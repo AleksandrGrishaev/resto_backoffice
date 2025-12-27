@@ -28,6 +28,16 @@
 
     <!-- Navigation -->
     <v-list nav class="px-2 flex-grow-1 overflow-y-auto">
+      <!-- Operations Alerts - Manager/Admin notifications (first for visibility) -->
+      <v-list-item to="/alerts" prepend-icon="mdi-bell-alert" color="primary" class="mb-2">
+        <template #title>
+          <span>Alerts</span>
+        </template>
+        <template #append>
+          <operations-alerts-badge />
+        </template>
+      </v-list-item>
+
       <!-- Menu -->
       <v-list-item to="/menu" prepend-icon="mdi-silverware-fork-knife" color="primary" class="mb-2">
         <template #title>
@@ -452,6 +462,7 @@ import { DebugUtils } from '@/utils'
 import { useViewRefresh } from '@/composables/useViewRefresh'
 import NavigationAccounts from './NavigationAccounts.vue'
 import AlertsBadge from './AlertsBadge.vue'
+import OperationsAlertsBadge from './OperationsAlertsBadge.vue'
 import DebugStoresBadge from './DebugStoresBadge.vue'
 
 const MODULE_NAME = 'NavigationMenu'

@@ -8,9 +8,13 @@
           <v-icon icon="mdi-cash-register" class="mr-2" />
           <span>Payment Checkout</span>
         </div>
-        <v-btn icon variant="text" size="small" @click="handleClose">
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
+        <div class="d-flex align-center gap-2">
+          <!-- Printer Status -->
+          <PrinterStatus />
+          <v-btn icon variant="text" size="small" @click="handleClose">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </div>
       </v-card-title>
 
       <v-card-text class="pt-4 pb-2">
@@ -170,12 +174,29 @@
 
       <!-- Actions -->
       <v-card-actions class="px-6 pb-4">
-        <!-- Add/Update Discount Button (left side) -->
+        <!-- Pre-Bill Print Button (always visible for fraud tracking) -->
+        <v-btn
+          variant="outlined"
+          color="secondary"
+          prepend-icon="mdi-printer"
+          :loading="isPrintingPreBill"
+          :disabled="!isPrinterConnected"
+          @click="handlePrintPreBill"
+        >
+          <template v-if="preBillPrinted">
+            <v-icon color="success" size="16" class="me-1">mdi-check</v-icon>
+            Re-Print Pre-Bill
+          </template>
+          <template v-else>Pre-Bill</template>
+        </v-btn>
+
+        <!-- Add/Update Discount Button -->
         <v-btn
           v-if="currentBill"
           variant="outlined"
           color="primary"
           prepend-icon="mdi-tag-percent"
+          class="ml-2"
           @click="handleOpenDiscountDialog"
         >
           {{ localDiscount > 0 ? 'Update Discount' : 'Add Discount' }}
@@ -210,12 +231,16 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import type { PosBillItem, PosBill } from '@/stores/pos/types'
+import type { PosBillItem, PosBill, PreBillSnapshot } from '@/stores/pos/types'
+import type { ReceiptData, ReceiptItem } from '@/core/printing/types'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import { DISCOUNT_REASON_LABELS } from '@/stores/discounts/constants'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, TimeUtils } from '@/utils'
+import { usePrinter } from '@/core/printing'
+import { createPreBillSnapshot } from '@/stores/pos/utils/preBillTracking'
 import PaymentItemsList from './widgets/PaymentItemsList.vue'
+import PrinterStatus from './widgets/PrinterStatus.vue'
 import BillDiscountDialog from '../order/dialogs/BillDiscountDialog.vue'
 
 interface Props {
@@ -242,6 +267,10 @@ const props = withDefaults(defineProps<Props>(), {
 const ordersStore = usePosOrdersStore()
 const paymentSettingsStore = usePaymentSettingsStore()
 
+// Printer
+const { isConnected: isPrinterConnected, settings: printerSettings, printPreBill } = usePrinter()
+const isPrintingPreBill = ref(false)
+
 interface PaymentData {
   method: string
   amount: number
@@ -255,10 +284,17 @@ interface PaymentData {
   }
 }
 
+interface PreBillPrintedData {
+  billId: string
+  snapshot: PreBillSnapshot
+  printedAt: string
+}
+
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   confirm: [data: PaymentData]
   cancel: []
+  'pre-bill-printed': [data: PreBillPrintedData]
 }>()
 
 // State
@@ -268,6 +304,7 @@ const processing = ref(false)
 const localDiscount = ref<number>(0) // Temporary bill discount (not saved to order)
 const localDiscountReason = ref<string>('') // Reason for bill discount
 const showBillDiscountDialog = ref(false)
+const preBillPrinted = ref(false) // Track if pre-bill was printed in this session
 
 // Payment Methods (already sorted by displayOrder from the store)
 const availablePaymentMethods = computed(() => {
@@ -439,6 +476,7 @@ const resetForm = () => {
   cashReceived.value = 0
   localDiscount.value = 0
   localDiscountReason.value = ''
+  preBillPrinted.value = false
 }
 
 const handleOpenDiscountDialog = () => {
@@ -490,6 +528,88 @@ const getDefaultIcon = (type: string): string => {
 
 const getDiscountReasonLabel = (reason: string): string => {
   return DISCOUNT_REASON_LABELS[reason as keyof typeof DISCOUNT_REASON_LABELS] || reason
+}
+
+// Build receipt data from current items
+const buildReceiptData = (): ReceiptData => {
+  const order = ordersStore.currentOrder
+  const items: ReceiptItem[] = props.items.map(item => ({
+    name: item.menuItemName,
+    quantity: item.quantity,
+    unitPrice: item.unitPrice,
+    totalPrice: item.totalPrice,
+    modifiers: item.modifiers?.map(m => m.name) || [],
+    discount: item.discounts?.reduce(
+      (sum, d) => sum + (d.type === 'percentage' ? (item.totalPrice * d.value) / 100 : d.value),
+      0
+    )
+  }))
+
+  return {
+    type: 'pre-bill',
+    restaurantName: printerSettings.value.restaurantName,
+    restaurantAddress: printerSettings.value.restaurantAddress,
+    restaurantPhone: printerSettings.value.restaurantPhone,
+    orderNumber: order?.orderNumber || '',
+    tableNumber: order?.tableId ? `Table ${order.tableId}` : undefined,
+    orderType: order?.type || 'dine_in',
+    waiterName: order?.waiterName,
+    dateTime: TimeUtils.formatDateTimeForDisplay(new Date()),
+    items,
+    subtotal: props.amount,
+    itemDiscounts: itemDiscounts.value,
+    billDiscount: localDiscount.value,
+    billDiscountReason: localDiscountReason.value,
+    subtotalAfterDiscounts: amountAfterDiscount.value,
+    serviceTax: recalculatedServiceTax.value,
+    serviceTaxPercent: 5,
+    governmentTax: recalculatedGovernmentTax.value,
+    governmentTaxPercent: 10,
+    totalAmount: totalAmount.value,
+    footerMessage: printerSettings.value.footerMessage
+  }
+}
+
+// Print pre-bill and create snapshot for fraud tracking
+const handlePrintPreBill = async (): Promise<void> => {
+  if (!isPrinterConnected.value || isPrintingPreBill.value) return
+  if (!currentBill.value) {
+    console.warn('No bill available for pre-bill print')
+    return
+  }
+
+  isPrintingPreBill.value = true
+  try {
+    const receiptData = buildReceiptData()
+    const result = await printPreBill(receiptData)
+
+    if (result.success) {
+      // Create snapshot for fraud tracking
+      const snapshot = createPreBillSnapshot(currentBill.value, totalAmount.value)
+      const printedAt = new Date().toISOString()
+
+      // Emit event to parent to save the snapshot
+      emit('pre-bill-printed', {
+        billId: currentBill.value.id,
+        snapshot,
+        printedAt
+      })
+
+      preBillPrinted.value = true
+
+      DebugUtils.info('PaymentDialog', 'Pre-bill printed with snapshot', {
+        billId: currentBill.value.id,
+        itemCount: snapshot.itemCount,
+        total: snapshot.total
+      })
+    } else {
+      console.error('Failed to print pre-bill:', result.error)
+    }
+  } catch (err) {
+    console.error('Print error:', err)
+  } finally {
+    isPrintingPreBill.value = false
+  }
 }
 
 // Ensure payment methods are loaded

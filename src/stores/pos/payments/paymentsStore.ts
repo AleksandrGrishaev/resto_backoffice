@@ -5,6 +5,8 @@ import { PaymentsService } from './services'
 import type { PosPayment, ServiceResponse, PaymentMethod } from '../types'
 import { usePosOrdersStore } from '../orders/ordersStore'
 import { usePosTablesStore } from '../tables/tablesStore'
+import { useAlertsStore } from '@/stores/alerts'
+import { formatIDR } from '@/utils'
 
 export const usePosPaymentsStore = defineStore('posPayments', () => {
   // ===== STATE =====
@@ -400,6 +402,34 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         amount: refundPayment.amount,
         method: refundPayment.method
       })
+
+      // Create alert for refund
+      try {
+        const alertsStore = useAlertsStore()
+        await alertsStore.createAlert({
+          category: 'shift',
+          type: 'large_refund', // Using existing type for all refunds
+          severity: 'warning',
+          title: 'Payment refunded',
+          description: `${formatIDR(Math.abs(refundPayment.amount))} via ${refundPayment.method}. Reason: ${reason}`,
+          metadata: {
+            paymentNumber: refundPayment.paymentNumber,
+            originalPaymentId,
+            refundAmount: Math.abs(refundPayment.amount),
+            method: refundPayment.method,
+            reason,
+            refundedBy
+          },
+          shiftId: refundPayment.shiftId,
+          orderId: originalPayment.orderId,
+          userId: authStore.currentUser?.id
+        })
+        console.log('🚨 Refund alert created')
+      } catch (alertError) {
+        // Don't fail refund if alert creation fails
+        console.error('Failed to create refund alert:', alertError)
+      }
+
       return { success: true, data: refundPayment }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Refund failed'

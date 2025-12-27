@@ -171,6 +171,32 @@ export interface PosBill extends BaseEntity {
   paymentStatus: 'unpaid' | 'partial' | 'paid'
   paidAmount: number
   notes?: string
+
+  // Pre-bill tracking (fraud protection)
+  preBillPrintedAt?: string // When pre-bill was printed
+  preBillPrintedBy?: string // Who printed the pre-bill (cashier ID)
+  preBillSnapshot?: PreBillSnapshot // Snapshot of bill state at print time
+  preBillModifiedAfterPrint?: boolean // Flag if changes detected after print
+}
+
+// Snapshot of bill state for fraud detection
+export interface PreBillSnapshot {
+  itemsHash: string // Hash of items for quick comparison
+  itemCount: number // Number of items
+  subtotal: number // Subtotal at print time
+  discountAmount: number // Discount at print time
+  total: number // Total at print time
+  items: PreBillSnapshotItem[] // Detailed items for audit
+}
+
+export interface PreBillSnapshotItem {
+  menuItemId: string
+  menuItemName: string
+  variantName?: string
+  quantity: number
+  unitPrice: number
+  totalPrice: number
+  discountAmount: number
 }
 
 export interface PosBillItem extends BaseEntity {

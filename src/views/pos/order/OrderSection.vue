@@ -129,6 +129,7 @@
       :items="paymentDialogData.items"
       @confirm="handlePaymentConfirm"
       @cancel="handlePaymentCancel"
+      @pre-bill-printed="handlePreBillPrinted"
     />
 
     <!-- Add Note Dialog -->
@@ -185,6 +186,18 @@
       @confirm="handleTableSelectionConfirm"
       @cancel="handleTableSelectionCancel"
     />
+
+    <!-- Print Receipt Dialog (after payment) -->
+    <PrintReceiptDialog
+      v-model="showPrintReceiptDialog"
+      :receipt-data="printReceiptData.receiptData"
+      :payment-method="printReceiptData.paymentMethod"
+      :amount="printReceiptData.amount"
+      :received-amount="printReceiptData.receivedAmount"
+      :change="printReceiptData.change"
+      @close="handlePrintReceiptClose"
+      @printed="handleReceiptPrinted"
+    />
   </div>
 </template>
 
@@ -195,9 +208,17 @@ import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
 import { usePosPaymentsStore } from '@/stores/pos/payments/paymentsStore'
 import { useMenuStore } from '@/stores/menu'
+import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
+import { useAuthStore } from '@/stores/auth'
+import { useAlertsStore } from '@/stores/alerts'
 import { useOrderCalculations } from '@/stores/pos/orders/composables/useOrderCalculations'
-import type { PosOrder, PosBill, PosBillItem, OrderType } from '@/stores/pos/types'
+import type { PosOrder, PosBill, PosBillItem, OrderType, PreBillSnapshot } from '@/stores/pos/types'
 import type { MenuItem, MenuItemVariant } from '@/stores/menu/types'
+import {
+  compareWithSnapshot,
+  requiresRePrint,
+  getTimeSincePreBill
+} from '@/stores/pos/utils/preBillTracking'
 import AppNotification from '@/components/atoms/feedback/AppNotification.vue'
 
 // Import components
@@ -206,6 +227,9 @@ import BillsManager from './components/BillsManager.vue'
 import OrderTotals from './components/OrderTotals.vue'
 import OrderActions from './components/OrderActions.vue'
 import PaymentDialog from '../payment/PaymentDialog.vue'
+import PrintReceiptDialog from '../payment/dialogs/PrintReceiptDialog.vue'
+import type { ReceiptData } from '@/core/printing/types'
+import { usePrinter } from '@/core/printing'
 import AddNoteDialog from './dialogs/AddNoteDialog.vue'
 import ItemDiscountDialog from './dialogs/ItemDiscountDialog.vue'
 import BillItemCancelDialog from './dialogs/BillItemCancelDialog.vue'
@@ -224,6 +248,9 @@ const ordersStore = usePosOrdersStore()
 const tablesStore = usePosTablesStore()
 const paymentsStore = usePosPaymentsStore()
 const menuStore = useMenuStore()
+const shiftsStore = useShiftsStore()
+const authStore = useAuthStore()
+const alertsStore = useAlertsStore()
 
 // Props
 interface Props {
@@ -273,6 +300,25 @@ const paymentDialogData = ref({
   itemIds: [] as string[],
   items: [] as PosBillItem[]
 })
+
+// Print Receipt Dialog State
+const showPrintReceiptDialog = ref(false)
+const printReceiptData = ref<{
+  receiptData: ReceiptData | null
+  paymentMethod: string
+  amount: number
+  receivedAmount: number
+  change: number
+}>({
+  receiptData: null,
+  paymentMethod: 'cash',
+  amount: 0,
+  receivedAmount: 0,
+  change: 0
+})
+
+// Printer
+const { settings: printerSettings, isConnected: isPrinterConnected } = usePrinter()
 
 // Add Note Dialog State
 const showAddNoteDialog = ref(false)
@@ -1278,6 +1324,12 @@ const handlePaymentConfirm = async (paymentData: {
       return
     }
 
+    // Check for pre-bill modifications before processing payment
+    // This runs for each bill being paid
+    for (const billId of paymentDialogData.value.billIds) {
+      await checkPreBillModifications(billId)
+    }
+
     // Save bill discount to order (NOT as item discounts)
     if (paymentData.billDiscount && paymentData.billDiscount.amount > 0) {
       console.log('💰 Saving bill discount to order:', paymentData.billDiscount)
@@ -1333,6 +1385,24 @@ const handlePaymentConfirm = async (paymentData: {
           paymentData.change ? `Change: Rp ${paymentData.change.toLocaleString('id-ID')}` : ''
         }`
       )
+
+      // Show print receipt dialog
+      const receiptData = buildPaymentReceiptData(
+        paymentData.method,
+        paymentData.amount,
+        paymentData.receivedAmount || 0,
+        paymentData.change || 0
+      )
+
+      printReceiptData.value = {
+        receiptData,
+        paymentMethod: paymentData.method,
+        amount: paymentData.amount,
+        receivedAmount: paymentData.receivedAmount || 0,
+        change: paymentData.change || 0
+      }
+
+      showPrintReceiptDialog.value = true
     } else {
       // ❌ Rollback UI on failure
       showError(result.error || 'Payment failed')
@@ -1353,7 +1423,177 @@ const handlePaymentCancel = (): void => {
   console.log('💳 Payment cancelled by user')
 }
 
-const handleCheckoutFromActions = (itemIds: string[], amount: number): void => {
+// Handle pre-bill printed event - save snapshot to bill for fraud tracking
+const handlePreBillPrinted = async (data: {
+  billId: string
+  snapshot: PreBillSnapshot
+  printedAt: string
+}): Promise<void> => {
+  if (!currentOrder.value) return
+
+  try {
+    console.log('📋 [OrderSection] Pre-bill printed, saving snapshot:', {
+      billId: data.billId,
+      itemCount: data.snapshot.itemCount,
+      total: data.snapshot.total
+    })
+
+    // Find the bill and update it with pre-bill tracking data
+    const bill = currentOrder.value.bills.find((b: PosBill) => b.id === data.billId)
+    if (bill) {
+      bill.preBillPrintedAt = data.printedAt
+      bill.preBillPrintedBy = authStore.currentUser?.id
+      bill.preBillSnapshot = data.snapshot
+      bill.preBillModifiedAfterPrint = false
+
+      // Save to database
+      await ordersStore.updateOrder(currentOrder.value)
+
+      console.log('✅ [OrderSection] Pre-bill snapshot saved successfully')
+    }
+  } catch (err) {
+    console.error('❌ [OrderSection] Failed to save pre-bill snapshot:', err)
+    // Don't show error to user - this is a background operation
+  }
+}
+
+// Check for pre-bill modifications before payment and create alerts if needed
+const checkPreBillModifications = async (billId: string): Promise<void> => {
+  if (!currentOrder.value) return
+
+  const bill = currentOrder.value.bills.find((b: PosBill) => b.id === billId)
+  if (!bill || !bill.preBillSnapshot || !bill.preBillPrintedAt) {
+    // No pre-bill was printed, nothing to check
+    return
+  }
+
+  try {
+    // Calculate current total with taxes
+    const activeItems = bill.items.filter((item: PosBillItem) => item.status !== 'cancelled')
+    const subtotal = activeItems.reduce(
+      (sum: number, item: PosBillItem) => sum + item.totalPrice,
+      0
+    )
+    const afterDiscount = subtotal - (bill.discountAmount || 0)
+    const currentTotalWithTaxes = afterDiscount + afterDiscount * 0.05 + afterDiscount * 0.1
+
+    // Compare with snapshot
+    const changeInfo = compareWithSnapshot(bill, currentTotalWithTaxes, bill.preBillSnapshot)
+
+    if (changeInfo.hasChanges) {
+      console.log('⚠️ [OrderSection] Pre-bill modifications detected:', changeInfo)
+
+      // Mark bill as modified
+      bill.preBillModifiedAfterPrint = true
+
+      if (requiresRePrint(changeInfo)) {
+        // Critical changes - create alert
+        await alertsStore.createAlert({
+          category: 'shift',
+          type: 'pre_bill_modified',
+          severity: 'critical',
+          title: 'Pre-bill modified before payment',
+          description: changeInfo.summary,
+          metadata: {
+            changes: changeInfo.changes,
+            originalTotal: bill.preBillSnapshot.total,
+            currentTotal: currentTotalWithTaxes,
+            timeSincePrint: getTimeSincePreBill(bill.preBillPrintedAt),
+            orderNumber: currentOrder.value.orderNumber,
+            tableNumber: tableNumber.value
+          },
+          shiftId: shiftsStore.currentShift?.id,
+          orderId: currentOrder.value.id,
+          billId: bill.id,
+          userId: authStore.currentUser?.id
+        })
+
+        console.log('🚨 [OrderSection] Created pre-bill modification alert')
+      }
+    }
+  } catch (err) {
+    console.error('❌ [OrderSection] Failed to check pre-bill modifications:', err)
+    // Don't block payment on error
+  }
+}
+
+// Build receipt data for printing
+function buildPaymentReceiptData(
+  paymentMethod: string,
+  _amount: number, // Used for logging, actual amount comes from paymentDialogData
+  receivedAmount: number,
+  change: number
+): ReceiptData | null {
+  if (!currentOrder.value) return null
+
+  const order = currentOrder.value
+  const items = paymentDialogData.value.items
+
+  // Build receipt items from order items
+  const receiptItems = items.map((item: PosBillItem) => ({
+    name: item.menuItemName + (item.variantName ? ` (${item.variantName})` : ''),
+    quantity: item.quantity,
+    unitPrice: item.unitPrice,
+    totalPrice: item.totalPrice,
+    discount: item.discountAmount,
+    notes: item.kitchenNotes
+  }))
+
+  // Calculate totals
+  const subtotal = paymentDialogData.value.amount
+  const discount = paymentDialogData.value.discount
+  const serviceTax = paymentDialogData.value.serviceTax
+  const governmentTax = paymentDialogData.value.governmentTax
+  const total = subtotal - discount + serviceTax + governmentTax
+
+  // Generate receipt number with timestamp (YYYYMMDDHHmmss format)
+  const now = new Date()
+  const timestamp =
+    now.getFullYear().toString() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0') +
+    String(now.getHours()).padStart(2, '0') +
+    String(now.getMinutes()).padStart(2, '0') +
+    String(now.getSeconds()).padStart(2, '0')
+
+  return {
+    receiptNumber: `PAY-${timestamp}`,
+    orderNumber: order.orderNumber || order.id.slice(0, 8).toUpperCase(),
+    tableNumber: tableNumber.value || undefined,
+    serverName: order.createdBy || 'Staff',
+    dateTime: now,
+    items: receiptItems,
+    subtotal,
+    discount,
+    discountReason: undefined,
+    serviceTax,
+    governmentTax,
+    total,
+    paymentMethod: paymentMethod as 'cash' | 'card' | 'qr',
+    receivedAmount: paymentMethod === 'cash' ? receivedAmount : undefined,
+    change: paymentMethod === 'cash' ? change : undefined,
+    cashierName: order.createdBy || 'Staff'
+  }
+}
+
+// Print Receipt Dialog Handlers
+const handlePrintReceiptClose = (): void => {
+  showPrintReceiptDialog.value = false
+  // Reset print receipt data
+  printReceiptData.value = {
+    receiptData: null,
+    paymentMethod: 'cash',
+    amount: 0,
+    receivedAmount: 0,
+    change: 0
+  }
+}
+
+const handleReceiptPrinted = (): void => {
+  console.log('🖨️ Receipt printed successfully')
+}
+
+const handleCheckoutFromActions = (itemIds: string[], _amount: number): void => {
   if (activeBillId.value) {
     handleCheckout(itemIds, activeBillId.value)
   }
@@ -1496,7 +1736,7 @@ watch(
     if (newLength !== undefined && oldLength !== undefined && newLength !== oldLength) {
       // При изменении количества элементов проверяем наличие несохраненных изменений
       hasUnsavedChanges.value =
-        activeBill.value?.items.some(item => item.status === 'draft') || false
+        activeBill.value?.items.some((item: PosBillItem) => item.status === 'draft') || false
     }
   }
 )
@@ -1509,7 +1749,9 @@ watch(
       return
     }
 
-    hasUnsavedChanges.value = bills.some(bill => bill.items.some(item => item.status === 'draft'))
+    hasUnsavedChanges.value = bills.some((bill: PosBill) =>
+      bill.items.some((item: PosBillItem) => item.status === 'draft')
+    )
   },
   { deep: true, immediate: true }
 )

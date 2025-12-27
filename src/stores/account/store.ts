@@ -3,7 +3,8 @@ import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
 import { accountService, transactionService, paymentService } from './service'
 import { categoryService } from './categoryService'
-import { DebugUtils, generateId } from '@/utils'
+import { DebugUtils, generateId, formatIDR } from '@/utils'
+import { useAlertsStore } from '@/stores/alerts'
 import type {
   Account,
   Transaction,
@@ -590,6 +591,11 @@ export const useAccountStore = defineStore('account', () => {
       state.value.loading.correction = true
       DebugUtils.info(MODULE_NAME, 'Creating correction', { data })
 
+      // Get account info before correction for alert
+      const account = state.value.accounts.find(a => a.id === data.accountId)
+      const previousBalance = account?.balance || 0
+      const correctionAmount = data.amount - previousBalance
+
       await transactionService.createCorrection(data)
 
       // ✅ ДОСТАТОЧНО только обновить аккаунты - транзакция уже добавлена в service
@@ -598,6 +604,32 @@ export const useAccountStore = defineStore('account', () => {
       // Инвалидируем кеш транзакций
       state.value.allTransactionsCache = undefined
       state.value.cacheTimestamp = undefined
+
+      // Create alert for manual correction
+      try {
+        const alertsStore = useAlertsStore()
+        await alertsStore.createAlert({
+          category: 'account',
+          type: 'manual_correction',
+          severity: 'warning',
+          title: 'Manual balance correction',
+          description: `${account?.name || 'Account'}: ${formatIDR(previousBalance)} → ${formatIDR(data.amount)} (${correctionAmount >= 0 ? '+' : ''}${formatIDR(correctionAmount)})`,
+          metadata: {
+            accountId: data.accountId,
+            accountName: account?.name,
+            previousBalance,
+            newBalance: data.amount,
+            correctionAmount,
+            reason: data.description,
+            performedBy: data.performedBy.name
+          },
+          userId: data.performedBy.id
+        })
+        DebugUtils.info(MODULE_NAME, 'Correction alert created')
+      } catch (alertError) {
+        // Don't fail correction if alert creation fails
+        DebugUtils.error(MODULE_NAME, 'Failed to create correction alert', { alertError })
+      }
 
       DebugUtils.info(MODULE_NAME, 'Correction created successfully')
     } catch (error) {

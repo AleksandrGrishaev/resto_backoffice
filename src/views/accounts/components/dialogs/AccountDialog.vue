@@ -38,7 +38,9 @@
           hide-details="auto"
         />
 
+        <!-- Initial Balance only shown when creating new account -->
         <v-text-field
+          v-if="!isEdit"
           v-model.number="formData.balance"
           label="Initial Balance"
           type="number"

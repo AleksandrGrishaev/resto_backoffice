@@ -26,6 +26,9 @@
     <!-- Shift Management Dialogs -->
     <StartShiftDialog v-model="showStartShiftDialog" @shift-started="handleShiftStarted" />
     <EndShiftDialog v-model="showEndShiftDialog" @shift-ended="handleShiftEnded" />
+
+    <!-- Printer Settings Dialog -->
+    <PrinterSettingsDialog v-model="showPrinterSettingsDialog" />
   </div>
 </template>
 
@@ -43,6 +46,9 @@ import NotificationBadge from '../../../components/atoms/indicators/Notification
 // Import shift dialogs
 import StartShiftDialog from '@/views/pos/shifts/dialogs/StartShiftDialog.vue'
 import EndShiftDialog from '@/views/pos/shifts/dialogs/EndShiftDialog.vue'
+
+// Import printer settings dialog
+import PrinterSettingsDialog from '@/views/pos/settings/PrinterSettingsDialog.vue'
 
 // Import stores
 import { usePosStore } from '@/stores/pos'
@@ -85,6 +91,7 @@ const currentTime = ref('')
 // Dialog states
 const showStartShiftDialog = ref(false)
 const showEndShiftDialog = ref(false)
+const showPrinterSettingsDialog = ref(false)
 
 // Time update interval
 let timeInterval: NodeJS.Timeout | null = null
@@ -205,6 +212,19 @@ const menuSections = computed(() => [
     ]
   },
 
+  // Settings Section
+  {
+    title: 'SETTINGS',
+    actions: [
+      {
+        id: POS_ACTIONS.PRINTER_SETTINGS,
+        icon: 'mdi-printer-settings',
+        label: 'Printer',
+        disabled: loading.value
+      }
+    ]
+  },
+
   // System Section
   {
     title: 'SYSTEM',
@@ -266,6 +286,10 @@ const handleAction = async (actionId: string) => {
         handleGoodsReceipt()
         break
 
+      case POS_ACTIONS.PRINTER_SETTINGS:
+        handlePrinterSettings()
+        break
+
       case POS_ACTIONS.LOGOUT:
         await handleLogout()
         break
@@ -300,6 +324,11 @@ const handleViewShift = () => {
 const handleGoodsReceipt = () => {
   DebugUtils.debug(MODULE_NAME, 'Navigating to goods receipt view')
   router.push('/pos/receipts')
+}
+
+const handlePrinterSettings = () => {
+  DebugUtils.debug(MODULE_NAME, 'Opening printer settings dialog')
+  showPrinterSettingsDialog.value = true
 }
 
 const handleShiftStarted = (data: { shift: unknown; startTime: string }) => {

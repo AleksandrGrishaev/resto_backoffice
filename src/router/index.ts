@@ -185,6 +185,16 @@ const routes: RouteRecordRaw[] = [
           allowedRoles: ['admin', 'manager']
         }
       },
+      // === Operations Alerts ===
+      {
+        path: 'alerts',
+        name: 'alerts',
+        component: () => import('@/views/backoffice/alerts/AlertsView.vue'),
+        meta: {
+          title: 'Operations Alerts',
+          allowedRoles: ['admin', 'manager']
+        }
+      },
       // === Счета (только для админа) ===
       {
         path: 'accounts',
