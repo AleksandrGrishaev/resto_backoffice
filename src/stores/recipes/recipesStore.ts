@@ -219,6 +219,8 @@ export const useRecipesStore = defineStore('recipes', () => {
       )
 
       // 5. ✅ Sprint 9: Cost recalculation - только если нужен и разрешён
+      let costRecalculationPerformed = false
+
       if (options?.skipCostRecalculation) {
         DebugUtils.info(MODULE_NAME, '⏭️ Cost recalculation skipped (POS/Kitchen mode)')
       } else {
@@ -231,6 +233,7 @@ export const useRecipesStore = defineStore('recipes', () => {
           await updateDatabaseCosts()
           // Save recalculation date
           autoCostRecalculation.saveLastRecalculationDate(new Date())
+          costRecalculationPerformed = true
         } else {
           DebugUtils.info(MODULE_NAME, '⏭️ Cost recalculation skipped (already done today)')
           // НЕ вызываем recalculateAllCosts() повторно - это занимает 38 сек!
@@ -252,7 +255,8 @@ export const useRecipesStore = defineStore('recipes', () => {
         units: unitsComposable.units.value.length,
         preparationCategories: preparationCategories.value.length,
         recipeCategories: recipeCategories.value.length,
-        costRecalculationNeeded: needsRecalculation
+        costRecalculationPerformed,
+        skipCostRecalculation: options?.skipCostRecalculation ?? false
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to initialize Recipe Store'
