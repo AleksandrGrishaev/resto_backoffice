@@ -95,10 +95,16 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
   /**
    * Инициализировать критические stores
    *
-   * ОПТИМИЗАЦИЯ: Параллельная загрузка независимых stores
-   * - products и counteragents грузятся параллельно (нет зависимостей)
-   * - recipes и storage грузятся параллельно (оба зависят только от products)
-   * - menu грузится последней (зависит от recipes)
+   * ✅ Sprint 10: LAZY LOADING для Backoffice
+   * - Backoffice: ТОЛЬКО products + recipes + menu (базовые для навигации)
+   * - POS/Kitchen: Полная загрузка (без изменений)
+   *
+   * LAZY LOAD при переходе на страницу (via router guards):
+   * - /storage → storageStore
+   * - /accounts → accountStore
+   * - /suppliers → supplierStore
+   * - /preparations → preparationStore
+   * - /counteragents → counteragentsStore
    */
   async initializeCriticalStores(userRoles?: UserRole[]): Promise<StoreInitResult[]> {
     const results: StoreInitResult[] = []
@@ -118,6 +124,44 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
     }
 
     try {
+      // ✅ Sprint 10: Для Backoffice - минимальная загрузка (lazy loading остальных)
+      if (this.currentContext === 'backoffice') {
+        DebugUtils.info(
+          MODULE_NAME,
+          '📦 [PROD] Backoffice LAZY MODE: Loading only base stores...',
+          {
+            context: this.currentContext,
+            baseStores: ['products', 'recipes', 'menu'],
+            lazyStores: ['storage', 'accounts', 'suppliers', 'preparations', 'counteragents']
+          }
+        )
+
+        // === ГРУППА 1: Products (базовый, нет зависимостей) ===
+        const productsResult = await this.loadProductsFromAPI()
+        results.push(productsResult)
+        if (productsResult.success) this.loadedStores.add(productsResult.name)
+
+        // === ГРУППА 2: Recipes (зависит от products) ===
+        const recipesResult = await this.loadRecipesFromAPI()
+        results.push(recipesResult)
+        if (recipesResult.success) this.loadedStores.add(recipesResult.name)
+
+        // === ГРУППА 3: Menu (зависит от recipes) ===
+        const menuResult = await this.loadMenuFromAPI()
+        results.push(menuResult)
+        if (menuResult.success) this.loadedStores.add(menuResult.name)
+
+        DebugUtils.info(MODULE_NAME, '✅ [PROD] Backoffice base stores initialized (lazy mode)', {
+          count: results.length,
+          success: results.filter(r => r.success).length,
+          loaded: Array.from(this.loadedStores),
+          lazyPending: ['storage', 'accounts', 'suppliers', 'preparations', 'counteragents']
+        })
+
+        return results
+      }
+
+      // === POS/Kitchen: Полная загрузка (без изменений) ===
       DebugUtils.info(MODULE_NAME, '📦 [PROD] Initializing critical stores...', {
         context: this.currentContext,
         requiredStores
@@ -799,12 +843,15 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
   }
 
   private async initializeBackofficeStores(): Promise<StoreInitResult[]> {
-    DebugUtils.info(MODULE_NAME, '🏢 [PROD] Initializing backoffice stores...')
+    // ✅ Sprint 10: Backoffice stores загружаются lazy (через router guards)
+    // Accounts, Storage, Suppliers, Preparations, Counteragents - только при переходе на страницу
+    DebugUtils.info(MODULE_NAME, '🏢 [PROD] Backoffice stores: LAZY LOADING mode', {
+      lazyStores: ['accounts', 'storage', 'suppliers', 'preparations', 'counteragents'],
+      note: 'Stores will load on navigation via router guards'
+    })
 
-    // Параллельная загрузка независимых stores
-    const results = await Promise.all([this.loadAccountsFromAPI()])
-
-    return results
+    // НЕ загружаем accounts при старте - lazy load при переходе на /accounts
+    return []
   }
 
   private async loadAccountsFromAPI(): Promise<StoreInitResult> {

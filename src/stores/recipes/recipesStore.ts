@@ -218,25 +218,23 @@ export const useRecipesStore = defineStore('recipes', () => {
         callbacks.getRecipeCost // ⭐ PHASE 1: Recipe Nesting
       )
 
-      // 5. ✅ Sprint 9: Cost recalculation - только если нужен и разрешён
-      let costRecalculationPerformed = false
+      // 5. ✅ Sprint 10: Cost recalculation ОТКЛЮЧЕН при инициализации
+      // Пересчёт запускается ТОЛЬКО:
+      // - Вручную через кнопку "Recalculate All Cost" в UI
+      // - Периодически (раз в 24ч) через schedulePeriodicRecalculation
+      // Это ускоряет загрузку Backoffice с 39 сек до 3 сек
 
       if (options?.skipCostRecalculation) {
         DebugUtils.info(MODULE_NAME, '⏭️ Cost recalculation skipped (POS/Kitchen mode)')
       } else {
+        // ✅ Sprint 10: НЕ запускаем пересчёт при старте
+        // Только планируем периодический пересчёт (раз в 24ч)
         const needsRecalculation = autoCostRecalculation.isRecalculationNeeded()
-
         if (needsRecalculation) {
-          DebugUtils.info(MODULE_NAME, '🔄 Daily cost recalculation needed...')
-          await recalculateAllCosts()
-          // Update database with new costs
-          await updateDatabaseCosts()
-          // Save recalculation date
-          autoCostRecalculation.saveLastRecalculationDate(new Date())
-          costRecalculationPerformed = true
-        } else {
-          DebugUtils.info(MODULE_NAME, '⏭️ Cost recalculation skipped (already done today)')
-          // НЕ вызываем recalculateAllCosts() повторно - это занимает 38 сек!
+          DebugUtils.info(
+            MODULE_NAME,
+            '⚠️ Cost recalculation needed, but deferred. Use "Recalculate All Cost" button.'
+          )
         }
 
         // Schedule periodic recalculation for long-running sessions (только для backoffice)

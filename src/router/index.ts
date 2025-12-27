@@ -38,6 +38,72 @@ import type { UserRole } from '@/stores/auth/types'
 // ===== HELP ROUTES =====
 import { helpRoutes } from '@/help/router'
 
+// ===== LAZY LOADING UTILS (Sprint 10) =====
+import { DebugUtils } from '@/utils'
+
+/**
+ * ✅ Sprint 10: Lazy loading guards for backoffice stores
+ * These guards load stores on-demand when navigating to specific pages
+ */
+const createLazyStoreGuard = (
+  storeName: string,
+  loader: () => Promise<void>
+): ((to: unknown, from: unknown, next: (path?: string) => void) => Promise<void>) => {
+  return async (_to, _from, next) => {
+    try {
+      const start = Date.now()
+      DebugUtils.info('Router', `📦 Lazy loading store: ${storeName}...`)
+      await loader()
+      DebugUtils.info('Router', `✅ Store ${storeName} loaded in ${Date.now() - start}ms`)
+      next()
+    } catch (error) {
+      DebugUtils.error('Router', `❌ Failed to load store ${storeName}`, { error })
+      next()
+    }
+  }
+}
+
+// Lazy loaders for each store
+const lazyLoadStorage = async () => {
+  const { useStorageStore } = await import('@/stores/storage')
+  const store = useStorageStore()
+  if (!store.initialized) {
+    await store.initialize()
+  }
+}
+
+const lazyLoadAccounts = async () => {
+  const { useAccountStore } = await import('@/stores/account')
+  const store = useAccountStore()
+  if (!store.state?.initialized) {
+    await store.initializeStore()
+  }
+}
+
+const lazyLoadSuppliers = async () => {
+  const { useSupplierStore } = await import('@/stores/supplier_2')
+  const store = useSupplierStore()
+  if (store.initialize && !store.state?.initialized) {
+    await store.initialize()
+  }
+}
+
+const lazyLoadPreparations = async () => {
+  const { usePreparationStore } = await import('@/stores/preparation')
+  const store = usePreparationStore()
+  if (store.initialize && !store.state?.initialized) {
+    await store.initialize()
+  }
+}
+
+const lazyLoadCounteragents = async () => {
+  const { useCounteragentsStore } = await import('@/stores/counteragents')
+  const store = useCounteragentsStore()
+  if (store.initialize && !store.initialized) {
+    await store.initialize()
+  }
+}
+
 // ===== ROUTES CONFIGURATION =====
 
 const routes: RouteRecordRaw[] = [
@@ -146,6 +212,7 @@ const routes: RouteRecordRaw[] = [
         }
       },
       // === Полуфабрикаты ===
+      // ✅ Sprint 10: Lazy loading - store загружается при переходе на страницу
       {
         path: 'preparations',
         name: 'preparations',
@@ -153,9 +220,11 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: 'Preparations',
           allowedRoles: ['admin', 'manager']
-        }
+        },
+        beforeEnter: createLazyStoreGuard('preparations', lazyLoadPreparations)
       },
       // === Склад ===
+      // ✅ Sprint 10: Lazy loading - store загружается при переходе на страницу
       {
         path: 'storage',
         name: 'storage',
@@ -163,9 +232,11 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: 'Storage',
           allowedRoles: ['admin', 'manager']
-        }
+        },
+        beforeEnter: createLazyStoreGuard('storage', lazyLoadStorage)
       },
       // === Поставщики ===
+      // ✅ Sprint 10: Lazy loading - store загружается при переходе на страницу
       {
         path: 'suppliers',
         name: 'suppliers',
@@ -173,9 +244,11 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: 'Suppliers',
           allowedRoles: ['admin', 'manager']
-        }
+        },
+        beforeEnter: createLazyStoreGuard('suppliers', lazyLoadSuppliers)
       },
       // === Контрагенты ===
+      // ✅ Sprint 10: Lazy loading - store загружается при переходе на страницу
       {
         path: 'counteragents',
         name: 'counteragents',
@@ -183,7 +256,8 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: 'Counteragents',
           allowedRoles: ['admin', 'manager']
-        }
+        },
+        beforeEnter: createLazyStoreGuard('counteragents', lazyLoadCounteragents)
       },
       // === Operations Alerts ===
       {
@@ -196,11 +270,13 @@ const routes: RouteRecordRaw[] = [
         }
       },
       // === Счета (только для админа) ===
+      // ✅ Sprint 10: Lazy loading - store загружается при переходе на страницу
       {
         path: 'accounts',
         meta: {
           allowedRoles: ['admin']
         },
+        beforeEnter: createLazyStoreGuard('accounts', lazyLoadAccounts),
         children: [
           {
             path: '',

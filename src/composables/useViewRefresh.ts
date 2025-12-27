@@ -59,8 +59,21 @@ export function useViewRefresh() {
       DebugUtils.info(MODULE_NAME, 'View data refreshed successfully', { path })
       return true
     } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Refresh failed'
-      DebugUtils.error(MODULE_NAME, 'Failed to refresh view data', { error: err, path: route.path })
+      // ✅ Sprint 10: Детальное логирование ошибок
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      const errorStack = err instanceof Error ? err.stack : undefined
+      error.value = errorMessage
+
+      DebugUtils.error(MODULE_NAME, 'Failed to refresh view data', {
+        path: route.path,
+        error: errorMessage,
+        stack: errorStack,
+        errorType: err instanceof Error ? err.constructor.name : typeof err
+      })
+
+      // Также выводим в консоль для отладки
+      console.error(`[${MODULE_NAME}] Refresh failed for ${route.path}:`, err)
+
       return false
     } finally {
       loading.value = false
