@@ -112,18 +112,20 @@ async function loadStoresAfterAuth() {
       throw new Error('No authenticated user found after waiting')
     }
 
-    // Определяем начальный путь для context-based loading
-    const initialPath = router.currentRoute.value.path
+    // ✅ Sprint 9: Определяем context по default route пользователя, не по текущему URL
+    // Это важно, потому что при login мы ещё на /auth/login, а не на целевом маршруте
+    const targetRoute = authStore.getDefaultRoute()
 
     DebugUtils.info(MODULE_NAME, 'Loading stores for user', {
       userId: user.id,
       roles: user.roles,
       attempts: attempts,
-      initialPath
+      targetRoute,
+      currentPath: router.currentRoute.value.path
     })
 
-    // Initialize stores based on user roles AND initial path (context-based loading)
-    await appInitializer.initialize(user.roles || [], { initialPath })
+    // Initialize stores based on user roles AND target route (context-based loading)
+    await appInitializer.initialize(user.roles || [], { initialPath: targetRoute })
 
     storesLoaded.value = true
     DebugUtils.info(MODULE_NAME, '✅ Stores loaded successfully')

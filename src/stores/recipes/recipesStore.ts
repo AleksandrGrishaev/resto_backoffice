@@ -170,8 +170,9 @@ export const useRecipesStore = defineStore('recipes', () => {
 
   /**
    * Инициализирует Recipe Store с интеграцией
+   * @param options.skipCostRecalculation - Пропустить пересчёт себестоимости (для POS/Kitchen)
    */
-  async function initialize(): Promise<void> {
+  async function initialize(options?: { skipCostRecalculation?: boolean }): Promise<void> {
     // Если уже инициализирован, не делаем ничего
     if (initialized.value) {
       DebugUtils.info(MODULE_NAME, 'Recipe Store already initialized')
@@ -217,24 +218,30 @@ export const useRecipesStore = defineStore('recipes', () => {
         callbacks.getRecipeCost // ⭐ PHASE 1: Recipe Nesting
       )
 
-      // 5. Check if automatic cost recalculation is needed (daily)
-      const needsRecalculation = autoCostRecalculation.isRecalculationNeeded()
-
-      if (needsRecalculation) {
-        DebugUtils.info(MODULE_NAME, '🔄 Daily cost recalculation needed...')
-        await recalculateAllCosts()
-        // Update database with new costs
-        await updateDatabaseCosts()
-        // Save recalculation date
-        autoCostRecalculation.saveLastRecalculationDate(new Date())
+      // 5. ✅ Sprint 9: Cost recalculation - только если нужен и разрешён
+      if (options?.skipCostRecalculation) {
+        DebugUtils.info(MODULE_NAME, '⏭️ Cost recalculation skipped (POS/Kitchen mode)')
       } else {
-        DebugUtils.info(MODULE_NAME, '⏭️ Cost recalculation skipped (already done today)')
-        // Still recalculate in memory for fresh data, but don't update DB
-        await recalculateAllCosts()
-      }
+        const needsRecalculation = autoCostRecalculation.isRecalculationNeeded()
 
-      // Schedule periodic recalculation for long-running sessions
-      autoCostRecalculation.schedulePeriodicRecalculation(recalculateAllCosts, updateDatabaseCosts)
+        if (needsRecalculation) {
+          DebugUtils.info(MODULE_NAME, '🔄 Daily cost recalculation needed...')
+          await recalculateAllCosts()
+          // Update database with new costs
+          await updateDatabaseCosts()
+          // Save recalculation date
+          autoCostRecalculation.saveLastRecalculationDate(new Date())
+        } else {
+          DebugUtils.info(MODULE_NAME, '⏭️ Cost recalculation skipped (already done today)')
+          // НЕ вызываем recalculateAllCosts() повторно - это занимает 38 сек!
+        }
+
+        // Schedule periodic recalculation for long-running sessions (только для backoffice)
+        autoCostRecalculation.schedulePeriodicRecalculation(
+          recalculateAllCosts,
+          updateDatabaseCosts
+        )
+      }
 
       // 🆕 Устанавливаем флаг инициализации
       initialized.value = true

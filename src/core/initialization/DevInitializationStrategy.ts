@@ -93,6 +93,19 @@ export class DevInitializationStrategy implements InitializationStrategy {
     const results: StoreInitResult[] = []
     const requiredStores = getStoresForContext(this.currentContext, userRoles || [])
 
+    // ✅ Sprint 9: Если critical stores уже загружены - пропускаем
+    if (
+      this.loadedStores.has('products') &&
+      this.loadedStores.has('recipes') &&
+      this.loadedStores.has('menu')
+    ) {
+      DebugUtils.info(MODULE_NAME, '⏭️ [DEV] Critical stores already loaded, skipping', {
+        context: this.currentContext,
+        loadedStores: Array.from(this.loadedStores)
+      })
+      return results
+    }
+
     try {
       DebugUtils.info(MODULE_NAME, '📦 [DEV] Initializing critical stores...', {
         context: this.currentContext,
@@ -386,10 +399,17 @@ export class DevInitializationStrategy implements InitializationStrategy {
     try {
       const store = useRecipesStore()
 
-      DebugUtils.store(MODULE_NAME, '[DEV] Loading recipes and preparations...')
+      // ✅ Sprint 9: Для POS/Kitchen пропускаем cost recalculation (экономия 38 сек!)
+      const skipCostRecalculation =
+        this.currentContext === 'pos' || this.currentContext === 'kitchen'
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading recipes and preparations...', {
+        context: this.currentContext,
+        skipCostRecalculation
+      })
 
       if (store.initialize) {
-        await store.initialize()
+        await store.initialize({ skipCostRecalculation })
       }
 
       return {

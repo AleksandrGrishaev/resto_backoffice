@@ -104,6 +104,19 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
     const results: StoreInitResult[] = []
     const requiredStores = getStoresForContext(this.currentContext, userRoles || [])
 
+    // ✅ Sprint 9: Если critical stores уже загружены - пропускаем
+    if (
+      this.loadedStores.has('products') &&
+      this.loadedStores.has('recipes') &&
+      this.loadedStores.has('menu')
+    ) {
+      DebugUtils.info(MODULE_NAME, '⏭️ [PROD] Critical stores already loaded, skipping', {
+        context: this.currentContext,
+        loadedStores: Array.from(this.loadedStores)
+      })
+      return results
+    }
+
     try {
       DebugUtils.info(MODULE_NAME, '📦 [PROD] Initializing critical stores...', {
         context: this.currentContext,
@@ -409,6 +422,7 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
 
   /**
    * TODO: Загрузить recipes через API
+   * ✅ Sprint 9: Skip cost recalculation for POS/Kitchen (38 sec → 0 sec)
    */
   private async loadRecipesFromAPI(): Promise<StoreInitResult> {
     const start = Date.now()
@@ -416,16 +430,18 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
     try {
       const store = useRecipesStore()
 
-      DebugUtils.store(MODULE_NAME, '[PROD] Loading recipes from API...')
+      // ✅ Sprint 9: Для POS/Kitchen пропускаем cost recalculation (экономия 38 сек!)
+      const skipCostRecalculation =
+        this.currentContext === 'pos' || this.currentContext === 'kitchen'
 
-      // TODO: Заменить на API вызов
-      // const response = await fetch('/api/v1/recipes')
-      // const recipes = await response.json()
-      // store.setRecipes(recipes)
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading recipes from API...', {
+        context: this.currentContext,
+        skipCostRecalculation
+      })
 
       // Сейчас используем существующий метод
       if (store.initialize) {
-        await store.initialize()
+        await store.initialize({ skipCostRecalculation })
       }
 
       return {
