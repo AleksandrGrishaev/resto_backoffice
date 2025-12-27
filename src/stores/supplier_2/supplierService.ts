@@ -1670,22 +1670,33 @@ class SupplierService {
   }
 
   private async generateReceiptNumber(): Promise<string> {
-    // ✅ COUNT FROM SUPABASE (Phase 3)
-    const { count, error } = await supabase
+    // ✅ Get MAX receipt number from SUPABASE to avoid duplicates after deletions
+    const { data, error } = await supabase
       .from('supplierstore_receipts')
-      .select('*', { count: 'exact', head: true })
+      .select('receipt_number')
+      .order('receipt_number', { ascending: false })
+      .limit(1)
 
     if (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to count receipts for number generation', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to get max receipt number', { error })
       throw error
     }
 
-    const receiptCount = (count || 0) + 1
+    // Extract the sequential number from the last receipt (e.g., "RCP-1227-062" -> 62)
+    let nextNumber = 1
+    if (data && data.length > 0) {
+      const lastNumber = data[0].receipt_number
+      const match = lastNumber.match(/RCP-\d{4}-(\d{3})/)
+      if (match) {
+        nextNumber = parseInt(match[1], 10) + 1
+      }
+    }
+
     const date = new Date()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
 
-    return `RCP-${month}${day}-${String(receiptCount).padStart(3, '0')}`
+    return `RCP-${month}${day}-${String(nextNumber).padStart(3, '0')}`
   }
 
   private async getSupplierName(supplierId: string): Promise<string> {

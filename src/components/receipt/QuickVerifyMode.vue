@@ -560,8 +560,15 @@ function formatNumber(value: number): string {
 .quick-verify-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100vh; // fallback for older browsers
+  height: 100dvh; // dynamic viewport height (accounts for browser UI)
   background: rgb(var(--v-theme-background));
+  // Safe area padding for notches, status bars, navigation bars
+  padding-top: var(--safe-area-inset-top);
+  padding-bottom: var(--safe-area-inset-bottom);
+  padding-left: var(--safe-area-inset-left);
+  padding-right: var(--safe-area-inset-right);
+  box-sizing: border-box;
 }
 
 .progress-badge {
