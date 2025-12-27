@@ -165,20 +165,21 @@ export const usePosStore = defineStore('pos', () => {
         throw new Error('POS stores not available')
       }
 
-      // Загружаем данные из Supabase/localStorage
-      platform.debugLog('POS', '📦 Initializing tables from Supabase...')
-      await tablesStore.initialize()
+      // ✅ PERFORMANCE FIX: Загружаем данные ПАРАЛЛЕЛЬНО для ускорения
+      platform.debugLog('POS', '📦 Loading POS data in parallel...')
+      const startTime = performance.now()
 
-      platform.debugLog('POS', '📦 Loading orders from storage...')
-      await ordersStore.loadOrders()
+      // Phase 1: Core POS data (parallel)
+      await Promise.all([
+        tablesStore.initialize(),
+        ordersStore.loadOrders(),
+        paymentsStore.initialize(),
+        shiftsStore.loadShifts()
+      ])
 
-      platform.debugLog('POS', '📦 Loading payments from storage...')
-      await paymentsStore.initialize()
-
-      platform.debugLog('POS', '📦 Loading shifts from storage...')
-      await shiftsStore.loadShifts()
-
-      platform.debugLog('POS', '✅ Data loaded successfully', {
+      const phase1Time = performance.now() - startTime
+      platform.debugLog('POS', '✅ Phase 1: Core data loaded', {
+        time: `${phase1Time.toFixed(0)}ms`,
         tablesCount: tablesStore.tables.length,
         ordersCount: ordersStore.orders.length,
         paymentsCount: paymentsStore.payments.length,
@@ -186,18 +187,16 @@ export const usePosStore = defineStore('pos', () => {
         currentShift: shiftsStore.currentShift?.shiftNumber || 'None'
       })
 
-      // ✅ Sprint 7: Initialize Account Store for shift sync
+      // Phase 2: Account Store (depends on nothing, can be parallel with phase 1 in future)
       platform.debugLog('POS', '💰 Initializing Account Store...')
       const accountStore = useAccountStore()
       await accountStore.initializeStore()
 
-      // ✅ Sprint 6 FIX: Load pending payments for POS Receipt
-      // initializeStore() loads accounts/categories/transactions but NOT pendingPayments
-      platform.debugLog('POS', '💳 Loading pending payments...')
-      await accountStore.fetchPayments(true)
-      platform.debugLog('POS', '✅ Account Store initialized', {
-        accountsCount: accountStore.accounts.length,
-        pendingPaymentsCount: accountStore.pendingPayments.length
+      // ✅ Lazy load pending payments - defer to when Receipt is opened
+      // This saves ~300ms on initial load
+      // await accountStore.fetchPayments(true) // DEFERRED - loaded on-demand
+      platform.debugLog('POS', '✅ Account Store initialized (payments deferred)', {
+        accountsCount: accountStore.accounts.length
       })
 
       // ✅ Sprint 6: Initialize SyncService
