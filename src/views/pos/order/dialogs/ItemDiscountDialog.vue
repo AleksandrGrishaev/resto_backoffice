@@ -46,18 +46,20 @@
           </div>
 
           <!-- Value Input (Compact) -->
-          <v-text-field
-            v-model.number="discountValue"
+          <NumericInputField
+            v-model="discountValue"
             :label="discountType === 'percentage' ? 'Discount Percentage' : 'Discount Amount'"
             :suffix="discountType === 'percentage' ? '%' : 'IDR'"
-            type="number"
-            min="0"
+            :min="0"
             :max="maxDiscountValue"
+            :allow-decimal="discountType === 'percentage'"
+            :decimal-places="discountType === 'percentage' ? 1 : 0"
+            :format-as-currency="discountType === 'fixed'"
             :error-messages="valueErrorMessage"
             variant="outlined"
             density="compact"
             class="mb-3"
-            @input="updatePreview"
+            @update:model-value="updatePreview"
           />
 
           <!-- Live Preview (Compact) -->

@@ -171,11 +171,13 @@
           </v-alert>
 
           <v-form v-model="createBillForm.valid">
-            <v-text-field
-              v-model.number="createBillForm.amount"
+            <NumericInputField
+              v-model="createBillForm.amount"
               label="Amount"
-              type="number"
               prefix="Rp"
+              :min="0"
+              :max="999999999"
+              :format-as-currency="true"
               :rules="createBillForm.amountRules"
               :hint="
                 remainingAmount > 0 ? `Remaining unpaid: ${formatCurrency(remainingAmount)}` : ''

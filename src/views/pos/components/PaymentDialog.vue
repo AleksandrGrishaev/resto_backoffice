@@ -68,13 +68,14 @@
 
           <!-- Cash Payment -->
           <div v-if="selectedMethodType === 'cash'" class="cash-payment">
-            <v-text-field
-              v-model.number="receivedAmount"
+            <NumericInputField
+              v-model="receivedAmount"
               label="Получено наличными"
               prefix="₽"
               variant="outlined"
-              type="number"
-              :min="totalAmount"
+              :min="0"
+              :max="999999999"
+              :format-as-currency="true"
               :error="receivedAmount < totalAmount"
               :error-messages="receivedAmount < totalAmount ? 'Сумма меньше к оплате' : ''"
             />

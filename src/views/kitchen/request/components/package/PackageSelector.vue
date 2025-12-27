@@ -212,16 +212,17 @@
         <div class="info-item quantity-edit">
           <div class="info-label">Quantity</div>
           <div class="quantity-input-wrapper">
-            <v-text-field
+            <NumericInputField
               :model-value="calculatedQuantity"
-              type="number"
+              :min="0.1"
+              :max="9999"
+              :allow-decimal="true"
+              :decimal-places="1"
               density="compact"
               variant="outlined"
               hide-details
               suffix="pkg"
               class="quantity-input"
-              :step="0.1"
-              min="0.1"
               @update:model-value="handleQuantityChange(Number($event))"
             />
             <v-tooltip v-if="overrideQuantity !== null" location="top">

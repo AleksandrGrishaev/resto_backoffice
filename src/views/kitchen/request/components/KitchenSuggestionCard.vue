@@ -99,11 +99,12 @@
 
             <!-- Quantity Input -->
             <div class="d-flex align-center gap-1">
-              <v-text-field
+              <NumericInputField
                 :model-value="getCurrentQuantityForDisplay()"
-                type="number"
                 :min="getMinQuantity()"
-                :step="getQuantityStep()"
+                :max="99999"
+                :allow-decimal="true"
+                :decimal-places="1"
                 hide-details
                 density="compact"
                 variant="outlined"

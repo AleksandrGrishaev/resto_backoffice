@@ -72,11 +72,9 @@
 
             <!-- Quantity and Actions -->
             <div class="item-actions">
-              <v-text-field
+              <NumericInputField
                 :model-value="item.requestedQuantity"
-                type="number"
-                min="1"
-                step="1"
+                input-type="integer"
                 hide-details
                 density="compact"
                 variant="outlined"

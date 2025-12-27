@@ -101,15 +101,16 @@
       <v-card>
         <v-card-title>Enter quantity</v-card-title>
         <v-card-text>
-          <v-text-field
-            v-model.number="dialogQuantity"
-            type="number"
+          <NumericInputField
+            v-model="dialogQuantity"
             variant="outlined"
             :suffix="currentUnitLabel"
-            autofocus
+            :min="0"
+            :max="99999"
+            :allow-decimal="true"
+            :decimal-places="1"
             hide-details
             class="dialog-input"
-            inputmode="decimal"
             @keyup.enter="confirmNumberInput"
           />
         </v-card-text>

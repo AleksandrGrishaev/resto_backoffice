@@ -99,19 +99,16 @@
 
             <!-- Quantity Input -->
             <div class="d-flex align-center gap-1">
-              <v-text-field
+              <NumericInputField
                 :model-value="getCurrentQuantityForDisplay()"
-                type="number"
-                :min="getMinQuantity()"
-                :step="getQuantityStep()"
+                :input-type="currentDisplayUnit === baseUnit ? 'integer' : 'decimal'"
+                :suffix="currentDisplayUnit"
                 hide-details
                 density="compact"
                 variant="outlined"
-                style="width: 70px"
-                class="text-center"
+                style="width: 90px"
                 @update:model-value="updateQuantity"
               />
-              <span class="text-caption">{{ currentDisplayUnit }}</span>
             </div>
 
             <!-- Days supply -->

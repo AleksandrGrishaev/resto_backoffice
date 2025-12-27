@@ -190,13 +190,15 @@ function handleCompleteWithPayment() {
     <v-expand-transition>
       <v-card-text v-if="showPayment" class="bg-grey-lighten-5">
         <div class="d-flex align-center gap-4">
-          <v-text-field
-            v-model.number="paymentAmount"
+          <NumericInputField
+            v-model="paymentAmount"
             label="Payment Amount"
-            type="number"
             variant="outlined"
             density="compact"
             prefix="Rp"
+            :min="0"
+            :max="999999999"
+            :format-as-currency="true"
             :disabled="submitting"
             style="max-width: 200px"
           />

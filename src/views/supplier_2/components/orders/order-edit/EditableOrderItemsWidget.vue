@@ -78,12 +78,11 @@
       <!-- Package Quantity Column - EDITABLE -->
       <template #[`item.packageQuantity`]="{ item }">
         <div class="text-right">
-          <v-text-field
+          <NumericInputField
             v-if="canEdit && !isItemReceived(item)"
             :model-value="item.packageQuantity"
-            type="number"
-            min="1"
-            step="1"
+            :min="1"
+            :max="9999"
             variant="outlined"
             density="compact"
             hide-details
@@ -118,12 +117,12 @@
       <!-- Price per Package Column - EDITABLE -->
       <template #[`item.packagePrice`]="{ item }">
         <div class="text-right">
-          <v-text-field
+          <NumericInputField
             v-if="canEdit && !isItemReceived(item)"
             :model-value="item.packagePrice"
-            type="number"
-            min="0"
-            step="100"
+            :min="0"
+            :max="999999999"
+            :format-as-currency="true"
             variant="outlined"
             density="compact"
             hide-details

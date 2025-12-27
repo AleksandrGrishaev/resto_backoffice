@@ -95,12 +95,12 @@
 
           <!-- Quantity and Unit Row -->
           <v-col cols="8">
-            <v-text-field
-              v-model.number="quantity"
-              type="number"
+            <NumericInputField
+              v-model="quantity"
               label="Quantity"
               :min="quantityMin"
-              :step="quantityStep"
+              :max="99999"
+              :allow-decimal="false"
               :rules="[rules.required, rules.positive, rules.integer]"
               variant="outlined"
               :hint="quantityHint"

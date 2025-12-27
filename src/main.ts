@@ -14,6 +14,9 @@ import '@/styles/main.scss'
 // Plugins
 import { vuetify } from '@/plugins/vuetify'
 
+// Global components
+import { NumericInputField, NumericKeypad } from '@/components/input'
+
 // App
 import App from './App.vue'
 import { DebugUtils } from './utils'
@@ -38,6 +41,10 @@ function initializeApp() {
     app.use(pinia)
     app.use(router)
     app.use(vuetify)
+
+    // Регистрируем глобальные компоненты для tablet-friendly input
+    app.component('NumericInputField', NumericInputField)
+    app.component('NumericKeypad', NumericKeypad)
 
     // Монтируем приложение
     app.mount('#app')

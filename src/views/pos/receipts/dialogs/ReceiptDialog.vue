@@ -12,6 +12,8 @@ import { formatIDR } from '@/utils'
 import ReceiptItemRow from '../components/ReceiptItemRow.vue'
 import PaymentInfoWidget from '../components/PaymentInfoWidget.vue'
 import PackageChangeDialog from './PackageChangeDialog.vue'
+import QuickVerifyMode from '@/components/receipt/QuickVerifyMode.vue'
+import type { ReceiptItemInput, ReceiptItemOutput } from '@/composables/useQuickVerifyMode'
 
 interface Props {
   modelValue: boolean
@@ -49,6 +51,9 @@ const paymentAmount = ref(0)
 // Package change dialog state
 const showPackageChangeDialog = ref(false)
 const selectedItemForPackageChange = ref<ReceiptFormItem | null>(null)
+
+// Quick Verify state
+const showQuickVerify = ref(false)
 
 // =============================================
 // COMPUTED
@@ -108,6 +113,35 @@ const canAddPayment = computed(() => {
 
   // Otherwise allow adding payment
   return true
+})
+
+/**
+ * Convert POS receipt items to Quick Verify input format
+ */
+const quickVerifyItems = computed((): ReceiptItemInput[] => {
+  if (!props.formData) return []
+
+  return props.formData.items.map(item => {
+    const packageSize = item.packageSize || 1
+    const packagePrice = item.actualPrice || item.orderedPrice || 0
+    const receivedPkgQty =
+      item.receivedPackageQuantity ||
+      (packageSize > 0 ? Math.ceil(item.receivedQuantity / packageSize) : item.receivedQuantity)
+    const lineTotal = item.actualLineTotal || item.actualTotal || receivedPkgQty * packagePrice
+
+    return {
+      id: item.orderItemId,
+      itemName: item.productName,
+      orderedQuantity: item.orderedQuantity,
+      orderedUnit: item.unit || 'gram',
+      packageName: item.packageName,
+      packageSize: packageSize,
+      packageUnit: item.packageUnit,
+      receivedPackageQuantity: receivedPkgQty,
+      actualPackagePrice: packagePrice,
+      actualLineTotal: lineTotal
+    }
+  })
 })
 
 // Calculate unpaid amount based on billStatus
@@ -257,10 +291,40 @@ function handleComplete() {
 function handleCompleteWithPayment() {
   emit('complete-with-payment', paymentAmount.value)
 }
+
+/**
+ * Handle Quick Verify completion - apply changes via emits
+ */
+function handleQuickVerifyComplete(modifiedItems: ReceiptItemOutput[]) {
+  if (!props.formData) return
+
+  modifiedItems.forEach(modifiedItem => {
+    const formItem = props.formData?.items.find(i => i.orderItemId === modifiedItem.id)
+    if (!formItem) return
+
+    const packageSize = formItem.packageSize || 1
+
+    // Update quantities
+    const newPackageQty = modifiedItem.receivedPackageQuantity
+    const newBaseQty = newPackageQty * packageSize
+
+    // Emit updates
+    emit('update:packageQuantity', modifiedItem.id, newPackageQty)
+    emit('update:quantity', modifiedItem.id, newBaseQty)
+    emit('update:packagePrice', modifiedItem.id, modifiedItem.actualPackagePrice)
+
+    // If line total was manually adjusted
+    if (modifiedItem.actualLineTotal !== newPackageQty * modifiedItem.actualPackagePrice) {
+      emit('update:lineTotal', modifiedItem.id, modifiedItem.actualLineTotal)
+    }
+  })
+
+  showQuickVerify.value = false
+}
 </script>
 
 <template>
-  <v-dialog v-model="isOpen" max-width="1000" persistent scrollable>
+  <v-dialog v-model="isOpen" max-width="1100" persistent scrollable>
     <v-card v-if="order && formData" class="receipt-dialog">
       <!-- Header -->
       <v-card-title class="d-flex align-center pa-4 bg-primary">
@@ -290,15 +354,31 @@ function handleCompleteWithPayment() {
         <v-row no-gutters>
           <!-- Left: Items Table -->
           <v-col cols="12" lg="8">
+            <!-- Quick Verify Button -->
+            <div class="d-flex align-center justify-space-between px-4 pt-3">
+              <div class="text-subtitle-2 font-weight-bold">
+                Receipt Items ({{ formData.items.length }})
+              </div>
+              <v-btn
+                v-if="formData.items.length > 0 && !submitting"
+                color="primary"
+                variant="tonal"
+                size="small"
+                prepend-icon="mdi-lightning-bolt"
+                @click="showQuickVerify = true"
+              >
+                Quick Verify
+              </v-btn>
+            </div>
             <v-table density="compact">
               <thead>
                 <tr>
                   <th class="text-center" style="width: 40px"></th>
                   <th>Product</th>
-                  <th style="width: 100px">Package</th>
+                  <th style="width: 110px">Package</th>
                   <th style="width: 100px">Received</th>
-                  <th style="width: 120px">Price</th>
-                  <th class="text-right" style="width: 120px">Line Total</th>
+                  <th style="width: 150px">Price</th>
+                  <th class="text-right" style="width: 150px">Line Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -374,12 +454,14 @@ function handleCompleteWithPayment() {
                     <span class="text-subtitle-2">Payment Amount</span>
                   </div>
 
-                  <v-text-field
-                    v-model.number="paymentAmount"
-                    type="number"
+                  <NumericInputField
+                    v-model="paymentAmount"
                     variant="outlined"
                     density="compact"
                     prefix="Rp"
+                    :min="0"
+                    :max="999999999"
+                    :format-as-currency="true"
                     :disabled="submitting"
                     hide-details
                     class="mb-2"
@@ -452,6 +534,14 @@ function handleCompleteWithPayment() {
       :current-package-quantity="selectedItemForPackageChange?.receivedPackageQuantity"
       :required-quantity="selectedItemForPackageChange?.receivedQuantity"
       @package-changed="handlePackageChanged"
+    />
+
+    <!-- Quick Verify Mode -->
+    <QuickVerifyMode
+      v-model="showQuickVerify"
+      :items="quickVerifyItems"
+      @complete="handleQuickVerifyComplete"
+      @exit="showQuickVerify = false"
     />
   </v-dialog>
 </template>

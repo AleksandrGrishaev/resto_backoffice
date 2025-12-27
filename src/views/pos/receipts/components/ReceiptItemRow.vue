@@ -3,9 +3,10 @@
 // Sprint 6: POS Receipt Module - Receipt Item Row with Package Support
 // Matches backoffice EditableReceiptItemsWidget.vue functionality
 
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import type { ReceiptFormItem } from '@/stores/pos/receipts'
-import { formatIDR, parseIDR } from '@/utils/currency'
+import { formatIDR } from '@/utils/currency'
+import NumericInputField from '@/components/input/NumericInputField.vue'
 
 interface Props {
   item: ReceiptFormItem
@@ -26,17 +27,6 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<Emits>()
-
-// =============================================
-// LOCAL STATE FOR FORMATTED INPUTS
-// =============================================
-
-const formattedPackagePrice = ref<string>('')
-const formattedLineTotal = ref<string>('')
-
-// Track if user is actively editing (focused on input)
-const isEditingPackagePrice = ref(false)
-const isEditingLineTotal = ref(false)
 
 // =============================================
 // COMPUTED PROPERTIES
@@ -122,112 +112,31 @@ function handleQuantityChange(value: number | string) {
 // EVENT HANDLERS - PACKAGE PRICE
 // =============================================
 
-function handlePackagePriceFocus() {
-  isEditingPackagePrice.value = true
-  // Pre-fill with current value (without formatting)
-  const currentPrice = props.item.actualPrice ?? props.item.orderedPrice
-  if (currentPrice && currentPrice > 0) {
-    formattedPackagePrice.value = new Intl.NumberFormat('id-ID').format(currentPrice)
-  } else {
-    formattedPackagePrice.value = ''
-  }
-}
-
-function handlePackagePriceInput(value: string) {
-  formattedPackagePrice.value = value
-}
-
-function handlePackagePriceBlur() {
-  isEditingPackagePrice.value = false
-  const trimmed = formattedPackagePrice.value.trim()
-
-  // If empty, reset to ordered price (clear manual override)
-  if (!trimmed || trimmed === '') {
+function handlePackagePriceChange(value: number) {
+  if (value <= 0) {
+    // Reset to ordered price if cleared
     emit('update:packagePrice', props.item.orderItemId, props.item.orderedPrice || 0)
-    formattedPackagePrice.value = ''
-    return
+  } else {
+    emit('update:packagePrice', props.item.orderItemId, value)
   }
-
-  const parsed = parseIDR(`Rp ${trimmed}`)
-  if (parsed > 0) {
-    emit('update:packagePrice', props.item.orderItemId, parsed)
-  }
-  // Reset formatted value
-  formattedPackagePrice.value = ''
 }
 
 // =============================================
 // EVENT HANDLERS - LINE TOTAL (Market Rounding)
 // =============================================
 
-function handleLineTotalFocus() {
-  isEditingLineTotal.value = true
-  // Pre-fill with current value (without formatting)
-  if (props.item.actualTotal && props.item.actualTotal > 0) {
-    formattedLineTotal.value = new Intl.NumberFormat('id-ID').format(props.item.actualTotal)
-  } else {
-    formattedLineTotal.value = ''
-  }
-}
-
-function handleLineTotalInput(value: string) {
-  formattedLineTotal.value = value
-}
-
-function handleLineTotalBlur() {
-  isEditingLineTotal.value = false
-  const trimmed = formattedLineTotal.value.trim()
-
-  // If empty, clear manual override and return to calculated value
-  if (!trimmed || trimmed === '') {
+function handleLineTotalChange(value: number) {
+  if (value <= 0) {
+    // Clear manual adjustment
     emit('update:lineTotal', props.item.orderItemId, undefined)
-    formattedLineTotal.value = ''
-    return
-  }
-
-  const parsed = parseIDR(`Rp ${trimmed}`)
-  if (parsed > 0) {
-    emit('update:lineTotal', props.item.orderItemId, parsed)
   } else {
-    // Clear manual adjustment if invalid/zero
-    emit('update:lineTotal', props.item.orderItemId, undefined)
+    emit('update:lineTotal', props.item.orderItemId, value)
   }
-  // Reset formatted value
-  formattedLineTotal.value = ''
 }
 
 function clearLineTotalAdjustment() {
   emit('update:lineTotal', props.item.orderItemId, undefined)
 }
-
-// =============================================
-// FORMATTING HELPERS
-// =============================================
-
-function formatPriceForInput(price: number): string {
-  if (!price || price === 0) return ''
-  return new Intl.NumberFormat('id-ID').format(price)
-}
-
-// Get display value for package price input
-const displayPackagePrice = computed(() => {
-  // If user is actively editing, show their input (including empty string)
-  if (isEditingPackagePrice.value) {
-    return formattedPackagePrice.value
-  }
-  // Otherwise show formatted current value
-  return formatPriceForInput(effectivePackagePrice.value)
-})
-
-// Get display value for line total input
-const displayLineTotal = computed(() => {
-  // If user is actively editing, show their input (including empty string)
-  if (isEditingLineTotal.value) {
-    return formattedLineTotal.value
-  }
-  // Otherwise show formatted current value
-  return formatPriceForInput(props.item.actualTotal)
-})
 </script>
 
 <template>
@@ -270,11 +179,11 @@ const displayLineTotal = computed(() => {
     <td class="qty-col">
       <!-- Package-based input -->
       <template v-if="hasPackage">
-        <v-text-field
+        <NumericInputField
           :model-value="item.receivedPackageQuantity"
-          type="number"
-          min="0"
-          step="1"
+          :min="0"
+          :max="9999"
+          :allow-decimal="false"
           variant="outlined"
           density="compact"
           hide-details
@@ -299,11 +208,12 @@ const displayLineTotal = computed(() => {
 
       <!-- Base unit input (no package) -->
       <template v-else>
-        <v-text-field
+        <NumericInputField
           :model-value="item.receivedQuantity"
-          type="number"
-          min="0"
-          step="0.01"
+          :min="0"
+          :max="99999"
+          :allow-decimal="true"
+          :decimal-places="2"
           variant="outlined"
           density="compact"
           hide-details
@@ -325,20 +235,19 @@ const displayLineTotal = computed(() => {
 
     <!-- Price per Package / Unit -->
     <td class="price-col">
-      <v-text-field
-        :model-value="displayPackagePrice"
-        type="text"
+      <NumericInputField
+        :model-value="effectivePackagePrice"
         variant="outlined"
         density="compact"
         hide-details
         prefix="Rp"
+        :min="0"
+        :max="999999999"
+        :format-as-currency="true"
         :disabled="disabled"
-        :placeholder="formatPriceForInput(item.orderedPrice)"
         :class="{ 'price-changed': priceDiff }"
         class="price-input"
-        @focus="handlePackagePriceFocus"
-        @update:model-value="handlePackagePriceInput"
-        @blur="handlePackagePriceBlur"
+        @update:model-value="handlePackagePriceChange"
       />
       <div class="text-caption text-grey mt-1">
         {{ hasPackage ? 'per pkg' : `per ${item.unit}` }}
@@ -361,19 +270,19 @@ const displayLineTotal = computed(() => {
 
     <!-- Line Total (Editable for market rounding) -->
     <td class="total-col">
-      <v-text-field
-        :model-value="displayLineTotal"
-        type="text"
+      <NumericInputField
+        :model-value="item.actualTotal || 0"
         variant="outlined"
         density="compact"
         hide-details
         prefix="Rp"
+        :min="0"
+        :max="999999999"
+        :format-as-currency="true"
         :disabled="disabled"
         :class="{ 'line-total-adjusted': hasLineTotalAdjustment }"
         class="total-input"
-        @focus="handleLineTotalFocus"
-        @update:model-value="handleLineTotalInput"
-        @blur="handleLineTotalBlur"
+        @update:model-value="handleLineTotalChange"
       />
 
       <!-- Show adjustment indicator -->
@@ -434,23 +343,37 @@ const displayLineTotal = computed(() => {
 }
 
 .qty-col {
-  width: 120px;
+  width: 100px;
+  min-width: 100px;
 }
 
 .price-col {
-  width: 140px;
+  width: 150px;
+  min-width: 150px;
 }
 
 .total-col {
-  width: 140px;
+  width: 150px;
+  min-width: 150px;
 }
 
-.qty-input,
-.price-input,
-.total-input {
+.qty-input {
+  min-width: 80px;
+
   :deep(.v-field__input) {
     text-align: right;
     padding-right: 8px;
+  }
+}
+
+.price-input,
+.total-input {
+  min-width: 120px;
+
+  :deep(.v-field__input) {
+    text-align: right;
+    padding-right: 8px;
+    min-width: 70px;
   }
 }
 

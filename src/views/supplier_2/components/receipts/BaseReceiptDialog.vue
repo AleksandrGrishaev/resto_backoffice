@@ -74,14 +74,16 @@
           <v-row v-if="receiptForm.includeTax">
             <v-col cols="12" md="6">
               <div class="text-subtitle-2 font-weight-bold mb-2">Tax Information</div>
-              <v-text-field
-                v-model.number="receiptForm.taxAmount"
+              <NumericInputField
+                v-model="receiptForm.taxAmount"
                 label="Tax Amount (IDR)"
-                type="number"
                 prepend-inner-icon="mdi-receipt-text"
                 variant="outlined"
                 density="compact"
                 :disabled="isCompleted"
+                :min="0"
+                :max="999999999"
+                :format-as-currency="true"
                 hint="Total tax amount (included in item prices)"
                 persistent-hint
                 @update:model-value="onTaxAmountChange"
@@ -90,15 +92,18 @@
 
             <v-col cols="12" md="6">
               <div class="text-subtitle-2 font-weight-bold mb-2">&nbsp;</div>
-              <v-text-field
-                v-model.number="receiptForm.taxPercentage"
+              <NumericInputField
+                v-model="receiptForm.taxPercentage"
                 label="Tax Percentage"
-                type="number"
                 prepend-inner-icon="mdi-percent"
                 variant="outlined"
                 density="compact"
                 :disabled="isCompleted"
                 suffix="%"
+                :min="0"
+                :max="100"
+                :allow-decimal="true"
+                :decimal-places="2"
                 hint="Tax % (for reference only)"
                 persistent-hint
                 @update:model-value="onTaxPercentageChange"
@@ -146,8 +151,22 @@
           </div>
         </div>
 
-        <!-- Items Widget -->
+        <!-- Items Widget Header with Quick Verify Button -->
         <div class="pa-4">
+          <div class="d-flex align-center justify-space-between mb-3">
+            <div class="text-subtitle-1 font-weight-bold">
+              Receipt Items ({{ receiptForm.items.length }})
+            </div>
+            <v-btn
+              v-if="!isCompleted && receiptForm.items.length > 0"
+              color="primary"
+              variant="tonal"
+              prepend-icon="mdi-lightning-bolt"
+              @click="showQuickVerify = true"
+            >
+              Quick Verify
+            </v-btn>
+          </div>
           <EditableReceiptItemsWidget
             :items="receiptForm.items"
             :is-completed="isCompleted"
@@ -206,6 +225,14 @@
         </v-btn>
       </v-card-actions>
     </v-card>
+
+    <!-- Quick Verify Mode -->
+    <QuickVerifyMode
+      v-model="showQuickVerify"
+      :items="quickVerifyItems"
+      @complete="handleQuickVerifyComplete"
+      @exit="showQuickVerify = false"
+    />
 
     <!-- Confirmation Dialog -->
     <v-dialog v-model="showConfirmDialog" max-width="500px">
@@ -274,6 +301,8 @@ import type {
   CreateReceiptData
 } from '@/stores/supplier_2/types'
 import EditableReceiptItemsWidget from './receipt-edit/EditableReceiptItemsWidget.vue'
+import QuickVerifyMode from '@/components/receipt/QuickVerifyMode.vue'
+import type { ReceiptItemInput, ReceiptItemOutput } from '@/composables/useQuickVerifyMode'
 
 const MODULE_NAME = 'BaseReceiptDialog'
 
@@ -323,6 +352,7 @@ const isLoading = ref(false)
 const isSaving = ref(false)
 const isCompleting = ref(false)
 const showConfirmDialog = ref(false)
+const showQuickVerify = ref(false)
 
 interface ReceiptFormItem extends ReceiptItem {
   unit?: string
@@ -416,6 +446,30 @@ const canComplete = computed(() => {
     receiptForm.value.items.every(item => item.receivedQuantity >= 0) &&
     !isCompleting.value
   )
+})
+
+/**
+ * Convert receipt form items to Quick Verify input format
+ */
+const quickVerifyItems = computed((): ReceiptItemInput[] => {
+  return receiptForm.value.items.map(item => {
+    const pkg = item.packageId ? productsStore.getPackageById(item.packageId) : null
+    const packageSize = pkg?.packageSize || item.orderedQuantity // fallback to ordered qty if no package
+
+    return {
+      id: item.id,
+      itemName: item.itemName,
+      orderedQuantity: item.orderedQuantity,
+      orderedUnit: item.unit || 'gram',
+      packageName: item.packageName || pkg?.packageName,
+      packageSize: packageSize,
+      packageUnit: item.packageUnit || pkg?.packageUnit,
+      receivedPackageQuantity:
+        item.receivedPackageQuantity || Math.ceil(item.receivedQuantity / packageSize),
+      actualPackagePrice: item.actualPackagePrice || item.actualPrice || item.orderedPrice || 0,
+      actualLineTotal: calculateLineTotal(item)
+    }
+  })
 })
 
 // =============================================
@@ -558,6 +612,48 @@ function handleItemChanged(item: ReceiptFormItem, index: number) {
     receivedQuantity: item.receivedQuantity,
     actualPrice: item.actualPrice
   })
+}
+
+/**
+ * Handle Quick Verify completion - apply changes to receipt form
+ */
+function handleQuickVerifyComplete(modifiedItems: ReceiptItemOutput[]) {
+  DebugUtils.info(MODULE_NAME, 'Quick Verify completed', {
+    modifiedCount: modifiedItems.filter(i => i.isModified).length,
+    notReceivedCount: modifiedItems.filter(i => i.isNotReceived).length
+  })
+
+  // Apply changes from Quick Verify to receipt form items
+  modifiedItems.forEach(modifiedItem => {
+    const formItemIndex = receiptForm.value.items.findIndex(i => i.id === modifiedItem.id)
+    if (formItemIndex === -1) return
+
+    const formItem = receiptForm.value.items[formItemIndex]
+    const pkg = formItem.packageId ? productsStore.getPackageById(formItem.packageId) : null
+    const packageSize = pkg?.packageSize || 1
+
+    // Update received quantities
+    formItem.receivedPackageQuantity = modifiedItem.receivedPackageQuantity
+    formItem.receivedQuantity = modifiedItem.receivedPackageQuantity * packageSize
+
+    // Update prices
+    formItem.actualPackagePrice = modifiedItem.actualPackagePrice
+    formItem.actualPrice = modifiedItem.actualPackagePrice
+    formItem.actualBaseCost = packageSize > 0 ? modifiedItem.actualPackagePrice / packageSize : 0
+
+    // If not received, ensure everything is 0
+    if (modifiedItem.isNotReceived) {
+      formItem.receivedPackageQuantity = 0
+      formItem.receivedQuantity = 0
+    }
+
+    // Trigger reactivity
+    receiptForm.value.items[formItemIndex] = { ...formItem }
+  })
+
+  showQuickVerify.value = false
+
+  DebugUtils.info(MODULE_NAME, 'Receipt form updated from Quick Verify')
 }
 
 // =============================================

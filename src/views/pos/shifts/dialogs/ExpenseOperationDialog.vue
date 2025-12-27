@@ -20,17 +20,15 @@
         <v-form ref="formRef" v-model="formValid" @submit.prevent="createExpense">
           <!-- Amount -->
           <div class="mb-4">
-            <v-text-field
-              v-model.number="form.amount"
+            <NumericInputField
+              v-model="form.amount"
               label="Amount *"
               variant="outlined"
-              type="number"
-              min="0"
-              step="1000"
+              :min="0"
+              :max="999999999"
+              :format-as-currency="true"
               prefix="Rp"
-              :rules="[rules.required, rules.positive]"
               prepend-inner-icon="mdi-currency-usd"
-              autofocus
               hint="Enter expense amount"
               persistent-hint
             />

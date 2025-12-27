@@ -67,35 +67,33 @@
 
             <!-- Right Column: Quantity Input -->
             <div class="input-column">
-              <v-text-field
+              <NumericInputField
                 v-if="isPortionType"
-                v-model.number="portionInput"
+                v-model="portionInput"
                 label="Portions"
-                type="number"
-                min="1"
-                step="1"
+                :min="1"
+                :max="9999"
+                :allow-decimal="false"
                 variant="outlined"
                 density="compact"
                 suffix="pcs"
                 prepend-inner-icon="mdi-food-variant"
                 :hint="`= ${effectiveQuantity}${task.targetUnit}`"
                 persistent-hint
-                autofocus
-                :rules="[v => (v && v > 0) || 'Required']"
+                :error-messages="!portionInput || portionInput <= 0 ? 'Required' : ''"
               />
-              <v-text-field
+              <NumericInputField
                 v-else
-                v-model.number="quantity"
+                v-model="quantity"
                 label="Quantity"
-                type="number"
-                min="1"
-                step="50"
+                :min="1"
+                :max="99999"
+                :allow-decimal="false"
                 variant="outlined"
                 density="compact"
                 :suffix="task.targetUnit"
                 prepend-inner-icon="mdi-scale"
-                autofocus
-                :rules="[v => (v && v > 0) || 'Required']"
+                :error-messages="!quantity || quantity <= 0 ? 'Required' : ''"
               />
 
               <!-- Cost Display (compact) -->

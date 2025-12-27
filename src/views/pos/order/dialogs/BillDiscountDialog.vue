@@ -155,21 +155,27 @@
               </v-btn-toggle>
             </div>
 
-            <!-- Value Input (Compact) -->
-            <v-text-field
-              v-model.number="discountValue"
+            <!-- Value Input (Compact) - Tablet-friendly -->
+            <NumericInputField
+              v-model="discountValue"
               :label="discountType === 'percentage' ? 'Discount Percentage' : 'Discount Amount'"
               :suffix="discountType === 'percentage' ? '%' : 'IDR'"
               :hint="maxDiscountHint"
               persistent-hint
-              type="number"
-              min="0"
+              :min="0"
               :max="maxDiscountValue"
+              :allow-decimal="discountType === 'percentage'"
+              :decimal-places="1"
+              :format-as-currency="discountType === 'fixed'"
               :error-messages="valueErrorMessage"
+              :quick-values="
+                discountType === 'percentage' ? percentageQuickValues : fixedQuickValues
+              "
               variant="outlined"
               density="compact"
               class="mb-3"
-              @input="updatePreview"
+              submit-label="Apply"
+              @update:model-value="updatePreview"
             />
 
             <!-- Reason Selection (Compact) -->
@@ -246,6 +252,7 @@ import type { DiscountReason, DiscountValueType } from '@/stores/discounts/types
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import { DebugUtils } from '@/utils'
+import { NumericInputField } from '@/components/input'
 
 const MODULE_NAME = 'BillDiscountDialog'
 const MAX_NOTES_LENGTH = DISCOUNT_VALIDATION.MAX_NOTES_LENGTH
@@ -279,6 +286,21 @@ const selectedReason = ref<DiscountReason | ''>('')
 const notes = ref<string>('')
 const isApplying = ref<boolean>(false)
 const isRemoving = ref<boolean>(false)
+
+// Quick values for NumericKeypad
+const percentageQuickValues = [
+  { label: '5%', value: 5 },
+  { label: '10%', value: 10 },
+  { label: '15%', value: 15 },
+  { label: '20%', value: 20 }
+]
+
+const fixedQuickValues = [
+  { label: '5K', value: 5000 },
+  { label: '10K', value: 10000 },
+  { label: '20K', value: 20000 },
+  { label: '50K', value: 50000 }
+]
 
 // Computed - Bill data
 const activeItems = computed(() => {

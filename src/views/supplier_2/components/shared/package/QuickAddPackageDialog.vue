@@ -30,16 +30,16 @@
           <!-- Package Size & Unit -->
           <v-row dense class="mb-3">
             <v-col cols="6">
-              <v-text-field
-                v-model.number="form.packageSize"
+              <NumericInputField
+                v-model="form.packageSize"
                 label="Package Size *"
-                type="number"
-                min="0.001"
-                step="0.001"
+                :min="0.001"
+                :max="99999"
+                :allow-decimal="true"
+                :decimal-places="3"
                 variant="outlined"
                 density="compact"
-                prepend-inner-icon="mdi-scale"
-                :rules="[v => (!!v && v > 0) || 'Must be > 0']"
+                :error-messages="!form.packageSize || form.packageSize <= 0 ? 'Must be > 0' : ''"
               />
             </v-col>
             <v-col cols="6">
@@ -55,19 +55,18 @@
           </v-row>
 
           <!-- Package Price (optional) with IDR formatting -->
-          <v-text-field
-            v-model="formattedPrice"
+          <NumericInputField
+            v-model="form.packagePrice"
             label="Package Price (optional)"
-            type="text"
             variant="outlined"
             density="compact"
             prefix="Rp"
-            placeholder="0"
-            prepend-inner-icon="mdi-currency-usd"
+            :min="0"
+            :max="999999999"
+            :format-as-currency="true"
             hint="Leave empty to calculate from base cost"
             persistent-hint
             class="mb-3"
-            @blur="validatePrice"
           />
 
           <!-- Brand Name (optional) -->
@@ -139,7 +138,7 @@
 import { ref, computed, watch } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
 import { DebugUtils } from '@/utils'
-import { formatIDR, parseIDR } from '@/utils/currency'
+import { formatIDR } from '@/utils/currency'
 import type { PackageOption } from '@/stores/productsStore/types'
 
 const MODULE_NAME = 'QuickAddPackageDialog'
@@ -188,8 +187,6 @@ const form = ref({
   brandName: '',
   notes: ''
 })
-
-const formattedPrice = ref('')
 
 // =============================================
 // COMPUTED
@@ -249,19 +246,6 @@ const pricePerBaseUnit = computed(() => {
 // METHODS
 // =============================================
 
-function validatePrice() {
-  if (formattedPrice.value) {
-    const parsed = parseIDR(`Rp ${formattedPrice.value}`)
-    form.value.packagePrice = parsed
-    formattedPrice.value = formatPriceForInput(parsed)
-  }
-}
-
-function formatPriceForInput(price: number): string {
-  if (!price || price === 0) return ''
-  return new Intl.NumberFormat('id-ID').format(price)
-}
-
 function formatCurrency(amount: number): string {
   return formatIDR(amount)
 }
@@ -308,7 +292,6 @@ function resetForm() {
     brandName: '',
     notes: ''
   }
-  formattedPrice.value = ''
   formValid.value = false
 }
 

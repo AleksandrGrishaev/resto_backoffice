@@ -92,13 +92,13 @@
             <!-- Confirm Tab -->
             <v-window-item value="confirm">
               <div class="mb-4">
-                <v-text-field
-                  v-model.number="form.actualAmount"
+                <NumericInputField
+                  v-model="form.actualAmount"
                   label="Actual Amount"
                   variant="outlined"
-                  type="number"
-                  min="0"
-                  step="1000"
+                  :min="0"
+                  :max="999999999"
+                  :format-as-currency="true"
                   prefix="Rp"
                   :rules="[rules.required, rules.positive]"
                   prepend-inner-icon="mdi-currency-usd"

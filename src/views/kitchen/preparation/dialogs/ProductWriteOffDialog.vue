@@ -104,11 +104,12 @@
                         Stock: {{ pendingProduct.currentQuantity }} {{ pendingProduct.unit }}
                       </div>
                     </div>
-                    <v-text-field
-                      v-model.number="pendingQuantity"
-                      type="number"
-                      min="0.01"
-                      step="0.1"
+                    <NumericInputField
+                      v-model="pendingQuantity"
+                      :min="0.01"
+                      :max="99999"
+                      :allow-decimal="true"
+                      :decimal-places="2"
                       variant="outlined"
                       density="compact"
                       :suffix="pendingProduct.unit"

@@ -93,13 +93,16 @@
               <v-radio label="Fixed Amount" value="fixed" />
             </v-radio-group>
 
-            <v-text-field
+            <NumericInputField
               v-model="discountValue"
               :label="discountType === 'percentage' ? 'Discount %' : 'Discount Amount'"
-              :prefix="discountType === 'fixed' ? '$' : ''"
+              :prefix="discountType === 'fixed' ? 'Rp' : ''"
               :suffix="discountType === 'percentage' ? '%' : ''"
-              type="number"
-              min="0"
+              :min="0"
+              :max="discountType === 'percentage' ? 100 : 999999999"
+              :allow-decimal="discountType === 'percentage'"
+              :decimal-places="discountType === 'percentage' ? 1 : 0"
+              :format-as-currency="discountType === 'fixed'"
               density="compact"
             />
 

@@ -52,15 +52,14 @@
               </div>
             </v-alert>
 
-            <v-text-field
-              v-model.number="form.startingCash"
+            <NumericInputField
+              v-model="form.startingCash"
               label="Starting Cash Amount"
               variant="outlined"
-              type="number"
-              min="0"
-              step="1000"
+              :min="0"
+              :max="999999999"
+              :format-as-currency="true"
               prefix="Rp"
-              :rules="[rules.required, rules.nonNegative]"
               prepend-inner-icon="mdi-cash"
               hint="Count and enter the actual cash amount in the register"
               persistent-hint

@@ -113,15 +113,15 @@
 
             <!-- Cash Payment Details -->
             <div v-if="selectedMethod === 'cash'" class="cash-payment mb-4">
-              <v-text-field
-                v-model.number="cashReceived"
+              <NumericInputField
+                v-model="cashReceived"
                 label="Cash Received"
                 prefix="Rp"
-                type="number"
+                :min="0"
+                :max="999999999"
+                :format-as-currency="true"
                 variant="outlined"
                 density="compact"
-                :min="totalAmount"
-                :rules="[cashValidationRule]"
                 :error="cashReceived > 0 && cashReceived < totalAmount"
                 hide-details
               >
@@ -135,7 +135,7 @@
                     EXACT
                   </v-btn>
                 </template>
-              </v-text-field>
+              </NumericInputField>
 
               <!-- Change Display -->
               <v-alert

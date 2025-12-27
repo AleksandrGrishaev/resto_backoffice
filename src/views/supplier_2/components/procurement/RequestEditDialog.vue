@@ -83,18 +83,18 @@
 
                 <!-- Quantity -->
                 <td class="text-center">
-                  <v-text-field
+                  <NumericInputField
                     v-if="canEditItems && !isItemOrdered(item)"
-                    v-model.number="item.requestedQuantity"
-                    type="number"
-                    min="0.1"
-                    step="0.1"
+                    v-model="item.requestedQuantity"
+                    :min="0.1"
+                    :max="99999"
+                    :allow-decimal="true"
+                    :decimal-places="1"
                     hide-details
                     density="compact"
                     variant="outlined"
                     style="width: 100px"
-                    class="text-center"
-                    @blur="validateQuantity(item)"
+                    @update:model-value="validateQuantity(item)"
                   />
                   <span v-else class="font-weight-medium">
                     {{ item.requestedQuantity }}

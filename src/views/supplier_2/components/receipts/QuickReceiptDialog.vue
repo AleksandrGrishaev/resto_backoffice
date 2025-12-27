@@ -167,30 +167,33 @@
 
                     <!-- Package Quantity -->
                     <td>
-                      <v-text-field
-                        v-model.number="item.packageQuantity"
-                        type="number"
+                      <NumericInputField
+                        v-model="item.packageQuantity"
                         variant="outlined"
                         density="compact"
                         hide-details
-                        min="0"
-                        step="1"
+                        :min="0"
+                        :max="9999"
                         :disabled="!item.packageId"
+                        :allow-decimal="true"
+                        :decimal-places="1"
+                        submit-label="OK"
                         @update:model-value="handlePackageQuantityChange(index)"
                       />
                     </td>
 
                     <!-- Package Price -->
                     <td>
-                      <v-text-field
-                        v-model.number="item.unitPrice"
-                        type="number"
+                      <NumericInputField
+                        v-model="item.unitPrice"
                         variant="outlined"
                         density="compact"
                         hide-details
-                        min="0"
-                        step="1"
+                        :min="0"
+                        :max="99999999"
                         :disabled="!item.packageId"
+                        :format-as-currency="true"
+                        submit-label="OK"
                         @update:model-value="calculateItemTotal(index)"
                       />
                     </td>
@@ -257,13 +260,15 @@
 
           <v-row v-if="form.includeTax">
             <v-col cols="12" md="6">
-              <v-text-field
-                v-model.number="form.taxAmount"
+              <NumericInputField
+                v-model="form.taxAmount"
                 label="Tax Amount (IDR)"
-                type="number"
                 prepend-inner-icon="mdi-receipt-text"
                 variant="outlined"
                 density="comfortable"
+                :min="0"
+                :max="999999999"
+                :format-as-currency="true"
                 hint="Total tax amount (included in item prices)"
                 persistent-hint
                 @update:model-value="onTaxAmountChange"
@@ -271,14 +276,17 @@
             </v-col>
 
             <v-col cols="12" md="6">
-              <v-text-field
-                v-model.number="form.taxPercentage"
+              <NumericInputField
+                v-model="form.taxPercentage"
                 label="Tax Percentage"
-                type="number"
                 prepend-inner-icon="mdi-percent"
                 variant="outlined"
                 density="comfortable"
                 suffix="%"
+                :min="0"
+                :max="100"
+                :allow-decimal="true"
+                :decimal-places="2"
                 hint="Tax % (for reference only)"
                 persistent-hint
                 @update:model-value="onTaxPercentageChange"
@@ -385,6 +393,7 @@ import { TimeUtils } from '@/utils/time'
 import { DebugUtils } from '@/utils'
 import type { Receipt, PurchaseOrder, ReceiptItem, OrderItem } from '@/stores/supplier_2/types'
 import QuickAddPackageDialog from '../shared/package/QuickAddPackageDialog.vue'
+import { NumericInputField } from '@/components/input'
 
 const MODULE_NAME = 'QuickReceiptDialog'
 

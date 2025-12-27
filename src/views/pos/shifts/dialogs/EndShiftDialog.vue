@@ -137,15 +137,14 @@
             </v-col>
 
             <v-col cols="6">
-              <v-text-field
-                v-model.number="form.endingCash"
+              <NumericInputField
+                v-model="form.endingCash"
                 label="Actual Cash Count"
                 variant="outlined"
-                type="number"
-                min="0"
-                step="1000"
+                :min="0"
+                :max="999999999"
+                :format-as-currency="true"
                 prefix="Rp"
-                :rules="[rules.required, rules.nonNegative]"
                 :color="discrepancyColor"
                 persistent-hint
                 :hint="discrepancyHint"
@@ -257,11 +256,13 @@
             class="mb-3"
           />
 
-          <v-text-field
-            v-model.number="newCorrection.amount"
+          <NumericInputField
+            v-model="newCorrection.amount"
             label="Amount"
             variant="outlined"
-            type="number"
+            :min="0"
+            :max="999999999"
+            :format-as-currency="true"
             prefix="Rp"
             class="mb-3"
           />

@@ -76,10 +76,11 @@
               >
                 <v-icon size="20">mdi-minus</v-icon>
               </v-btn>
-              <v-text-field
-                v-model.number="packageQuantity"
-                type="number"
-                min="1"
+              <NumericInputField
+                v-model="packageQuantity"
+                :min="1"
+                :max="9999"
+                :allow-decimal="false"
                 variant="outlined"
                 density="compact"
                 hide-details
@@ -113,23 +114,25 @@
             </div>
 
             <!-- Price Input (aligned with Package Select) -->
-            <v-text-field
+            <NumericInputField
               v-if="priceMode === 'package' && selectedPackage"
-              v-model.number="pricePerPackage"
-              type="number"
-              min="0"
+              v-model="pricePerPackage"
+              :min="0"
+              :max="999999999"
+              :format-as-currency="true"
               variant="outlined"
               density="compact"
               hide-details
               prefix="Rp"
               class="mb-3"
             />
-            <v-text-field
+            <NumericInputField
               v-else
-              v-model.number="pricePerBaseUnit"
-              type="number"
-              min="0"
-              step="0.01"
+              v-model="pricePerBaseUnit"
+              :min="0"
+              :max="999999999"
+              :allow-decimal="true"
+              :decimal-places="2"
               variant="outlined"
               density="compact"
               hide-details

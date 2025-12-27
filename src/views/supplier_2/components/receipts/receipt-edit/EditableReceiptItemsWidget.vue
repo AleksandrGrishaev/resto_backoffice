@@ -79,12 +79,13 @@
       <!-- Received Packages - EDITABLE -->
       <template #[`item.receivedPackages`]="{ item }">
         <div class="text-right">
-          <v-text-field
+          <NumericInputField
             v-if="!isCompleted"
             :model-value="getReceivedPackageQuantity(item)"
-            type="number"
-            min="0"
-            step="1"
+            :min="0"
+            :max="9999"
+            :allow-decimal="true"
+            :decimal-places="1"
             variant="outlined"
             density="compact"
             hide-details
@@ -120,19 +121,19 @@
       <!-- Actual Price per Package - EDITABLE with IDR formatting -->
       <template #[`item.actualPackagePrice`]="{ item }">
         <div class="text-right">
-          <v-text-field
+          <NumericInputField
             v-if="!isCompleted"
-            :model-value="getFormattedPrice(item)"
-            type="text"
+            :model-value="getActualPackagePrice(item)"
+            :min="0"
+            :max="999999999"
+            :format-as-currency="true"
             variant="outlined"
             density="compact"
             hide-details
             style="width: 150px"
             prefix="Rp"
-            :placeholder="formatPriceForInput(getOrderedPackagePrice(item))"
             :class="{ 'price-discrepancy': hasPriceDiscrepancy(item) }"
-            @update:model-value="updateFormattedPrice(item, $event)"
-            @blur="validateAndUpdatePrice(item)"
+            @update:model-value="updateActualPackagePrice(item, $event)"
           />
           <div v-else>
             <div class="text-body-2 font-weight-medium">
@@ -172,18 +173,18 @@
         <div class="text-right">
           <!-- Editable mode -->
           <template v-if="!isCompleted">
-            <v-text-field
-              :model-value="getFormattedLineTotal(item)"
-              type="text"
+            <NumericInputField
+              :model-value="calculateActualLineTotal(item)"
+              :min="0"
+              :max="999999999"
+              :format-as-currency="true"
               variant="outlined"
               density="compact"
               hide-details
               style="width: 140px"
               prefix="Rp"
-              :placeholder="formatPriceForInput(calculateExpectedLineTotal(item))"
               :class="{ 'line-total-adjusted': hasLineTotalAdjustment(item) }"
-              @update:model-value="updateFormattedLineTotal(item, $event)"
-              @blur="validateAndUpdateLineTotal(item)"
+              @update:model-value="updateLineTotal(item, $event)"
             />
           </template>
 
@@ -758,9 +759,9 @@ function formatLineTotalAdjustment(item: ReceiptItem): string {
 // EDITING METHODS
 // =============================================
 
-function updateReceivedPackages(item: ReceiptItem, value: string | number) {
-  const newPackageQty = Number(value)
-  if (newPackageQty < 0) return
+function updateReceivedPackages(item: ReceiptItem, value: number | null) {
+  if (value === null || value < 0) return
+  const newPackageQty = value
 
   const packageSize = getPackageSize(item)
   if (!packageSize) return
@@ -794,9 +795,41 @@ function updateReceivedPackages(item: ReceiptItem, value: string | number) {
   emitItemChange(item)
 }
 
-function updateActualPackagePrice(item: ReceiptItem, value: string | number) {
-  const newPrice = typeof value === 'string' ? parseIDR(value) : Number(value)
-  if (newPrice < 0) return
+/**
+ * Update line total directly (for NumericInputField)
+ */
+function updateLineTotal(item: ReceiptItem, value: number | null) {
+  if (value === null || value < 0) return
+
+  // Store the actual line total
+  actualLineTotals.value.set(item.id, value)
+
+  // Recalculate base cost from line total
+  if (item.receivedQuantity > 0) {
+    const newBaseCost = value / item.receivedQuantity
+    item.actualBaseCost = newBaseCost
+
+    // Also update package price if we have package info
+    const packageSize = getPackageSize(item)
+    if (packageSize > 0) {
+      item.actualPackagePrice = newBaseCost * packageSize
+      item.actualPrice = newBaseCost * packageSize
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Line total updated directly', {
+      itemName: item.itemName,
+      newLineTotal: value,
+      newBaseCost,
+      newPackagePrice: item.actualPackagePrice
+    })
+
+    emitItemChange(item)
+  }
+}
+
+function updateActualPackagePrice(item: ReceiptItem, value: number | null) {
+  if (value === null || value < 0) return
+  const newPrice = value
 
   const packageSize = getPackageSize(item)
   if (!packageSize) return

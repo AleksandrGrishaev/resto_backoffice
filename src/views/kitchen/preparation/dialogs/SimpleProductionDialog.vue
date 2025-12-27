@@ -106,39 +106,37 @@
             <!-- Right Column -->
             <div v-if="selectedPreparation" class="right-column">
               <!-- Quantity Input - Portion Type -->
-              <v-text-field
+              <NumericInputField
                 v-if="isPortionType"
-                v-model.number="portionInput"
+                v-model="portionInput"
                 label="Portions"
-                type="number"
-                min="1"
-                step="1"
+                :min="1"
+                :max="9999"
+                :allow-decimal="false"
                 variant="outlined"
                 density="compact"
                 suffix="pcs"
                 prepend-inner-icon="mdi-food-variant"
                 :hint="`= ${effectiveQuantity}${selectedPreparation.outputUnit}`"
                 persistent-hint
-                autofocus
-                :rules="[v => (v && v > 0) || 'Required']"
+                :error-messages="!portionInput || portionInput <= 0 ? 'Required' : ''"
               />
 
               <!-- Quantity Input - Weight Type -->
-              <v-text-field
+              <NumericInputField
                 v-else
-                v-model.number="quantity"
+                v-model="quantity"
                 label="Quantity"
-                type="number"
-                min="50"
-                step="50"
+                :min="1"
+                :max="99999"
+                :allow-decimal="false"
                 variant="outlined"
                 density="compact"
                 :suffix="selectedPreparation?.outputUnit || 'g'"
                 prepend-inner-icon="mdi-scale"
                 :hint="quantityHint"
                 persistent-hint
-                autofocus
-                :rules="[v => (v && v > 0) || 'Required']"
+                :error-messages="!quantity || quantity <= 0 ? 'Required' : ''"
               />
 
               <!-- Cost Display (compact) -->
