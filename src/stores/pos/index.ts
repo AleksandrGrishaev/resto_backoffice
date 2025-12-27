@@ -13,10 +13,9 @@ import { useShiftsStore } from './shifts/shiftsStore'
 // ✅ Sprint 7: Account Store for shift sync
 import { useAccountStore } from '@/stores/account'
 
-// ✅ Sprint 8: Catalog stores for full sync
-import { useProductsStore } from '@/stores/productsStore'
+// ✅ Sprint 9: Only essential stores for POS sync (recipes excluded - cost recalculation too slow)
 import { useMenuStore } from '@/stores/menu'
-import { useRecipesStore } from '@/stores/recipes'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 
 // ✅ Sprint 6: SyncService integration
 import { useSyncService } from '@/core/sync/SyncService'
@@ -362,8 +361,8 @@ export const usePosStore = defineStore('pos', () => {
   }
 
   /**
-   * ✅ Sprint 8: Полная синхронизация всех данных
-   * Вызывается из кнопки "Sync Data" в POS Navigation Menu
+   * ✅ Sprint 9: Оптимизированная синхронизация POS данных
+   * Обновляет только stores, используемые в POS (не трогает recipes с cost recalculation)
    */
   async function syncData(): Promise<ServiceResponse<void>> {
     try {
@@ -372,7 +371,7 @@ export const usePosStore = defineStore('pos', () => {
       }
 
       const startTime = performance.now()
-      platform.debugLog('POS', '🔄 Starting full data sync...')
+      platform.debugLog('POS', '🔄 Starting POS data sync...')
 
       // Phase 1: Перезагрузить POS stores (параллельно)
       platform.debugLog('POS', '📦 Phase 1: Reloading POS stores...')
@@ -383,16 +382,15 @@ export const usePosStore = defineStore('pos', () => {
         shiftsStore.loadShifts()
       ])
 
-      // Phase 2: Перезагрузить каталоги (используем refresh() для инвалидации кеша)
-      platform.debugLog('POS', '📦 Phase 2: Refreshing catalog stores with cache invalidation...')
-      const productsStore = useProductsStore()
+      // Phase 2: Перезагрузить каталоги для POS (меню + методы оплаты)
+      // ⚠️ НЕ обновляем recipes/products - это занимает 30+ сек из-за cost recalculation
+      platform.debugLog('POS', '📦 Phase 2: Refreshing POS catalogs...')
       const menuStore = useMenuStore()
-      const recipesStore = useRecipesStore()
+      const paymentSettingsStore = usePaymentSettingsStore()
 
       await Promise.all([
-        productsStore.refresh(), // ✅ Sprint 8: Invalidates cache + reloads from server
-        menuStore.refresh(), // ✅ Sprint 8: Invalidates cache + reloads from server
-        recipesStore.refresh() // ✅ Sprint 8: Invalidates cache + reloads from server
+        menuStore.refresh(), // Меню и цены
+        paymentSettingsStore.fetchPaymentMethods() // Методы оплаты (могли добавить новые)
       ])
 
       // Phase 3: Обработать sync queue
@@ -404,11 +402,12 @@ export const usePosStore = defineStore('pos', () => {
 
       lastSync.value = new Date().toISOString()
 
-      platform.debugLog('POS', '✅ Full sync completed', {
+      platform.debugLog('POS', '✅ POS sync completed', {
         duration: `${duration.toFixed(0)}ms`,
-        tablesCount: tablesStore.tables.length,
-        ordersCount: ordersStore.orders.length,
-        productsCount: productsStore.products.length,
+        tables: tablesStore.tables.length,
+        orders: ordersStore.orders.length,
+        menuItems: menuStore.allMenuItems.length,
+        paymentMethods: paymentSettingsStore.paymentMethods.length,
         syncQueue: {
           succeeded: syncReport.succeeded,
           failed: syncReport.failed,
