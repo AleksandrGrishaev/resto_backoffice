@@ -84,22 +84,35 @@ export class ShiftsService {
   // =============================================
 
   /**
-   * Загрузить все смены
-   * Sprint 7: Reads from Supabase, fallback to localStorage
+   * Загрузить смены (с оптимизированной фильтрацией)
+   * Sprint 8: По умолчанию загружаем ТОЛЬКО активную смену
+   * @param options.all - загрузить ВСЕ смены (для отчётов в Backoffice)
    */
-  async loadShifts(): Promise<ServiceResponse<PosShift[]>> {
+  async loadShifts(options?: { all?: boolean }): Promise<ServiceResponse<PosShift[]>> {
     try {
       // Try Supabase first if available
       if (this.isSupabaseAvailable()) {
-        const { data, error } = await supabase
-          .from('shifts')
-          .select('*')
+        let query = supabase.from('shifts').select('*')
+
+        // ✅ Sprint 8: По умолчанию грузим ТОЛЬКО активную смену
+        // Для отчётов (options.all) - грузим все
+        if (!options?.all) {
+          // Только активные смены (обычно 0 или 1)
+          query = query.eq('status', 'active')
+        }
+
+        const { data, error } = await query
           .order('created_at', { ascending: false })
+          .limit(options?.all ? 100 : 1) // ✅ Лимит 1 для активной смены
 
         if (!error && data) {
           // Convert Supabase format to app format
           const shifts = data.map(fromSupabase)
-          console.log('✅ Загружено смен из Supabase:', shifts.length)
+          console.log(
+            '✅ Загружено смен из Supabase:',
+            shifts.length,
+            options?.all ? '(all)' : '(active only)'
+          )
 
           // Cache in localStorage for offline access
           localStorage.setItem(this.STORAGE_KEYS.shifts, JSON.stringify(shifts))
@@ -113,7 +126,12 @@ export class ShiftsService {
 
       // Fallback: Read from localStorage
       const stored = localStorage.getItem(this.STORAGE_KEYS.shifts)
-      const shifts = stored ? JSON.parse(stored) : []
+      let shifts: PosShift[] = stored ? JSON.parse(stored) : []
+
+      // ✅ Apply same filtering to localStorage data
+      if (!options?.all) {
+        shifts = shifts.filter(s => s.status === 'active')
+      }
 
       console.log('📦 Загружено смен из localStorage:', shifts.length)
       return { success: true, data: shifts }
@@ -122,6 +140,40 @@ export class ShiftsService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to load shifts'
+      }
+    }
+  }
+
+  /**
+   * ✅ Sprint 8: Lazy load исторических смен
+   * Вызывается при нажатии "Показать историю" в UI
+   */
+  async loadHistoricalShifts(beforeDate: string): Promise<ServiceResponse<PosShift[]>> {
+    try {
+      if (!this.isSupabaseAvailable()) {
+        return { success: false, error: 'Supabase not available' }
+      }
+
+      const { data, error } = await supabase
+        .from('shifts')
+        .select('*')
+        .lt('created_at', beforeDate)
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (error) {
+        throw error
+      }
+
+      const shifts = (data || []).map(fromSupabase)
+      console.log('✅ Загружено исторических смен:', shifts.length)
+
+      return { success: true, data: shifts }
+    } catch (error) {
+      console.error('❌ Ошибка загрузки исторических смен:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to load historical shifts'
       }
     }
   }

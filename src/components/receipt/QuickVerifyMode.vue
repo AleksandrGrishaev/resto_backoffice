@@ -640,6 +640,8 @@ function formatNumber(value: number): string {
 .item-info-section {
   width: 100%;
   max-width: 500px;
+  overflow-y: auto;
+  max-height: 100%;
 }
 
 .item-header {
@@ -916,6 +918,182 @@ function formatNumber(value: number): string {
 // RESPONSIVE
 // =============================================
 
+// Tablet landscape (limited height) - keep horizontal layout but compress
+@media (max-height: 800px) and (min-width: 769px) {
+  .item-content {
+    padding: 12px 24px;
+  }
+
+  .item-header {
+    margin-bottom: 8px;
+  }
+
+  .item-name {
+    font-size: 1.25rem;
+  }
+
+  .order-info {
+    padding: 8px 12px;
+  }
+
+  .info-row {
+    padding: 2px 0;
+    font-size: 0.875rem;
+  }
+
+  .fields-list {
+    margin-top: 8px;
+  }
+
+  .field-row {
+    padding: 10px 12px;
+    margin-bottom: 4px;
+  }
+
+  .field-value {
+    font-size: 1.1rem;
+  }
+
+  .calculated-info {
+    margin-top: 8px;
+    padding: 8px 12px;
+  }
+
+  .action-buttons {
+    margin-top: 12px;
+
+    .v-btn {
+      height: 40px !important;
+    }
+
+    .mb-3 {
+      margin-bottom: 8px !important;
+    }
+  }
+
+  .right-panel {
+    width: 300px;
+    min-width: 300px;
+    padding: 12px 16px;
+  }
+
+  .keypad-header {
+    margin-bottom: 12px;
+  }
+
+  .keypad-label {
+    margin-bottom: 4px;
+    font-size: 0.75rem;
+  }
+
+  .keypad-display {
+    font-size: 1.75rem;
+    min-height: 56px;
+    padding: 10px;
+  }
+
+  .currency-prefix {
+    font-size: 1.125rem;
+  }
+
+  .value-suffix {
+    font-size: 1rem;
+  }
+
+  .keypad-grid {
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .keypad-btn {
+    height: 48px !important;
+    font-size: 1.25rem !important;
+  }
+
+  .confirm-btn {
+    height: 44px !important;
+    font-size: 1rem !important;
+  }
+
+  .keypad-actions {
+    .mt-3 {
+      margin-top: 8px !important;
+    }
+    .mt-2 {
+      margin-top: 6px !important;
+    }
+    .v-btn:not(.confirm-btn) {
+      height: 36px !important;
+    }
+  }
+
+  .nav-area {
+    width: 60px;
+    min-width: 60px;
+    padding: 0 8px;
+  }
+
+  .item-nav-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .my-4 {
+    margin-top: 8px !important;
+    margin-bottom: 8px !important;
+  }
+}
+
+// Very limited height (e.g., tablet with keyboard or small landscape)
+@media (max-height: 600px) and (min-width: 769px) {
+  .item-content {
+    padding: 8px 16px;
+  }
+
+  .item-name {
+    font-size: 1.1rem;
+  }
+
+  .order-info {
+    padding: 6px 10px;
+  }
+
+  .field-row {
+    padding: 8px 10px;
+    margin-bottom: 3px;
+  }
+
+  .field-value {
+    font-size: 1rem;
+  }
+
+  .calculated-info {
+    padding: 6px 10px;
+  }
+
+  .right-panel {
+    width: 280px;
+    min-width: 280px;
+    padding: 8px 12px;
+  }
+
+  .keypad-display {
+    font-size: 1.5rem;
+    min-height: 48px;
+    padding: 8px;
+  }
+
+  .keypad-btn {
+    height: 40px !important;
+    font-size: 1.1rem !important;
+  }
+
+  .confirm-btn {
+    height: 40px !important;
+  }
+}
+
+// Mobile portrait
 @media (max-width: 768px) {
   .split-layout {
     flex-direction: column;

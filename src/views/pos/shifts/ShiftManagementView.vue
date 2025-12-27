@@ -242,33 +242,6 @@
           </template>
         </v-data-table>
       </v-card>
-
-      <!-- Previous Shifts (Collapsible) -->
-      <v-expansion-panels class="mt-4">
-        <v-expansion-panel>
-          <v-expansion-panel-title>
-            <v-icon class="mr-2">mdi-history</v-icon>
-            Previous Shifts
-          </v-expansion-panel-title>
-          <v-expansion-panel-text>
-            <div v-if="previousShifts.length === 0" class="text-center py-4 text-medium-emphasis">
-              No previous shifts found
-            </div>
-            <div v-for="shift in previousShifts" :key="shift.id" class="previous-shift-item">
-              <div class="shift-info">
-                <div>Shift {{ shift.shiftNumber }}</div>
-                <div class="text-caption">
-                  {{ formatDateTime(shift.startTime) }}
-                  <template v-if="shift.endTime">- {{ formatDateTime(shift.endTime) }}</template>
-                </div>
-              </div>
-              <div class="shift-total">
-                {{ formatPrice(shift.totalSales || 0) }}
-              </div>
-            </div>
-          </v-expansion-panel-text>
-        </v-expansion-panel>
-      </v-expansion-panels>
     </template>
 
     <!-- ✅ Sprint 8: Pending Confirmations (shown even without active shift) -->
@@ -379,9 +352,6 @@ const currentShift = computed(() => {
   }
   return shiftsStore.currentShift
 })
-const previousShifts = computed(() =>
-  shiftsStore.shifts.filter((s: PosShift) => s.status === 'completed').slice(0, 10)
-)
 
 // Get payments for current shift
 const shiftPayments = computed(() => {
@@ -810,23 +780,6 @@ onUnmounted(() => {
 
 .total-row {
   background: rgba(var(--v-theme-primary), 0.05);
-  font-weight: 600;
-}
-
-.previous-shift-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-}
-
-.previous-shift-item:last-child {
-  border-bottom: none;
-}
-
-.shift-total {
-  font-size: 16px;
   font-weight: 600;
 }
 </style>

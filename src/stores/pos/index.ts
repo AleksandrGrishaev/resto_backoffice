@@ -13,6 +13,11 @@ import { useShiftsStore } from './shifts/shiftsStore'
 // ✅ Sprint 7: Account Store for shift sync
 import { useAccountStore } from '@/stores/account'
 
+// ✅ Sprint 8: Catalog stores for full sync
+import { useProductsStore } from '@/stores/productsStore'
+import { useMenuStore } from '@/stores/menu'
+import { useRecipesStore } from '@/stores/recipes'
+
 // ✅ Sprint 6: SyncService integration
 import { useSyncService } from '@/core/sync/SyncService'
 import { ShiftSyncAdapter } from '@/core/sync/adapters/ShiftSyncAdapter'
@@ -170,6 +175,9 @@ export const usePosStore = defineStore('pos', () => {
       const startTime = performance.now()
 
       // Phase 1: Core POS data (parallel)
+      // ✅ Sprint 8: Production performance logging
+      console.log('⏱️ [POS] Starting data load...')
+
       await Promise.all([
         tablesStore.initialize(),
         ordersStore.loadOrders(),
@@ -178,6 +186,15 @@ export const usePosStore = defineStore('pos', () => {
       ])
 
       const phase1Time = performance.now() - startTime
+
+      // ✅ Sprint 8: Always log performance summary (even in production)
+      console.log(`⏱️ [POS] Phase 1 complete: ${phase1Time.toFixed(0)}ms`, {
+        tables: tablesStore.tables.length,
+        orders: ordersStore.orders.length,
+        payments: paymentsStore.payments.length,
+        shifts: shiftsStore.shifts.length
+      })
+
       platform.debugLog('POS', '✅ Phase 1: Core data loaded', {
         time: `${phase1Time.toFixed(0)}ms`,
         tablesCount: tablesStore.tables.length,
@@ -345,23 +362,73 @@ export const usePosStore = defineStore('pos', () => {
   }
 
   /**
-   * Синхронизация с сервером (заглушка)
+   * ✅ Sprint 8: Полная синхронизация всех данных
+   * Вызывается из кнопки "Sync Data" в POS Navigation Menu
    */
-  async function syncWithServer(): Promise<ServiceResponse<void>> {
+  async function syncData(): Promise<ServiceResponse<void>> {
     try {
       if (!platform.isOnline.value) {
         throw new Error('Cannot sync while offline')
       }
 
-      // TODO: Реализовать синхронизацию
+      const startTime = performance.now()
+      platform.debugLog('POS', '🔄 Starting full data sync...')
+
+      // Phase 1: Перезагрузить POS stores (параллельно)
+      platform.debugLog('POS', '📦 Phase 1: Reloading POS stores...')
+      await Promise.all([
+        tablesStore.initialize(),
+        ordersStore.loadOrders(),
+        paymentsStore.initialize(),
+        shiftsStore.loadShifts()
+      ])
+
+      // Phase 2: Перезагрузить каталоги (используем refresh() для инвалидации кеша)
+      platform.debugLog('POS', '📦 Phase 2: Refreshing catalog stores with cache invalidation...')
+      const productsStore = useProductsStore()
+      const menuStore = useMenuStore()
+      const recipesStore = useRecipesStore()
+
+      await Promise.all([
+        productsStore.refresh(), // ✅ Sprint 8: Invalidates cache + reloads from server
+        menuStore.refresh(), // ✅ Sprint 8: Invalidates cache + reloads from server
+        recipesStore.refresh() // ✅ Sprint 8: Invalidates cache + reloads from server
+      ])
+
+      // Phase 3: Обработать sync queue
+      platform.debugLog('POS', '🔄 Phase 3: Processing sync queue...')
+      const syncService = useSyncService()
+      const syncReport = await syncService.processQueue()
+
+      const duration = performance.now() - startTime
+
       lastSync.value = new Date().toISOString()
 
-      platform.debugLog('POS', '✅ Sync completed (mock)')
+      platform.debugLog('POS', '✅ Full sync completed', {
+        duration: `${duration.toFixed(0)}ms`,
+        tablesCount: tablesStore.tables.length,
+        ordersCount: ordersStore.orders.length,
+        productsCount: productsStore.products.length,
+        syncQueue: {
+          succeeded: syncReport.succeeded,
+          failed: syncReport.failed,
+          skipped: syncReport.skipped
+        }
+      })
+
       return { success: true }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Sync failed'
+      platform.debugLog('POS', '❌ Sync failed', { error: errorMsg })
       return { success: false, error: errorMsg }
     }
+  }
+
+  /**
+   * @deprecated Use syncData() instead
+   */
+  async function syncWithServer(): Promise<ServiceResponse<void>> {
+    return syncData()
   }
 
   /**
@@ -476,7 +543,8 @@ export const usePosStore = defineStore('pos', () => {
     initializePOS,
     startShift,
     endShift,
-    syncWithServer,
+    syncData,
+    syncWithServer, // @deprecated - use syncData
     clearError,
     reset,
     cleanup // ✅ FIX: Add cleanup method to exports

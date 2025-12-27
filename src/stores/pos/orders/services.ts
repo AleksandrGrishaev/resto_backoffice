@@ -49,32 +49,36 @@ export class OrdersService {
   }
 
   /**
-   * Get all orders from storage
-   * NEW: Makes 2 queries - orders + order_items, then assembles hierarchy
+   * Get orders from storage (with smart filtering)
+   * Sprint 8: Only load active orders + today's orders by default
+   * @param options.all - загрузить ВСЕ заказы (для отчётов)
    *
-   * ✅ PERFORMANCE FIX: Only load active orders + recent paid orders
+   * ✅ PERFORMANCE FIX: Only load active orders + today
    * - All unpaid/partial orders (active, need attention)
-   * - Paid orders from last 2 days only (for reference)
-   * This reduces 343 orders → ~200 orders, significantly faster loading
+   * - Today's paid orders (for reference)
+   * This reduces 343 orders → ~50-100 orders
    */
-  async getAllOrders(): Promise<ServiceResponse<PosOrder[]>> {
+  async getAllOrders(options?: { all?: boolean }): Promise<ServiceResponse<PosOrder[]>> {
     try {
       // Try to load from Supabase first (if online)
       if (this.isSupabaseAvailable()) {
-        // Calculate date filter for paid orders (last 2 days)
-        const twoDaysAgo = new Date()
-        twoDaysAgo.setDate(twoDaysAgo.getDate() - 2)
-        const dateFilter = twoDaysAgo.toISOString()
+        // ✅ Sprint 8: More aggressive filtering - today only (not 2 days)
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const dateFilter = today.toISOString()
 
         // Query 1: Load orders with smart filtering
-        // - All unpaid/partial orders (always load)
-        // - Paid orders only from last 2 days
-        const { data: ordersData, error: ordersError } = await supabase
-          .from('orders')
-          .select('*')
-          .or(`payment_status.neq.paid,created_at.gte.${dateFilter}`)
+        // - All unpaid/partial orders (always load - they need attention)
+        // - Paid orders only from today (for reference)
+        let query = supabase.from('orders').select('*')
+
+        if (!options?.all) {
+          query = query.or(`payment_status.neq.paid,created_at.gte.${dateFilter}`)
+        }
+
+        const { data: ordersData, error: ordersError } = await query
           .order('created_at', { ascending: false })
-          .limit(200) // Hard limit for safety
+          .limit(options?.all ? 500 : 100) // Reduced limit for faster loading
 
         if (!ordersError && ordersData) {
           // Query 2: Load all items for these orders

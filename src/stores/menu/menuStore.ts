@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { categoryService, menuItemService } from './menuService'
-import { DebugUtils, generateId } from '@/utils'
+import { DebugUtils, generateId, invalidateCache } from '@/utils'
 import type {
   Category,
   MenuItem,
@@ -540,6 +540,30 @@ export const useMenuStore = defineStore('menu', () => {
     }
   }
 
+  /**
+   * ✅ Sprint 8: Force refresh menu from server
+   * Invalidates cache and reloads categories + items from Supabase
+   */
+  async function refresh(): Promise<void> {
+    DebugUtils.info(MODULE_NAME, '🔄 Refreshing menu (cache invalidation + reload)')
+
+    // Invalidate SWR cache
+    invalidateCache('menu_categories')
+    invalidateCache('menu_items')
+
+    // Also clear legacy cache keys
+    localStorage.removeItem('menu_categories_cache')
+    localStorage.removeItem('menu_items_cache')
+
+    // Reload from server
+    await initialize()
+
+    DebugUtils.info(MODULE_NAME, '✅ Menu refreshed', {
+      categories: state.value.categories.length,
+      items: state.value.menuItems.length
+    })
+  }
+
   return {
     // State
     state,
@@ -596,6 +620,7 @@ export const useMenuStore = defineStore('menu', () => {
     // Actions - Utility
     setSelectedCategory,
     clearError,
-    initialize
+    initialize,
+    refresh
   }
 })

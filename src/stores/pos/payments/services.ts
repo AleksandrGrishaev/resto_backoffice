@@ -21,20 +21,50 @@ export class PaymentsService {
   }
 
   /**
-   * Get all payments from storage
-   * Tries Supabase first (if online), falls back to localStorage
+   * Get payments from storage (with smart filtering)
+   * Sprint 8: Only loads today's payments + current shift by default
+   * @param options.shiftId - фильтр по ID смены
+   * @param options.all - загрузить ВСЕ платежи (для отчётов)
    */
-  async getAllPayments(): Promise<ServiceResponse<PosPayment[]>> {
+  async getAllPayments(options?: {
+    shiftId?: string
+    all?: boolean
+  }): Promise<ServiceResponse<PosPayment[]>> {
     try {
       // Try to load from Supabase first (if online)
       if (this.isSupabaseAvailable()) {
-        const { data, error } = await supabase
-          .from('payments')
-          .select('*')
+        let query = supabase.from('payments').select('*')
+
+        // ✅ Sprint 8: Smart filtering для POS
+        if (!options?.all) {
+          if (options?.shiftId) {
+            // Если передан shiftId — загружаем только платежи этой смены
+            query = query.eq('shift_id', options.shiftId)
+          } else {
+            // По умолчанию: только сегодняшние платежи
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+            query = query.gte('created_at', today.toISOString())
+          }
+        }
+
+        const { data, error } = await query
           .order('created_at', { ascending: false })
+          .limit(options?.all ? 1000 : 200)
 
         if (!error && data) {
-          console.log('✅ Loaded payments from Supabase:', data.length)
+          const filterType = options?.all
+            ? 'all'
+            : options?.shiftId
+              ? `shift:${options.shiftId}`
+              : 'today'
+          console.log('✅ Loaded payments from Supabase:', data.length, `(${filterType})`)
+
+          // Cache in localStorage (only for non-filtered requests)
+          if (!options?.shiftId) {
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data.map(fromSupabase)))
+          }
+
           return { success: true, data: data.map(fromSupabase) }
         }
 
@@ -46,14 +76,52 @@ export class PaymentsService {
 
       // Fallback to localStorage
       const stored = localStorage.getItem(this.STORAGE_KEY)
-      const payments = stored ? JSON.parse(stored) : []
-      console.log('📦 Loaded payments from localStorage:', payments.length)
+      let payments: PosPayment[] = stored ? JSON.parse(stored) : []
 
+      // Apply filtering to cached data too
+      if (!options?.all && options?.shiftId) {
+        payments = payments.filter(p => p.shiftId === options.shiftId)
+      }
+
+      console.log('📦 Loaded payments from localStorage:', payments.length)
       return { success: true, data: payments }
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to load payments'
+      }
+    }
+  }
+
+  /**
+   * ✅ Sprint 8: Lazy load платежей за период (для отчётов)
+   */
+  async getPaymentsForDateRange(
+    startDate: string,
+    endDate: string
+  ): Promise<ServiceResponse<PosPayment[]>> {
+    try {
+      if (!this.isSupabaseAvailable()) {
+        return { success: false, error: 'Supabase not available' }
+      }
+
+      const { data, error } = await supabase
+        .from('payments')
+        .select('*')
+        .gte('created_at', startDate)
+        .lte('created_at', endDate)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        throw error
+      }
+
+      console.log('✅ Loaded payments for date range:', data?.length || 0)
+      return { success: true, data: (data || []).map(fromSupabase) }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to load payments for date range'
       }
     }
   }

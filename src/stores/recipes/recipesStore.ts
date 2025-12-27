@@ -2,7 +2,7 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed, readonly } from 'vue'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, invalidateCache } from '@/utils'
 
 // Import composables
 import { usePreparations } from './composables/usePreparations'
@@ -255,6 +255,35 @@ export const useRecipesStore = defineStore('recipes', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  /**
+   * ✅ Sprint 8: Force refresh recipes from server
+   * Invalidates cache and reloads preparations + recipes from Supabase
+   */
+  async function refresh(): Promise<void> {
+    DebugUtils.info(MODULE_NAME, '🔄 Refreshing recipes (cache invalidation + reload)')
+
+    // Invalidate SWR cache
+    invalidateCache('preparations')
+    invalidateCache('recipes')
+    invalidateCache('preparation_categories')
+    invalidateCache('recipe_categories')
+
+    // Also clear legacy cache keys
+    localStorage.removeItem('preparations_cache')
+    localStorage.removeItem('recipes_cache')
+
+    // Reset initialized flag to allow full reload
+    initialized.value = false
+
+    // Reload from server
+    await initialize()
+
+    DebugUtils.info(MODULE_NAME, '✅ Recipes refreshed', {
+      preparations: activePreparations.value.length,
+      recipes: activeRecipes.value.length
+    })
   }
 
   /**
@@ -1014,6 +1043,7 @@ export const useRecipesStore = defineStore('recipes', () => {
 
     // Main actions
     initialize,
+    refresh,
 
     // ✅ NEW: Category actions
     loadPreparationCategories,

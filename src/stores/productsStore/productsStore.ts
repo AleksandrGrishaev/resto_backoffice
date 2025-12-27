@@ -15,7 +15,7 @@ import type {
   ProductForMenu,
   Department
 } from './types'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, invalidateCache } from '@/utils'
 import type { ProductForRecipe } from '@/stores/recipes/types'
 import { isUnitDivisible, type MeasurementUnit } from '@/types/measurementUnits'
 
@@ -140,6 +140,30 @@ export const useProductsStore = defineStore('products', {
         // Don't throw - categories are optional for basic functionality
         this.categories = []
       }
+    },
+
+    /**
+     * ✅ Sprint 8: Force refresh products from server
+     * Invalidates cache and reloads from Supabase
+     */
+    async refresh(): Promise<void> {
+      DebugUtils.info(MODULE_NAME, '🔄 Refreshing products (cache invalidation + reload)')
+
+      // Invalidate SWR cache
+      invalidateCache('products')
+      invalidateCache('product_categories')
+
+      // Also clear legacy cache keys
+      localStorage.removeItem('products_cache')
+      localStorage.removeItem('products_cache_ts')
+
+      // Reload from server
+      await this.loadProducts()
+
+      DebugUtils.info(MODULE_NAME, '✅ Products refreshed', {
+        count: this.products.length,
+        categories: this.categories.length
+      })
     },
 
     async createProduct(data: CreateProductData): Promise<Product> {
