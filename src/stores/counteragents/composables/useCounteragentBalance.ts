@@ -19,7 +19,7 @@ export function useCounteragentBalance() {
    * Логика баланса:
    * - totalReceived = стоимость ПОЛУЧЕННЫХ товаров (delivered orders with completed receipts)
    * - totalPaid = ВСЕ completed платежи для этого контрагента (включая предоплаты)
-   * - balance = totalPaid - totalReceived
+   * - balance = totalPaid - totalReceived + totalCorrections
    *   - Положительный = кредит (предоплата, оплатили больше чем получили)
    *   - Отрицательный = долг (получили больше чем оплатили)
    */
@@ -27,9 +27,11 @@ export function useCounteragentBalance() {
     try {
       const { useSupplierStore } = await import('@/stores/supplier_2')
       const { useAccountStore } = await import('@/stores/account')
+      const { useCounteragentsStore } = await import('@/stores/counteragents')
 
       const supplierStore = useSupplierStore()
       const accountStore = useAccountStore()
+      const counteragentsStore = useCounteragentsStore()
 
       // Ensure data is loaded
       if (accountStore.state.pendingPayments.length === 0) {
@@ -70,13 +72,18 @@ export function useCounteragentBalance() {
         return sum + (payment.paidAmount || payment.amount)
       }, 0)
 
-      // 4. Баланс = Оплачено - Получено
+      // 4. Получить сумму всех корректировок баланса
+      const counteragent = counteragentsStore.counteragents.find(ca => ca.id === counteragentId)
+      const balanceHistory = counteragent?.balanceHistory || []
+      const totalCorrections = balanceHistory.reduce((sum, entry) => sum + entry.amount, 0)
+
+      // 5. Баланс = Оплачено - Получено + Корректировки
       // Положительный = кредит (предоплата за ещё не полученные товары)
       // Отрицательный = долг (получили товары, но не оплатили)
       return {
         totalReceived,
         totalPaid,
-        balance: totalPaid - totalReceived,
+        balance: totalPaid - totalReceived + totalCorrections,
         ordersWithReceipts: ordersWithReceipts.length
       }
     } catch (error) {

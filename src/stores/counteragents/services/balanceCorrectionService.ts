@@ -2,6 +2,7 @@
 
 import { DebugUtils } from '@/utils'
 import { generateId } from '@/utils/id'
+import { formatIDR } from '@/utils/currency'
 import type {
   Counteragent,
   BalanceHistoryEntry,
@@ -69,6 +70,11 @@ class BalanceCorrectionService {
         historyEntry
       )
 
+      // Создаем алерт для supplier balance correction
+      if (counteragent.type === 'supplier') {
+        await this.createBalanceCorrectionAlert(counteragent, correctionData, historyEntry, userId)
+      }
+
       DebugUtils.info(MODULE_NAME, 'Balance correction applied successfully', {
         counteragentId: counteragent.id,
         correctionId: historyEntry.id,
@@ -97,6 +103,60 @@ class BalanceCorrectionService {
         correctionAmount: correctionData.newBalance - (counteragent.currentBalance || 0),
         error: error instanceof Error ? error.message : 'Unknown error occurred'
       }
+    }
+  }
+
+  /**
+   * Создать алерт для корректировки баланса поставщика
+   */
+  private async createBalanceCorrectionAlert(
+    counteragent: Counteragent,
+    correctionData: BalanceCorrectionData,
+    historyEntry: BalanceHistoryEntry,
+    userId?: string
+  ): Promise<void> {
+    try {
+      const { useAlertsStore } = await import('@/stores/alerts')
+      const alertsStore = useAlertsStore()
+
+      // Определяем severity на основе суммы корректировки
+      const absAmount = Math.abs(historyEntry.amount)
+      let severity: 'critical' | 'warning' | 'info' = 'info'
+      if (absAmount >= 10000000) {
+        severity = 'critical' // 10M+
+      } else if (absAmount >= 1000000) {
+        severity = 'warning' // 1M+
+      }
+
+      const changeDirection = historyEntry.amount >= 0 ? 'increased' : 'decreased'
+      const formattedAmount = formatIDR(absAmount)
+
+      await alertsStore.createAlert({
+        category: 'supplier',
+        type: 'balance_correction',
+        severity,
+        title: `Supplier Balance ${changeDirection}: ${counteragent.name}`,
+        description: `Balance manually adjusted by ${formattedAmount}`,
+        metadata: {
+          supplierId: counteragent.id,
+          supplierName: counteragent.name,
+          previousBalance: historyEntry.oldBalance,
+          newBalance: historyEntry.newBalance,
+          correctionAmount: historyEntry.amount,
+          reason: correctionData.reason,
+          notes: correctionData.notes,
+          performedBy: userId || 'unknown'
+        },
+        userId
+      })
+
+      DebugUtils.info(MODULE_NAME, 'Balance correction alert created', {
+        counteragentId: counteragent.id,
+        severity
+      })
+    } catch (error) {
+      // Don't fail the correction if alert creation fails
+      DebugUtils.error(MODULE_NAME, 'Failed to create balance correction alert', { error })
     }
   }
 

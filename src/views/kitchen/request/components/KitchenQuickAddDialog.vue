@@ -71,16 +71,17 @@
                 variant="tonal"
                 color="error"
                 size="small"
-                :disabled="packageQuantity <= 1"
+                :disabled="packageQuantity <= 0.001"
                 @click="decrementQuantity"
               >
                 <v-icon size="20">mdi-minus</v-icon>
               </v-btn>
               <NumericInputField
                 v-model="packageQuantity"
-                :min="1"
+                :min="0.001"
                 :max="9999"
-                :allow-decimal="false"
+                :allow-decimal="true"
+                :decimal-places="3"
                 variant="outlined"
                 density="compact"
                 hide-details
@@ -398,7 +399,7 @@ function incrementQuantity() {
 
 function decrementQuantity() {
   if (packageQuantity.value > 1) {
-    packageQuantity.value--
+    packageQuantity.value = Math.max(0.001, packageQuantity.value - 1)
   }
 }
 

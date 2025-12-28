@@ -62,6 +62,16 @@
               }}{{ formatCurrency(alert.metadata.correctionAmount) }}
             </span>
           </template>
+          <template v-else-if="alert.type === 'balance_correction' && alert.metadata">
+            {{ alert.metadata.supplierName }}:
+            <span
+              :class="alert.metadata.correctionAmount >= 0 ? 'text-success' : 'text-error'"
+              class="font-weight-medium"
+            >
+              {{ alert.metadata.correctionAmount >= 0 ? '+' : ''
+              }}{{ formatCurrency(alert.metadata.correctionAmount) }}
+            </span>
+          </template>
           <template v-else-if="alert.type === 'large_refund' && alert.metadata">
             <span class="text-error font-weight-medium">
               -{{ formatCurrency(alert.metadata.refundAmount) }}
@@ -128,6 +138,51 @@
           <div v-if="alert.metadata.reason" class="reason-text">
             <v-icon icon="mdi-message-text-outline" size="14" class="me-1" />
             {{ alert.metadata.reason }}
+          </div>
+        </div>
+
+        <!-- Supplier Balance Correction Details -->
+        <div
+          v-else-if="alert.type === 'balance_correction' && alert.metadata"
+          class="alert-details"
+        >
+          <div class="details-grid mb-2">
+            <div class="detail-item">
+              <span class="detail-label">Supplier</span>
+              <span class="detail-value font-weight-medium">
+                {{ alert.metadata.supplierName || 'Unknown' }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Previous Balance</span>
+              <span class="detail-value">{{ formatCurrency(alert.metadata.previousBalance) }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">New Balance</span>
+              <span class="detail-value">{{ formatCurrency(alert.metadata.newBalance) }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Correction</span>
+              <span
+                class="detail-value font-weight-bold"
+                :class="alert.metadata.correctionAmount >= 0 ? 'text-success' : 'text-error'"
+              >
+                {{ alert.metadata.correctionAmount >= 0 ? '+' : ''
+                }}{{ formatCurrency(alert.metadata.correctionAmount) }}
+              </span>
+            </div>
+            <div v-if="alert.metadata.performedBy" class="detail-item">
+              <span class="detail-label">Performed by</span>
+              <span class="detail-value">{{ alert.metadata.performedBy }}</span>
+            </div>
+            <div v-if="alert.metadata.reason" class="detail-item">
+              <span class="detail-label">Reason</span>
+              <span class="detail-value">{{ alert.metadata.reason }}</span>
+            </div>
+          </div>
+          <div v-if="alert.metadata.notes" class="reason-text">
+            <v-icon icon="mdi-message-text-outline" size="14" class="me-1" />
+            {{ alert.metadata.notes }}
           </div>
         </div>
 
@@ -341,7 +396,12 @@ const formatCurrency = (value: number | undefined): string => {
 }
 
 // Known alert types with custom UI
-const KNOWN_ALERT_TYPES = ['manual_correction', 'large_refund', 'pre_bill_modified']
+const KNOWN_ALERT_TYPES = [
+  'manual_correction',
+  'large_refund',
+  'pre_bill_modified',
+  'balance_correction'
+]
 
 // =============================================
 // COMPUTED

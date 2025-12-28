@@ -38,6 +38,7 @@ export type ProductAlertType =
 export type SupplierAlertType =
   | 'payment_discrepancy' // Payment doesn't match invoice
   | 'overdue_delivery' // Delivery not received on time
+  | 'balance_correction' // Manual balance adjustment for supplier
 
 export type AlertType = ShiftAlertType | AccountAlertType | ProductAlertType | SupplierAlertType
 
@@ -196,7 +197,8 @@ export const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   negative_inventory: 'Negative Inventory',
   // Supplier
   payment_discrepancy: 'Payment Discrepancy',
-  overdue_delivery: 'Overdue Delivery'
+  overdue_delivery: 'Overdue Delivery',
+  balance_correction: 'Supplier Balance Correction'
 }
 
 // =============================================
