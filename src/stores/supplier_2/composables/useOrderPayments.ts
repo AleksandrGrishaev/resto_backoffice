@@ -386,10 +386,27 @@ export function useOrderPayments() {
           orderNumber: order.orderNumber
         })
 
+        // ✅ FIX: Update the supplier order with bill reference and status
+        const { supplierStore } = await getStores()
+
+        // Calculate bill_status based on payment status and amount
+        const billStatus =
+          payment.status === 'completed'
+            ? linkAmount >= order.totalAmount
+              ? 'fully_paid'
+              : 'partially_paid'
+            : 'billed'
+
+        await supplierStore.updateOrder(order.id, {
+          billId: billId,
+          billStatus: billStatus
+        })
+
         DebugUtils.info(MODULE_NAME, 'Bill attached successfully', {
           billId,
           orderId: order.id,
-          linkedAmount: linkAmount
+          linkedAmount: linkAmount,
+          billStatus
         })
 
         // Обновляем данные
@@ -428,10 +445,51 @@ export function useOrderPayments() {
         // ✅ НОВЫЙ: Используем unlinkPaymentFromOrder
         await accountStore.unlinkPaymentFromOrder(billId, order.id)
 
-        DebugUtils.info(MODULE_NAME, 'Bill detached successfully', { billId })
+        // ✅ FIX: Recalculate bill_status after unlinking
+        // First reload bills to get fresh data
+        await loadOrderBills(order.id)
 
-        // Обновляем данные
-        await Promise.all([loadOrderBills(order.id), loadAvailableBills(order.supplierId)])
+        const { supplierStore } = await getStores()
+        const remainingBills = orderBills.value.filter(
+          b =>
+            b.status !== 'cancelled' &&
+            b.linkedOrders?.some(o => o.orderId === order.id && o.isActive)
+        )
+
+        let newBillStatus: string
+        if (remainingBills.length === 0) {
+          newBillStatus = 'not_billed'
+        } else {
+          // Calculate total paid amount from remaining bills
+          const totalPaid = remainingBills
+            .filter(b => b.status === 'completed')
+            .reduce((sum, b) => {
+              const link = b.linkedOrders?.find(o => o.orderId === order.id && o.isActive)
+              return sum + (link?.linkedAmount || 0)
+            }, 0)
+
+          if (totalPaid >= order.totalAmount) {
+            newBillStatus = 'fully_paid'
+          } else if (totalPaid > 0) {
+            newBillStatus = 'partially_paid'
+          } else {
+            newBillStatus = 'billed'
+          }
+        }
+
+        await supplierStore.updateOrder(order.id, {
+          billId: remainingBills.length > 0 ? remainingBills[0].id : null,
+          billStatus: newBillStatus
+        })
+
+        DebugUtils.info(MODULE_NAME, 'Bill detached successfully', {
+          billId,
+          newBillStatus,
+          remainingBillsCount: remainingBills.length
+        })
+
+        // Reload available bills
+        await loadAvailableBills(order.supplierId)
       } catch (error) {
         const errorMsg = 'Failed to detach bill'
         paymentState.error = errorMsg
