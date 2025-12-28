@@ -435,6 +435,7 @@ const isOpen = computed({
 
 const formRef = ref<any>(null)
 const isSaving = ref(false)
+const isInitializing = ref(false)
 
 // Package dialog state
 const showPackageDialog = ref(false)
@@ -1066,13 +1067,33 @@ function formatDate(dateString: string): string {
 
 watch(
   () => props.modelValue,
-  isOpen => {
+  async isOpen => {
     if (isOpen) {
       DebugUtils.info(MODULE_NAME, 'Dialog opened', {
         supplierId: form.value.supplierId,
         hasLastReceipt: !!lastReceipt.value,
         itemsCount: form.value.items.length
       })
+
+      // Ensure counteragentsStore is initialized
+      if (
+        counteragentsStore.counteragents.length === 0 &&
+        !counteragentsStore.loading.counteragents
+      ) {
+        DebugUtils.info(MODULE_NAME, '🔄 Initializing counteragentsStore...')
+        isInitializing.value = true
+        try {
+          await counteragentsStore.initialize()
+          DebugUtils.info(MODULE_NAME, '✅ CounteragentsStore initialized', {
+            suppliersCount: counteragentsStore.supplierCounterAgents.length
+          })
+        } catch (error) {
+          DebugUtils.error(MODULE_NAME, '❌ Failed to initialize counteragentsStore', { error })
+          emits('error', 'Failed to load suppliers. Please try again.')
+        } finally {
+          isInitializing.value = false
+        }
+      }
     }
   }
 )
