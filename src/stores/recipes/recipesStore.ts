@@ -253,7 +253,7 @@ export const useRecipesStore = defineStore('recipes', () => {
         units: unitsComposable.units.value.length,
         preparationCategories: preparationCategories.value.length,
         recipeCategories: recipeCategories.value.length,
-        costRecalculationPerformed,
+        costRecalculationMode: 'manual', // ✅ Sprint 10: Only manual via "Recalculate All Cost" button
         skipCostRecalculation: options?.skipCostRecalculation ?? false
       })
     } catch (err) {
