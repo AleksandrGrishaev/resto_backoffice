@@ -613,7 +613,7 @@ function handleAddToBill(): void {
               groupName: group.name,
               optionId: option.id,
               optionName: option.name,
-              priceAdjustment: option.priceAdjustment,
+              priceAdjustment: Number(option.priceAdjustment) || 0,
               composition: option.composition,
               // Additional fields for replacement logic in decomposition
               groupType: group.type,

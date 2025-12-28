@@ -275,9 +275,9 @@ export class OrdersService {
     selectedModifiers?: SelectedModifier[]
   ): Promise<ServiceResponse<PosBillItem>> {
     try {
-      // Calculate modifiers total
+      // Calculate modifiers total (defensive: ensure numeric values)
       const modifiersTotal = selectedModifiers
-        ? selectedModifiers.reduce((sum, mod) => sum + mod.priceAdjustment, 0)
+        ? selectedModifiers.reduce((sum, mod) => sum + (Number(mod.priceAdjustment) || 0), 0)
         : 0
 
       // Legacy modifier price
