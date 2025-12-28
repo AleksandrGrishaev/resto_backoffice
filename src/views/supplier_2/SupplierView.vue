@@ -327,7 +327,8 @@ const MODULE_NAME = 'SupplierView'
 const supplierStore = useSupplierStore()
 const { completeReceipt } = useReceipts()
 const { submitRequest, updateRequest, canEditRequest, canDeleteRequest } = useProcurementRequests()
-const { sendOrder, updateOrder, canEditOrder, canSendOrder } = usePurchaseOrders()
+const { sendOrder, updateOrder, canEditOrder, canSendOrder, calculateBillStatus } =
+  usePurchaseOrders()
 const accountStore = useAccountStore()
 const router = useRouter()
 const authStore = useAuthStore()
@@ -818,12 +819,45 @@ onMounted(async () => {
       supplierStore.initialize(),
       accountStore.fetchPayments() // Load payments for bill status display
     ])
+
+    // Recalculate bill statuses for all orders based on actual payment data
+    await recalculateBillStatuses()
+
     console.log(`${MODULE_NAME}: Data initialized successfully`)
   } catch (error) {
     console.error(`${MODULE_NAME}: Failed to initialize data`, error)
     handleError('Failed to load supplier data')
   }
 })
+
+/**
+ * Recalculate bill statuses for all orders based on actual payment data
+ */
+async function recalculateBillStatuses() {
+  const orders = supplierStore.state.orders || []
+
+  console.log(`${MODULE_NAME}: Recalculating bill statuses for ${orders.length} orders`)
+
+  for (const order of orders) {
+    try {
+      const newStatus = await calculateBillStatus(order)
+
+      // Only update if status changed
+      if (order.billStatus !== newStatus) {
+        console.log(
+          `${MODULE_NAME}: Updating bill status for ${order.orderNumber}: ${order.billStatus} -> ${newStatus}`
+        )
+        // Update local state (not persisting to DB to avoid unnecessary writes)
+        order.billStatus = newStatus
+      }
+    } catch (error) {
+      console.warn(
+        `${MODULE_NAME}: Failed to calculate bill status for ${order.orderNumber}`,
+        error
+      )
+    }
+  }
+}
 </script>
 
 <style scoped>
