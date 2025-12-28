@@ -158,8 +158,8 @@ export function useOrderPayments() {
 
       const { accountStore } = await getStores()
 
-      // Обеспечиваем свежие данные платежей
-      await accountStore.fetchPayments()
+      // Обеспечиваем свежие данные платежей (force refresh to ensure data is fresh)
+      await accountStore.fetchPayments(true)
 
       // ✅ НОВОЕ: Используем getPaymentsByOrder вместо фильтрации по purchaseOrderId
       const bills = await accountStore.getPaymentsByOrder(orderId)
@@ -185,8 +185,8 @@ export function useOrderPayments() {
 
       const { accountStore } = await getStores()
 
-      // Обеспечиваем свежие данные
-      await accountStore.fetchPayments()
+      // Обеспечиваем свежие данные (force refresh)
+      await accountStore.fetchPayments(true)
 
       // ✅ ИСПРАВЛЕНО: Фильтруем платежи с доступной суммой
       const bills = accountStore.state.pendingPayments.filter(payment => {

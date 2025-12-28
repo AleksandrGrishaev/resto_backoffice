@@ -813,7 +813,11 @@ onMounted(async () => {
   console.log(`${MODULE_NAME}: Component mounted, initializing data`)
 
   try {
-    await supplierStore.initialize()
+    // Initialize supplier store and account store in parallel
+    await Promise.all([
+      supplierStore.initialize(),
+      accountStore.fetchPayments() // Load payments for bill status display
+    ])
     console.log(`${MODULE_NAME}: Data initialized successfully`)
   } catch (error) {
     console.error(`${MODULE_NAME}: Failed to initialize data`, error)
