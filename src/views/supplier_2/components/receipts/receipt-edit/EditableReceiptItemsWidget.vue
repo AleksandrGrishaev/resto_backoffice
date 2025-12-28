@@ -85,7 +85,7 @@
             :min="0"
             :max="9999"
             :allow-decimal="true"
-            :decimal-places="1"
+            :decimal-places="6"
             variant="outlined"
             density="compact"
             hide-details
@@ -962,7 +962,9 @@ function hasAnyDiscrepancy(item: ReceiptItem): boolean {
 function getQuantityDifference(item: ReceiptItem): string {
   const diff = item.receivedQuantity - item.orderedQuantity
   const sign = diff >= 0 ? '+' : ''
-  return `${sign}${diff.toFixed(2)}`
+  // Format with up to 6 decimals, remove trailing zeros
+  const formatted = diff.toFixed(6).replace(/\.?0+$/, '')
+  return `${sign}${formatted}`
 }
 
 function getPriceChangePercent(item: ReceiptItem): string {

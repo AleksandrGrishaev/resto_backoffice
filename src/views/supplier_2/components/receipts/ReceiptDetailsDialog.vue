@@ -368,7 +368,7 @@ function hasItemDiscrepancy(item: ReceiptItem): boolean {
 }
 
 function hasQuantityDiscrepancy(item: ReceiptItem): boolean {
-  return Math.abs(item.receivedQuantity - item.orderedQuantity) > 0.01
+  return Math.abs(item.receivedQuantity - item.orderedQuantity) > 0.0000001
 }
 
 function hasPriceDiscrepancy(item: ReceiptItem): boolean {
@@ -380,13 +380,15 @@ function hasPriceDiscrepancy(item: ReceiptItem): boolean {
 
 function getQuantityDiscrepancyText(item: ReceiptItem): string {
   const diff = item.receivedQuantity - item.orderedQuantity
-  if (Math.abs(diff) < 0.01) return 'exact'
-  return diff > 0 ? `+${diff.toFixed(2)}` : `${diff.toFixed(2)}`
+  if (Math.abs(diff) < 0.0000001) return 'exact'
+  // Format with up to 6 decimals, remove trailing zeros
+  const formatted = diff.toFixed(6).replace(/\.?0+$/, '')
+  return diff > 0 ? `+${formatted}` : formatted
 }
 
 function getQuantityDiscrepancyClass(item: ReceiptItem): string {
   const diff = item.receivedQuantity - item.orderedQuantity
-  if (Math.abs(diff) < 0.01) return 'text-success'
+  if (Math.abs(diff) < 0.0000001) return 'text-success'
   return diff > 0 ? 'text-info' : 'text-warning'
 }
 

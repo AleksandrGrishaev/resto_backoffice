@@ -200,6 +200,11 @@ export class DevInitializationStrategy implements InitializationStrategy {
             results.push(await this.loadKitchenKpi())
             this.loadedStores.add('kitchenKpi')
           }
+          // Storage для Kitchen Inventory feature
+          if (requiredStores.includes('storage') && !this.loadedStores.has('storage')) {
+            results.push(await this.loadStorage())
+            this.loadedStores.add('storage')
+          }
           break
 
         case 'backoffice':

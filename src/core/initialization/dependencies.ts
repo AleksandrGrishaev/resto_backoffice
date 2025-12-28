@@ -220,6 +220,7 @@ export function getStoresForContext(context: AppContext, userRoles: UserRole[]):
       stores.add('kitchen')
       stores.add('kitchenKpi')
       stores.add('preparations') // для Kitchen Preparation feature
+      stores.add('storage') // для Kitchen Inventory feature
       break
 
     case 'backoffice':

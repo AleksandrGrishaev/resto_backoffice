@@ -93,6 +93,23 @@
         </div>
       </v-btn>
 
+      <div class="separator" />
+
+      <!-- Inventory Screen Button -->
+      <v-btn
+        :class="['screen-btn', { active: currentScreen === 'inventory' }]"
+        :color="currentScreen === 'inventory' ? 'primary' : undefined"
+        :variant="currentScreen === 'inventory' ? 'flat' : 'text'"
+        block
+        height="56"
+        @click="handleScreenSelect('inventory')"
+      >
+        <div class="screen-btn-content">
+          <v-icon size="24">mdi-clipboard-check-outline</v-icon>
+          <span class="screen-btn-label">Inventory</span>
+        </div>
+      </v-btn>
+
       <!-- Calculator Screen Button - Kitchen only -->
       <template v-if="showCalculatorTab">
         <div class="separator" />
@@ -136,7 +153,7 @@ const MODULE_NAME = 'KitchenSidebar'
 // =============================================
 
 interface Props {
-  currentScreen?: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator'
+  currentScreen?: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator' | 'inventory'
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -148,7 +165,9 @@ const props = withDefaults(defineProps<Props>(), {
 // =============================================
 
 const emit = defineEmits<{
-  'screen-select': [screen: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator']
+  'screen-select': [
+    screen: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator' | 'inventory'
+  ]
   'department-change': [department: 'all' | 'kitchen' | 'bar']
 }>()
 
@@ -201,7 +220,7 @@ watch(selectedDepartment, value => {
 // =============================================
 
 const handleScreenSelect = (
-  screen: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator'
+  screen: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator' | 'inventory'
 ) => {
   DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })
   emit('screen-select', screen)

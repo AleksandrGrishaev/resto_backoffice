@@ -194,7 +194,7 @@ const props = withDefaults(defineProps<Props>(), {
   required: false,
   allowDecimal: false,
   allowDoubleZero: true,
-  decimalPlaces: 2,
+  decimalPlaces: 6,
   formatAsCurrency: false,
   quickValues: () => [],
   showActions: true,

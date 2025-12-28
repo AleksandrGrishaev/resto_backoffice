@@ -456,7 +456,10 @@ export function useQuickVerifyMode(inputItems: Ref<ReceiptItemInput[]>) {
     if (Number.isInteger(value)) {
       return value.toString()
     }
-    return value.toFixed(1)
+    // Support up to 6 decimal places for precise quantities (e.g., 0.000001)
+    // Remove trailing zeros for cleaner display
+    const formatted = value.toFixed(6)
+    return formatted.replace(/\.?0+$/, '')
   }
 
   // =============================================

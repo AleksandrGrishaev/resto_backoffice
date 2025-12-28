@@ -58,21 +58,25 @@ const discrepancyIcon = computed(() => {
   return 'mdi-alert'
 })
 
-// Quantity difference text
+// Quantity difference text - support up to 6 decimal places
 const quantityDiff = computed(() => {
   const diff = props.item.receivedQuantity - props.item.orderedQuantity
-  if (Math.abs(diff) < 0.001) return ''
-  return diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2)
+  if (Math.abs(diff) < 0.0000001) return ''
+  // Format with up to 6 decimals, remove trailing zeros
+  const formatted = diff.toFixed(6).replace(/\.?0+$/, '')
+  return diff > 0 ? `+${formatted}` : formatted
 })
 
-// Package quantity difference
+// Package quantity difference - support up to 6 decimal places
 const packageQtyDiff = computed(() => {
   if (!hasPackage.value) return ''
   const ordered = props.item.orderedPackageQuantity ?? 0
   const received = props.item.receivedPackageQuantity ?? 0
   const diff = received - ordered
-  if (Math.abs(diff) < 0.001) return ''
-  return diff > 0 ? `+${diff}` : `${diff}`
+  if (Math.abs(diff) < 0.0000001) return ''
+  // Format with up to 6 decimals, remove trailing zeros
+  const formatted = diff.toFixed(6).replace(/\.?0+$/, '')
+  return diff > 0 ? `+${formatted}` : formatted
 })
 
 // Price difference text
@@ -213,7 +217,7 @@ function clearLineTotalAdjustment() {
           :min="0"
           :max="99999"
           :allow-decimal="true"
-          :decimal-places="2"
+          :decimal-places="6"
           variant="outlined"
           density="compact"
           hide-details

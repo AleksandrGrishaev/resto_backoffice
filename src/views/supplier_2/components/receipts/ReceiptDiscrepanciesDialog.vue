@@ -310,8 +310,10 @@ function getItemIssueColor(item: ReceiptItem): string {
 
 function getQuantityDifferenceText(item: ReceiptItem): string {
   const diff = item.receivedQuantity - item.orderedQuantity
-  if (Math.abs(diff) < 0.01) return '0'
-  return diff > 0 ? `+${diff.toFixed(2)}` : `${diff.toFixed(2)}`
+  if (Math.abs(diff) < 0.0000001) return '0'
+  // Format with up to 6 decimals, remove trailing zeros
+  const formatted = diff.toFixed(6).replace(/\.?0+$/, '')
+  return diff > 0 ? `+${formatted}` : formatted
 }
 
 function getQuantityPercentage(item: ReceiptItem): string {
@@ -322,7 +324,7 @@ function getQuantityPercentage(item: ReceiptItem): string {
 
 function getQuantityImpactClass(item: ReceiptItem): string {
   const diff = item.receivedQuantity - item.orderedQuantity
-  if (Math.abs(diff) < 0.01) return 'text-success'
+  if (Math.abs(diff) < 0.0000001) return 'text-success'
   return diff > 0 ? 'text-info' : 'text-warning'
 }
 

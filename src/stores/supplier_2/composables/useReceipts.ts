@@ -983,8 +983,10 @@ export function useReceipts() {
    */
   function getQuantityDiscrepancyText(ordered: number, received: number): string {
     const diff = received - ordered
-    if (Math.abs(diff) <= 0.001) return 'Exact'
-    return diff > 0 ? `+${diff.toFixed(2)}` : `${diff.toFixed(2)}`
+    if (Math.abs(diff) <= 0.0000001) return 'Exact'
+    // Format with up to 6 decimals, remove trailing zeros
+    const formatted = diff.toFixed(6).replace(/\.?0+$/, '')
+    return diff > 0 ? `+${formatted}` : formatted
   }
 
   /**
