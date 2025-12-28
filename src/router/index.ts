@@ -42,16 +42,51 @@ import { helpRoutes } from '@/help/router'
 import { DebugUtils } from '@/utils'
 
 /**
+ * ✅ Sprint 10: Wait for base stores to be initialized before lazy loading
+ * This prevents race conditions when navigating before app initialization completes
+ */
+const waitForBaseStores = async (): Promise<void> => {
+  const { useRecipesStore } = await import('@/stores/recipes')
+  const { useProductsStore } = await import('@/stores/productsStore')
+
+  const recipesStore = useRecipesStore()
+  const productsStore = useProductsStore()
+
+  // Wait up to 10 seconds for base stores to initialize
+  const maxWait = 10000
+  const interval = 100
+  let waited = 0
+
+  while (waited < maxWait) {
+    if (recipesStore.initialized && productsStore.products.length > 0) {
+      DebugUtils.debug('Router', '✅ Base stores ready for lazy loading')
+      return
+    }
+    await new Promise(resolve => setTimeout(resolve, interval))
+    waited += interval
+  }
+
+  DebugUtils.warn('Router', '⚠️ Base stores not fully initialized, proceeding anyway')
+}
+
+/**
  * ✅ Sprint 10: Lazy loading guards for backoffice stores
  * These guards load stores on-demand when navigating to specific pages
  */
 const createLazyStoreGuard = (
   storeName: string,
-  loader: () => Promise<void>
+  loader: () => Promise<void>,
+  requiresBaseStores = true
 ): ((to: unknown, from: unknown, next: (path?: string) => void) => Promise<void>) => {
   return async (_to, _from, next) => {
     try {
       const start = Date.now()
+
+      // ✅ Wait for base stores (recipes, products) before loading dependent stores
+      if (requiresBaseStores) {
+        await waitForBaseStores()
+      }
+
       DebugUtils.info('Router', `📦 Lazy loading store: ${storeName}...`)
       await loader()
       DebugUtils.info('Router', `✅ Store ${storeName} loaded in ${Date.now() - start}ms`)

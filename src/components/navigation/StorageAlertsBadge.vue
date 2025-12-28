@@ -39,10 +39,16 @@ const hasAlerts = computed(
 )
 
 // Initialize store data for alerts
+// ✅ Sprint 10: Storage is now lazy loaded, so we need to initialize it first
 onMounted(async () => {
   try {
-    // Load storage data to calculate alerts
-    await storageStore.fetchBalances()
+    // Initialize storage store if not already initialized (lazy loading)
+    if (!storageStore.initialized) {
+      await storageStore.initialize()
+    } else {
+      // Just fetch latest balances if already initialized
+      await storageStore.fetchBalances()
+    }
   } catch (error) {
     console.warn('Failed to load storage alerts:', error)
   }
