@@ -106,6 +106,32 @@ export function useKitchenRequest(selectedDepartment?: Ref<'all' | 'kitchen' | '
         department: effectiveDepartment.value
       })
 
+      // === LAZY LOAD: Ensure required stores are initialized ===
+      // Kitchen context doesn't include storage/supplier stores by default.
+      // We lazy load them here when user opens Create Request dialog.
+
+      // 1. Ensure products are loaded (needed for storage calculations)
+      if (productsStore.products.length === 0) {
+        DebugUtils.info(MODULE_NAME, 'Lazy loading products store...')
+        await productsStore.loadProducts()
+      }
+
+      // 2. Ensure storage store is initialized (for balance calculations)
+      if (!storageStore.initialized) {
+        DebugUtils.info(MODULE_NAME, 'Lazy initializing storage store...')
+        await storageStore.initialize()
+      }
+
+      // 3. Ensure supplier store is initialized (for suggestions)
+      // Note: supplierStore.initialize() also calls ensureDependentStoresReady()
+      // which loads products/storage, but we do it explicitly above for clarity
+      if (!supplierStore.integrationState.isInitialized) {
+        DebugUtils.info(MODULE_NAME, 'Lazy initializing supplier store...')
+        await supplierStore.initialize()
+      }
+
+      // === END LAZY LOAD ===
+
       await storageStore.fetchBalances(effectiveDepartment.value)
       await supplierStore.refreshSuggestions(effectiveDepartment.value)
 

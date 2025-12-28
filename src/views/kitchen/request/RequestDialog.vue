@@ -1,76 +1,58 @@
 <!-- src/views/kitchen/request/RequestDialog.vue -->
-<!-- Dialog wrapper for Create Request -->
+<!-- Fullscreen dialog wrapper for Create Request - Tablet optimized -->
 <template>
-  <v-dialog v-model="internalShow" max-width="1200px" persistent scrollable>
-    <v-card class="request-dialog-card">
-      <!-- Dialog Header -->
-      <v-toolbar color="primary" height="72" class="px-4">
-        <v-toolbar-title class="text-h5">
-          <v-icon icon="mdi-cart-plus" size="32" class="mr-3" />
-          Create Request
-        </v-toolbar-title>
+  <v-dialog v-model="internalShow" fullscreen transition="dialog-bottom-transition">
+    <v-card class="request-dialog-fullscreen">
+      <!-- Header - slightly larger for touch -->
+      <v-toolbar color="primary" density="comfortable" class="px-3">
+        <v-btn icon="mdi-close" variant="text" size="large" @click="handleClose" />
+        <v-toolbar-title class="text-h6 font-weight-medium">Create Request</v-toolbar-title>
         <v-spacer />
         <v-chip
           v-if="pendingRequestCount > 0"
           color="warning"
-          size="default"
-          prepend-icon="mdi-clock-outline"
+          size="small"
+          variant="flat"
           class="mr-2"
         >
           {{ pendingRequestCount }} pending
         </v-chip>
-        <v-chip color="white" variant="tonal" size="default" class="mr-3">
+        <v-chip color="white" variant="tonal" size="small">
           {{ effectiveDepartment === 'kitchen' ? 'Kitchen' : 'Bar' }}
         </v-chip>
-        <v-btn icon="mdi-close" variant="text" size="large" @click="handleClose" />
       </v-toolbar>
 
       <!-- Loading State -->
-      <div
-        v-if="isInitializing"
-        class="d-flex align-center justify-center pa-8"
-        style="min-height: 400px"
-      >
-        <div class="text-center">
-          <v-progress-circular indeterminate color="primary" size="48" class="mb-4" />
-          <div class="text-body-1">Loading request assistant...</div>
-        </div>
+      <div v-if="isInitializing" class="loading-container">
+        <v-progress-circular indeterminate color="primary" size="48" />
+        <div class="text-body-2 mt-3">Loading...</div>
       </div>
 
       <!-- Error State -->
       <v-alert v-else-if="initError" type="error" variant="tonal" class="ma-4">
-        <v-alert-title>Failed to initialize</v-alert-title>
         {{ initError }}
         <template #append>
           <v-btn variant="outlined" size="small" @click="initialize">Retry</v-btn>
         </template>
       </v-alert>
 
-      <!-- Main Content -->
-      <v-card-text v-else class="pa-4" style="max-height: 70vh">
+      <!-- Main Content - takes remaining space -->
+      <div v-else class="dialog-content">
         <KitchenOrderAssistant
           :department="effectiveDepartment"
           :requested-by="requestedByName"
           @success="handleSuccess"
           @error="handleError"
         />
-      </v-card-text>
+      </div>
     </v-card>
 
-    <!-- Success Snackbar -->
-    <v-snackbar v-model="showSuccessSnackbar" :timeout="4000" color="success" location="top">
-      <div class="d-flex align-center">
-        <v-icon icon="mdi-check-circle" class="mr-2" />
-        {{ successMessage }}
-      </div>
+    <!-- Snackbars -->
+    <v-snackbar v-model="showSuccessSnackbar" :timeout="3000" color="success" location="top">
+      {{ successMessage }}
     </v-snackbar>
-
-    <!-- Error Snackbar -->
-    <v-snackbar v-model="showErrorSnackbar" :timeout="5000" color="error" location="top">
-      <div class="d-flex align-center">
-        <v-icon icon="mdi-alert-circle" class="mr-2" />
-        {{ errorMessage }}
-      </div>
+    <v-snackbar v-model="showErrorSnackbar" :timeout="4000" color="error" location="top">
+      {{ errorMessage }}
     </v-snackbar>
   </v-dialog>
 </template>
@@ -194,18 +176,35 @@ watch(
 </script>
 
 <style scoped lang="scss">
-.request-dialog-card {
+.request-dialog-fullscreen {
   display: flex;
   flex-direction: column;
-  max-height: 90vh;
+  height: 100vh; // fallback
+  height: 100dvh; // dynamic viewport height (accounts for Android/iOS UI)
+  overflow: hidden;
+
+  // Safe area padding for notched devices and Android nav bar
+  padding-top: var(--safe-area-inset-top);
+  padding-bottom: var(--safe-area-inset-bottom);
 }
 
-// Kitchen-appropriate touch targets
+.loading-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+// Touch-friendly targets
 :deep(.v-btn) {
   min-height: 44px;
-}
-
-:deep(.v-tab) {
-  min-height: 52px;
 }
 </style>

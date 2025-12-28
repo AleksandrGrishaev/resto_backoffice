@@ -3,29 +3,40 @@
 <!-- Key changes: No dialog wrapper, department via prop, uses useKitchenRequest for isolated state -->
 <template>
   <v-card class="kitchen-order-assistant" variant="flat">
-    <!-- Content Tabs -->
-    <v-tabs v-model="activeTab" bg-color="surface-variant">
+    <!-- Dark Tabs for Tablet -->
+    <v-tabs
+      v-model="activeTab"
+      bg-color="grey-darken-4"
+      color="white"
+      slider-color="primary"
+      grow
+      class="request-tabs"
+    >
       <v-tab value="suggestions">
-        <v-icon icon="mdi-lightbulb" class="mr-2" />
         AI Suggestions
-        <v-chip v-if="urgentSuggestions.length > 0" size="small" color="error" class="ml-2">
-          {{ urgentSuggestions.length }} urgent
-        </v-chip>
+        <v-badge
+          v-if="departmentFilteredSuggestions.length > 0"
+          :content="departmentFilteredSuggestions.length"
+          color="warning"
+          inline
+          class="ml-2"
+        />
       </v-tab>
-      <v-tab value="manual">
-        <v-icon icon="mdi-plus" class="mr-2" />
-        Add Manual Item
-      </v-tab>
+      <v-tab value="manual">+ Manual</v-tab>
       <v-tab value="summary">
-        <v-icon icon="mdi-cart" class="mr-2" />
-        Request Summary
-        <v-chip v-if="selectedItems.length > 0" size="small" color="primary" class="ml-2">
-          {{ selectedItems.length }}
-        </v-chip>
+        Summary
+        <v-badge
+          v-if="selectedItems.length > 0"
+          :content="selectedItems.length"
+          color="success"
+          inline
+          class="ml-2"
+        />
       </v-tab>
     </v-tabs>
 
-    <v-tabs-window v-model="activeTab" class="pa-4" style="min-height: 400px">
+    <!-- Scrollable Content Area -->
+    <v-tabs-window v-model="activeTab" class="tabs-content">
       <!-- AI Suggestions Tab -->
       <v-tabs-window-item value="suggestions">
         <!-- Loading State -->
@@ -124,26 +135,20 @@
       </v-tabs-window-item>
     </v-tabs-window>
 
-    <v-divider />
-
-    <!-- Actions -->
-    <v-card-actions class="pa-4">
-      <v-btn variant="outlined" color="secondary" @click="clearSelectedItems">
-        <v-icon start>mdi-close</v-icon>
-        Clear All
-      </v-btn>
+    <!-- Fixed Footer Actions -->
+    <div class="actions-footer">
+      <v-btn variant="text" color="secondary" @click="clearSelectedItems">Clear</v-btn>
       <v-spacer />
       <v-btn
         color="success"
         size="large"
         :disabled="!canCreateRequest"
         :loading="isSubmitting"
-        prepend-icon="mdi-send"
         @click="sendRequest"
       >
-        Send Request
+        Send Request ({{ selectedItems.length }})
       </v-btn>
-    </v-card-actions>
+    </div>
 
     <!-- Success Snackbar -->
     <v-snackbar v-model="showItemAddedSnackbar" :timeout="2000" color="success" location="top">
@@ -410,21 +415,57 @@ watch(
   height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
 
-  .v-tabs-window {
-    flex: 1;
-    overflow-y: auto;
-  }
+// Dark tabs bar
+.request-tabs {
+  flex-shrink: 0;
 
-  // Large touch targets for tablet use
   :deep(.v-tab) {
-    min-height: 56px;
-    font-size: var(--text-base);
-  }
+    min-height: 52px;
+    padding: 0 20px;
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 500;
+    opacity: 0.7;
 
-  :deep(.v-btn) {
+    &.v-tab--selected {
+      opacity: 1;
+    }
+  }
+}
+
+// Scrollable content area - MUST fill remaining space
+.tabs-content {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px;
+  min-height: 0; // Important for flex overflow
+
+  // Force v-window to fill container
+  :deep(.v-window__container) {
+    height: 100%;
+  }
+}
+
+// Fixed footer for actions - always visible at bottom
+.actions-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: rgb(var(--v-theme-surface));
+
+  .v-btn {
     min-height: 48px;
   }
+}
+
+:deep(.v-btn) {
+  min-height: 44px;
 }
 
 .gap-2 {

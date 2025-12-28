@@ -97,8 +97,8 @@
               </v-btn>
             </v-btn-toggle>
 
-            <!-- Quantity Input -->
-            <div class="d-flex align-center gap-1">
+            <!-- Quantity Input - dynamic width based on value -->
+            <div class="d-flex align-center gap-2">
               <NumericInputField
                 :model-value="getCurrentQuantityForDisplay()"
                 :min="getMinQuantity()"
@@ -108,11 +108,10 @@
                 hide-details
                 density="compact"
                 variant="outlined"
-                style="width: 70px"
-                class="text-center"
+                class="quantity-input"
                 @update:model-value="updateQuantity"
               />
-              <span class="text-caption">{{ currentDisplayUnit }}</span>
+              <span class="text-body-2">{{ currentDisplayUnit }}</span>
             </div>
 
             <!-- Days supply -->
@@ -492,6 +491,24 @@ function formatReason(reason: string): string {
 
 .quantity-editor {
   width: 100%;
+}
+
+/* Dynamic width input - expands to fit content */
+.quantity-input {
+  min-width: 90px;
+  max-width: 120px;
+}
+
+.quantity-input :deep(.v-field__input) {
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 600;
+  padding: 8px 12px;
+  min-height: 44px;
+}
+
+.quantity-input :deep(.v-field) {
+  border-radius: 8px;
 }
 
 .gap-1 {
