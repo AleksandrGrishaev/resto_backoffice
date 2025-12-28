@@ -18,6 +18,17 @@
 
           <v-col cols="12" md="3">
             <v-select
+              v-model="supplierFilter"
+              :items="supplierOptions"
+              label="Supplier"
+              variant="outlined"
+              density="compact"
+              clearable
+            />
+          </v-col>
+
+          <v-col cols="12" md="3">
+            <v-select
               v-model="discrepancyFilter"
               :items="discrepancyOptions"
               label="Discrepancies"
@@ -27,7 +38,7 @@
             />
           </v-col>
 
-          <v-col cols="12" md="3">
+          <v-col cols="12" md="2">
             <v-text-field
               v-model="searchQuery"
               label="Search receipts..."
@@ -38,16 +49,8 @@
             />
           </v-col>
 
-          <v-col cols="12" md="3">
-            <v-btn
-              color="primary"
-              variant="flat"
-              prepend-icon="mdi-refresh"
-              :loading="loading"
-              @click="refreshData"
-            >
-              Refresh
-            </v-btn>
+          <v-col cols="12" md="1" class="d-flex align-center">
+            <v-btn icon="mdi-refresh" variant="text" :loading="loading" @click="refreshData" />
           </v-col>
         </v-row>
       </v-card-text>
@@ -257,6 +260,7 @@ const emits = defineEmits<Emits>()
 // =============================================
 
 const statusFilter = ref<string>()
+const supplierFilter = ref<string>()
 const discrepancyFilter = ref<boolean | string>()
 const searchQuery = ref('')
 
@@ -299,9 +303,38 @@ const discrepancyOptions = [
   { title: 'No Discrepancies', value: false }
 ]
 
+// Unique suppliers from orders
+const supplierOptions = computed(() => {
+  const suppliersMap = new Map<string, string>()
+  if (Array.isArray(props.orders)) {
+    for (const order of props.orders) {
+      if (order?.supplierId && order?.supplierName) {
+        suppliersMap.set(order.supplierId, order.supplierName)
+      }
+    }
+  }
+  return Array.from(suppliersMap.entries()).map(([id, name]) => ({
+    title: name,
+    value: id
+  }))
+})
+
 // =============================================
 // COMPUTED
 // =============================================
+
+// Map orders by ID for quick lookup
+const ordersById = computed(() => {
+  const map = new Map<string, PurchaseOrder>()
+  if (Array.isArray(props.orders)) {
+    for (const order of props.orders) {
+      if (order?.id) {
+        map.set(order.id, order)
+      }
+    }
+  }
+  return map
+})
 
 const filteredReceipts = computed(() => {
   // Проверяем что receipts является массивом
@@ -320,6 +353,14 @@ const filteredReceipts = computed(() => {
   // Status filter
   if (statusFilter.value) {
     filtered = filtered.filter(receipt => receipt?.status === statusFilter.value)
+  }
+
+  // Supplier filter
+  if (supplierFilter.value) {
+    filtered = filtered.filter(receipt => {
+      const order = ordersById.value.get(receipt?.purchaseOrderId)
+      return order?.supplierId === supplierFilter.value
+    })
   }
 
   // Discrepancy filter
@@ -383,19 +424,6 @@ function getStatusIcon(status: string): string {
   }
   return iconMap[status] || 'mdi-help-circle'
 }
-
-// Map orders by ID for quick lookup
-const ordersById = computed(() => {
-  const map = new Map<string, PurchaseOrder>()
-  if (Array.isArray(props.orders)) {
-    for (const order of props.orders) {
-      if (order?.id) {
-        map.set(order.id, order)
-      }
-    }
-  }
-  return map
-})
 
 function getPurchaseOrderNumber(orderId: string): string {
   const order = ordersById.value.get(orderId)
