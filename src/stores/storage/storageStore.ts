@@ -333,6 +333,15 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.balances = true
       state.value.error = null
 
+      // ✅ Sprint 10: Auto-initialize service if not ready
+      if (!storageService.initialized) {
+        DebugUtils.warn(
+          MODULE_NAME,
+          'fetchBalances called before service initialized, auto-initializing...'
+        )
+        await storageService.initialize()
+      }
+
       const [balances, activeBatches, transitBatches] = await Promise.all([
         storageService.getBalances(), // ✅ Без параметра department
         storageService.getActiveBatches(),
@@ -391,6 +400,15 @@ export const useStorageStore = defineStore('storage', () => {
       state.value.loading.operations = true
       state.value.error = null
 
+      // ✅ Sprint 10: Auto-initialize service if not ready
+      if (!storageService.initialized) {
+        DebugUtils.warn(
+          MODULE_NAME,
+          'fetchOperations called before service initialized, auto-initializing...'
+        )
+        await storageService.initialize()
+      }
+
       const operations = await storageService.getOperations(department)
       state.value.operations = operations
 
@@ -412,6 +430,15 @@ export const useStorageStore = defineStore('storage', () => {
     try {
       state.value.loading.inventory = true
       state.value.error = null
+
+      // ✅ Sprint 10: Auto-initialize service if not ready
+      if (!storageService.initialized) {
+        DebugUtils.warn(
+          MODULE_NAME,
+          'fetchInventories called before service initialized, auto-initializing...'
+        )
+        await storageService.initialize()
+      }
 
       const inventories = await storageService.getInventories(department)
       state.value.inventories = inventories
