@@ -262,17 +262,26 @@ export const useStorageStore = defineStore('storage', () => {
       // Initialize service
       await storageService.initialize()
 
-      // Load initial data in parallel
-      await Promise.all([loadBalances(), loadRecentOperations()])
+      // Load balances first (critical for UI)
+      await loadBalances()
 
-      // Load inventories (if migrated to Supabase)
-      try {
-        const inventories = await storageService.getInventories()
-        state.value.inventories = inventories
-      } catch (error) {
-        DebugUtils.warn(MODULE_NAME, 'Inventory feature not yet migrated, skipping', { error })
-        state.value.inventories = []
-      }
+      // Load operations in background (non-critical, can timeout)
+      loadRecentOperations().catch(error => {
+        DebugUtils.warn(MODULE_NAME, 'Operations load failed, will retry on demand', { error })
+        // Don't throw - operations can be loaded later when needed
+      })
+
+      // Load inventories in background (non-critical)
+      storageService
+        .getInventories()
+        .then(inventories => {
+          state.value.inventories = inventories
+          DebugUtils.debug(MODULE_NAME, 'Inventories loaded', { count: inventories.length })
+        })
+        .catch(error => {
+          DebugUtils.warn(MODULE_NAME, 'Inventories load failed, will retry on demand', { error })
+          state.value.inventories = []
+        })
 
       // ✅ REMOVED: transitBatchService.load() - data now loaded from Supabase via getTransitBatches()
 
