@@ -6,6 +6,7 @@ import { useProductsStore } from '@/stores/productsStore'
 import type { Department } from '@/stores/productsStore/types'
 import type { InventoryDocument, InventoryItem, CreateInventoryData } from '../types'
 import { DebugUtils } from '@/utils'
+import { supabase } from '@/supabase'
 
 const MODULE_NAME = 'useInventory'
 
@@ -178,6 +179,38 @@ export function useInventory() {
 
       const inventory = await storageStore.finalizeInventory(inventoryId)
       currentInventory.value = null
+
+      // Update lastCountedAt for all counted products
+      const now = new Date().toISOString()
+      const countedItemIds = inventory.items
+        .filter(item => item.confirmed || item.userInteracted || item.countedBy)
+        .map(item => item.itemId)
+
+      if (countedItemIds.length > 0) {
+        DebugUtils.info(MODULE_NAME, 'Updating lastCountedAt for products', {
+          count: countedItemIds.length
+        })
+
+        const { error } = await supabase
+          .from('products')
+          .update({ last_counted_at: now, updated_at: now })
+          .in('id', countedItemIds)
+
+        if (error) {
+          DebugUtils.warn(MODULE_NAME, 'Failed to update lastCountedAt', { error })
+        } else {
+          // Update local productsStore
+          countedItemIds.forEach(id => {
+            const product = productsStore.products.find(p => p.id === id)
+            if (product) {
+              product.lastCountedAt = now
+            }
+          })
+          DebugUtils.info(MODULE_NAME, 'lastCountedAt updated successfully', {
+            count: countedItemIds.length
+          })
+        }
+      }
 
       DebugUtils.info(MODULE_NAME, 'Inventory finalized', {
         inventoryId: inventory.id,

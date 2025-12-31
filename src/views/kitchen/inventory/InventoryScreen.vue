@@ -189,6 +189,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useStorageStore } from '@/stores/storage'
+import { useProductsStore } from '@/stores/productsStore'
 import { useAuthStore } from '@/stores/auth'
 import { useInventory } from '@/stores/storage'
 import type { InventoryDocument } from '@/stores/storage'
@@ -214,6 +215,7 @@ const props = defineProps<Props>()
 // =============================================
 
 const storageStore = useStorageStore()
+const productsStore = useProductsStore()
 const authStore = useAuthStore()
 const inventory = useInventory()
 
@@ -372,7 +374,7 @@ function handleError(message: string) {
 }
 
 /**
- * Load data
+ * Load data (refresh existing data)
  */
 async function loadData() {
   if (storageStore.initialized) {
@@ -386,24 +388,48 @@ async function loadData() {
 }
 
 /**
- * Retry loading
+ * Lazy load required stores for Inventory
+ * Products and Storage are not loaded by default in Kitchen context
+ * to optimize initial load time (99% of kitchen users don't need inventory)
  */
-async function retryLoad() {
+async function initializeRequiredStores(): Promise<void> {
   isLoading.value = true
   error.value = null
 
   try {
+    // Step 1: Load products if not loaded (required for balance calculation)
+    if (productsStore.products.length === 0) {
+      DebugUtils.info(MODULE_NAME, 'Lazy loading products store...')
+      await productsStore.loadProducts()
+      DebugUtils.info(MODULE_NAME, 'Products loaded', {
+        count: productsStore.products.length
+      })
+    }
+
+    // Step 2: Initialize or refresh storage store
     if (!storageStore.initialized) {
+      DebugUtils.info(MODULE_NAME, 'Lazy loading storage store...')
       await storageStore.initialize()
+      DebugUtils.info(MODULE_NAME, 'Storage initialized', {
+        balances: storageStore.state.balances.length
+      })
     } else {
+      // Already initialized, just refresh data
       await loadData()
     }
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Unknown error'
-    DebugUtils.error(MODULE_NAME, 'Retry failed', { error: err })
+    error.value = err instanceof Error ? err.message : 'Failed to load inventory data'
+    DebugUtils.error(MODULE_NAME, 'Failed to initialize required stores', { error: err })
   } finally {
     isLoading.value = false
   }
+}
+
+/**
+ * Retry loading - reuses initializeRequiredStores for consistency
+ */
+async function retryLoad() {
+  await initializeRequiredStores()
 }
 
 // =============================================
@@ -429,14 +455,12 @@ watch(
 onMounted(async () => {
   DebugUtils.info(MODULE_NAME, 'Component mounted', {
     department: effectiveDepartment.value,
-    storageInitialized: storageStore.initialized
+    storageInitialized: storageStore.initialized,
+    productsLoaded: productsStore.products.length > 0
   })
 
-  // Storage store should already be loaded by initialization
-  // Just refresh if needed
-  if (storageStore.initialized) {
-    await loadData()
-  }
+  // Lazy load products and storage stores
+  await initializeRequiredStores()
 })
 </script>
 

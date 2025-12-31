@@ -5,7 +5,7 @@
     <v-card-text class="pa-4">
       <v-row align="center" no-gutters>
         <!-- Item Info -->
-        <v-col cols="12" sm="4" class="mb-3 mb-sm-0">
+        <v-col cols="6" sm="3" class="mb-3 mb-sm-0">
           <div class="d-flex align-center">
             <div class="item-icon mr-3">
               {{ itemIcon }}
@@ -18,12 +18,22 @@
                 System:
                 <strong>{{ modelValue.systemQuantity }}</strong>
                 {{ modelValue.unit }}
-                <span v-if="modelValue.systemQuantity < 0" class="text-error ml-1">(Negative)</span>
+                <span v-if="modelValue.systemQuantity < 0" class="text-error ml-1">(Neg)</span>
                 <span v-else-if="modelValue.systemQuantity === 0" class="text-warning ml-1">
-                  (Zero)
+                  (0)
                 </span>
               </div>
             </div>
+          </div>
+        </v-col>
+
+        <!-- Days Since Last Count Column -->
+        <v-col cols="2" sm="1" class="text-center mb-3 mb-sm-0">
+          <div class="days-column">
+            <div class="text-subtitle-2 font-weight-bold" :class="daysTextColor">
+              {{ daysSinceLastCount !== null ? daysSinceLastCount : '—' }}
+            </div>
+            <div class="text-caption text-medium-emphasis">days</div>
           </div>
         </v-col>
 
@@ -41,16 +51,18 @@
               <v-icon size="24">mdi-minus</v-icon>
             </v-btn>
 
-            <v-text-field
-              v-model.number="localQuantity"
-              type="number"
+            <NumericInputField
+              v-model="localQuantity"
               variant="outlined"
               density="comfortable"
               hide-details
               class="quantity-input mx-2"
               :suffix="modelValue.unit"
-              @focus="($event.target as HTMLInputElement).select()"
-              @blur="handleQuantityBlur"
+              :allow-decimal="true"
+              :decimal-places="3"
+              :min="0"
+              force-tablet-mode
+              @update:model-value="handleQuantityChange"
             />
 
             <v-btn
@@ -66,7 +78,7 @@
         </v-col>
 
         <!-- Confirm Button & Difference -->
-        <v-col cols="4" sm="3" class="text-center">
+        <v-col cols="4" sm="3" class="text-center d-flex flex-column align-center justify-center">
           <v-btn
             :color="isConfirmed ? 'success' : 'default'"
             :variant="isConfirmed ? 'flat' : 'outlined'"
@@ -127,6 +139,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { InventoryItem } from '@/stores/storage'
+import NumericInputField from '@/components/input/NumericInputField.vue'
 
 // =============================================
 // PROPS
@@ -156,6 +169,7 @@ const emit = defineEmits<{
 const showNotes = ref(false)
 const localQuantity = ref(props.modelValue.actualQuantity)
 const localNotes = ref(props.modelValue.notes || '')
+const hasUserInteracted = ref(props.modelValue.userInteracted || false)
 
 // =============================================
 // COMPUTED
@@ -166,6 +180,27 @@ const localNotes = ref(props.modelValue.notes || '')
  */
 const itemIcon = computed(() => {
   return props.modelValue.itemType === 'product' ? '🥩' : '🍲'
+})
+
+/**
+ * Days since last inventory count
+ */
+const daysSinceLastCount = computed(() => {
+  if (!props.modelValue.lastCountedAt) return null
+  const lastCounted = new Date(props.modelValue.lastCountedAt)
+  const now = new Date()
+  return Math.floor((now.getTime() - lastCounted.getTime()) / (1000 * 60 * 60 * 24))
+})
+
+/**
+ * Text color for days column based on staleness
+ */
+const daysTextColor = computed(() => {
+  const days = daysSinceLastCount.value
+  if (days === null) return 'text-grey'
+  if (days > 14) return 'text-error'
+  if (days > 7) return 'text-warning'
+  return 'text-success'
 })
 
 /**
@@ -237,6 +272,7 @@ const formattedValueDiff = computed(() => {
  * Increment quantity
  */
 function incrementQuantity() {
+  hasUserInteracted.value = true
   localQuantity.value++
   emitUpdate()
 }
@@ -246,18 +282,21 @@ function incrementQuantity() {
  */
 function decrementQuantity() {
   if (localQuantity.value > 0) {
+    hasUserInteracted.value = true
     localQuantity.value--
     emitUpdate()
   }
 }
 
 /**
- * Handle quantity blur
+ * Handle quantity change from NumericInputField
  */
-function handleQuantityBlur() {
-  if (localQuantity.value < 0) {
-    localQuantity.value = 0
+function handleQuantityChange(value: number | string) {
+  const numValue = typeof value === 'string' ? parseFloat(value) || 0 : value
+  if (numValue !== props.modelValue.actualQuantity) {
+    hasUserInteracted.value = true
   }
+  localQuantity.value = numValue
   emitUpdate()
 }
 
@@ -277,12 +316,14 @@ function handleNotesBlur() {
  * Toggle confirmed state
  */
 function toggleConfirmed() {
+  hasUserInteracted.value = true
   const wasConfirmed = props.modelValue.confirmed
   const newConfirmed = !wasConfirmed
 
   emit('update:modelValue', {
     ...props.modelValue,
     confirmed: newConfirmed,
+    userInteracted: true,
     countedBy:
       newConfirmed && !props.modelValue.countedBy
         ? props.responsiblePerson
@@ -303,8 +344,12 @@ function emitUpdate() {
     actualQuantity: quantity,
     difference,
     valueDifference,
-    countedBy: !props.modelValue.countedBy ? props.responsiblePerson : props.modelValue.countedBy,
-    confirmed: Math.abs(difference) > 0.001 ? false : props.modelValue.confirmed
+    userInteracted: hasUserInteracted.value,
+    countedBy:
+      hasUserInteracted.value && !props.modelValue.countedBy
+        ? props.responsiblePerson
+        : props.modelValue.countedBy,
+    confirmed: props.modelValue.confirmed
   })
 }
 
@@ -326,6 +371,15 @@ watch(
   newVal => {
     if (newVal !== localNotes.value) {
       localNotes.value = newVal || ''
+    }
+  }
+)
+
+watch(
+  () => props.modelValue.userInteracted,
+  newVal => {
+    if (newVal !== hasUserInteracted.value) {
+      hasUserInteracted.value = newVal || false
     }
   }
 )
@@ -380,6 +434,10 @@ watch(
 .item-info {
   min-width: 0;
   flex: 1;
+}
+
+.days-column {
+  line-height: 1.2;
 }
 
 .item-name {

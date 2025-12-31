@@ -183,6 +183,7 @@ export interface InventoryItem {
   itemId: string
   itemType: 'product'
   itemName: string
+  category?: string // Product category key for filtering
   systemQuantity: number
   actualQuantity: number
   difference: number
@@ -192,6 +193,8 @@ export interface InventoryItem {
   notes?: string
   countedBy?: string
   confirmed?: boolean
+  userInteracted?: boolean // User explicitly interacted with this item (clicked +/-, entered value, confirmed)
+  lastCountedAt?: string // ISO date when this product was last inventoried
 }
 
 // DTOs

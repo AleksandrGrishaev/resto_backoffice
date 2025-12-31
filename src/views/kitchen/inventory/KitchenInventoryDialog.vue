@@ -45,8 +45,58 @@
         <v-progress-linear :model-value="progressPercentage" height="10" rounded color="primary" />
       </div>
 
-      <!-- Filter Chips -->
+      <!-- Filter Section -->
       <div class="filter-section px-4 pb-2">
+        <!-- Row 1: Search + Category + Days Filter -->
+        <div class="d-flex align-center flex-wrap gap-2 mb-3">
+          <!-- Search by name -->
+          <v-text-field
+            v-model="searchQuery"
+            placeholder="Search..."
+            density="compact"
+            hide-details
+            variant="outlined"
+            prepend-inner-icon="mdi-magnify"
+            clearable
+            class="search-field"
+          />
+
+          <!-- Category filter -->
+          <v-select
+            v-model="selectedCategory"
+            :items="categoryOptions"
+            density="compact"
+            hide-details
+            variant="outlined"
+            placeholder="Category"
+            clearable
+            class="category-select"
+          />
+
+          <!-- Days filter -->
+          <v-select
+            v-model="daysFilter"
+            :items="daysFilterOptions"
+            density="compact"
+            hide-details
+            variant="outlined"
+            class="days-select"
+          />
+
+          <v-spacer />
+
+          <!-- Sort selector -->
+          <v-select
+            v-model="sortBy"
+            :items="sortOptions"
+            density="compact"
+            hide-details
+            variant="outlined"
+            class="sort-select"
+          />
+        </div>
+
+        <!-- Row 2: Status Chips -->
         <v-chip-group v-model="filterType" mandatory selected-class="text-primary">
           <v-chip value="all" filter variant="outlined">All ({{ totalItems }})</v-chip>
           <v-chip value="uncounted" filter variant="outlined">
@@ -54,6 +104,9 @@
           </v-chip>
           <v-chip value="discrepancy" filter variant="outlined" color="warning">
             Diff ({{ discrepancyCount }})
+          </v-chip>
+          <v-chip value="stale" filter variant="outlined" color="info">
+            Stale ({{ staleCount }})
           </v-chip>
         </v-chip-group>
       </div>
@@ -212,9 +265,40 @@ const inventory = useInventory()
 
 const isLoading = ref(false)
 const isSaving = ref(false)
-const filterType = ref<'all' | 'uncounted' | 'discrepancy'>('all')
+const filterType = ref<'all' | 'uncounted' | 'discrepancy' | 'stale'>('all')
+const sortBy = ref<'name' | 'last_counted'>('name')
+const searchQuery = ref('')
+const selectedCategory = ref<string | null>(null)
+const daysFilter = ref<number | null>(null) // null = all, number = max days since count
 const inventoryItems = ref<InventoryItem[]>([])
 const currentInventory = ref<InventoryDocument | null>(null)
+
+// Constants
+const STALE_DAYS_THRESHOLD = 7
+
+// Sort options for dropdown
+const sortOptions = [
+  { title: 'Name', value: 'name' },
+  { title: 'Last Count', value: 'last_counted' }
+]
+
+// Days filter options
+const daysFilterOptions = [
+  { title: 'All Days', value: null },
+  { title: '> 3 days', value: 3 },
+  { title: '> 7 days', value: 7 },
+  { title: '> 14 days', value: 14 },
+  { title: '> 30 days', value: 30 }
+]
+
+// Category options - computed from products
+const categoryOptions = computed(() => {
+  const categories = productsStore.categories || []
+  return categories.map(cat => ({
+    title: cat.name,
+    value: cat.key
+  }))
+})
 
 // =============================================
 // COMPUTED
@@ -262,6 +346,19 @@ const discrepancyCount = computed(() => {
 })
 
 /**
+ * Stale items count (not counted in STALE_DAYS_THRESHOLD days or never counted)
+ */
+const staleCount = computed(() => {
+  const now = new Date()
+  return inventoryItems.value.filter(item => {
+    if (!item.lastCountedAt) return true // Never counted = stale
+    const lastCounted = new Date(item.lastCountedAt)
+    const daysSince = Math.floor((now.getTime() - lastCounted.getTime()) / (1000 * 60 * 60 * 24))
+    return daysSince > STALE_DAYS_THRESHOLD
+  }).length
+})
+
+/**
  * Total value difference
  */
 const valueDifference = computed(() => {
@@ -290,11 +387,42 @@ const canComplete = computed(() => {
 })
 
 /**
- * Filtered items based on filter type
+ * Helper to calculate days since last count
+ */
+function getDaysSinceLastCount(item: InventoryItem): number | null {
+  if (!item.lastCountedAt) return null
+  const lastCounted = new Date(item.lastCountedAt)
+  const now = new Date()
+  return Math.floor((now.getTime() - lastCounted.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+/**
+ * Filtered and sorted items
  */
 const filteredItems = computed(() => {
   let items = [...inventoryItems.value]
 
+  // 1. Apply search filter
+  if (searchQuery.value.trim()) {
+    const query = searchQuery.value.toLowerCase().trim()
+    items = items.filter(item => item.itemName.toLowerCase().includes(query))
+  }
+
+  // 2. Apply category filter
+  if (selectedCategory.value) {
+    items = items.filter(item => item.category === selectedCategory.value)
+  }
+
+  // 3. Apply days filter
+  if (daysFilter.value !== null) {
+    items = items.filter(item => {
+      const days = getDaysSinceLastCount(item)
+      if (days === null) return true // Never counted = include
+      return days > daysFilter.value!
+    })
+  }
+
+  // 4. Apply status filter
   switch (filterType.value) {
     case 'uncounted':
       items = items.filter(item => !hasItemBeenCounted(item))
@@ -302,9 +430,36 @@ const filteredItems = computed(() => {
     case 'discrepancy':
       items = items.filter(item => Math.abs(item.difference) > 0.01)
       break
+    case 'stale':
+      items = items.filter(item => {
+        const days = getDaysSinceLastCount(item)
+        if (days === null) return true
+        return days > STALE_DAYS_THRESHOLD
+      })
+      break
     default:
       break
   }
+
+  // 5. Apply sort
+  items.sort((a, b) => {
+    switch (sortBy.value) {
+      case 'name':
+        return a.itemName.localeCompare(b.itemName)
+      case 'last_counted':
+        // Oldest first (never counted items come first)
+        const daysA = getDaysSinceLastCount(a)
+        const daysB = getDaysSinceLastCount(b)
+        // null (never counted) should come first
+        if (daysA === null && daysB === null) return 0
+        if (daysA === null) return -1
+        if (daysB === null) return 1
+        // More days = older = higher priority
+        return daysB - daysA
+      default:
+        return 0
+    }
+  })
 
   return items
 })
@@ -315,12 +470,13 @@ const filteredItems = computed(() => {
 
 /**
  * Check if item has been counted
+ * Only returns true if user explicitly interacted with the item
  */
 function hasItemBeenCounted(item: InventoryItem): boolean {
   return (
-    !!item.countedBy ||
-    Math.abs(item.actualQuantity - item.systemQuantity) > 0.001 ||
-    item.confirmed === true
+    item.confirmed === true || // User explicitly confirmed
+    item.userInteracted === true || // User interacted (clicked +/-, entered value)
+    !!item.countedBy // Has countedBy set (from previous session)
   )
 }
 
@@ -360,21 +516,28 @@ function initializeItems() {
     return
   }
 
-  inventoryItems.value = balances.map(balance => ({
-    id: `inv-${balance.itemId}-${Date.now()}`,
-    itemId: balance.itemId,
-    itemType: balance.itemType,
-    itemName: balance.itemName,
-    systemQuantity: balance.totalQuantity,
-    actualQuantity: balance.totalQuantity,
-    difference: 0,
-    unit: balance.unit,
-    averageCost: balance.averageCost,
-    valueDifference: 0,
-    notes: '',
-    countedBy: '',
-    confirmed: false
-  }))
+  inventoryItems.value = balances.map(balance => {
+    // Get product info from productsStore
+    const product = productsStore.products.find(p => p.id === balance.itemId)
+    return {
+      id: `inv-${balance.itemId}-${Date.now()}`,
+      itemId: balance.itemId,
+      itemType: balance.itemType,
+      itemName: balance.itemName,
+      category: product?.category?.key || product?.category, // Support both object and string format
+      systemQuantity: balance.totalQuantity,
+      actualQuantity: balance.totalQuantity,
+      difference: 0,
+      unit: balance.unit,
+      averageCost: balance.averageCost,
+      valueDifference: 0,
+      notes: '',
+      countedBy: '',
+      confirmed: false,
+      userInteracted: false,
+      lastCountedAt: product?.lastCountedAt
+    }
+  })
 
   DebugUtils.info(MODULE_NAME, 'Inventory items initialized', {
     count: inventoryItems.value.length
@@ -494,7 +657,12 @@ async function handleComplete() {
 function handleClose() {
   inventoryItems.value = []
   currentInventory.value = null
+  // Reset all filters
   filterType.value = 'all'
+  searchQuery.value = ''
+  selectedCategory.value = null
+  daysFilter.value = null
+  sortBy.value = 'name'
   emit('update:modelValue', false)
 }
 
@@ -547,6 +715,26 @@ watch(
 
 .filter-section {
   background-color: var(--v-theme-surface);
+}
+
+.search-field {
+  max-width: 180px;
+  min-width: 140px;
+}
+
+.category-select {
+  max-width: 150px;
+  min-width: 120px;
+}
+
+.days-select {
+  max-width: 130px;
+  min-width: 110px;
+}
+
+.sort-select {
+  max-width: 140px;
+  min-width: 120px;
 }
 
 .items-section {

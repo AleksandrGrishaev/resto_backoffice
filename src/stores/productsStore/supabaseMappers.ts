@@ -100,6 +100,7 @@ export function productFromSupabase(
     tags: row.tags || undefined,
     recommendedPackageId: row.recommended_package_id || undefined,
     packageOptions, // Passed from JOIN or secondary query
+    lastCountedAt: (row as any).last_counted_at || undefined, // Inventory tracking
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || new Date().toISOString()
   }

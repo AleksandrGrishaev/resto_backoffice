@@ -88,6 +88,9 @@ export interface Product extends BaseEntity {
   // ✨ NEW: Negative inventory config (Sprint 1)
   allowNegativeInventory?: boolean
   lastKnownCost?: number
+
+  // ✨ NEW: Last inventory count date
+  lastCountedAt?: string
 }
 
 // ✅ НОВЫЕ DTO для CRUD операций с упаковками

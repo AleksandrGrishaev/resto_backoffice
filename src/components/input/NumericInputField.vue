@@ -242,7 +242,8 @@ const displayValue = computed(() => {
     return formatIDR(val).replace('Rp ', '')
   }
 
-  if (val === 0) return ''
+  // Show 0 as "0" (don't hide it)
+  if (val === 0) return '0'
 
   // Format with thousand separators
   return val.toLocaleString('id-ID')
@@ -282,12 +283,14 @@ function handleNativeInput(value: string) {
 }
 
 function openKeypad() {
-  tempValue.value = numericValue.value
+  // Start with 0 so user can immediately type new value
+  // The previous value is shown in the text field behind the dialog
+  tempValue.value = 0
   showKeypad.value = true
 
-  // Focus the keypad after it opens
+  // Clear the keypad display after it opens
   nextTick(() => {
-    // Keypad is now visible
+    keypadRef.value?.clear?.()
   })
 }
 

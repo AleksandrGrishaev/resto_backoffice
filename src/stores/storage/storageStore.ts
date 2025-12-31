@@ -654,8 +654,19 @@ export const useStorageStore = defineStore('storage', () => {
         state.value.operations.unshift(...correctionOperations)
       }
 
-      // ✅ Обновляем балансы конкретного департамента
-      await fetchBalances(inventory.department)
+      // ✅ Обновляем балансы конкретного департамента (non-critical, don't throw)
+      try {
+        await fetchBalances(inventory.department)
+      } catch (balanceError) {
+        // Log but don't fail - inventory is already finalized
+        DebugUtils.warn(
+          MODULE_NAME,
+          'Failed to refresh balances after inventory, will retry later',
+          {
+            error: balanceError
+          }
+        )
+      }
 
       return inventory
     } catch (error) {
