@@ -32,7 +32,12 @@
 
           <!-- Action buttons -->
           <div class="action-buttons">
-            <v-btn color="success" size="small" @click="showOperationDialog('income')">
+            <v-btn
+              v-if="!isPosСashRegister"
+              color="success"
+              size="small"
+              @click="showOperationDialog('income')"
+            >
               <v-icon>mdi-plus</v-icon>
               Income
             </v-btn>
@@ -263,7 +268,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAccountTransactions } from '@/stores/account/composables/useAccountTransactions'
@@ -279,11 +284,20 @@ import TransferDialog from './components/dialogs/TransferDialog.vue'
 import CorrectionDialog from './components/dialogs/CorrectionDialog.vue'
 import TransactionDetailDialog from './components/dialogs/TransactionDetailDialog.vue'
 import { useAccountStore } from '@/stores/account'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const accountStore = useAccountStore()
+const paymentSettingsStore = usePaymentSettingsStore()
+
+// Ensure payment methods are loaded for POS cash register check
+onMounted(async () => {
+  if (paymentSettingsStore.paymentMethods.length === 0) {
+    await paymentSettingsStore.fetchPaymentMethods()
+  }
+})
 
 // Get account ID from route
 const accountId = computed(() => route.params.id as string)
@@ -341,6 +355,14 @@ const selectedTransaction = ref<Transaction | null>(null)
 
 // Computed
 const canCorrect = computed(() => authStore.isAdmin)
+
+// Check if this account is used as POS cash register
+// POS cash register should not allow direct Income operations from backoffice
+// (all income for POS cash should come through confirmed transfers or POS sales)
+const isPosСashRegister = computed(() => {
+  const posCashAccountId = paymentSettingsStore.posCashAccountId
+  return currentAccount.value?.id === posCashAccountId
+})
 
 const operationTypes = [
   { title: 'All Operations', value: null },

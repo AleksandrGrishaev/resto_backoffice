@@ -92,6 +92,12 @@
               <div class="value negative">- {{ formatPrice(shiftStats.cashRefunded) }}</div>
             </div>
 
+            <!-- ✅ Sprint 10: Confirmed Incoming Transfers -->
+            <div v-if="totalConfirmedTransfers > 0" class="balance-item">
+              <div class="label">Incoming Transfers</div>
+              <div class="value positive">+ {{ formatPrice(totalConfirmedTransfers) }}</div>
+            </div>
+
             <!-- ✅ Sprint 4: Total Expenses -->
             <div class="balance-item">
               <div class="label">Total Expenses</div>
@@ -185,11 +191,13 @@
         </div>
       </div>
 
-      <!-- Sprint 3: Incoming Transfers -->
+      <!-- Sprint 10: Incoming Transfers with confirmation -->
       <div v-if="incomingTransfers.length > 0" class="mt-4">
         <ShiftTransfersList
           :transfers="incomingTransfers"
           :cash-account-id="cashAccount?.id || ''"
+          :read-only="readOnly"
+          @confirm-transfer="handleConfirmTransferClick"
         />
       </div>
 
@@ -288,6 +296,16 @@
       @payment-confirmed="handlePaymentConfirmed"
       @payment-rejected="handlePaymentRejected"
     />
+
+    <!-- Sprint 10: Transfer Confirm Dialog -->
+    <TransferConfirmDialog
+      v-if="currentShift"
+      v-model="showTransferConfirmDialog"
+      :transfer="selectedTransfer"
+      :shift-id="currentShift.id"
+      @transfer-confirmed="handleTransferConfirmed"
+      @transfer-rejected="handleTransferRejected"
+    />
   </div>
 </template>
 
@@ -305,9 +323,11 @@ import EndShiftDialog from './dialogs/EndShiftDialog.vue'
 import PaymentDetailsDialog from './dialogs/PaymentDetailsDialog.vue'
 import ExpenseOperationDialog from './dialogs/ExpenseOperationDialog.vue'
 import SupplierPaymentConfirmDialog from './dialogs/SupplierPaymentConfirmDialog.vue'
+import TransferConfirmDialog from './dialogs/TransferConfirmDialog.vue'
 import ShiftExpensesList from './components/ShiftExpensesList.vue'
 import PendingSupplierPaymentsList from './components/PendingSupplierPaymentsList.vue'
 import ShiftTransfersList from './components/ShiftTransfersList.vue'
+import type { Transaction } from '@/stores/account/types'
 
 // ✅ Sprint 5: Props for read-only mode
 interface Props {
@@ -343,6 +363,10 @@ const loading = ref(false) // ✅ Sprint 8: Loading state for pending payments r
 const showExpenseDialog = ref(false)
 const showConfirmPaymentDialog = ref(false)
 const selectedPayment = ref<PendingPayment | null>(null)
+
+// Sprint 10: Transfer confirmation state
+const showTransferConfirmDialog = ref(false)
+const selectedTransfer = ref<Transaction | null>(null)
 
 // Computed
 // ✅ Sprint 5: Support shiftId prop for viewing specific shift
@@ -444,6 +468,15 @@ const totalShiftExpenses = computed(() => {
   )
 })
 
+// ✅ Sprint 10: Total confirmed incoming transfers
+const totalConfirmedTransfers = computed(() => {
+  return (
+    currentShift.value?.transferOperations
+      ?.filter(t => t.status === 'confirmed')
+      .reduce((sum, t) => sum + t.amount, 0) || 0
+  )
+})
+
 const expectedCash = computed(() => {
   const baseExpected =
     (currentShift.value?.startingCash || 0) +
@@ -451,7 +484,8 @@ const expectedCash = computed(() => {
     shiftStats.value.cashRefunded
 
   // ✅ Sprint 4: Subtract ALL expenses (direct + supplier payments)
-  return baseExpected - totalShiftExpenses.value
+  // ✅ Sprint 10: Add confirmed incoming transfers
+  return baseExpected + totalConfirmedTransfers.value - totalShiftExpenses.value
 })
 
 // Sprint 3: Check if balance is negative
@@ -664,6 +698,22 @@ const handlePaymentRejected = async (paymentId: string) => {
   if (currentShift.value) {
     await shiftsStore.loadPendingPayments()
   }
+}
+
+// Sprint 10: Transfer confirmation handlers
+const handleConfirmTransferClick = (transfer: Transaction) => {
+  selectedTransfer.value = transfer
+  showTransferConfirmDialog.value = true
+}
+
+const handleTransferConfirmed = async (transactionId: string) => {
+  console.log('✅ Transfer confirmed:', transactionId)
+  selectedTransfer.value = null
+}
+
+const handleTransferRejected = async (transactionId: string) => {
+  console.log('❌ Transfer rejected:', transactionId)
+  selectedTransfer.value = null
 }
 
 // ✅ Sprint 8: Refresh pending payments manually

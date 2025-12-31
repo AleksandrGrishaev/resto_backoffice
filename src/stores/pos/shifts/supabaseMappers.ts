@@ -92,6 +92,26 @@ export function toSupabaseInsert(shift: PosShift): SupabaseShiftInsert {
       totalIncome: ab.totalIncome,
       totalExpense: ab.totalExpense
     })),
+    transfer_operations: (shift.transferOperations || []).map(t => ({
+      id: t.id,
+      shiftId: t.shiftId,
+      type: t.type,
+      transactionId: t.transactionId,
+      fromAccountId: t.fromAccountId,
+      fromAccountName: t.fromAccountName,
+      toAccountId: t.toAccountId,
+      amount: t.amount,
+      description: t.description,
+      status: t.status,
+      confirmedBy: t.confirmedBy,
+      confirmedAt: t.confirmedAt,
+      rejectionReason: t.rejectionReason,
+      reverseTransactionId: t.reverseTransactionId,
+      syncStatus: t.syncStatus,
+      notes: t.notes,
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt
+    })),
     pending_payments: shift.pendingPayments,
 
     // Notes and metadata
@@ -207,6 +227,28 @@ export function fromSupabase(supabaseShift: SupabaseShift): PosShift {
     syncStatus: 'synced' as const
   }))
 
+  // Convert transfer operations back to app format
+  const transferOperations = ((supabaseShift as any).transfer_operations || []).map((t: any) => ({
+    id: t.id,
+    shiftId: supabaseShift.id,
+    type: t.type || 'incoming_transfer',
+    transactionId: t.transactionId,
+    fromAccountId: t.fromAccountId,
+    fromAccountName: t.fromAccountName,
+    toAccountId: t.toAccountId,
+    amount: t.amount,
+    description: t.description,
+    status: t.status || 'pending',
+    confirmedBy: t.confirmedBy,
+    confirmedAt: t.confirmedAt,
+    rejectionReason: t.rejectionReason,
+    reverseTransactionId: t.reverseTransactionId,
+    syncStatus: t.syncStatus || 'synced',
+    notes: t.notes,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt
+  }))
+
   return {
     id: supabaseShift.id,
     shiftNumber,
@@ -239,6 +281,9 @@ export function fromSupabase(supabaseShift: SupabaseShift): PosShift {
     deviceId: supabaseShift.device_id || undefined,
     location: supabaseShift.location || undefined,
 
+    // Transfer operations (Sprint 10)
+    transferOperations,
+
     // Sync tracking
     syncStatus: (supabaseShift.sync_status as any) || 'pending',
     lastSyncAt: supabaseShift.last_sync_at || undefined,
@@ -246,7 +291,7 @@ export function fromSupabase(supabaseShift: SupabaseShift): PosShift {
     syncedToAccount: supabaseShift.synced_to_account,
     syncedAt: supabaseShift.synced_at || undefined,
     accountTransactionIds: supabaseShift.account_transaction_ids || undefined,
-    syncAttempts: supabaseShift.sync_attempts,
+    syncAttempts: supabaseShift.sync_attempts ?? undefined,
     lastSyncAttempt: supabaseShift.last_sync_attempt || undefined,
     syncError: supabaseShift.sync_error || undefined,
     syncQueuedAt: supabaseShift.sync_queued_at || undefined,

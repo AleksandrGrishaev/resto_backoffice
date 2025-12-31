@@ -129,6 +129,9 @@
                 <div class="text-caption text-medium-emphasis">
                   Starting: {{ formatCurrency(currentShift.startingCash) }} + Sales:
                   {{ formatCurrency(cashSales) }}
+                  <span v-if="totalConfirmedTransfers > 0" class="text-success">
+                    + Transfers: {{ formatCurrency(totalConfirmedTransfers) }}
+                  </span>
                   <span v-if="totalExpenses > 0" class="text-error">
                     - Expenses: {{ formatCurrency(totalExpenses) }}
                   </span>
@@ -434,10 +437,25 @@ const totalExpenses = computed(() => {
     .reduce((sum, exp) => sum + exp.amount, 0)
 })
 
+// ✅ Sprint 10: Total confirmed incoming transfers
+const totalConfirmedTransfers = computed(() => {
+  if (!currentShift.value) return 0
+  return (
+    currentShift.value.transferOperations
+      ?.filter(t => t.status === 'confirmed')
+      .reduce((sum, t) => sum + t.amount, 0) || 0
+  )
+})
+
 const expectedCash = computed(() => {
   if (!currentShift.value) return 0
-  // Expected = Starting + Sales - Expenses
-  return currentShift.value.startingCash + cashSales.value - totalExpenses.value
+  // Expected = Starting + Sales + Transfers - Expenses
+  return (
+    currentShift.value.startingCash +
+    cashSales.value +
+    totalConfirmedTransfers.value -
+    totalExpenses.value
+  )
 })
 
 const cashDiscrepancy = computed(() => form.value.endingCash - expectedCash.value)

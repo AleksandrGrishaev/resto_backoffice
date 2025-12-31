@@ -67,6 +67,9 @@ export interface PosShift extends BaseEntity {
   expenseOperations: ShiftExpenseOperation[] // Все расходные операции смены
   pendingPayments: string[] // ID платежей, ожидающих подтверждения
 
+  // ✅ Sprint 10: Incoming transfer operations
+  transferOperations: ShiftTransferOperation[] // Входящие переводы на кассу
+
   // Sync information for the entire shift
   syncStatus: SyncStatus
   lastSyncAt?: string
@@ -523,6 +526,64 @@ export interface ServiceResponse<T = void> {
   success: boolean
   data?: T
   error?: string
+}
+
+// =============================================
+// SPRINT 10: INCOMING TRANSFER OPERATIONS
+// =============================================
+
+/**
+ * Status of transfer confirmation
+ */
+export type TransferOperationStatus = 'pending' | 'confirmed' | 'rejected'
+
+/**
+ * Incoming transfer operation in shift
+ * Represents a transfer TO the cash register that requires cashier confirmation
+ */
+export interface ShiftTransferOperation extends BaseEntity {
+  shiftId: string
+  type: 'incoming_transfer'
+
+  // Transfer details from Account Store
+  transactionId: string // ID of the original transfer transaction
+  fromAccountId: string
+  fromAccountName: string
+  toAccountId: string // Cash account ID
+  amount: number
+  description: string
+
+  // Confirmation status
+  status: TransferOperationStatus
+  confirmedBy?: TransactionPerformer
+  confirmedAt?: string
+  rejectionReason?: string
+  reverseTransactionId?: string // ID of reverse transaction (when rejected)
+
+  // Sync
+  syncStatus: SyncStatus
+  notes?: string
+}
+
+/**
+ * DTO for confirming an incoming transfer
+ */
+export interface ConfirmTransferDto {
+  shiftId: string
+  transactionId: string
+  confirmedAmount?: number // If different from original amount
+  notes?: string
+  performedBy: TransactionPerformer
+}
+
+/**
+ * DTO for rejecting an incoming transfer (creates reverse transfer)
+ */
+export interface RejectTransferDto {
+  shiftId: string
+  transactionId: string
+  reason: string
+  performedBy: TransactionPerformer
 }
 
 // =============================================

@@ -21,7 +21,11 @@ import type {
   SyncQueueItem,
   CreateLinkedExpenseDto,
   CreateUnlinkedExpenseDto,
-  CreateAccountPaymentExpenseDto
+  CreateAccountPaymentExpenseDto,
+  // Sprint 10: Transfer Operations
+  ShiftTransferOperation,
+  ConfirmTransferDto,
+  RejectTransferDto
 } from './types'
 import { ShiftsService } from './services'
 import { useShiftsComposables } from './composables'
@@ -875,6 +879,176 @@ export const useShiftsStore = defineStore('posShifts', () => {
     }
   }
 
+  // ============ SPRINT 10: INCOMING TRANSFER OPERATIONS ============
+
+  /**
+   * Confirm an incoming transfer to cash register
+   * Adds the transfer to shift balance
+   */
+  async function confirmTransfer(
+    data: ConfirmTransferDto
+  ): Promise<ServiceResponse<ShiftTransferOperation>> {
+    try {
+      if (!currentShift.value) {
+        return { success: false, error: 'No active shift' }
+      }
+
+      loading.value.sync = true
+      error.value = null
+
+      // Get original transfer from account store
+      const originalTransfer = accountStore.getAllTransactions.find(
+        t => t.id === data.transactionId
+      )
+      if (!originalTransfer) {
+        return { success: false, error: `Transfer ${data.transactionId} not found` }
+      }
+
+      // Get from account name for display
+      const fromAccount = accountStore.accounts.find(
+        a => a.id === originalTransfer.transferDetails?.fromAccountId
+      )
+      const fromAccountName = fromAccount?.name || 'Unknown Account'
+
+      // Create transfer operation record
+      const transferOperation: ShiftTransferOperation = {
+        id: `transfer-${Date.now()}`,
+        shiftId: data.shiftId,
+        type: 'incoming_transfer',
+        transactionId: data.transactionId,
+        fromAccountId: originalTransfer.transferDetails?.fromAccountId || '',
+        fromAccountName,
+        toAccountId: originalTransfer.accountId,
+        amount: data.confirmedAmount || originalTransfer.amount,
+        description: originalTransfer.description,
+        status: 'confirmed',
+        confirmedBy: data.performedBy,
+        confirmedAt: new Date().toISOString(),
+        syncStatus: 'synced',
+        notes: data.notes,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+
+      // Initialize transferOperations array if not exists
+      if (!currentShift.value.transferOperations) {
+        currentShift.value.transferOperations = []
+      }
+
+      // Add to shift
+      currentShift.value.transferOperations.push(transferOperation)
+
+      // Save shift
+      await shiftsService.updateShift(currentShift.value.id, currentShift.value)
+
+      console.log(
+        `✅ Transfer confirmed: ${data.transactionId}, amount: ${transferOperation.amount}`
+      )
+
+      return { success: true, data: transferOperation }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to confirm transfer'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    } finally {
+      loading.value.sync = false
+    }
+  }
+
+  /**
+   * Reject an incoming transfer
+   * Creates a reverse transfer to return money to source account
+   */
+  async function rejectTransfer(
+    data: RejectTransferDto
+  ): Promise<ServiceResponse<ShiftTransferOperation>> {
+    try {
+      if (!currentShift.value) {
+        return { success: false, error: 'No active shift' }
+      }
+
+      loading.value.sync = true
+      error.value = null
+
+      // Get original transfer from account store
+      const originalTransfer = accountStore.getAllTransactions.find(
+        t => t.id === data.transactionId
+      )
+      if (!originalTransfer) {
+        return { success: false, error: `Transfer ${data.transactionId} not found` }
+      }
+
+      // Get from account name for display
+      const fromAccount = accountStore.accounts.find(
+        a => a.id === originalTransfer.transferDetails?.fromAccountId
+      )
+      const fromAccountName = fromAccount?.name || 'Unknown Account'
+
+      // Create reverse transfer in account store
+      // Note: transferBetweenAccounts doesn't return a result, it throws on error
+      try {
+        await accountStore.transferBetweenAccounts({
+          fromAccountId: originalTransfer.accountId, // Cash account (where money is now)
+          toAccountId: originalTransfer.transferDetails?.fromAccountId || '', // Return to source
+          amount: originalTransfer.amount,
+          description: `Reversed: ${originalTransfer.description} (Reason: ${data.reason})`,
+          performedBy: data.performedBy
+        })
+      } catch (transferError) {
+        const msg =
+          transferError instanceof Error
+            ? transferError.message
+            : 'Failed to create reverse transfer'
+        return { success: false, error: msg }
+      }
+
+      // Create rejected transfer operation record
+      // Note: We don't have the reverse transaction ID since transferBetweenAccounts doesn't return it
+      const transferOperation: ShiftTransferOperation = {
+        id: `transfer-${Date.now()}`,
+        shiftId: data.shiftId,
+        type: 'incoming_transfer',
+        transactionId: data.transactionId,
+        fromAccountId: originalTransfer.transferDetails?.fromAccountId || '',
+        fromAccountName,
+        toAccountId: originalTransfer.accountId,
+        amount: originalTransfer.amount,
+        description: originalTransfer.description,
+        status: 'rejected',
+        confirmedBy: data.performedBy,
+        confirmedAt: new Date().toISOString(),
+        rejectionReason: data.reason,
+        // reverseTransactionId not available (transferBetweenAccounts doesn't return it)
+        syncStatus: 'synced',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+
+      // Initialize transferOperations array if not exists
+      if (!currentShift.value.transferOperations) {
+        currentShift.value.transferOperations = []
+      }
+
+      // Add to shift
+      currentShift.value.transferOperations.push(transferOperation)
+
+      // Save shift
+      await shiftsService.updateShift(currentShift.value.id, currentShift.value)
+
+      console.log(
+        `❌ Transfer rejected: ${data.transactionId}, reversed to ${originalTransfer.transferDetails?.fromAccountId}`
+      )
+
+      return { success: true, data: transferOperation }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to reject transfer'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    } finally {
+      loading.value.sync = false
+    }
+  }
+
   // ============ SPRINT 6: RECEIPT PAYMENT SCENARIOS ============
 
   /**
@@ -1603,6 +1777,10 @@ export const useShiftsStore = defineStore('posShifts', () => {
     createDirectExpense,
     confirmExpense,
     rejectExpense,
+
+    // Sprint 10: Transfer Operations
+    confirmTransfer,
+    rejectTransfer,
 
     // Sprint 6: Receipt Payment Scenarios
     hasPendingPaymentForOrder,

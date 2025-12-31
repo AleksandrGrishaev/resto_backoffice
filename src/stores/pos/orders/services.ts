@@ -27,6 +27,7 @@ import {
   buildStatusUpdatePayload
 } from './supabaseMappers'
 import { executeSupabaseMutation } from '@/utils/supabase'
+import { withRetry } from '@/core/request/SupabaseRetryHandler'
 
 /**
  * Order service - handles storage operations
@@ -217,21 +218,33 @@ export class OrdersService {
         newOrder.bills = [firstBill.data]
       }
 
-      // Try Supabase first (if online)
+      // Try Supabase first (if online) with retry logic
       if (this.isSupabaseAvailable()) {
         const supabaseRow = toSupabaseInsert(newOrder)
 
         try {
-          await executeSupabaseMutation(async () => {
-            const { error } = await supabase.from('orders').insert(supabaseRow)
-            if (error) throw error
-          }, 'OrdersService.createOrder')
+          await withRetry(
+            async () => {
+              await executeSupabaseMutation(async () => {
+                const { error } = await supabase.from('orders').insert(supabaseRow)
+                if (error) throw error
+              }, 'OrdersService.createOrder')
+            },
+            'createOrder',
+            { maxRetries: 3, baseDelay: 1000 }
+          )
 
           // Note: No items to insert yet (order is empty)
           console.log('✅ Order saved to Supabase:', newOrder.orderNumber)
         } catch (error) {
-          console.error('❌ Supabase save failed:', extractErrorDetails(error))
-          // Continue to localStorage (offline fallback)
+          console.error('❌ Supabase save failed after retries:', extractErrorDetails(error))
+          // CRITICAL: Return error instead of continuing with localStorage-only order
+          // This prevents "ghost" orders where table is occupied but order doesn't exist in DB
+          // TODO: In the future, implement offline sync queue for true offline support
+          return {
+            success: false,
+            error: 'Failed to save order to server. Please check your connection and try again.'
+          }
         }
       }
 
@@ -1108,6 +1121,22 @@ export class OrdersService {
       if (this.isSupabaseAvailable()) {
         try {
           await executeSupabaseMutation(async () => {
+            // SAFETY: Free any table linked to this order BEFORE deleting
+            // This prevents "ghost" tables (occupied with non-existent order)
+            const { error: tableError } = await supabase
+              .from('tables')
+              .update({
+                status: 'available',
+                current_order_id: null,
+                updated_at: new Date().toISOString()
+              })
+              .eq('current_order_id', orderId)
+
+            if (tableError) {
+              console.warn('⚠️ Failed to free table before order deletion:', tableError)
+              // Continue anyway - table cleanup is secondary
+            }
+
             // Delete all order items first (foreign key constraint)
             const { error: itemsError } = await supabase
               .from('order_items')
