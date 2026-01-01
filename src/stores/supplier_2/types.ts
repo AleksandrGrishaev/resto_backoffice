@@ -44,7 +44,7 @@ export interface RequestItem {
 
 // 2. Purchase order to supplier
 export interface PurchaseOrder extends BaseEntity {
-  orderNumber: string // "PO-001"
+  orderNumber: string // "PO-YYMMDD-NNN" e.g. "PO-260101-024"
   supplierId: string // relation to Counteragent
   supplierName: string // cached name
 
@@ -129,7 +129,7 @@ export interface OrderItem {
 
 // 3. Goods receipt
 export interface Receipt extends BaseEntity {
-  receiptNumber: string // "RCP-001"
+  receiptNumber: string // "RCP-YYMMDD-NNN" e.g. "RCP-260101-024"
   purchaseOrderId: string
 
   deliveryDate: string

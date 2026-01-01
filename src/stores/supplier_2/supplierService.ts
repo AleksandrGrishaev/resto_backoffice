@@ -1644,6 +1644,7 @@ class SupplierService {
 
   private async generateOrderNumber(): Promise<string> {
     const date = new Date()
+    const year = String(date.getFullYear()).slice(-2) // "26" for 2026
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
 
@@ -1658,23 +1659,26 @@ class SupplierService {
           error
         })
         // Fallback to timestamp-based number
-        return `PO-${month}${day}-${String(Date.now()).slice(-3)}`
+        return `PO-${year}${month}${day}-${String(Date.now()).slice(-3)}`
       }
 
       const sequence = (count || 0) + 1
-      return `PO-${month}${day}-${String(sequence).padStart(3, '0')}`
+      // New format: PO-YYMMDD-NNN (e.g., PO-260101-024)
+      return `PO-${year}${month}${day}-${String(sequence).padStart(3, '0')}`
     } catch (error) {
       DebugUtils.warn(MODULE_NAME, 'Error generating order number, using timestamp', { error })
-      return `PO-${month}${day}-${String(Date.now()).slice(-3)}`
+      return `PO-${year}${month}${day}-${String(Date.now()).slice(-3)}`
     }
   }
 
   private async generateReceiptNumber(): Promise<string> {
-    // ✅ Get MAX receipt number from SUPABASE to avoid duplicates after deletions
+    // ✅ Get the most recently created receipt to continue the sequence
+    // Using created_at instead of receipt_number to handle year transitions correctly
+    // (e.g., RCP-251231-022 → RCP-260101-023, where "260101" > "251231" lexicographically)
     const { data, error } = await supabase
       .from('supplierstore_receipts')
       .select('receipt_number')
-      .order('receipt_number', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(1)
 
     if (error) {
@@ -1682,21 +1686,25 @@ class SupplierService {
       throw error
     }
 
-    // Extract the sequential number from the last receipt (e.g., "RCP-1227-062" -> 62)
+    // Extract the sequential number from the last receipt
+    // Supports both old format "RCP-MMDD-NNN" and new format "RCP-YYMMDD-NNN"
     let nextNumber = 1
     if (data && data.length > 0) {
       const lastNumber = data[0].receipt_number
-      const match = lastNumber.match(/RCP-\d{4}-(\d{3})/)
+      // Match both formats: RCP-1227-062 (old) or RCP-251227-062 (new)
+      const match = lastNumber.match(/RCP-\d{4,6}-(\d{3})/)
       if (match) {
         nextNumber = parseInt(match[1], 10) + 1
       }
     }
 
     const date = new Date()
+    const year = String(date.getFullYear()).slice(-2) // "26" for 2026
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
 
-    return `RCP-${month}${day}-${String(nextNumber).padStart(3, '0')}`
+    // New format: RCP-YYMMDD-NNN (e.g., RCP-260101-024)
+    return `RCP-${year}${month}${day}-${String(nextNumber).padStart(3, '0')}`
   }
 
   private async getSupplierName(supplierId: string): Promise<string> {
