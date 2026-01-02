@@ -1012,7 +1012,8 @@ export const useSupplierStore = defineStore('supplier', () => {
       return updatedReceipt
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to complete receipt', { receiptId, error })
-      integrationState.value.integrationErrors.push(`Receipt completion failed: ${error}`)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      integrationState.value.integrationErrors.push(`Receipt completion failed: ${errorMessage}`)
       throw error
     } finally {
       state.value.loading.receipts = false
