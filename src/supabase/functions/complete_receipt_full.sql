@@ -2,7 +2,7 @@
 -- Purpose: Atomic receipt completion in single transaction
 -- Performance: Replaces 45-60+ sequential API calls with 1 RPC call (20s → 1-2s)
 -- Created: 2026-01-02
--- Migration: 025_complete_receipt_rpc.sql
+-- Migration: 085_complete_receipt_rpc.sql
 
 -- PARAMETERS:
 -- p_receipt_id: Receipt ID to complete

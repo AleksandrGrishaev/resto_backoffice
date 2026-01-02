@@ -17,6 +17,7 @@ export type BackgroundTaskType =
   | 'preparation_writeoff'
   | 'schedule_complete'
   | 'receipt_price_update'
+  | 'quick_receipt_storage'
 
 export type BackgroundTaskStatus = 'queued' | 'processing' | 'completed' | 'failed'
 
@@ -183,6 +184,40 @@ export interface ReceiptPriceUpdateTaskPayload {
 }
 
 export type ReceiptPriceUpdateTask = BackgroundTask<ReceiptPriceUpdateTaskPayload>
+
+// ============================================================
+// Quick Receipt Storage Task
+// ============================================================
+
+export interface QuickReceiptStorageTaskPayload {
+  receiptId: string
+  receiptNumber: string
+  orderId: string
+  orderNumber: string
+  supplierName: string
+  items: Array<{
+    id: string
+    orderItemId: string
+    itemId: string
+    itemName: string
+    orderedQuantity: number
+    receivedQuantity: number
+    unit: string
+    packageId: string
+    packageName: string
+    orderedPackageQuantity: number
+    receivedPackageQuantity: number
+    packageUnit: string
+    orderedPrice: number
+    actualPrice: number
+    orderedBaseCost: number
+    actualBaseCost: number
+  }>
+  deliveryDate: string
+  skipPriceUpdate?: boolean // Flag to skip price update (already done by RPC)
+}
+
+export type QuickReceiptStorageTask = BackgroundTask<QuickReceiptStorageTaskPayload>
 
 // ============================================================
 // Task Result

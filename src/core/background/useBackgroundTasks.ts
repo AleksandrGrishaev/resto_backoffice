@@ -33,7 +33,8 @@ import type {
   ProductWriteOffTaskPayload,
   PrepWriteOffTaskPayload,
   ScheduleCompleteTaskPayload,
-  ReceiptPriceUpdateTaskPayload
+  ReceiptPriceUpdateTaskPayload,
+  QuickReceiptStorageTaskPayload
 } from './types'
 
 const MODULE_NAME = 'BackgroundTasks'
@@ -664,6 +665,160 @@ export function useBackgroundTasks() {
   }
 
   // ============================================================
+  // Quick Receipt Storage Task
+  // ============================================================
+
+  async function addQuickReceiptStorageTask(
+    payload: QuickReceiptStorageTaskPayload,
+    callbacks?: TaskCallbacks
+  ): Promise<string> {
+    const taskId = generateId()
+    const description = `Processing storage for ${payload.receiptNumber}`
+
+    const task: BackgroundTask<QuickReceiptStorageTaskPayload> = {
+      id: taskId,
+      type: 'quick_receipt_storage',
+      status: 'queued',
+      description,
+      department: 'kitchen',
+      createdBy: 'Quick Entry',
+      payload,
+      createdAt: new Date().toISOString(),
+      attempts: 0,
+      maxAttempts: 3
+    }
+
+    tasks.value.push(task)
+    DebugUtils.info(MODULE_NAME, 'Quick receipt storage task queued', {
+      taskId,
+      receiptNumber: payload.receiptNumber,
+      orderNumber: payload.orderNumber
+    })
+
+    callbacks?.onQueued?.(`Processing storage for ${payload.receiptNumber}...`)
+
+    // Process immediately in background
+    processQuickReceiptStorageTask(task, callbacks)
+
+    return taskId
+  }
+
+  async function processQuickReceiptStorageTask(
+    task: BackgroundTask<QuickReceiptStorageTaskPayload>,
+    callbacks?: TaskCallbacks
+  ): Promise<void> {
+    const { payload } = task
+
+    updateTaskStatus(task.id, 'processing')
+    task.startedAt = new Date().toISOString()
+
+    try {
+      DebugUtils.info(MODULE_NAME, 'Processing quick receipt storage task', { taskId: task.id })
+
+      // Dynamically import to avoid circular dependencies
+      const { useSupplierStorageIntegration } = await import(
+        '@/stores/supplier_2/integrations/storageIntegration'
+      )
+
+      const storageIntegration = useSupplierStorageIntegration()
+
+      // Map payload to Receipt and Order types
+      const receipt = {
+        id: payload.receiptId,
+        receiptNumber: payload.receiptNumber,
+        purchaseOrderId: payload.orderId,
+        deliveryDate: payload.deliveryDate,
+        receivedBy: 'Quick Entry',
+        items: payload.items.map(item => ({
+          ...item,
+          notes: ''
+        })),
+        hasDiscrepancies: false,
+        status: 'completed' as const,
+        notes: '',
+        closedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+
+      const order = {
+        id: payload.orderId,
+        orderNumber: payload.orderNumber,
+        supplierId: '',
+        supplierName: payload.supplierName,
+        orderDate: new Date().toISOString(),
+        expectedDeliveryDate: payload.deliveryDate,
+        totalAmount: payload.items.reduce(
+          (sum, item) => sum + item.receivedQuantity * item.actualBaseCost,
+          0
+        ),
+        isEstimatedTotal: false,
+        status: 'delivered' as const,
+        billStatus: 'not_billed' as const,
+        receiptId: payload.receiptId,
+        requestIds: [],
+        items: payload.items.map(item => ({
+          id: item.orderItemId,
+          orderId: payload.orderId,
+          itemId: item.itemId,
+          itemName: item.itemName,
+          orderedQuantity: item.orderedQuantity,
+          receivedQuantity: item.receivedQuantity,
+          unit: item.unit,
+          packageId: item.packageId,
+          packageName: item.packageName,
+          packageQuantity: item.orderedPackageQuantity,
+          packageUnit: item.packageUnit,
+          pricePerUnit: item.orderedBaseCost,
+          packagePrice: item.orderedPrice,
+          totalPrice: item.orderedQuantity * item.orderedBaseCost,
+          isEstimatedPrice: false,
+          status: 'received' as const
+        })),
+        notes: '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+
+      // Create storage operation (batches + reconciliation)
+      // Note: Price update already done by RPC, but storageService may do it again
+      // which is non-critical and ensures compatibility with other flows
+      await storageIntegration.createReceiptOperation(receipt, order)
+
+      // Success
+      updateTaskStatus(task.id, 'completed')
+      task.completedAt = new Date().toISOString()
+
+      const successMessage = `Storage processed for ${payload.receiptNumber}`
+      DebugUtils.info(MODULE_NAME, 'Quick receipt storage task completed', { taskId: task.id })
+      callbacks?.onSuccess?.(successMessage)
+
+      setTimeout(() => removeTask(task.id), 5000)
+    } catch (error) {
+      task.attempts++
+      task.lastError = error instanceof Error ? error.message : 'Unknown error'
+
+      if (task.attempts < task.maxAttempts) {
+        const delay = Math.pow(2, task.attempts) * 1000
+        DebugUtils.warn(MODULE_NAME, 'Quick receipt storage task failed, retrying', {
+          taskId: task.id,
+          attempt: task.attempts,
+          delay
+        })
+        setTimeout(() => processQuickReceiptStorageTask(task, callbacks), delay)
+      } else {
+        updateTaskStatus(task.id, 'failed')
+        const errorMessage = `Storage processing failed: ${task.lastError}`
+        DebugUtils.error(MODULE_NAME, 'Quick receipt storage task failed permanently', {
+          taskId: task.id,
+          error: task.lastError
+        })
+        callbacks?.onError?.(errorMessage)
+      }
+    }
+  }
+
+  // ============================================================
   // Helper Functions
   // ============================================================
 
@@ -710,6 +865,7 @@ export function useBackgroundTasks() {
     addPrepWriteOffTask,
     addScheduleCompleteTask,
     addReceiptPriceUpdateTask,
+    addQuickReceiptStorageTask,
 
     // Getters
     getTaskById,

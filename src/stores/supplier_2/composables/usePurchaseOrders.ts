@@ -17,6 +17,7 @@ import { DebugUtils } from '@/utils'
 import { useStorageStore } from '@/stores/storage/storageStore'
 import { StorageDepartment } from '@/stores/storage'
 import { useCounteragentsStore } from '@/stores/counteragents'
+import { supabase } from '@/supabase/client'
 const MODULE_NAME = 'usePurchaseOrders'
 
 // =============================================
@@ -638,51 +639,85 @@ export function usePurchaseOrders() {
 
   /**
    * Send order to supplier
+   * Uses RPC function for atomic transaction (order update + transit batch creation)
    */
   async function sendOrder(id: string): Promise<PurchaseOrder> {
     try {
-      const sentOrder = await updateOrder(id, {
-        status: 'sent',
-        sentDate: new Date().toISOString()
+      DebugUtils.info(MODULE_NAME, 'Sending order via RPC', { orderId: id })
+
+      // Call RPC function for atomic operation
+      const { data, error } = await supabase.rpc('send_purchase_order_to_supplier', {
+        p_order_id: id,
+        p_sent_date: new Date().toISOString(),
+        p_warehouse_id: 'wh_1'
       })
 
-      // ✅ УПРОЩЕННАЯ ВЕРСИЯ: без department
+      if (error) {
+        DebugUtils.error(MODULE_NAME, 'RPC call failed', { error })
+        throw error
+      }
+
+      const result = data as {
+        success: boolean
+        orderNumber?: string
+        status?: string
+        batchesCreated?: number
+        batchIds?: Array<{
+          batchId: string
+          batchNumber: string
+          itemId: string
+          itemName: string
+          quantity: number
+        }>
+        totalAmount?: number
+        supplierId?: string
+        supplierName?: string
+        error?: string
+        code?: string
+      }
+
+      if (!result.success) {
+        const errorMsg = result.error || 'Failed to send order'
+        DebugUtils.error(MODULE_NAME, 'RPC returned failure', { result })
+        throw new Error(errorMsg)
+      }
+
+      DebugUtils.info(MODULE_NAME, `Order ${result.orderNumber} sent successfully via RPC`, {
+        orderId: id,
+        batchesCreated: result.batchesCreated,
+        totalAmount: result.totalAmount
+      })
+
+      // Reload orders to reflect changes in store
+      await supplierStore.getOrders()
+
+      // Get the sent order from store
+      const sentOrder = supplierStore.state.orders.find(o => o.id === id)
+      if (!sentOrder) {
+        throw new Error('Order not found after sending')
+      }
+
+      // Trigger automation (async, non-blocking)
+      // This remains in client code as per user decision
       try {
-        const transitBatchData = sentOrder.items.map(item => ({
-          itemId: item.itemId,
-          itemName: item.itemName,
-          quantity: item.orderedQuantity,
-          unit: item.unit,
-          estimatedCostPerUnit: item.pricePerUnit,
-          // ❌ УДАЛИТЬ: department
-          purchaseOrderId: sentOrder.id,
-          supplierId: sentOrder.supplierId,
-          supplierName: sentOrder.supplierName,
-          plannedDeliveryDate:
-            sentOrder.expectedDeliveryDate || calculateDefaultDeliveryDate(sentOrder),
-          notes: `Transit batch from order ${sentOrder.orderNumber}`
-        }))
-
-        const batchIds = await storageStore.createTransitBatches(transitBatchData)
-
-        console.log(`PurchaseOrders: Transit batches created successfully`, {
-          orderId: sentOrder.id,
-          batchesCreated: batchIds.length,
-          batchIds
-        })
-      } catch (transitError) {
-        console.warn(
-          'PurchaseOrders: Failed to create transit batches (order sent successfully):',
-          transitError
+        const { AutomatedPayments } = await import(
+          '@/stores/counteragents/integrations/automatedPayments'
         )
+        await AutomatedPayments.onOrderStatusChanged(sentOrder, 'draft')
+        DebugUtils.info(MODULE_NAME, 'AutomatedPayments triggered successfully', { orderId: id })
+      } catch (automationError) {
+        DebugUtils.error(MODULE_NAME, 'AutomatedPayments failed (non-critical)', {
+          error: automationError
+        })
       }
 
       console.log(
-        `PurchaseOrders: Order ${sentOrder.orderNumber} sent to supplier and transit batches created`
+        `PurchaseOrders: Order ${result.orderNumber} sent to supplier and ${result.batchesCreated} transit batches created`
       )
+
       return sentOrder
     } catch (error) {
-      console.error('PurchaseOrders: Error sending order:', error)
+      DebugUtils.error(MODULE_NAME, 'Error sending order', { orderId: id, error })
       throw error
     }
   }

@@ -877,41 +877,59 @@ async function saveReceipt() {
       throw new Error(`RPC error: ${error.message}`)
     }
 
+    // Check if RPC returned an error in the data
+    if (data && data.success === false) {
+      throw new Error(`RPC failed: ${data.error} (code: ${data.code})`)
+    }
+
     const rpcTime = performance.now() - startTime
 
     DebugUtils.info(MODULE_NAME, '✅ RPC completed', {
-      orderId: data.order_id,
-      orderNumber: data.order_number,
-      receiptId: data.receipt_id,
-      receiptNumber: data.receipt_number,
-      totalAmount: data.total_amount,
-      rpcTimeMs: Math.round(rpcTime)
+      orderId: data?.order_id,
+      orderNumber: data?.order_number,
+      receiptId: data?.receipt_id,
+      receiptNumber: data?.receipt_number,
+      totalAmount: data?.total_amount,
+      priceUpdates: data?.priceUpdates,
+      rpcTimeMs: Math.round(rpcTime),
+      rawData: data // Add full response for debugging
     })
 
     // 3. Map RPC result to Receipt and Order types for storage integration
     const receipt = mapRPCResultToReceipt(data)
     const order = mapRPCResultToOrder(data)
 
-    // 4. Storage integration (create batches + update prices)
-    const storageStartTime = performance.now()
+    // 4. Storage integration in background (non-blocking)
+    const { useBackgroundTasks } = await import('@/core/background')
+    const { addQuickReceiptStorageTask } = useBackgroundTasks()
 
-    try {
-      await storageIntegration.createReceiptOperation(receipt, order)
-      DebugUtils.info(MODULE_NAME, '✅ Storage batches created')
-    } catch (storageError) {
-      DebugUtils.warn(MODULE_NAME, '⚠️ Storage operation failed (non-critical)', { storageError })
-    }
+    // Queue storage task in background - dialog can close immediately
+    addQuickReceiptStorageTask(
+      {
+        receiptId: data.receipt_id,
+        receiptNumber: data.receipt_number,
+        orderId: data.order_id,
+        orderNumber: data.order_number,
+        supplierName: supplier.name,
+        items: data.items,
+        deliveryDate: form.value.deliveryDate,
+        skipPriceUpdate: true // Prices already updated by RPC
+      },
+      {
+        onQueued: msg => DebugUtils.info(MODULE_NAME, '📦 Storage task queued', { msg }),
+        onSuccess: msg => {
+          DebugUtils.info(MODULE_NAME, '✅ Storage completed in background', { msg })
+          // Refresh stores after background completion
+          supplierStore.getOrders()
+          supplierStore.getReceipts()
+        },
+        onError: msg => DebugUtils.warn(MODULE_NAME, '⚠️ Storage task failed', { msg })
+      }
+    )
 
-    try {
-      await storageIntegration.updateProductPrices(receipt)
-      DebugUtils.info(MODULE_NAME, '✅ Product prices updated')
-    } catch (priceError) {
-      DebugUtils.warn(MODULE_NAME, '⚠️ Price update failed (non-critical)', { priceError })
-    }
+    DebugUtils.info(MODULE_NAME, '✅ Storage task queued (processing in background)')
 
-    const storageTime = performance.now() - storageStartTime
-
-    // 5. Refresh local stores
+    // 5. Refresh local stores immediately (show new receipt in UI)
     await Promise.all([supplierStore.getOrders(), supplierStore.getReceipts()])
 
     const totalTime = performance.now() - startTime
@@ -921,8 +939,8 @@ async function saveReceipt() {
       orderNumber: data.order_number,
       timing: {
         rpcMs: Math.round(rpcTime),
-        storageMs: Math.round(storageTime),
-        totalMs: Math.round(totalTime)
+        totalMs: Math.round(totalTime),
+        note: 'Storage processing in background'
       }
     })
 
