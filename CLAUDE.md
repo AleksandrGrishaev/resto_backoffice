@@ -229,6 +229,37 @@ src/supabase/migrations/
 
 **Remember: MCP tools are for DEV testing only. Migration files are for production deployment.**
 
+## ⚠️ CRITICAL: RPC Functions Policy
+
+**MANDATORY: All Supabase RPC functions MUST be version-controlled in two places:**
+
+```
+src/supabase/
+├── migrations/025_complete_receipt_rpc.sql  # Migration (applied to DB)
+└── functions/complete_receipt_full.sql      # Source code (for git/reference)
+```
+
+**Why two copies?**
+
+- `migrations/` - Applied to DB via `mcp__supabase__apply_migration`
+- `functions/` - Version-controlled source code with comments (NOT executed)
+
+**Workflow:**
+
+1. Write function in `functions/function_name.sql` with detailed comments
+2. Copy same code to `migrations/NNN_function_name.sql`
+3. Apply migration: `mcp__supabase__apply_migration({ name, query })`
+4. Use in client: `supabase.rpc('function_name', { params })`
+
+**Best practices:**
+
+- Always use `SECURITY DEFINER` for permissions
+- Always return JSONB: `{ success: boolean, ... }`
+- Always include `EXCEPTION WHEN OTHERS` for error handling
+- Always test on DEV first
+
+**⚠️ PostgREST registration:** Always use `mcp__supabase__apply_migration` to create functions. Manual SQL Editor functions require cache reload.
+
 ## Documentation Structure
 
 The project uses a structured approach to documentation and task management:

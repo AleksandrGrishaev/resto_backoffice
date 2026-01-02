@@ -32,7 +32,8 @@ import type {
   ProductionTaskPayload,
   ProductWriteOffTaskPayload,
   PrepWriteOffTaskPayload,
-  ScheduleCompleteTaskPayload
+  ScheduleCompleteTaskPayload,
+  ReceiptPriceUpdateTaskPayload
 } from './types'
 
 const MODULE_NAME = 'BackgroundTasks'
@@ -554,6 +555,115 @@ export function useBackgroundTasks() {
   }
 
   // ============================================================
+  // Receipt Price Update Task
+  // ============================================================
+
+  async function addReceiptPriceUpdateTask(
+    payload: ReceiptPriceUpdateTaskPayload,
+    callbacks?: TaskCallbacks
+  ): Promise<string> {
+    const taskId = generateId()
+
+    const task: BackgroundTask<ReceiptPriceUpdateTaskPayload> = {
+      id: taskId,
+      type: 'receipt_price_update',
+      status: 'queued',
+      description: `Updating prices from ${payload.receiptNumber}`,
+      department: 'kitchen', // Receipt price updates are cross-department
+      createdBy: 'System',
+      payload,
+      createdAt: new Date().toISOString(),
+      attempts: 0,
+      maxAttempts: 3
+    }
+
+    tasks.value.push(task)
+    DebugUtils.info(MODULE_NAME, 'Receipt price update task queued', {
+      taskId,
+      receiptNumber: payload.receiptNumber
+    })
+
+    // Show queued notification (optional)
+    callbacks?.onQueued?.(`Updating product prices from ${payload.receiptNumber}...`)
+
+    // Process immediately in background (no await!)
+    processReceiptPriceUpdateTask(task, callbacks)
+
+    return taskId
+  }
+
+  async function processReceiptPriceUpdateTask(
+    task: BackgroundTask<ReceiptPriceUpdateTaskPayload>,
+    callbacks?: TaskCallbacks
+  ): Promise<void> {
+    // Dynamic import to avoid circular dependencies
+    const { useSupplierStorageIntegration } = await import(
+      '@/stores/supplier_2/integrations/storageIntegration'
+    )
+    const { useReceipts } = await import('@/stores/supplier_2/composables/useReceipts')
+
+    const storageIntegration = useSupplierStorageIntegration()
+    const { getReceiptById } = useReceipts()
+    const { payload } = task
+
+    updateTaskStatus(task.id, 'processing')
+    task.startedAt = new Date().toISOString()
+
+    try {
+      // Get receipt data
+      const receipt = getReceiptById(payload.receiptId)
+      if (!receipt) {
+        throw new Error(`Receipt ${payload.receiptId} not found`)
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Processing receipt price update task', {
+        taskId: task.id,
+        receiptNumber: payload.receiptNumber,
+        itemsCount: receipt.items.length
+      })
+
+      // Main operation: Update product prices
+      await storageIntegration.updateProductPrices(receipt)
+
+      // Success
+      updateTaskStatus(task.id, 'completed')
+      task.completedAt = new Date().toISOString()
+
+      const successMessage = `Product prices updated from ${payload.receiptNumber}`
+
+      DebugUtils.info(MODULE_NAME, 'Receipt price update task completed', {
+        taskId: task.id,
+        itemsCount: receipt.items.length
+      })
+      callbacks?.onSuccess?.(successMessage)
+
+      // Remove task after 5 seconds
+      setTimeout(() => removeTask(task.id), 5000)
+    } catch (error) {
+      task.attempts++
+      task.lastError = error instanceof Error ? error.message : 'Unknown error'
+
+      if (task.attempts < task.maxAttempts) {
+        const delay = Math.pow(2, task.attempts) * 1000
+        DebugUtils.warn(MODULE_NAME, 'Receipt price update task failed, retrying', {
+          taskId: task.id,
+          attempt: task.attempts,
+          delay
+        })
+        setTimeout(() => processReceiptPriceUpdateTask(task, callbacks), delay)
+      } else {
+        updateTaskStatus(task.id, 'failed')
+        const errorMessage = `Price update failed: ${task.lastError}`
+        DebugUtils.error(MODULE_NAME, 'Receipt price update task failed permanently', {
+          taskId: task.id,
+          error: task.lastError
+        })
+        callbacks?.onError?.(errorMessage)
+      }
+    }
+  }
+
+  // ============================================================
   // Helper Functions
   // ============================================================
 
@@ -599,6 +709,7 @@ export function useBackgroundTasks() {
     addProductWriteOffTask,
     addPrepWriteOffTask,
     addScheduleCompleteTask,
+    addReceiptPriceUpdateTask,
 
     // Getters
     getTaskById,

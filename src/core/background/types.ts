@@ -16,6 +16,7 @@ export type BackgroundTaskType =
   | 'product_writeoff'
   | 'preparation_writeoff'
   | 'schedule_complete'
+  | 'receipt_price_update'
 
 export type BackgroundTaskStatus = 'queued' | 'processing' | 'completed' | 'failed'
 
@@ -170,6 +171,18 @@ export interface ScheduleCompleteTaskPayload {
 }
 
 export type ScheduleCompleteTask = BackgroundTask<ScheduleCompleteTaskPayload>
+
+// ============================================================
+// Receipt Price Update Task
+// ============================================================
+
+export interface ReceiptPriceUpdateTaskPayload {
+  receiptId: string
+  receiptNumber: string
+  supplierName: string
+}
+
+export type ReceiptPriceUpdateTask = BackgroundTask<ReceiptPriceUpdateTaskPayload>
 
 // ============================================================
 // Task Result
