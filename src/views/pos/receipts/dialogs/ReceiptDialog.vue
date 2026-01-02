@@ -288,8 +288,11 @@ function toggleTax() {
 /**
  * When tax amount changes, calculate percentage
  */
-function onTaxAmountChange(value: number | undefined) {
+function onTaxAmountChange(value: number | null | undefined) {
   if (taxSyncInProgress) return
+
+  taxAmount.value = value ?? undefined
+
   if (!value || value <= 0) {
     taxPercentage.value = undefined
     emitTaxUpdate()
@@ -308,8 +311,11 @@ function onTaxAmountChange(value: number | undefined) {
 /**
  * When tax percentage changes, calculate amount
  */
-function onTaxPercentageChange(value: number | undefined) {
+function onTaxPercentageChange(value: number | null | undefined) {
   if (taxSyncInProgress) return
+
+  taxPercentage.value = value ?? undefined
+
   if (!value || value <= 0) {
     taxAmount.value = undefined
     emitTaxUpdate()
@@ -535,32 +541,34 @@ function handleQuickVerifyComplete(modifiedItems: ReceiptItemOutput[]) {
                 <v-expand-transition>
                   <div v-if="includeTax" class="mt-3">
                     <div class="d-flex align-center gap-2 mb-2">
-                      <v-text-field
+                      <NumericInputField
                         :model-value="taxAmount"
                         label="Tax Amount"
                         variant="outlined"
                         density="compact"
                         prefix="Rp"
-                        type="number"
                         :min="0"
+                        :max="999999999"
+                        :format-as-currency="true"
                         hide-details
                         class="flex-grow-1"
                         :disabled="submitting"
-                        @update:model-value="onTaxAmountChange(Number($event) || undefined)"
+                        @update:model-value="onTaxAmountChange($event)"
                       />
-                      <v-text-field
+                      <NumericInputField
                         :model-value="taxPercentage"
                         label="%"
                         variant="outlined"
                         density="compact"
                         suffix="%"
-                        type="number"
                         :min="0"
                         :max="100"
+                        :step="0.1"
+                        :decimal-places="2"
                         hide-details
-                        style="max-width: 90px"
+                        style="min-width: 100px"
                         :disabled="submitting"
-                        @update:model-value="onTaxPercentageChange(Number($event) || undefined)"
+                        @update:model-value="onTaxPercentageChange($event)"
                       />
                     </div>
                   </div>

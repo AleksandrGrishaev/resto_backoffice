@@ -300,6 +300,7 @@ import { useProcurementRequests } from '@/stores/supplier_2/composables/useProcu
 import type { ProcurementRequest, PurchaseOrder, Receipt } from '@/stores/supplier_2/types'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import { useAccountStore } from '@/stores/account'
+import { useCounteragentsStore } from '@/stores/counteragents'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
@@ -330,6 +331,7 @@ const { submitRequest, updateRequest, canEditRequest, canDeleteRequest } = usePr
 const { sendOrder, updateOrder, canEditOrder, canSendOrder, calculateBillStatus } =
   usePurchaseOrders()
 const accountStore = useAccountStore()
+const counteragentsStore = useCounteragentsStore()
 const router = useRouter()
 const authStore = useAuthStore()
 // =============================================
@@ -814,16 +816,22 @@ onMounted(async () => {
   console.log(`${MODULE_NAME}: Component mounted, initializing data`)
 
   try {
-    // Initialize supplier store and account store in parallel
+    // Initialize all required stores in parallel
+    // ✅ CRITICAL: counteragentsStore must be initialized for supplier selection in order dialogs
     await Promise.all([
       supplierStore.initialize(),
+      counteragentsStore.initialize(),
       accountStore.fetchPayments() // Load payments for bill status display
     ])
 
     // Recalculate bill statuses for all orders based on actual payment data
     await recalculateBillStatuses()
 
-    console.log(`${MODULE_NAME}: Data initialized successfully`)
+    console.log(`${MODULE_NAME}: Data initialized successfully`, {
+      suppliers: counteragentsStore.supplierCounterAgents.length,
+      requests: supplierStore.state.requests?.length || 0,
+      orders: supplierStore.state.orders?.length || 0
+    })
   } catch (error) {
     console.error(`${MODULE_NAME}: Failed to initialize data`, error)
     handleError('Failed to load supplier data')

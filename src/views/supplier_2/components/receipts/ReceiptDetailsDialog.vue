@@ -146,7 +146,7 @@
               </div>
             </template>
 
-            <!-- Price Comparison -->
+            <!-- Price per Package (without tax) -->
             <template #[`item.priceComparison`]="{ item }">
               <div class="text-right">
                 <div class="text-body-2">
@@ -162,6 +162,16 @@
                   was {{ formatCurrency(item.orderedPrice) }}
                 </div>
                 <div v-else class="text-caption text-success">same price</div>
+              </div>
+            </template>
+
+            <!-- Price per Package WITH Tax (only shown if receipt has tax) -->
+            <template #[`item.priceWithTax`]="{ item }">
+              <div class="text-right">
+                <div class="text-body-2 font-weight-bold text-info">
+                  {{ formatCurrency(getPriceWithTax(item)) }}
+                </div>
+                <div class="text-caption text-medium-emphasis">per pkg</div>
               </div>
             </template>
 
@@ -242,7 +252,14 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { Receipt, ReceiptItem } from '@/stores/supplier_2/types'
+import { useProductsStore } from '@/stores/productsStore'
 import ReceiptDiscrepanciesDialog from './ReceiptDiscrepanciesDialog.vue'
+
+// =============================================
+// STORES
+// =============================================
+
+const productsStore = useProductsStore()
 
 // =============================================
 // PROPS & EMITS
@@ -278,20 +295,56 @@ const showDiscrepanciesDialog = ref(false)
 // TABLE CONFIGURATION
 // =============================================
 
-const itemHeaders = [
-  { title: 'Item', key: 'itemName', sortable: false, width: '200px' },
-  {
-    title: 'Qty (Received/Ordered)',
-    key: 'quantityComparison',
-    sortable: false,
-    width: '160px',
-    align: 'center'
-  },
-  { title: 'Price', key: 'priceComparison', sortable: false, width: '120px', align: 'end' },
-  { title: 'Line Total', key: 'lineTotal', sortable: false, width: '120px', align: 'end' },
-  { title: 'Status', key: 'itemStatus', sortable: false, width: '100px' },
-  { title: 'Notes', key: 'notes', sortable: false }
-]
+const itemHeaders = computed(() => {
+  const headers = [
+    { title: 'Item', key: 'itemName', sortable: false, width: '180px' },
+    {
+      title: 'Qty (Received/Ordered)',
+      key: 'quantityComparison',
+      sortable: false,
+      width: '140px',
+      align: 'center' as const
+    },
+    {
+      title: 'Pkg Price',
+      key: 'priceComparison',
+      sortable: false,
+      width: '110px',
+      align: 'end' as const
+    }
+  ]
+
+  // Add "Pkg + Tax" column only if receipt has tax
+  if (hasTax.value) {
+    headers.push({
+      title: 'Pkg + Tax',
+      key: 'priceWithTax',
+      sortable: false,
+      width: '110px',
+      align: 'end' as const
+    })
+  }
+
+  headers.push(
+    {
+      title: 'Line Total',
+      key: 'lineTotal',
+      sortable: false,
+      width: '110px',
+      align: 'end' as const
+    },
+    {
+      title: 'Status',
+      key: 'itemStatus',
+      sortable: false,
+      width: '90px',
+      align: 'center' as const
+    },
+    { title: 'Notes', key: 'notes', sortable: false, width: '100px', align: 'start' as const }
+  )
+
+  return headers
+})
 
 // =============================================
 // COMPUTED
@@ -319,6 +372,14 @@ const totalFinancialImpact = computed(() => {
   return actualTotal - originalTotal
 })
 
+/**
+ * Check if this receipt has tax applied
+ */
+const hasTax = computed(() => {
+  if (!props.receipt) return false
+  return (props.receipt.taxAmount ?? 0) > 0
+})
+
 // =============================================
 // METHODS
 // =============================================
@@ -331,6 +392,31 @@ function closeDialog() {
 // =============================================
 // HELPER FUNCTIONS
 // =============================================
+
+/**
+ * Get package size from productsStore
+ */
+function getPackageSize(item: ReceiptItem): number {
+  if (!item.packageId) return 1
+  const pkg = productsStore.getPackageById(item.packageId)
+  return pkg?.packageSize || 1
+}
+
+/**
+ * Calculate price per package WITH tax included
+ * Tax is distributed proportionally based on line total
+ */
+function getPriceWithTax(item: ReceiptItem): number {
+  if (!props.receipt?.taxAmount || props.receipt.taxAmount <= 0) {
+    return item.actualPrice || item.orderedPrice
+  }
+
+  // actualBaseCost already includes proportional tax
+  // So price with tax = actualBaseCost × packageSize
+  const baseCostWithTax = item.actualBaseCost || item.orderedBaseCost
+  const packageSize = getPackageSize(item)
+  return baseCostWithTax * packageSize
+}
 
 function getStatusColor(status: string): string {
   const colorMap: Record<string, string> = {

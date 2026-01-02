@@ -899,6 +899,8 @@ function handlePackageChange(data: {
 
   // Update item with new package
   item.packageId = pkg.id
+  item.packageName = pkg.packageName // ✅ FIXED: Update packageName for QuickVerify display
+  item.packageUnit = pkg.packageUnit // ✅ FIXED: Update packageUnit
   item.receivedPackageQuantity = data.packageQuantity
   item.receivedQuantity = data.resultingBaseQuantity
 
@@ -912,6 +914,7 @@ function handlePackageChange(data: {
   DebugUtils.info(MODULE_NAME, 'Package changed', {
     itemName: item.itemName,
     newPackage: pkg.packageName,
+    packageUnit: pkg.packageUnit,
     receivedQuantity: item.receivedQuantity
   })
 
