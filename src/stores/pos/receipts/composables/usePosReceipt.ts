@@ -513,6 +513,19 @@ export function usePosReceipt() {
   }
 
   /**
+   * Update tax values
+   */
+  function updateTax(includeTax: boolean, taxAmount?: number, taxPercentage?: number): void {
+    if (!formData.value) return
+
+    formData.value.includeTax = includeTax
+    formData.value.taxAmount = taxAmount
+    formData.value.taxPercentage = taxPercentage
+
+    DebugUtils.debug(MODULE_NAME, 'Tax updated', { includeTax, taxAmount, taxPercentage })
+  }
+
+  /**
    * Complete receipt using supplier_2 store
    * REQUIRES ONLINE MODE
    */
@@ -541,11 +554,13 @@ export function usePosReceipt() {
         notes: ''
       }))
 
-      // Start receipt via supplier_2
+      // Start receipt via supplier_2 (including tax if present)
       await receiptsComposable.startReceipt(selectedOrder.value.id, {
         purchaseOrderId: selectedOrder.value.id,
         receivedBy: options?.performedBy?.name || 'Cashier',
-        items: itemsData
+        items: itemsData,
+        taxAmount: formData.value.includeTax ? formData.value.taxAmount : undefined,
+        taxPercentage: formData.value.includeTax ? formData.value.taxPercentage : undefined
       })
 
       // Update each item
@@ -957,6 +972,7 @@ export function usePosReceipt() {
     clearItemLineTotal,
     changeItemPackage,
     setPaymentAmount,
+    updateTax,
     completeReceipt,
     completeReceiptWithPayment
   }

@@ -28,6 +28,7 @@ const {
   updateItemPackageQuantity,
   updateItemLineTotal,
   changeItemPackage,
+  updateTax,
   completeReceipt,
   completeReceiptWithPayment
 } = usePosReceipt()
@@ -112,6 +113,11 @@ async function handleCompleteWithPayment(amount: number) {
   if (result.success) {
     showReceiptDialog.value = false
   }
+}
+
+// Handle tax update from dialog
+function handleTaxUpdate(includeTax: boolean, taxAmount?: number, taxPercentage?: number) {
+  updateTax(includeTax, taxAmount, taxPercentage)
 }
 
 // Format date
@@ -301,6 +307,7 @@ function goBack() {
       @update:package-price="updateItemPackagePrice"
       @update:line-total="updateItemLineTotal"
       @change-package="changeItemPackage"
+      @update:tax="handleTaxUpdate"
       @complete="handleCompleteReceipt"
       @complete-with-payment="handleCompleteWithPayment"
     />

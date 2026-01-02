@@ -74,6 +74,11 @@ export interface ReceiptFormData {
   actualTotal: number // Calculated from actual items
   hasDiscrepancies: boolean
 
+  // Tax (optional) - same as backoffice BaseReceiptDialog
+  includeTax?: boolean
+  taxAmount?: number // Total tax amount in IDR
+  taxPercentage?: number // Tax percentage (for display/calculation)
+
   // Payment (optional)
   paymentAmount?: number
   paymentNotes?: string

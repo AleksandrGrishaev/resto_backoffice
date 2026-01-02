@@ -31,6 +31,7 @@ interface Emits {
   (e: 'update:packagePrice', itemId: string, packagePrice: number): void
   (e: 'update:lineTotal', itemId: string, lineTotal: number | undefined): void
   (e: 'change-package', itemId: string, packageId: string, packageQuantity: number): void
+  (e: 'update:tax', includeTax: boolean, taxAmount?: number, taxPercentage?: number): void
   (e: 'complete'): void
   (e: 'complete-with-payment', amount: number): void
 }
@@ -47,6 +48,12 @@ const emit = defineEmits<Emits>()
 
 const showPayment = ref(false)
 const paymentAmount = ref(0)
+
+// Tax state
+const includeTax = ref(false)
+const taxAmount = ref<number | undefined>(undefined)
+const taxPercentage = ref<number | undefined>(undefined)
+let taxSyncInProgress = false
 
 // Package change dialog state
 const showPackageChangeDialog = ref(false)
@@ -82,6 +89,13 @@ const itemsWithDiscrepancies = computed(() => {
 
 const canComplete = computed(() => {
   return props.formData && props.formData.items.length > 0
+})
+
+// Grand total including tax
+const grandTotal = computed(() => {
+  const subtotal = props.formData?.actualTotal ?? 0
+  const tax = includeTax.value && taxAmount.value ? taxAmount.value : 0
+  return subtotal + tax
 })
 
 // Check if order is fully paid
@@ -172,7 +186,7 @@ const unpaidAmount = computed(() => {
 // WATCH
 // =============================================
 
-// Reset payment when order changes
+// Reset payment and tax when order changes
 // Auto-enable payment section if order has pending payment
 watch(
   () => props.order,
@@ -185,6 +199,24 @@ watch(
     } else {
       showPayment.value = false
       paymentAmount.value = unpaidAmount.value
+    }
+
+    // Reset tax state when order changes
+    includeTax.value = false
+    taxAmount.value = undefined
+    taxPercentage.value = undefined
+  },
+  { immediate: true }
+)
+
+// Sync tax state from formData (if loaded from existing receipt)
+watch(
+  () => props.formData,
+  newFormData => {
+    if (newFormData) {
+      includeTax.value = newFormData.includeTax ?? false
+      taxAmount.value = newFormData.taxAmount
+      taxPercentage.value = newFormData.taxPercentage
     }
   },
   { immediate: true }
@@ -235,6 +267,69 @@ function togglePayment() {
   if (showPayment.value) {
     paymentAmount.value = unpaidAmount.value
   }
+}
+
+// =============================================
+// TAX METHODS
+// =============================================
+
+/**
+ * Toggle tax inclusion
+ */
+function toggleTax() {
+  includeTax.value = !includeTax.value
+  if (!includeTax.value) {
+    taxAmount.value = undefined
+    taxPercentage.value = undefined
+  }
+  emitTaxUpdate()
+}
+
+/**
+ * When tax amount changes, calculate percentage
+ */
+function onTaxAmountChange(value: number | undefined) {
+  if (taxSyncInProgress) return
+  if (!value || value <= 0) {
+    taxPercentage.value = undefined
+    emitTaxUpdate()
+    return
+  }
+
+  taxSyncInProgress = true
+  const subtotal = props.formData?.actualTotal || 0
+  if (subtotal > 0) {
+    taxPercentage.value = Number(((value / subtotal) * 100).toFixed(2))
+  }
+  taxSyncInProgress = false
+  emitTaxUpdate()
+}
+
+/**
+ * When tax percentage changes, calculate amount
+ */
+function onTaxPercentageChange(value: number | undefined) {
+  if (taxSyncInProgress) return
+  if (!value || value <= 0) {
+    taxAmount.value = undefined
+    emitTaxUpdate()
+    return
+  }
+
+  taxSyncInProgress = true
+  const subtotal = props.formData?.actualTotal || 0
+  if (subtotal > 0) {
+    taxAmount.value = Math.round((subtotal * value) / 100)
+  }
+  taxSyncInProgress = false
+  emitTaxUpdate()
+}
+
+/**
+ * Emit tax update to parent
+ */
+function emitTaxUpdate() {
+  emit('update:tax', includeTax.value, taxAmount.value, taxPercentage.value)
 }
 
 function handleQuantityUpdate(itemId: string, quantity: number) {
@@ -430,11 +525,71 @@ function handleQuickVerifyComplete(modifiedItems: ReceiptItemOutput[]) {
                 </div>
                 <v-divider class="my-2" />
                 <div class="d-flex justify-space-between">
-                  <span class="text-body-1 font-weight-bold">Actual Total:</span>
-                  <span class="text-h6 font-weight-bold">
+                  <span class="text-body-1 font-weight-bold">Subtotal:</span>
+                  <span class="text-body-1 font-weight-bold">
                     {{ formatIDR(formData.actualTotal) }}
                   </span>
                 </div>
+
+                <!-- Tax Section -->
+                <v-expand-transition>
+                  <div v-if="includeTax" class="mt-3">
+                    <div class="d-flex align-center gap-2 mb-2">
+                      <v-text-field
+                        :model-value="taxAmount"
+                        label="Tax Amount"
+                        variant="outlined"
+                        density="compact"
+                        prefix="Rp"
+                        type="number"
+                        :min="0"
+                        hide-details
+                        class="flex-grow-1"
+                        :disabled="submitting"
+                        @update:model-value="onTaxAmountChange(Number($event) || undefined)"
+                      />
+                      <v-text-field
+                        :model-value="taxPercentage"
+                        label="%"
+                        variant="outlined"
+                        density="compact"
+                        suffix="%"
+                        type="number"
+                        :min="0"
+                        :max="100"
+                        hide-details
+                        style="max-width: 90px"
+                        :disabled="submitting"
+                        @update:model-value="onTaxPercentageChange(Number($event) || undefined)"
+                      />
+                    </div>
+                  </div>
+                </v-expand-transition>
+
+                <!-- Tax Toggle Button -->
+                <v-btn
+                  variant="text"
+                  size="small"
+                  :color="includeTax ? 'error' : 'primary'"
+                  class="mt-2"
+                  :disabled="submitting"
+                  @click="toggleTax"
+                >
+                  <v-icon start size="small">
+                    {{ includeTax ? 'mdi-minus-circle' : 'mdi-plus-circle' }}
+                  </v-icon>
+                  {{ includeTax ? 'Remove Tax' : 'Add Tax' }}
+                </v-btn>
+
+                <!-- Grand Total (with tax) -->
+                <v-divider v-if="includeTax && taxAmount" class="my-2" />
+                <div v-if="includeTax && taxAmount" class="d-flex justify-space-between">
+                  <span class="text-h6 font-weight-bold">Grand Total:</span>
+                  <span class="text-h6 font-weight-bold text-primary">
+                    {{ formatIDR(grandTotal) }}
+                  </span>
+                </div>
+
                 <div v-if="totalDifference !== 0" class="d-flex justify-space-between mt-2">
                   <span class="text-body-2 text-grey">Difference:</span>
                   <span class="text-body-2 font-weight-medium" :class="`text-${differenceColor}`">

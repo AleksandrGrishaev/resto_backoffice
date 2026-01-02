@@ -708,11 +708,49 @@ async function saveReceipt() {
 
   isSaving.value = true
   try {
+    // ✅ FIXED: Include items in the update data to save package changes and quantities
+    // Map form items back to receipt items with all package data
+    const itemsToSave = receiptForm.value.items.map(formItem => {
+      const originalItem = currentReceipt.value!.items.find(ri => ri.id === formItem.id)
+
+      return {
+        ...originalItem,
+        // Quantities
+        receivedQuantity: formItem.receivedQuantity,
+        receivedPackageQuantity: formItem.receivedPackageQuantity,
+        // Package data
+        packageId: formItem.packageId,
+        packageName: formItem.packageName,
+        packageUnit: formItem.packageUnit,
+        // Prices
+        actualPrice: formItem.actualPackagePrice || formItem.actualPrice,
+        actualBaseCost: formItem.actualBaseCost,
+        // Notes
+        notes: formItem.notes
+      }
+    })
+
     const updateData = {
       notes: receiptForm.value.notes,
+      receivedBy: receiptForm.value.receivedBy,
+      deliveryDate: receiptForm.value.deliveryDate,
       taxAmount: receiptForm.value.includeTax ? receiptForm.value.taxAmount : undefined,
-      taxPercentage: receiptForm.value.includeTax ? receiptForm.value.taxPercentage : undefined
+      taxPercentage: receiptForm.value.includeTax ? receiptForm.value.taxPercentage : undefined,
+      items: itemsToSave // ✅ Include items with all changes
     }
+
+    DebugUtils.debug(MODULE_NAME, 'Saving receipt with items', {
+      receiptId: currentReceipt.value.id,
+      itemsCount: itemsToSave.length,
+      sampleItem: itemsToSave[0]
+        ? {
+            itemName: itemsToSave[0].itemName,
+            receivedQuantity: itemsToSave[0].receivedQuantity,
+            packageId: itemsToSave[0].packageId,
+            packageName: itemsToSave[0].packageName
+          }
+        : null
+    })
 
     await updateReceipt(currentReceipt.value.id, updateData)
     emits('success', 'Receipt saved successfully')
