@@ -130,16 +130,23 @@
 
                 <!-- Actions -->
                 <div class="bill-actions d-flex gap-1">
-                  <!-- ✅ Unlink для completed переплат -->
-                  <v-tooltip v-if="canUnlinkOverpayment(bill)" text="Unlink Overpayment">
+                  <!-- ✅ NEW: Unlink button for ALL completed payments -->
+                  <v-tooltip
+                    v-if="canUnlinkPayment(bill)"
+                    :text="
+                      needsUnlinkConfirmation(bill)
+                        ? 'Unlink Payment (Source Order)'
+                        : 'Unlink Payment'
+                    "
+                  >
                     <template #activator="{ props: tooltipProps }">
                       <v-btn
                         v-bind="tooltipProps"
                         icon="mdi-link-off"
                         variant="text"
                         size="small"
-                        color="warning"
-                        @click="$emit('detach-bill', bill.id)"
+                        :color="needsUnlinkConfirmation(bill) ? 'warning' : 'info'"
+                        @click="$emit('unlink-payment', bill.id, needsUnlinkConfirmation(bill))"
                       />
                     </template>
                   </v-tooltip>
@@ -264,7 +271,7 @@ interface Emits {
   (e: 'detach-bill', billId: string): void
   (e: 'edit-bill', billId: string): void
   (e: 'cancel-bill', billId: string): void
-  (e: 'detach-bill', billId: string): void
+  (e: 'unlink-payment', billId: string, needsConfirmation: boolean): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -284,16 +291,46 @@ const showBillHistory = ref<Record<string, boolean>>({})
 // METHODS
 // =============================================
 
-function canUnlinkOverpayment(bill: PendingPayment): boolean {
-  // Только completed счета (переплаты)
+/**
+ * ✅ NEW: Check if a completed payment can be unlinked from the order
+ * Allows unlinking any completed payment (both source and attached)
+ * Also allowed for delivered orders - to fix double-payment errors
+ */
+function canUnlinkPayment(bill: PendingPayment): boolean {
+  // Only completed payments can be unlinked (pending can be cancelled)
   if (bill.status !== 'completed') return false
 
-  // Заказ НЕ в финальном статусе
+  // Allow unlinking from delivered orders for error correction
+  // Only restrict for 'received' status (final accounting closure)
+  if (props.order.status === 'received') return false
+
+  return true
+}
+
+/**
+ * Check if unlink needs confirmation
+ * - Source order payments need confirmation
+ * - Delivered orders need confirmation (accounting impact)
+ */
+function needsUnlinkConfirmation(bill: PendingPayment): boolean {
+  // Source order payments always need confirmation
+  if (bill.sourceOrderId === props.order.id && bill.status === 'completed') return true
+
+  // Delivered orders need confirmation (accounting records already exist)
+  if (props.order.status === 'delivered') return true
+
+  return false
+}
+
+/**
+ * @deprecated Use canUnlinkPayment instead
+ * Kept for backward compatibility with existing code
+ */
+function canUnlinkOverpayment(bill: PendingPayment): boolean {
+  // Only completed payments attached via Attach (not source order)
+  if (bill.status !== 'completed') return false
   if (props.order.status === 'delivered' || props.order.status === 'received') return false
-
-  // Счет был привязан через Attach (не создан для этого заказа)
   if (bill.sourceOrderId === props.order.id) return false
-
   return true
 }
 

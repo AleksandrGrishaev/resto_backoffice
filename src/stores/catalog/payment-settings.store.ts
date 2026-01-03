@@ -4,13 +4,30 @@ import type { PaymentMethod } from '@/types/payment'
 import type { Tax } from '@/types/tax'
 import { paymentMethodService } from '@/stores/catalog/payment-methods.service'
 import { taxService } from '@/services/tax.service'
-import { DebugUtils } from '@/utils'
+import { supabase } from '@/supabase'
+import { DebugUtils, DEFAULT_PAYMENT_TOLERANCE } from '@/utils'
 
 const MODULE_NAME = 'PaymentSettingsStore'
+
+/**
+ * Payment tolerance settings for IDR currency
+ */
+export interface PaymentToleranceSettings {
+  /** Maximum amount difference to consider as "fully paid" (default: 1000 IDR) */
+  paymentTolerance: number
+  /** Whether to round all amounts to whole IDR before comparison (default: true) */
+  roundToWholeUnits: boolean
+}
+
+const DEFAULT_TOLERANCE_SETTINGS: PaymentToleranceSettings = {
+  paymentTolerance: DEFAULT_PAYMENT_TOLERANCE,
+  roundToWholeUnits: true
+}
 
 interface State {
   paymentMethods: PaymentMethod[]
   taxes: Tax[]
+  toleranceSettings: PaymentToleranceSettings
   isLoading: boolean
   error: Error | null
 }
@@ -19,6 +36,7 @@ export const usePaymentSettingsStore = defineStore('paymentSettings', {
   state: (): State => ({
     paymentMethods: [],
     taxes: [],
+    toleranceSettings: { ...DEFAULT_TOLERANCE_SETTINGS },
     isLoading: false,
     error: null
   }),
@@ -50,7 +68,12 @@ export const usePaymentSettingsStore = defineStore('paymentSettings', {
     posCashAccountId(): string | null {
       const method = this.posCashRegisterMethod
       return method?.accountId || null
-    }
+    },
+
+    /**
+     * Get current payment tolerance value
+     */
+    paymentTolerance: state => state.toleranceSettings.paymentTolerance
   },
 
   actions: {
@@ -188,10 +211,84 @@ export const usePaymentSettingsStore = defineStore('paymentSettings', {
       }
     },
 
+    // =============================================
+    // Payment Tolerance Settings
+    // =============================================
+
+    /**
+     * Fetch tolerance settings from database
+     */
+    async fetchToleranceSettings() {
+      try {
+        DebugUtils.info(MODULE_NAME, 'Fetching tolerance settings')
+
+        const { data, error } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'payment_tolerance_settings')
+          .single()
+
+        // PGRST116 = no rows returned (first run, use defaults)
+        if (error && error.code !== 'PGRST116') {
+          throw error
+        }
+
+        if (data?.value) {
+          this.toleranceSettings = {
+            ...DEFAULT_TOLERANCE_SETTINGS,
+            ...data.value
+          }
+        }
+
+        DebugUtils.info(MODULE_NAME, 'Tolerance settings loaded', {
+          tolerance: this.toleranceSettings.paymentTolerance
+        })
+      } catch (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to fetch tolerance settings', { error })
+        // Use defaults on error
+        this.toleranceSettings = { ...DEFAULT_TOLERANCE_SETTINGS }
+      }
+    },
+
+    /**
+     * Update tolerance settings
+     */
+    async updateToleranceSettings(settings: Partial<PaymentToleranceSettings>) {
+      try {
+        DebugUtils.info(MODULE_NAME, 'Updating tolerance settings', { settings })
+
+        const newSettings: PaymentToleranceSettings = {
+          ...this.toleranceSettings,
+          ...settings
+        }
+
+        const { error } = await supabase.from('app_settings').upsert({
+          key: 'payment_tolerance_settings',
+          value: newSettings,
+          updated_at: new Date().toISOString()
+        })
+
+        if (error) throw error
+
+        this.toleranceSettings = newSettings
+
+        DebugUtils.info(MODULE_NAME, 'Tolerance settings updated successfully', {
+          tolerance: newSettings.paymentTolerance
+        })
+      } catch (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to update tolerance settings', { error })
+        throw error
+      }
+    },
+
     // Initialize
     async initialize() {
       DebugUtils.info(MODULE_NAME, 'Initializing payment settings')
-      await Promise.all([this.fetchPaymentMethods(), this.fetchTaxes()])
+      await Promise.all([
+        this.fetchPaymentMethods(),
+        this.fetchTaxes(),
+        this.fetchToleranceSettings()
+      ])
       DebugUtils.info(MODULE_NAME, 'Payment settings initialized successfully')
     }
   }

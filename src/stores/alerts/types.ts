@@ -39,6 +39,8 @@ export type SupplierAlertType =
   | 'payment_discrepancy' // Payment doesn't match invoice
   | 'overdue_delivery' // Delivery not received on time
   | 'balance_correction' // Manual balance adjustment for supplier
+  | 'payment_unlinked' // Payment unlinked from delivered order
+  | 'backdated_receipt' // Receipt created with past date
 
 export type AlertType = ShiftAlertType | AccountAlertType | ProductAlertType | SupplierAlertType
 
@@ -198,7 +200,9 @@ export const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   // Supplier
   payment_discrepancy: 'Payment Discrepancy',
   overdue_delivery: 'Overdue Delivery',
-  balance_correction: 'Supplier Balance Correction'
+  balance_correction: 'Supplier Balance Correction',
+  payment_unlinked: 'Payment Unlinked',
+  backdated_receipt: 'Backdated Receipt'
 }
 
 // =============================================

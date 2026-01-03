@@ -80,6 +80,7 @@
             @create-bill="handleCreateBill"
             @attach-bill="handleAttachBill"
             @detach-bill="handleDetachBill"
+            @unlink-payment="handleUnlinkPayment"
             @view-bill="billId => actions.navigateToPayment(billId)"
             @cancel-bill="handleCancelBill"
             @manage-all-bills="() => actions.navigateToAccounts()"
@@ -297,15 +298,75 @@
 
     <!-- Order Preview Dialog -->
     <OrderPreviewDialog v-model="showPreviewDialog" :order-data="previewData" />
+
+    <!-- Unlink Payment Confirmation Dialog -->
+    <v-dialog v-model="showUnlinkConfirmDialog" max-width="500px" persistent>
+      <v-card>
+        <v-card-title class="d-flex align-center text-warning">
+          <v-icon icon="mdi-alert" class="mr-2" />
+          Confirm Payment Unlink
+        </v-card-title>
+
+        <v-card-text>
+          <v-alert v-if="unlinkDialogData.isDelivered" type="warning" variant="tonal" class="mb-4">
+            <strong>Warning:</strong>
+            This order is already delivered. Unlinking this payment may affect accounting records
+            and will create an alert for review.
+          </v-alert>
+
+          <v-alert v-else type="info" variant="tonal" class="mb-4">
+            This payment was originally created for this order. Unlinking will make the payment
+            available for other orders.
+          </v-alert>
+
+          <div v-if="unlinkDialogData.payment" class="pa-3 bg-grey-darken-3 rounded mb-4">
+            <div class="d-flex justify-space-between mb-2">
+              <span class="text-medium-emphasis">Payment ID:</span>
+              <span class="font-weight-medium">{{ unlinkDialogData.payment?.id?.slice(-8) }}</span>
+            </div>
+            <div class="d-flex justify-space-between mb-2">
+              <span class="text-medium-emphasis">Amount:</span>
+              <span class="font-weight-medium">
+                {{ formatCurrency(unlinkDialogData.payment?.amount || 0) }}
+              </span>
+            </div>
+            <div class="d-flex justify-space-between">
+              <span class="text-medium-emphasis">Order:</span>
+              <span class="font-weight-medium">{{ order?.orderNumber }}</span>
+            </div>
+          </div>
+
+          <p class="text-body-2 text-medium-emphasis">
+            Are you sure you want to unlink this payment from the order?
+          </p>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="cancelUnlink">Cancel</v-btn>
+          <v-btn
+            color="warning"
+            variant="flat"
+            :loading="unlinkDialogData.loading"
+            @click="confirmUnlink"
+          >
+            Unlink Payment
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import { useOrderPayments } from '@/stores/supplier_2/composables/useOrderPayments'
 import { usePurchaseOrderExport } from '@/stores/supplier_2/composables/usePurchaseOrderExport'
+import { useAlertsStore } from '@/stores/alerts'
+import { useAuthStore } from '@/stores/auth'
 import type { PurchaseOrder } from '@/stores/supplier_2/types'
+import type { PendingPayment } from '@/stores/account/types'
 import OrderItemsWidget from './order/OrderItemsWidget.vue'
 import OrderReceiptWidget from './order/OrderReceiptWidget.vue'
 import AttachBillDialog from './order/AttachBillDialog.vue'
@@ -360,6 +421,20 @@ const previewData = ref<any>(null)
 
 const showAttachBillDialog = ref(false)
 const showCreateBillDialog = ref(false)
+const showUnlinkConfirmDialog = ref(false)
+
+// Unlink dialog state
+const unlinkDialogData = reactive<{
+  billId: string | null
+  payment: PendingPayment | null
+  isDelivered: boolean
+  loading: boolean
+}>({
+  billId: null,
+  payment: null,
+  isDelivered: false,
+  loading: false
+})
 
 const createBillForm = ref({
   valid: false,
@@ -462,6 +537,93 @@ async function handleCancelBill(billId: string) {
     await actions.cancelBill(billId)
   } catch (error) {
     console.error('Failed to cancel bill:', error)
+  }
+}
+
+/**
+ * ✅ NEW: Handle unlink payment from order
+ * Shows confirmation dialog for completed payments
+ */
+function handleUnlinkPayment(billId: string, needsConfirmation: boolean) {
+  // Find the payment in active bills
+  const payment = activeBills.value.find(b => b.id === billId)
+
+  // Set dialog data
+  unlinkDialogData.billId = billId
+  unlinkDialogData.payment = payment || null
+  unlinkDialogData.isDelivered = props.order?.status === 'delivered'
+  unlinkDialogData.loading = false
+
+  // Always show dialog for better UX (even if needsConfirmation is false)
+  showUnlinkConfirmDialog.value = true
+}
+
+/**
+ * Cancel unlink operation
+ */
+function cancelUnlink() {
+  showUnlinkConfirmDialog.value = false
+  unlinkDialogData.billId = null
+  unlinkDialogData.payment = null
+}
+
+/**
+ * Confirm and execute unlink operation
+ * Creates an alert for delivered orders
+ */
+async function confirmUnlink() {
+  if (!unlinkDialogData.billId) return
+
+  unlinkDialogData.loading = true
+
+  try {
+    const billId = unlinkDialogData.billId
+    const isDelivered = unlinkDialogData.isDelivered
+    const payment = unlinkDialogData.payment
+
+    // Execute unlink
+    await actions.detachBill(billId)
+    console.log('Payment unlinked successfully:', billId)
+
+    // Create alert for delivered orders
+    if (isDelivered && props.order) {
+      try {
+        const alertsStore = useAlertsStore()
+        const authStore = useAuthStore()
+
+        await alertsStore.createAlert({
+          category: 'supplier',
+          type: 'payment_unlinked',
+          severity: 'warning',
+          title: `Payment unlinked from delivered order ${props.order.orderNumber}`,
+          description: `Payment ${payment?.id?.slice(-8) || billId.slice(-8)} (${formatCurrency(payment?.amount || 0)}) was unlinked from order ${props.order.orderNumber} after delivery. This may affect accounting records.`,
+          metadata: {
+            purchaseOrderId: props.order.id,
+            orderNumber: props.order.orderNumber,
+            paymentId: billId,
+            paymentAmount: payment?.amount || 0,
+            supplierName: props.order.supplierName,
+            unlinkedBy: authStore.user?.name || 'Unknown'
+          }
+          // Note: orderId is NOT passed here because it's a purchase order, not a POS order
+          // The FK constraint on operations_alerts.order_id references the POS orders table
+        })
+
+        console.log('Alert created for unlinked payment from delivered order')
+      } catch (alertError) {
+        console.error('Failed to create alert:', alertError)
+        // Don't throw - unlink was successful, alert is secondary
+      }
+    }
+
+    // Close dialog
+    showUnlinkConfirmDialog.value = false
+    unlinkDialogData.billId = null
+    unlinkDialogData.payment = null
+  } catch (error) {
+    console.error('Failed to unlink payment:', error)
+  } finally {
+    unlinkDialogData.loading = false
   }
 }
 

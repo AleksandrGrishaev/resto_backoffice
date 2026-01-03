@@ -1,7 +1,8 @@
 // src/stores/supplier_2/composables/useOrderPayments.ts - ИСПРАВЛЕННАЯ ВЕРСИЯ
 
 import { reactive, computed, readonly, ref, watch } from 'vue'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, amountsEqual, isPaymentComplete, getTolerancePaymentStatus } from '@/utils'
+import { usePaymentTolerance } from '@/composables/usePaymentTolerance'
 import type { PurchaseOrder } from '../types'
 import type { PendingPayment, CreatePaymentDto } from '@/stores/account'
 const MODULE_NAME = 'useOrderPayments'
@@ -13,6 +14,12 @@ const MODULE_NAME = 'useOrderPayments'
  * - Централизованная логика для диалогов
  */
 export function useOrderPayments() {
+  // =============================================
+  // PAYMENT TOLERANCE
+  // =============================================
+
+  const { tolerance } = usePaymentTolerance()
+
   // =============================================
   // CENTRALIZED STATE
   // =============================================
@@ -90,14 +97,16 @@ export function useOrderPayments() {
     }
 
     const totalBilled = bills
-      .filter(bill => bill.status !== 'cancelled') // ✅ ДОБАВИТЬ ФИЛЬТР
+      .filter(bill => bill.status !== 'cancelled')
       .reduce((sum, bill) => {
         const link = bill.linkedOrders?.find(o => o.orderId === order.id && o.isActive)
         return sum + (link?.linkedAmount || 0)
       }, 0)
     const orderTotal = order.totalAmount
     const amountDifference = totalBilled - orderTotal
-    const hasAmountMismatch = Math.abs(amountDifference) > 1
+
+    // ✅ Use configurable tolerance for amount comparison
+    const hasAmountMismatch = !amountsEqual(totalBilled, orderTotal, tolerance.value)
 
     const amountDifferenceClass = hasAmountMismatch
       ? amountDifference > 0
@@ -115,23 +124,26 @@ export function useOrderPayments() {
     const deliveredAmount = order.actualDeliveredAmount || 0
     const shortfallAmount = paidAmount - deliveredAmount
 
+    // ✅ Use tolerance-aware payment status calculation
     let paymentStatus: 'not_billed' | 'billed' | 'partially_paid' | 'fully_paid' | 'overpaid' =
       'not_billed'
 
-    const activeBills = bills.filter(bill => bill.status !== 'cancelled') // ✅ ДОБАВИТЬ
+    const activeBills = bills.filter(bill => bill.status !== 'cancelled')
 
-    if (activeBills.length === 0) {
+    if (activeBills.length === 0 || totalBilled === 0) {
       paymentStatus = 'not_billed'
-    } else if (totalBilled === 0) {
-      paymentStatus = 'not_billed'
-    } else if (totalBilled > orderTotal) {
-      paymentStatus = 'overpaid'
-    } else if (totalBilled === orderTotal) {
-      paymentStatus = 'fully_paid'
-    } else if (totalBilled > 0) {
-      paymentStatus = 'partially_paid'
     } else {
-      paymentStatus = 'billed'
+      // Use tolerance-aware status: overpaid if > tolerance above, fully_paid if within tolerance
+      const toleranceStatus = getTolerancePaymentStatus(totalBilled, orderTotal, tolerance.value)
+      if (toleranceStatus === 'not_paid') {
+        paymentStatus = 'billed'
+      } else if (toleranceStatus === 'overpaid') {
+        paymentStatus = 'overpaid'
+      } else if (toleranceStatus === 'fully_paid') {
+        paymentStatus = 'fully_paid'
+      } else {
+        paymentStatus = 'partially_paid'
+      }
     }
 
     return {
@@ -352,9 +364,18 @@ export function useOrderPayments() {
 
     /**
      * ✅ Привязать существующий счет к заказу
+     * Auto-adjusts existing pending payments for the same order to prevent double-payment
      */
     // ✅ НОВЫЙ метод attachBill с linkPaymentToOrder
-    async attachBill(billId: string): Promise<void> {
+    async attachBill(billId: string): Promise<{
+      success: boolean
+      adjustedPendingPayments?: Array<{
+        paymentId: string
+        action: string
+        oldAmount: number
+        newAmount: number
+      }>
+    }> {
       if (!paymentState.selectedOrder) {
         throw new Error('No order selected')
       }
@@ -379,12 +400,24 @@ export function useOrderPayments() {
         const availableAmount = getAvailableAmount(payment)
         const linkAmount = Math.min(availableAmount, order.totalAmount)
 
-        await accountStore.linkPaymentToOrder({
-          paymentId: billId,
-          orderId: order.id,
-          linkAmount: linkAmount,
-          orderNumber: order.orderNumber
-        })
+        // ✅ linkPaymentToOrder now auto-adjusts pending payments
+        const result = await accountStore.linkPaymentToOrder(
+          {
+            paymentId: billId,
+            orderId: order.id,
+            linkAmount: linkAmount,
+            orderNumber: order.orderNumber
+          },
+          { autoAdjustPending: true, tolerance: tolerance.value }
+        )
+
+        // Log adjusted pending payments if any
+        if (result.adjustedPayments && result.adjustedPayments.length > 0) {
+          DebugUtils.info(MODULE_NAME, '📝 Pending payments adjusted after attaching bill', {
+            orderId: order.id,
+            adjustedPayments: result.adjustedPayments
+          })
+        }
 
         // ✅ FIX: Update the supplier order with bill reference and status
         const { supplierStore } = await getStores()
@@ -406,11 +439,17 @@ export function useOrderPayments() {
           billId,
           orderId: order.id,
           linkedAmount: linkAmount,
-          billStatus
+          billStatus,
+          adjustedPendingPaymentsCount: result.adjustedPayments?.length || 0
         })
 
         // Обновляем данные
         await Promise.all([loadOrderBills(order.id), loadAvailableBills(order.supplierId)])
+
+        return {
+          success: true,
+          adjustedPendingPayments: result.adjustedPayments
+        }
       } catch (error) {
         const errorMsg = 'Failed to attach bill'
         paymentState.error = errorMsg

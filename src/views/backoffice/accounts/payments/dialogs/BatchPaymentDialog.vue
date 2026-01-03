@@ -8,6 +8,7 @@ import { useAccountStore } from '@/stores/account'
 import { useAuthStore } from '@/stores/auth'
 import { formatIDR } from '@/utils/currency'
 import { TimeUtils } from '@/utils'
+import { usePaymentTolerance } from '@/composables/usePaymentTolerance'
 
 interface Props {
   modelValue: boolean
@@ -30,6 +31,7 @@ const emit = defineEmits<Emits>()
 
 const accountStore = useAccountStore()
 const authStore = useAuthStore()
+const { isFullyPaid: checkFullyPaid } = usePaymentTolerance()
 
 // =============================================
 // STATE
@@ -160,12 +162,13 @@ function allocateToPayment(payment: PendingPayment) {
 
   // Allocate as much as possible
   const amountToAllocate = Math.min(remainingAmount.value, paymentAmount)
-  const isFullyPaid = amountToAllocate >= paymentAmount
+  // Use tolerance-aware check for fully paid
+  const paymentIsFullyPaid = checkFullyPaid(amountToAllocate, paymentAmount)
 
   allocations.value.push({
     paymentId: payment.id,
     allocatedAmount: amountToAllocate,
-    isFullyPaid
+    isFullyPaid: paymentIsFullyPaid
   })
 }
 
@@ -197,7 +200,8 @@ function autoAllocateAll() {
     allocations.value.push({
       paymentId: payment.id,
       allocatedAmount: amountToAllocate,
-      isFullyPaid: amountToAllocate >= paymentAmount
+      // Use tolerance-aware check for fully paid
+      isFullyPaid: checkFullyPaid(amountToAllocate, paymentAmount)
     })
 
     remaining -= amountToAllocate

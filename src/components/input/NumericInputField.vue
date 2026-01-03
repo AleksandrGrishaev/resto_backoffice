@@ -41,6 +41,7 @@
       inputmode="decimal"
       @click="handleClick"
       @focus="handleFocus"
+      @blur="handleBlur"
       @update:model-value="handleNativeInput"
     >
       <template v-if="$slots.prepend" #prepend>
@@ -221,6 +222,8 @@ const textFieldRef = ref<any>(null)
 const keypadRef = ref<InstanceType<typeof NumericKeypad> | null>(null)
 const showKeypad = ref(false)
 const tempValue = ref<number>(0)
+const isEditing = ref(false)
+const editingValue = ref('')
 
 // =============================================
 // COMPUTED
@@ -236,6 +239,11 @@ const numericValue = computed(() => {
 })
 
 const displayValue = computed(() => {
+  // During editing, show raw input value without formatting
+  if (isEditing.value && !isTabletMode.value) {
+    return editingValue.value
+  }
+
   const val = numericValue.value
 
   if (props.formatAsCurrency) {
@@ -269,17 +277,30 @@ function handleFocus(event: FocusEvent) {
     const input = event.target as HTMLInputElement
     input?.blur()
     openKeypad()
+  } else {
+    // Desktop mode: start editing with raw value
+    isEditing.value = true
+    editingValue.value = numericValue.value ? String(numericValue.value) : ''
   }
 }
 
 function handleNativeInput(value: string) {
   if (isTabletMode.value) return // Ignore in tablet mode
 
+  // Store raw editing value
+  editingValue.value = value
+
   // Parse the input value
   const cleanValue = value.replace(/[^\d.,]/g, '').replace(',', '.')
   const parsed = parseFloat(cleanValue) || 0
 
   emit('update:modelValue', parsed)
+}
+
+function handleBlur() {
+  isEditing.value = false
+  editingValue.value = ''
+  emit('blur')
 }
 
 function openKeypad() {

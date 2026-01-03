@@ -56,6 +56,63 @@
                 </v-switch>
               </v-card-text>
             </v-card>
+
+            <!-- Payment Tolerance Settings Card -->
+            <v-card>
+              <v-card-title class="text-subtitle-1">
+                <v-icon start size="small">mdi-tune-vertical</v-icon>
+                Payment Tolerance
+              </v-card-title>
+              <v-card-text>
+                <v-text-field
+                  v-model.number="toleranceSettings.paymentTolerance"
+                  label="Tolerance Amount (IDR)"
+                  type="number"
+                  variant="outlined"
+                  density="compact"
+                  :min="0"
+                  :step="100"
+                  :hint="toleranceHint"
+                  persistent-hint
+                  :loading="savingTolerance"
+                  @update:model-value="debouncedSaveTolerance"
+                >
+                  <template #prepend-inner>
+                    <span class="text-body-2 text-medium-emphasis">Rp</span>
+                  </template>
+                </v-text-field>
+
+                <v-switch
+                  v-model="toleranceSettings.roundToWholeUnits"
+                  color="primary"
+                  density="compact"
+                  hide-details
+                  class="mt-4"
+                  :loading="savingTolerance"
+                  @update:model-value="saveToleranceSettings"
+                >
+                  <template #label>
+                    <div>
+                      <div class="text-body-2">Round to Whole IDR</div>
+                      <div class="text-caption text-medium-emphasis">
+                        Remove decimals from all calculations
+                      </div>
+                    </div>
+                  </template>
+                </v-switch>
+
+                <v-alert
+                  v-if="toleranceSettings.paymentTolerance === 0"
+                  type="info"
+                  variant="tonal"
+                  density="compact"
+                  class="mt-4"
+                >
+                  <v-icon size="small" start>mdi-information</v-icon>
+                  Exact matching required - no tolerance allowed
+                </v-alert>
+              </v-card-text>
+            </v-card>
           </div>
         </v-col>
 
@@ -87,14 +144,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
+import {
+  usePaymentSettingsStore,
+  type PaymentToleranceSettings
+} from '@/stores/catalog/payment-settings.store'
 import { useAccountStore } from '@/stores/account'
 import { supabase } from '@/supabase'
 import type { PaymentMethod } from '@/types/payment'
 import type { Tax } from '@/types/tax'
 import type { TransactionCategory } from '@/stores/account/types'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, formatIDR, DEFAULT_PAYMENT_TOLERANCE } from '@/utils'
 import PaymentMethodList from '@/views/catalog/payment-methods/PaymentMethodList.vue'
 import TaxList from '@/components/payment-settings/TaxList.vue'
 import PaymentMethodDialog from '@/views/catalog/payment-methods/PaymentMethodDialog.vue'
@@ -119,6 +179,20 @@ const expenseSettings = reactive<ExpenseSettings>({
   autoSuggestThreshold: 0.05
 })
 const savingExpenseSettings = ref(false)
+
+// Tolerance Settings State
+const toleranceSettings = reactive<PaymentToleranceSettings>({
+  paymentTolerance: DEFAULT_PAYMENT_TOLERANCE,
+  roundToWholeUnits: true
+})
+const savingTolerance = ref(false)
+
+const toleranceHint = computed(() => {
+  if (toleranceSettings.paymentTolerance === 0) {
+    return 'Exact matching required'
+  }
+  return `Differences up to ${formatIDR(toleranceSettings.paymentTolerance)} will be considered fully paid`
+})
 
 // Load expense settings from DB
 async function loadExpenseSettings() {
@@ -159,6 +233,31 @@ async function saveExpenseSettings() {
   } finally {
     savingExpenseSettings.value = false
   }
+}
+
+// Load tolerance settings from store
+function loadToleranceSettings() {
+  Object.assign(toleranceSettings, store.toleranceSettings)
+}
+
+// Save tolerance settings
+async function saveToleranceSettings() {
+  savingTolerance.value = true
+  try {
+    await store.updateToleranceSettings(toleranceSettings)
+    DebugUtils.info(MODULE_NAME, 'Tolerance settings saved', { toleranceSettings })
+  } catch (err) {
+    DebugUtils.error(MODULE_NAME, 'Failed to save tolerance settings', { err })
+  } finally {
+    savingTolerance.value = false
+  }
+}
+
+// Debounced save for text field
+let toleranceDebounceTimer: ReturnType<typeof setTimeout> | null = null
+function debouncedSaveTolerance() {
+  if (toleranceDebounceTimer) clearTimeout(toleranceDebounceTimer)
+  toleranceDebounceTimer = setTimeout(saveToleranceSettings, 500)
 }
 
 // State
@@ -223,6 +322,8 @@ onMounted(async () => {
   try {
     DebugUtils.debug(MODULE_NAME, 'Component mounted')
     await Promise.all([store.initialize(), loadExpenseSettings()])
+    // Load tolerance settings after store is initialized
+    loadToleranceSettings()
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to initialize', { error })
   }

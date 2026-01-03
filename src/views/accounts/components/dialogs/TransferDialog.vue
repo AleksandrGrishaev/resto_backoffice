@@ -42,12 +42,11 @@
         ]"
         required
       />
-      <v-textarea
+      <v-text-field
         v-model="formData.description"
-        label="Description"
-        rows="3"
-        :rules="[v => !!v || 'Required field']"
-        required
+        label="Description (optional)"
+        density="compact"
+        hide-details
       />
     </v-form>
   </base-dialog>

@@ -8,6 +8,7 @@ import type { ShiftExpenseOperation } from '@/stores/pos/shifts/types'
 import type { InvoiceSuggestion } from '@/stores/pos/shifts/composables/useExpenseLinking'
 import { formatIDR } from '@/utils/currency'
 import { TimeUtils } from '@/utils'
+import { usePaymentTolerance } from '@/composables/usePaymentTolerance'
 
 interface Props {
   modelValue: boolean
@@ -37,6 +38,8 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<Emits>()
+
+const { isFullyPaid: checkFullyPaid } = usePaymentTolerance()
 
 // =============================================
 // STATE
@@ -141,12 +144,13 @@ function allocateToInvoice(invoice: InvoiceSuggestion) {
 
   // Allocate as much as possible (minimum of remaining amount and invoice unpaid)
   const amountToAllocate = Math.min(remainingAmount.value, invoice.unpaidAmount)
-  const isFullyPaid = amountToAllocate >= invoice.unpaidAmount
+  // Use tolerance-aware check for fully paid
+  const invoiceIsFullyPaid = checkFullyPaid(amountToAllocate, invoice.unpaidAmount)
 
   allocations.value.push({
     invoice,
     allocatedAmount: amountToAllocate,
-    isFullyPaid
+    isFullyPaid: invoiceIsFullyPaid
   })
 }
 
@@ -180,7 +184,8 @@ function autoAllocateAll() {
     allocations.value.push({
       invoice,
       allocatedAmount: amountToAllocate,
-      isFullyPaid: amountToAllocate >= invoice.unpaidAmount
+      // Use tolerance-aware check for fully paid
+      isFullyPaid: checkFullyPaid(amountToAllocate, invoice.unpaidAmount)
     })
 
     remaining -= amountToAllocate

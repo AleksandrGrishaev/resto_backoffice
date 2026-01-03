@@ -291,6 +291,155 @@ export const IDR_CURRENCY = {
 } as const
 
 // =============================================
+// PAYMENT TOLERANCE UTILITIES
+// =============================================
+
+/**
+ * Default payment tolerance for IDR currency
+ * Used when store settings are not available
+ */
+export const DEFAULT_PAYMENT_TOLERANCE = 1000 // 1000 IDR (~$0.06)
+
+/**
+ * Round amount to whole IDR units (no decimals)
+ * IDR is the smallest unit, no sen/cents
+ * @param amount - Amount to round
+ * @returns Rounded whole number
+ */
+export function roundToWholeIDR(amount: number): number {
+  return Math.round(amount)
+}
+
+/**
+ * Check if an amount difference is negligible (within tolerance)
+ * Use for floating point error handling and small payment differences
+ *
+ * @param amount - The amount difference to check (can be negative)
+ * @param tolerance - Maximum acceptable difference (default: 1000 IDR)
+ * @returns true if amount is within ±tolerance
+ *
+ * @example
+ * isAmountNegligible(0.18) // true - floating point error
+ * isAmountNegligible(862, 1000) // true - within 1000 IDR
+ * isAmountNegligible(1500, 1000) // false - exceeds tolerance
+ */
+export function isAmountNegligible(
+  amount: number,
+  tolerance: number = DEFAULT_PAYMENT_TOLERANCE
+): boolean {
+  return Math.abs(roundToWholeIDR(amount)) <= tolerance
+}
+
+/**
+ * Check if a payment is considered fully paid (within tolerance)
+ * Accounts for both underpayment and slight overpayment
+ *
+ * @param paidAmount - Amount that has been paid
+ * @param requiredAmount - Amount that needs to be paid
+ * @param tolerance - Maximum acceptable shortfall (default: 1000 IDR)
+ * @returns true if considered fully paid
+ *
+ * @example
+ * isPaymentComplete(31895500, 31896362, 1000) // true - 862 IDR short, within tolerance
+ * isPaymentComplete(32000000, 31896362, 1000) // true - overpaid
+ * isPaymentComplete(31000000, 31896362, 1000) // false - 896K short
+ */
+export function isPaymentComplete(
+  paidAmount: number,
+  requiredAmount: number,
+  tolerance: number = DEFAULT_PAYMENT_TOLERANCE
+): boolean {
+  const roundedPaid = roundToWholeIDR(paidAmount)
+  const roundedRequired = roundToWholeIDR(requiredAmount)
+  const difference = roundedRequired - roundedPaid
+
+  // Fully paid if difference is within tolerance (including overpayment)
+  return difference <= tolerance
+}
+
+/**
+ * Check if two amounts are equal within tolerance
+ *
+ * @param amount1 - First amount
+ * @param amount2 - Second amount
+ * @param tolerance - Maximum acceptable difference (default: 1000 IDR)
+ * @returns true if amounts are equal within tolerance
+ *
+ * @example
+ * amountsEqual(31896361.82, 31896362) // true - floating point
+ * amountsEqual(31895500, 31896362, 1000) // true - within 1000 IDR
+ */
+export function amountsEqual(
+  amount1: number,
+  amount2: number,
+  tolerance: number = DEFAULT_PAYMENT_TOLERANCE
+): boolean {
+  const rounded1 = roundToWholeIDR(amount1)
+  const rounded2 = roundToWholeIDR(amount2)
+  return Math.abs(rounded1 - rounded2) <= tolerance
+}
+
+/**
+ * Calculate payment status based on amounts with tolerance
+ *
+ * @param paidAmount - Amount paid
+ * @param requiredAmount - Amount required
+ * @param tolerance - Maximum acceptable shortfall (default: 1000 IDR)
+ * @returns Payment status string
+ *
+ * @example
+ * getTolerancePaymentStatus(0, 100000) // 'not_paid'
+ * getTolerancePaymentStatus(50000, 100000) // 'partially_paid'
+ * getTolerancePaymentStatus(99500, 100000, 1000) // 'fully_paid' - within tolerance
+ * getTolerancePaymentStatus(100000, 100000) // 'fully_paid'
+ * getTolerancePaymentStatus(110000, 100000, 1000) // 'overpaid'
+ */
+export function getTolerancePaymentStatus(
+  paidAmount: number,
+  requiredAmount: number,
+  tolerance: number = DEFAULT_PAYMENT_TOLERANCE
+): 'not_paid' | 'partially_paid' | 'fully_paid' | 'overpaid' {
+  const roundedPaid = roundToWholeIDR(paidAmount)
+  const roundedRequired = roundToWholeIDR(requiredAmount)
+
+  if (roundedPaid <= 0) return 'not_paid'
+
+  const difference = roundedPaid - roundedRequired
+
+  // Overpaid: paid more than required + tolerance
+  if (difference > tolerance) return 'overpaid'
+
+  // Fully paid: within tolerance range (including exact and small overpay)
+  if (difference >= -tolerance) return 'fully_paid'
+
+  // Partially paid: paid something but not enough
+  return 'partially_paid'
+}
+
+/**
+ * Get the effective remaining amount (0 if within tolerance)
+ *
+ * @param paidAmount - Amount paid
+ * @param requiredAmount - Amount required
+ * @param tolerance - Maximum acceptable shortfall (default: 1000 IDR)
+ * @returns Remaining amount or 0 if within tolerance
+ */
+export function getEffectiveRemaining(
+  paidAmount: number,
+  requiredAmount: number,
+  tolerance: number = DEFAULT_PAYMENT_TOLERANCE
+): number {
+  const roundedPaid = roundToWholeIDR(paidAmount)
+  const roundedRequired = roundToWholeIDR(requiredAmount)
+  const remaining = roundedRequired - roundedPaid
+
+  // If within tolerance, return 0 (considered fully paid)
+  if (Math.abs(remaining) <= tolerance) return 0
+
+  return remaining
+}
+
+// =============================================
 // АДАПТИВНОЕ ФОРМАТИРОВАНИЕ
 // =============================================
 

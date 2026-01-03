@@ -1092,10 +1092,30 @@ export const useAccountStore = defineStore('account', () => {
   // Payment link
   // ✅ НОВЫЙ метод: привязка платежа к заказу с указанием суммы
 
-  async function linkPaymentToOrder(data: LinkPaymentToOrderDto): Promise<void> {
+  interface LinkPaymentOptions {
+    /** Automatically adjust/cancel pending payments for the same order (default: true) */
+    autoAdjustPending?: boolean
+    /** Tolerance for considering remaining amount as negligible (default: 1000) */
+    tolerance?: number
+  }
+
+  async function linkPaymentToOrder(
+    data: LinkPaymentToOrderDto,
+    options?: LinkPaymentOptions
+  ): Promise<{
+    success: boolean
+    adjustedPayments?: Array<{
+      paymentId: string
+      action: string
+      oldAmount: number
+      newAmount: number
+    }>
+  }> {
+    const { autoAdjustPending = true, tolerance = 1000 } = options || {}
+
     try {
       clearError()
-      DebugUtils.info(MODULE_NAME, 'Linking payment to order', data)
+      DebugUtils.info(MODULE_NAME, 'Linking payment to order', { ...data, options })
 
       const payment = state.value.pendingPayments.find(p => p.id === data.paymentId)
       if (!payment) {
@@ -1129,6 +1149,38 @@ export const useAccountStore = defineStore('account', () => {
         throw new Error('Order already linked to this payment')
       }
 
+      // ✅ NEW: Check and adjust existing pending payments for this order
+      let adjustedPayments: Array<{
+        paymentId: string
+        action: string
+        oldAmount: number
+        newAmount: number
+      }> = []
+
+      if (autoAdjustPending && payment.sourceOrderId !== data.orderId) {
+        // Only adjust if we're linking an external payment (not the source order's own pending payment)
+        const { adjustments } = await checkAndAdjustPendingPayments(
+          data.orderId,
+          data.linkAmount,
+          tolerance
+        )
+
+        if (adjustments.length > 0) {
+          DebugUtils.info(MODULE_NAME, 'Applying pending payment adjustments', {
+            orderId: data.orderId,
+            adjustmentsCount: adjustments.length
+          })
+
+          await applyPendingPaymentAdjustments(adjustments, data.orderId)
+          adjustedPayments = adjustments.map(a => ({
+            paymentId: a.paymentId,
+            action: a.action,
+            oldAmount: a.oldAmount,
+            newAmount: a.newAmount
+          }))
+        }
+      }
+
       // Добавляем привязку (теперь массив точно существует)
       payment.linkedOrders.push({
         orderId: data.orderId,
@@ -1148,7 +1200,8 @@ export const useAccountStore = defineStore('account', () => {
 
       DebugUtils.info(MODULE_NAME, 'Payment linkedOrders saved to database', {
         paymentId: payment.id,
-        linkedOrdersCount: payment.linkedOrders.length
+        linkedOrdersCount: payment.linkedOrders.length,
+        adjustedPaymentsCount: adjustedPayments.length
       })
 
       // ✅ НОВОЕ: Обновляем usedAmount для completed платежей
@@ -1206,8 +1259,14 @@ export const useAccountStore = defineStore('account', () => {
         paymentId: data.paymentId,
         orderId: data.orderId,
         linkedAmount: data.linkAmount,
-        paymentStatus: payment.status
+        paymentStatus: payment.status,
+        adjustedPaymentsCount: adjustedPayments.length
       })
+
+      return {
+        success: true,
+        adjustedPayments: adjustedPayments.length > 0 ? adjustedPayments : undefined
+      }
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to link payment to order', { error })
       setError(error)
@@ -1400,6 +1459,225 @@ export const useAccountStore = defineStore('account', () => {
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to get total paid for order', { error })
       return 0
+    }
+  }
+
+  /**
+   * Get comprehensive payment summary for an order
+   * Used for checking payment status before linking new payments
+   */
+  async function getOrderPaymentSummary(orderId: string): Promise<{
+    orderTotal: number
+    currentPaid: number
+    currentPending: number
+    currentBilled: number
+    remainingToPay: number
+  }> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Getting order payment summary', { orderId })
+
+      // Get order total from supplier store
+      const { useSupplierStore } = await import('@/stores/supplier_2')
+      const supplierStore = useSupplierStore()
+      const order = supplierStore.getOrderById(orderId)
+
+      if (!order) {
+        throw new Error(`Order ${orderId} not found`)
+      }
+
+      const orderTotal = order.actualDeliveredAmount || order.totalAmount
+
+      // Get all payments for this order
+      const payments = await getPaymentsByOrder(orderId)
+
+      let currentPaid = 0
+      let currentPending = 0
+      let currentBilled = 0
+
+      for (const p of payments) {
+        if (p.status === 'cancelled') continue
+
+        const link = p.linkedOrders?.find(o => o.orderId === orderId && o.isActive)
+        const amount = link?.linkedAmount || 0
+
+        if (p.status === 'completed') {
+          currentPaid += amount
+        } else if (p.status === 'pending') {
+          currentPending += amount
+        }
+        currentBilled += amount
+      }
+
+      const remainingToPay = Math.max(0, orderTotal - currentBilled)
+
+      DebugUtils.info(MODULE_NAME, 'Order payment summary calculated', {
+        orderId,
+        orderTotal,
+        currentPaid,
+        currentPending,
+        currentBilled,
+        remainingToPay
+      })
+
+      return {
+        orderTotal,
+        currentPaid,
+        currentPending,
+        currentBilled,
+        remainingToPay
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to get order payment summary', { error })
+      throw error
+    }
+  }
+
+  /**
+   * Check for existing pending payments and calculate necessary adjustments
+   * When linking an unlinked payment to an order that already has pending payments,
+   * this method determines what adjustments are needed to avoid double-payment
+   */
+  async function checkAndAdjustPendingPayments(
+    orderId: string,
+    linkAmount: number,
+    tolerance: number = 1000
+  ): Promise<{
+    pendingPaymentsFound: PendingPayment[]
+    adjustments: Array<{
+      paymentId: string
+      action: 'cancel' | 'reduce'
+      oldAmount: number
+      newAmount: number
+    }>
+  }> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Checking pending payments for adjustment', {
+        orderId,
+        linkAmount,
+        tolerance
+      })
+
+      // Get all payments for this order
+      const orderPayments = await getPaymentsByOrder(orderId)
+
+      // Find pending payments that are the source order (created for this order)
+      const pendingSourcePayments = orderPayments.filter(
+        p => p.status === 'pending' && p.sourceOrderId === orderId
+      )
+
+      if (pendingSourcePayments.length === 0) {
+        DebugUtils.info(MODULE_NAME, 'No pending source payments found', { orderId })
+        return { pendingPaymentsFound: [], adjustments: [] }
+      }
+
+      const adjustments: Array<{
+        paymentId: string
+        action: 'cancel' | 'reduce'
+        oldAmount: number
+        newAmount: number
+      }> = []
+
+      // Calculate adjustments for each pending payment
+      let remainingLinkAmount = linkAmount
+
+      for (const pending of pendingSourcePayments) {
+        if (remainingLinkAmount <= 0) break
+
+        const pendingLink = pending.linkedOrders?.find(o => o.orderId === orderId && o.isActive)
+        const pendingAmount = pendingLink?.linkedAmount || pending.amount
+
+        // Calculate how much of this pending payment should be reduced
+        const reductionAmount = Math.min(remainingLinkAmount, pendingAmount)
+        const newAmount = pendingAmount - reductionAmount
+
+        if (newAmount <= tolerance) {
+          // Cancel the entire pending payment
+          adjustments.push({
+            paymentId: pending.id,
+            action: 'cancel',
+            oldAmount: pendingAmount,
+            newAmount: 0
+          })
+        } else {
+          // Reduce the pending payment amount
+          adjustments.push({
+            paymentId: pending.id,
+            action: 'reduce',
+            oldAmount: pendingAmount,
+            newAmount: newAmount
+          })
+        }
+
+        remainingLinkAmount -= reductionAmount
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Pending payment adjustments calculated', {
+        orderId,
+        pendingPaymentsCount: pendingSourcePayments.length,
+        adjustmentsCount: adjustments.length,
+        adjustments
+      })
+
+      return {
+        pendingPaymentsFound: pendingSourcePayments,
+        adjustments
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to check pending payments', { error })
+      return { pendingPaymentsFound: [], adjustments: [] }
+    }
+  }
+
+  /**
+   * Apply pending payment adjustments (cancel or reduce)
+   * Used after checking for pending payments when linking a new payment
+   */
+  async function applyPendingPaymentAdjustments(
+    adjustments: Array<{
+      paymentId: string
+      action: 'cancel' | 'reduce'
+      oldAmount: number
+      newAmount: number
+    }>,
+    orderId: string
+  ): Promise<void> {
+    for (const adj of adjustments) {
+      if (adj.action === 'cancel') {
+        DebugUtils.info(MODULE_NAME, 'Cancelling pending payment due to new link', {
+          paymentId: adj.paymentId,
+          orderId,
+          originalAmount: adj.oldAmount
+        })
+        await cancelPayment(adj.paymentId)
+      } else if (adj.action === 'reduce') {
+        DebugUtils.info(MODULE_NAME, 'Reducing pending payment due to new link', {
+          paymentId: adj.paymentId,
+          orderId,
+          oldAmount: adj.oldAmount,
+          newAmount: adj.newAmount
+        })
+
+        // Update the payment amount
+        await updatePaymentAmount({
+          paymentId: adj.paymentId,
+          newAmount: adj.newAmount,
+          reason: 'payment_split',
+          notes: `Reduced from ${adj.oldAmount} to ${adj.newAmount} because order ${orderId} was paid via another payment`
+        })
+
+        // Also update the linkedAmount in linkedOrders
+        const payment = state.value.pendingPayments.find(p => p.id === adj.paymentId)
+        if (payment?.linkedOrders) {
+          const link = payment.linkedOrders.find(o => o.orderId === orderId && o.isActive)
+          if (link) {
+            link.linkedAmount = adj.newAmount
+            await paymentService.update(payment.id, {
+              linkedOrders: payment.linkedOrders,
+              updatedAt: new Date().toISOString()
+            })
+          }
+        }
+      }
     }
   }
 
@@ -1725,6 +2003,9 @@ export const useAccountStore = defineStore('account', () => {
     getAllTransactions,
     getPaymentsByCounteragent,
     getTotalPaidForOrder,
+    getOrderPaymentSummary,
+    checkAndAdjustPendingPayments,
+    applyPendingPaymentAdjustments,
 
     // Helper methods
     clearError,

@@ -7,12 +7,19 @@ import { computed } from 'vue'
 import { getPaymentStatusDisplay } from '@/stores/pos/receipts'
 import type { PendingOrderForReceipt } from '@/stores/pos/receipts'
 import { formatIDR } from '@/utils'
+import { usePaymentTolerance } from '@/composables/usePaymentTolerance'
 
 interface Props {
   order: PendingOrderForReceipt
 }
 
 const props = defineProps<Props>()
+
+// =============================================
+// TOLERANCE
+// =============================================
+
+const { amountsMatch, tolerance } = usePaymentTolerance()
 
 // =============================================
 // COMPUTED
@@ -33,7 +40,10 @@ const amountDifference = computed(() => {
 const amountStatus = computed(() => {
   if (!hasPayment.value) return null
   const diff = amountDifference.value
-  if (Math.abs(diff) < 1) return { type: 'exact', color: 'success', text: 'Matches order amount' }
+  // Use configurable tolerance for amount comparison
+  if (amountsMatch(paymentAmount.value, props.order.totalAmount)) {
+    return { type: 'exact', color: 'success', text: 'Matches order amount' }
+  }
   if (diff > 0) return { type: 'over', color: 'warning', text: `Overpayment: ${formatIDR(diff)}` }
   return { type: 'under', color: 'error', text: `Underpayment: ${formatIDR(Math.abs(diff))}` }
 })

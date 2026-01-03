@@ -8,3 +8,14 @@ export * from './quantityFormatter'
 export * from './supabase'
 export * from './whatsapp'
 export * from './swr'
+// Export only tolerance-related functions from currency.ts
+// (formatIDR is already re-exported via formatter.ts)
+export {
+  DEFAULT_PAYMENT_TOLERANCE,
+  roundToWholeIDR,
+  isAmountNegligible,
+  isPaymentComplete,
+  amountsEqual,
+  getTolerancePaymentStatus,
+  getEffectiveRemaining
+} from './currency'

@@ -730,7 +730,9 @@ export function validateRevenueBreakdown(
 ): RevenueBreakdownValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
-  const tolerance = 1 // 1 IDR tolerance for rounding errors
+  // Use configurable tolerance from payment settings
+  const paymentSettingsStore = usePaymentSettingsStore()
+  const tolerance = paymentSettingsStore.paymentTolerance
 
   // =============================================
   // Rule 1: Non-negative values
@@ -821,7 +823,9 @@ export function validateRevenueBreakdown(
 export function validateOrderAmounts(order: PosOrder): RevenueBreakdownValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
-  const tolerance = 1
+  // Use configurable tolerance from payment settings
+  const paymentSettingsStore = usePaymentSettingsStore()
+  const tolerance = paymentSettingsStore.paymentTolerance
 
   if (!order.revenueBreakdown) {
     errors.push('Order has no revenueBreakdown')

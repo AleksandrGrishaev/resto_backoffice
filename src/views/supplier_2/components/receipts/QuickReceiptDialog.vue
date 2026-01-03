@@ -1,6 +1,6 @@
 <!-- src/views/supplier_2/components/receipts/QuickReceiptDialog.vue -->
 <template>
-  <v-dialog v-model="isOpen" max-width="1200px" persistent scrollable>
+  <v-dialog v-model="isOpen" max-width="1400px" persistent scrollable>
     <v-card class="quick-receipt-dialog">
       <!-- Header -->
       <v-card-title class="d-flex align-center justify-space-between pa-4 bg-primary text-white">
@@ -103,13 +103,13 @@
               <v-table density="compact" class="items-table">
                 <thead>
                   <tr>
-                    <th style="width: 25%">Product</th>
-                    <th style="width: 20%">Package</th>
-                    <th style="width: 10%">Qty</th>
-                    <th style="width: 15%">Price/pkg (IDR)</th>
-                    <th style="width: 10%">Total qty</th>
-                    <th style="width: 12%">Total (IDR)</th>
-                    <th style="width: 8%">Actions</th>
+                    <th style="min-width: 180px">Product</th>
+                    <th style="min-width: 160px">Package</th>
+                    <th style="min-width: 80px">Qty</th>
+                    <th style="min-width: 130px">Price/pkg</th>
+                    <th style="min-width: 90px">Total qty</th>
+                    <th style="min-width: 120px">Total</th>
+                    <th style="min-width: 60px"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -388,9 +388,10 @@ import { useReceipts } from '@/stores/supplier_2/composables/useReceipts'
 import { useProductsStore } from '@/stores/productsStore'
 import { useCounteragentsStore } from '@/stores/counteragents'
 import { useSupplierStorageIntegration } from '@/stores/supplier_2/integrations'
+import { useAlertsStore } from '@/stores/alerts/alertsStore'
 import { supabase } from '@/supabase/client'
 import { TimeUtils } from '@/utils/time'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, formatIDR } from '@/utils'
 import type { Receipt, PurchaseOrder, ReceiptItem, OrderItem } from '@/stores/supplier_2/types'
 import QuickAddPackageDialog from '../shared/package/QuickAddPackageDialog.vue'
 import { NumericInputField } from '@/components/input'
@@ -423,6 +424,7 @@ const { startReceipt } = useReceipts()
 const productsStore = useProductsStore()
 const counteragentsStore = useCounteragentsStore()
 const storageIntegration = useSupplierStorageIntegration()
+const alertsStore = useAlertsStore()
 
 // =============================================
 // LOCAL STATE
@@ -822,6 +824,64 @@ function onTaxPercentageChange(value: number | undefined) {
 }
 
 // =============================================
+// METHODS - Backdated Receipt Alert
+// =============================================
+
+/**
+ * Check if delivery date is not today and create alert
+ */
+async function createBackdatedReceiptAlert(
+  data: { receipt_number: string; receipt_id: string; total_amount: number; delivery_date: string },
+  supplierName: string
+): Promise<void> {
+  const deliveryDate = new Date(form.value.deliveryDate)
+  const today = new Date()
+
+  // Compare only dates (ignore time)
+  const deliveryDateStr = deliveryDate.toISOString().split('T')[0]
+  const todayStr = today.toISOString().split('T')[0]
+
+  if (deliveryDateStr === todayStr) {
+    return // No alert needed for today's date
+  }
+
+  const daysDiff = Math.round((today.getTime() - deliveryDate.getTime()) / (1000 * 60 * 60 * 24))
+  const isPast = daysDiff > 0
+  const isFuture = daysDiff < 0
+
+  try {
+    await alertsStore.createAlert({
+      category: 'supplier',
+      type: 'backdated_receipt',
+      severity: isPast && daysDiff > 7 ? 'warning' : 'info',
+      title: `Backdated Receipt: ${data.receipt_number}`,
+      description: isPast
+        ? `Receipt created with date ${daysDiff} day(s) in the past`
+        : `Receipt created with date ${Math.abs(daysDiff)} day(s) in the future`,
+      metadata: {
+        receiptId: data.receipt_id,
+        receiptNumber: data.receipt_number,
+        supplierName,
+        deliveryDate: form.value.deliveryDate,
+        totalAmount: data.total_amount,
+        daysDifference: daysDiff,
+        isPast,
+        isFuture
+      }
+    })
+
+    DebugUtils.info(MODULE_NAME, '📢 Created backdated receipt alert', {
+      receiptNumber: data.receipt_number,
+      daysDiff,
+      isPast
+    })
+  } catch (error) {
+    // Don't fail the receipt creation if alert fails
+    DebugUtils.warn(MODULE_NAME, '⚠️ Failed to create backdated receipt alert', { error })
+  }
+}
+
+// =============================================
 // METHODS - Save
 // =============================================
 
@@ -943,6 +1003,9 @@ async function saveReceipt() {
         note: 'Storage processing in background'
       }
     })
+
+    // 6. Create alert if receipt date is not today
+    await createBackdatedReceiptAlert(data, supplier.name)
 
     emits(
       'success',
@@ -1127,10 +1190,34 @@ watch(
 .items-table {
   border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   border-radius: 4px;
+  overflow-x: auto;
 
   th {
     font-weight: 600;
     background-color: rgba(var(--v-theme-surface-variant), 0.5);
+    white-space: nowrap;
+    padding: 8px 12px !important;
+  }
+
+  td {
+    padding: 4px 8px !important;
+    vertical-align: middle;
+  }
+
+  // Compact inputs inside table
+  :deep(.v-field) {
+    font-size: 0.875rem;
+  }
+
+  :deep(.v-field__input) {
+    min-height: 36px !important;
+    padding: 4px 8px !important;
+  }
+
+  :deep(.v-select__selection-text) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
