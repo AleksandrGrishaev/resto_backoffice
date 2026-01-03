@@ -318,6 +318,7 @@ import ReceiptTable from './components/receipts/ReceiptTable.vue'
 import RequestEditDialog from './components/procurement/RequestEditDialog.vue'
 import PurchaseOrderEditDialog from './components/orders/PurchaseOrderEditDialog.vue'
 import QuickReceiptDialog from './components/receipts/QuickReceiptDialog.vue'
+import { extractErrorDetails } from '@/utils/errors'
 
 const MODULE_NAME = 'SupplierView'
 
@@ -458,8 +459,8 @@ function showSuccess(message: string) {
   showSuccessSnackbar.value = true
 }
 
-function handleError(error: string | Error) {
-  const message = typeof error === 'string' ? error : error.message
+function handleError(error: string | Error | unknown) {
+  const message = typeof error === 'string' ? error : extractErrorDetails(error).message
   console.error(`${MODULE_NAME}: Error -`, message)
   errorMessage.value = message
   showErrorSnackbar.value = true

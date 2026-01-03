@@ -392,6 +392,7 @@ import { useAlertsStore } from '@/stores/alerts/alertsStore'
 import { supabase } from '@/supabase/client'
 import { TimeUtils } from '@/utils/time'
 import { DebugUtils, formatIDR } from '@/utils'
+import { extractErrorDetails } from '@/utils/errors'
 import type { Receipt, PurchaseOrder, ReceiptItem, OrderItem } from '@/stores/supplier_2/types'
 import QuickAddPackageDialog from '../shared/package/QuickAddPackageDialog.vue'
 import { NumericInputField } from '@/components/input'
@@ -1014,7 +1015,7 @@ async function saveReceipt() {
     closeDialog()
   } catch (error) {
     DebugUtils.error(MODULE_NAME, '❌ Failed to create quick receipt', { error })
-    emits('error', `Failed to create receipt: ${error}`)
+    emits('error', `Failed to create receipt: ${extractErrorDetails(error).message}`)
   } finally {
     isSaving.value = false
   }

@@ -294,6 +294,7 @@ import { useReceipts } from '@/stores/supplier_2/composables/useReceipts'
 import { useProductsStore } from '@/stores/productsStore'
 import { TimeUtils } from '@/utils/time'
 import { DebugUtils } from '@/utils'
+import { extractErrorDetails } from '@/utils/errors'
 import type {
   PurchaseOrder,
   Receipt,
@@ -519,7 +520,7 @@ async function initializeReceipt() {
     })
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to initialize receipt', { error })
-    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorMessage = extractErrorDetails(error).message
     emits('error', `Failed to initialize receipt: ${errorMessage}`)
     closeDialog()
   } finally {
@@ -756,7 +757,7 @@ async function saveReceipt() {
     emits('success', 'Receipt saved successfully')
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to save receipt', { error })
-    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorMessage = extractErrorDetails(error).message
     emits('error', `Failed to save receipt: ${errorMessage}`)
   } finally {
     isSaving.value = false
@@ -877,7 +878,7 @@ async function confirmComplete() {
     closeDialog()
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to complete receipt', { error })
-    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorMessage = extractErrorDetails(error).message
     emits('error', `Failed to complete receipt: ${errorMessage}`)
   } finally {
     isCompleting.value = false

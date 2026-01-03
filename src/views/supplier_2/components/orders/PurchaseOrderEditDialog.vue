@@ -199,6 +199,7 @@ import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOr
 import { useReceipts } from '@/stores/supplier_2/composables/useReceipts'
 import EditableOrderItemsWidget from './order-edit/EditableOrderItemsWidget.vue'
 import { DebugUtils } from '@/utils'
+import { extractErrorDetails } from '@/utils/errors'
 
 const MODULE_NAME = 'PurchaseOrderEditDialog'
 
@@ -416,7 +417,7 @@ async function saveOrder() {
     emits('success', `Order ${updatedOrder.orderNumber} updated successfully`)
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to save order', { error })
-    emits('error', `Failed to save order: ${error}`)
+    emits('error', `Failed to save order: ${extractErrorDetails(error).message}`)
   } finally {
     saving.value = false
   }
@@ -436,7 +437,7 @@ async function sendOrder() {
     emits('success', `Order ${sentOrder.orderNumber} sent to supplier`)
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to send order', { error })
-    emits('error', `Failed to send order: ${error}`)
+    emits('error', `Failed to send order: ${extractErrorDetails(error).message}`)
   } finally {
     sending.value = false
   }
