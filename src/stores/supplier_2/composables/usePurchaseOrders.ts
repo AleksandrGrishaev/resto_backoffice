@@ -522,33 +522,44 @@ export function usePurchaseOrders() {
   }
 
   /**
-   * НОВЫЙ МЕТОД: Условное обновление статуса запросов
+   * Условное обновление статуса запросов
    * Меняет статус на 'converted' только если все товары из заявки заказаны
+   * Проверяет ВСЕ связанные заказы, не только текущий
    */
   async function updateRequestsStatusConditionally(
     requestIds: string[],
-    orderedItems: UnassignedItem[]
+    _orderedItems: UnassignedItem[] // Kept for backwards compatibility, but not used
   ) {
     try {
       for (const requestId of requestIds) {
         const request = supplierStore.state.requests.find(req => req.id === requestId)
         if (!request) continue
 
-        // Проверяем, все ли товары из заявки были заказаны
+        // Get ALL orders linked to this request
+        const linkedOrders = supplierStore.state.orders.filter(order =>
+          order.requestIds.includes(requestId)
+        )
+
+        // Aggregate ordered quantities from ALL linked orders
+        const totalOrderedByItem = new Map<string, number>()
+
+        for (const order of linkedOrders) {
+          for (const orderItem of order.items) {
+            const current = totalOrderedByItem.get(orderItem.itemId) || 0
+            totalOrderedByItem.set(orderItem.itemId, current + orderItem.orderedQuantity)
+          }
+        }
+
+        // Check if ALL request items have been fully ordered
         const allItemsOrdered = request.items.every(requestItem => {
-          return orderedItems.some(
-            orderedItem =>
-              orderedItem.itemId === requestItem.itemId &&
-              orderedItem.totalQuantity >= requestItem.requestedQuantity
-          )
+          const totalOrdered = totalOrderedByItem.get(requestItem.itemId) || 0
+          return totalOrdered >= requestItem.requestedQuantity
         })
 
         if (allItemsOrdered) {
-          // Все товары заказаны - меняем статус на 'converted'
           await supplierStore.updateRequest(requestId, { status: 'converted' })
           console.log(`PurchaseOrders: Request ${requestId} fully converted (all items ordered)`)
         } else {
-          // Частично заказаны - оставляем статус 'submitted'
           console.log(
             `PurchaseOrders: Request ${requestId} partially ordered, keeping status 'submitted'`
           )

@@ -49,11 +49,16 @@ export function useKitchenRequest(selectedDepartment?: Ref<'all' | 'kitchen' | '
     return 'kitchen'
   })
 
-  // Pending request count for badge
+  // Pending request count for badge (only last 7 days)
   const pendingRequestCount = computed(() => {
-    return supplierStore.state.requests.filter(
-      r => r.status === 'draft' || r.status === 'submitted'
-    ).length
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+    return supplierStore.state.requests.filter(r => {
+      if (r.status !== 'draft' && r.status !== 'submitted') return false
+      const createdAt = new Date(r.createdAt)
+      return createdAt >= sevenDaysAgo
+    }).length
   })
 
   const requestedByName = computed(() => authStore.currentUser?.email || 'Kitchen Staff')
