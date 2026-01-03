@@ -192,6 +192,7 @@ export class StorageService {
         .select('*')
         .eq('warehouse_id', warehouseId)
         .order('operation_date', { ascending: false })
+        .limit(100)
 
       if (dateFrom) {
         query = query.gte('operation_date', dateFrom)
@@ -1921,6 +1922,7 @@ export class StorageService {
         .from('inventory_documents')
         .select('*')
         .order('inventory_date', { ascending: false })
+        .limit(50)
 
       // Filter by department if specified
       if (department && department !== 'all') {

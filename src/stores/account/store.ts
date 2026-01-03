@@ -143,6 +143,16 @@ export const useAccountStore = defineStore('account', () => {
   )
 
   /**
+   * Backoffice expense categories (for account expenses)
+   * Includes supplier category for direct supplier payments
+   */
+  const backofficeExpenseCategories = computed(() =>
+    state.value.transactionCategories
+      .filter(c => c.type === 'expense' && c.isActive && (!c.isSystem || c.code === 'supplier'))
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+  )
+
+  /**
    * All income categories
    * Excludes system categories (sales) - they are used automatically by the system
    */
@@ -1598,6 +1608,7 @@ export const useAccountStore = defineStore('account', () => {
     transactionCategories: computed(() => state.value.transactionCategories),
     expenseCategories,
     posExpenseCategories,
+    backofficeExpenseCategories,
     incomeCategories,
     opexCategories,
     getCategoryByCode,

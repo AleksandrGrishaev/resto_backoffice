@@ -332,6 +332,20 @@ watch(dialog, newValue => {
     resetForm()
   }
 })
+
+// Ensure counteragents are loaded when dialog opens
+watch(
+  dialog,
+  async isOpen => {
+    if (isOpen) {
+      // Lazy load counteragents if not already loaded
+      if (!counteragentsStore.counteragents?.length) {
+        await counteragentsStore.initialize()
+      }
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>

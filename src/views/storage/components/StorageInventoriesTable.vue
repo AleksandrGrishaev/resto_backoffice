@@ -159,11 +159,19 @@
         <!-- Value Difference -->
         <template #[`item.totalValueDifference`]="{ item }">
           <div class="text-right">
-            <div
-              class="font-weight-medium"
-              :class="getValueDifferenceColor(item.totalValueDifference || 0)"
-            >
-              {{ formatCurrency(item.totalValueDifference || 0) }}
+            <div class="d-flex align-center justify-end gap-1">
+              <span
+                class="font-weight-medium"
+                :class="getValueDifferenceColor(item.totalValueDifference || 0)"
+              >
+                {{ formatCurrency(item.totalValueDifference || 0) }}
+              </span>
+              <v-icon
+                v-if="(item.totalValueDifference || 0) !== 0"
+                :icon="(item.totalValueDifference || 0) > 0 ? 'mdi-arrow-up' : 'mdi-arrow-down'"
+                :color="(item.totalValueDifference || 0) > 0 ? 'success' : 'error'"
+                size="small"
+              />
             </div>
             <div class="text-caption text-medium-emphasis">
               {{ (item.totalValueDifference || 0) >= 0 ? 'surplus' : 'shortage' }}
@@ -472,7 +480,8 @@ function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
-    maximumFractionDigits: 0
+    maximumFractionDigits: 0,
+    signDisplay: 'always' // ← Force display of + or - sign for value differences
   }).format(amount)
 }
 

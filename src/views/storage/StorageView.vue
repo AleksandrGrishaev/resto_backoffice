@@ -530,6 +530,17 @@ async function refreshCurrentData() {
   }
 }
 
+async function refreshInventories() {
+  try {
+    DebugUtils.info(MODULE_NAME, 'Refreshing inventories')
+    await storageStore.fetchInventories(
+      selectedDepartment.value === 'all' ? undefined : selectedDepartment.value
+    )
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to refresh inventories', { error })
+  }
+}
+
 async function forceRefresh() {
   try {
     DebugUtils.info(MODULE_NAME, 'Force refresh requested')
@@ -567,6 +578,15 @@ watch(selectedDepartment, async (newDepartment, oldDepartment) => {
     })
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to change department', { error })
+  }
+})
+
+// Auto-refresh inventories when switching to the Inventories tab
+watch(selectedTab, async newTab => {
+  if (newTab === 'inventories' && isStoreReady.value) {
+    await storageStore.fetchInventories(
+      selectedDepartment.value === 'all' ? undefined : selectedDepartment.value
+    )
   }
 })
 

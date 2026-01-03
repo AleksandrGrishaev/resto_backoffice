@@ -5,11 +5,11 @@
     v-model="dialogModel"
     :title="title"
     :loading="loading"
-    :disabled="!isFormValid"
+    :disabled="!isFormValid || (isSupplierCategory && !formData.counteragentId)"
     @confirm="handleSubmit"
   >
     <v-form ref="form" v-model="formState.isValid" @submit.prevent>
-      <!-- Общие поля для всех типов операций -->
+      <!-- Account selector (if not pre-selected) -->
       <v-select
         v-if="!account"
         v-model="formData.accountId"
@@ -43,8 +43,49 @@
           item-value="code"
           :rules="[v => !!v || 'Required field']"
           required
-        />
+        >
+          <template #item="{ item, props: itemProps }">
+            <v-list-item v-bind="itemProps">
+              <template #prepend>
+                <v-icon
+                  :icon="item.raw.code === 'supplier' ? 'mdi-truck-delivery' : 'mdi-tag'"
+                  :color="item.raw.code === 'supplier' ? 'purple' : undefined"
+                />
+              </template>
+              <template v-if="item.raw.code === 'supplier'" #append>
+                <v-chip size="x-small" color="warning" variant="flat">Requires Linking</v-chip>
+              </template>
+            </v-list-item>
+          </template>
+        </v-select>
       </template>
+
+      <!-- Supplier Payment Alert -->
+      <v-alert v-if="isSupplierCategory" type="info" variant="tonal" density="compact" class="mb-4">
+        <div class="d-flex align-center">
+          <v-icon icon="mdi-link-variant" class="me-2" />
+          <div>
+            <div class="text-subtitle-2">Supplier Payment</div>
+            <div class="text-caption">
+              This payment can be linked to Purchase Orders in the Payments tab.
+            </div>
+          </div>
+        </div>
+      </v-alert>
+
+      <!-- Supplier selector (required for supplier category) -->
+      <v-autocomplete
+        v-if="isSupplierCategory"
+        v-model="formData.counteragentId"
+        label="Supplier *"
+        :items="supplierItems"
+        item-title="name"
+        item-value="id"
+        :rules="[v => !!v || 'Supplier is required for supplier payments']"
+        prepend-inner-icon="mdi-truck-delivery"
+        clearable
+        @update:model-value="onSupplierChange"
+      />
 
       <v-textarea
         v-model="formData.description"
@@ -62,6 +103,7 @@ import { computed, watch } from 'vue'
 import BaseDialog from '@/components/base/BaseDialog.vue'
 import { useAccountStore } from '@/stores/account'
 import { useAuthStore } from '@/stores/auth'
+import { useCounteragentsStore } from '@/stores/counteragents'
 import { useDialogForm } from '@/composables/useDialogForm'
 import { formatIDR } from '@/utils/currency'
 import type { Account, OperationType, ExpenseCategory } from '@/stores/account'
@@ -80,6 +122,7 @@ const emit = defineEmits<{
 // Stores
 const accountStore = useAccountStore()
 const authStore = useAuthStore()
+const counteragentsStore = useCounteragentsStore()
 
 // Computed
 const title = computed(() => {
@@ -105,11 +148,20 @@ const accountItems = computed(() =>
 )
 
 // Use categories from store based on operation type
+// For expenses, use backofficeExpenseCategories which includes supplier
 const categoryItems = computed(() => {
   if (props.type === 'income') {
     return accountStore.incomeCategories
   }
-  return accountStore.expenseCategories
+  return accountStore.backofficeExpenseCategories
+})
+
+// Check if supplier category is selected
+const isSupplierCategory = computed(() => formData.value.expenseCategory?.category === 'supplier')
+
+// Get active suppliers for dropdown
+const supplierItems = computed(() => {
+  return counteragentsStore.supplierCounterAgents || []
 })
 
 // Form
@@ -118,6 +170,8 @@ const initialData = computed(() => ({
   amount: 0,
   type: props.type,
   description: '',
+  counteragentId: '',
+  counteragentName: '',
   expenseCategory:
     props.type === 'expense' || props.type === 'income'
       ? ({
@@ -134,6 +188,8 @@ const { form, loading, formState, formData, isFormValid, handleSubmit } = useDia
     try {
       await accountStore.createOperation({
         ...data,
+        counteragentId: data.counteragentId || undefined,
+        counteragentName: data.counteragentName || undefined,
         performedBy: {
           type: 'user',
           id: authStore.userId,
@@ -142,7 +198,6 @@ const { form, loading, formState, formData, isFormValid, handleSubmit } = useDia
       })
       emit('success')
     } catch (error) {
-      // Преобразуем ошибку в понятное пользователю сообщение
       if (error instanceof Error) {
         if (error.message === 'Insufficient funds') {
           form.value?.setErrors({
@@ -169,6 +224,41 @@ function validateAmount(value: number) {
   }
   return true
 }
+
+function onSupplierChange(supplierId: string | null) {
+  if (supplierId) {
+    const supplier = supplierItems.value.find(s => s.id === supplierId)
+    if (supplier) {
+      formData.value.counteragentName = supplier.name
+    }
+  } else {
+    formData.value.counteragentName = ''
+  }
+}
+
+// Reset counteragent when category changes away from supplier
+watch(
+  () => formData.value.expenseCategory?.category,
+  newCategory => {
+    if (newCategory !== 'supplier') {
+      formData.value.counteragentId = ''
+      formData.value.counteragentName = ''
+    }
+  }
+)
+
+// Ensure counteragents are loaded when dialog opens and supplier category might be used
+watch(
+  () => props.modelValue,
+  async isOpen => {
+    if (isOpen && props.type === 'expense') {
+      // Lazy load counteragents if not already loaded
+      if (!counteragentsStore.counteragents?.length) {
+        await counteragentsStore.initialize()
+      }
+    }
+  }
+)
 
 watch(
   () => props.account?.balance,
