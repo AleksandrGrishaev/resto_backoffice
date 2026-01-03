@@ -13,9 +13,11 @@ import PaymentHistoryList from './components/PaymentHistoryList.vue'
 import LinkExpenseDialog from './dialogs/LinkExpenseDialog.vue'
 import ConfirmPaymentDialog from './dialogs/ConfirmPaymentDialog.vue'
 import ExpenseDetailsDialog from './dialogs/ExpenseDetailsDialog.vue'
+import BatchPaymentDialog from './dialogs/BatchPaymentDialog.vue'
 import type { ShiftExpenseOperation } from '@/stores/pos/shifts/types'
 import type { PendingPayment } from '@/stores/account/types'
 import type { InvoiceSuggestion } from '@/stores/pos/shifts/composables/useExpenseLinking'
+import type { LinkAllocation } from './dialogs/LinkExpenseDialog.vue'
 
 // =============================================
 // STORES & COMPOSABLES
@@ -31,6 +33,7 @@ const {
   error,
   getInvoiceSuggestions,
   linkExpenseToInvoice,
+  linkExpenseToMultipleInvoices,
   clearError
 } = useExpenseLinking()
 
@@ -44,9 +47,11 @@ const selectedPayment = ref<PendingPayment | null>(null)
 const showLinkDialog = ref(false)
 const showConfirmPaymentDialog = ref(false)
 const showExpenseDetailsDialog = ref(false)
+const showBatchPaymentDialog = ref(false)
 const invoiceSuggestions = ref<InvoiceSuggestion[]>([])
 const expenseAvailableAmount = ref(0) // Amount available for linking (expense.amount - alreadyLinkedAmount)
 const selectedExpensePayment = ref<PendingPayment | null>(null) // Payment for expense details dialog
+const batchPaymentsList = ref<PendingPayment[]>([]) // Payments selected for batch payment
 
 // =============================================
 // COMPUTED
@@ -143,6 +148,22 @@ async function handleConfirmLink(invoice: InvoiceSuggestion, amount: number) {
     selectedExpense.value,
     invoice,
     amount,
+    currentUser.value
+  )
+
+  if (result.success) {
+    showLinkDialog.value = false
+    selectedExpense.value = null
+    invoiceSuggestions.value = []
+  }
+}
+
+async function handleConfirmMultipleLinks(links: LinkAllocation[]) {
+  if (!selectedExpense.value) return
+
+  const result = await linkExpenseToMultipleInvoices(
+    selectedExpense.value,
+    links,
     currentUser.value
   )
 
@@ -277,6 +298,27 @@ function handleViewPayment(payment: PendingPayment) {
 function handleDismissError() {
   clearError()
 }
+
+// =============================================
+// BATCH PAYMENT METHODS
+// =============================================
+
+function handleBatchPay(payments: PendingPayment[]) {
+  batchPaymentsList.value = payments
+  showBatchPaymentDialog.value = true
+}
+
+async function handleBatchPaymentSuccess() {
+  showBatchPaymentDialog.value = false
+  batchPaymentsList.value = []
+  // Refresh payments list
+  await accountStore.fetchPayments(true)
+}
+
+function handleCancelBatchPayment() {
+  showBatchPaymentDialog.value = false
+  batchPaymentsList.value = []
+}
 </script>
 
 <template>
@@ -350,6 +392,7 @@ function handleDismissError() {
             @confirm="handleConfirmPayment"
             @reject="handleRejectPayment"
             @view="handleViewPayment"
+            @batch-pay="handleBatchPay"
           />
         </v-window-item>
 
@@ -382,6 +425,7 @@ function handleDismissError() {
       :available-amount="expenseAvailableAmount"
       :loading="isLoading"
       @confirm="handleConfirmLink"
+      @confirm-multiple="handleConfirmMultipleLinks"
       @cancel="handleCancelLink"
     />
 
@@ -399,6 +443,15 @@ function handleDismissError() {
       v-model="showExpenseDetailsDialog"
       :expense="selectedExpense"
       :payment="selectedExpensePayment"
+    />
+
+    <!-- Batch Payment Dialog -->
+    <BatchPaymentDialog
+      v-model="showBatchPaymentDialog"
+      :payments="batchPaymentsList"
+      :loading="isLoading"
+      @success="handleBatchPaymentSuccess"
+      @cancel="handleCancelBatchPayment"
     />
   </v-container>
 </template>

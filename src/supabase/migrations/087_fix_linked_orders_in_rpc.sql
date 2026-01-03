@@ -1,23 +1,9 @@
--- RPC Function: complete_receipt_full
--- Purpose: Atomic receipt completion in single transaction
--- Performance: Replaces 45-60+ sequential API calls with 1 RPC call (20s → 1-2s)
--- Created: 2026-01-02
--- Migration: 085_complete_receipt_rpc.sql
+-- Migration: 087_fix_linked_orders_in_rpc
+-- Description: Fix complete_receipt_full RPC to include linked_orders for bill_status calculation
+-- Date: 2026-01-03
+-- Issue: Payments created by RPC had empty linked_orders[], causing bill_status to stay 'not_billed'
 
--- PARAMETERS:
--- p_receipt_id: Receipt ID to complete
--- p_order_id: Related purchase order ID
--- p_delivery_date: Actual delivery timestamp
--- p_warehouse_id: Target warehouse
--- p_supplier_id: Supplier counteragent ID
--- p_supplier_name: Supplier name for payment record
--- p_total_amount: Total receipt amount
--- p_received_items: JSONB array of received items with structure:
---   [{ itemId, itemName, receivedQuantity, actualPrice, packageId, packageSize }]
-
--- RETURNS:
--- JSONB: { success: boolean, convertedBatches, reconciledBatches, operationId, paymentId, error?, code? }
-
+-- 1. UPDATE RPC FUNCTION to include linked_orders
 CREATE OR REPLACE FUNCTION complete_receipt_full(
   p_receipt_id TEXT,
   p_order_id TEXT,
@@ -54,7 +40,6 @@ BEGIN
   END IF;
 
   -- 1. CONVERT TRANSIT BATCHES TO ACTIVE
-  -- Changes status of all batches from 'in_transit' to 'active'
   UPDATE storage_batches
   SET status = 'active',
       is_active = true,
@@ -65,7 +50,6 @@ BEGIN
   GET DIAGNOSTICS v_converted = ROW_COUNT;
 
   -- 2. UPDATE BATCH QUANTITIES/PRICES
-  -- Updates each batch with actual received quantities and prices
   FOR v_item IN SELECT * FROM jsonb_array_elements(p_received_items)
   LOOP
     UPDATE storage_batches
@@ -79,7 +63,6 @@ BEGIN
       AND item_id = v_item->>'itemId'
       AND status = 'active';
 
-    -- Build items array for storage_operation audit record
     v_items_array := v_items_array || jsonb_build_object(
       'itemId', v_item->>'itemId',
       'itemName', v_item->>'itemName',
@@ -89,7 +72,6 @@ BEGIN
   END LOOP;
 
   -- 3. RECONCILE NEGATIVE BATCHES
-  -- Marks negative batches as reconciled (they were created from shortages)
   UPDATE storage_batches
   SET reconciled_at = NOW(),
       is_active = false,
@@ -101,7 +83,6 @@ BEGIN
   GET DIAGNOSTICS v_reconciled = ROW_COUNT;
 
   -- 4. CREATE STORAGE OPERATION (audit trail)
-  -- Records the receipt operation for audit/accounting purposes
   v_operation_id := 'op_' || gen_random_uuid();
   INSERT INTO storage_operations (
     id, operation_type, document_number, operation_date, department,
@@ -112,7 +93,6 @@ BEGIN
   );
 
   -- 5. CREATE PENDING PAYMENT (debt to supplier)
-  -- Creates a payable record for the supplier
   -- IMPORTANT: linked_orders is required for bill_status calculation (calculateBillStatus uses linkedOrders.linkedAmount)
   v_payment_id := 'pp_' || gen_random_uuid();
   INSERT INTO pending_payments (
@@ -120,7 +100,7 @@ BEGIN
     category, status, source_order_id, linked_orders, created_by, created_at, updated_at
   ) VALUES (
     v_payment_id, p_supplier_id, p_supplier_name, p_total_amount,
-    'Order ' || v_order_number || ' delivered', 'supplier', 'pending',
+    'Order ' || v_order_number || ' delivered', 'supplier_debt', 'pending',
     p_order_id,
     jsonb_build_array(jsonb_build_object(
       'orderId', p_order_id,
@@ -133,7 +113,6 @@ BEGIN
   );
 
   -- 6. UPDATE RECEIPT STATUS
-  -- Marks receipt as completed and links to storage operation
   UPDATE supplierstore_receipts
   SET status = 'completed',
       storage_operation_id = v_operation_id,
@@ -141,14 +120,12 @@ BEGIN
   WHERE id = p_receipt_id;
 
   -- 7. UPDATE ORDER STATUS
-  -- Marks order as delivered
   UPDATE supplierstore_orders
   SET status = 'delivered',
       receipt_completed_at = NOW(),
       updated_at = NOW()
   WHERE id = p_order_id;
 
-  -- Return success with operation counts
   RETURN jsonb_build_object(
     'success', true,
     'convertedBatches', v_converted,
@@ -158,7 +135,6 @@ BEGIN
   );
 
 EXCEPTION WHEN OTHERS THEN
-  -- Automatic transaction rollback on any error
   RETURN jsonb_build_object(
     'success', false,
     'error', SQLERRM,
@@ -166,3 +142,33 @@ EXCEPTION WHEN OTHERS THEN
   );
 END;
 $$;
+
+-- 2. FIX EXISTING DATA: Add linked_orders to payments with category='supplier_debt' and empty linked_orders
+UPDATE pending_payments pp
+SET linked_orders = jsonb_build_array(jsonb_build_object(
+  'orderId', pp.source_order_id,
+  'orderNumber', o.order_number,
+  'linkedAmount', pp.amount,
+  'linkedAt', pp.created_at::TEXT,
+  'isActive', true
+)),
+updated_at = NOW()
+FROM supplierstore_orders o
+WHERE pp.category = 'supplier_debt'
+  AND pp.source_order_id IS NOT NULL
+  AND pp.source_order_id = o.id
+  AND (pp.linked_orders IS NULL OR pp.linked_orders = '[]'::jsonb);
+
+-- 3. UPDATE BILL STATUS for affected orders
+UPDATE supplierstore_orders o
+SET bill_status = CASE
+  WHEN pp.status = 'completed' THEN 'fully_paid'
+  WHEN pp.status = 'pending' THEN 'billed'
+  ELSE o.bill_status
+END,
+bill_status_calculated_at = NOW(),
+updated_at = NOW()
+FROM pending_payments pp
+WHERE pp.source_order_id = o.id
+  AND pp.category = 'supplier_debt'
+  AND o.bill_status = 'not_billed';

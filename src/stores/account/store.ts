@@ -1590,6 +1590,104 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
+  // ============ SUPPLIER EXPENSE WITH PAYMENT ============
+  /**
+   * Create a supplier expense that also creates a PendingPayment for tracking.
+   * This ensures all supplier payments appear in the Unlinked tab for linking to POs.
+   *
+   * @param data - Operation data with counteragentId and counteragentName required
+   * @returns Both the transaction and the created payment
+   */
+  async function createSupplierExpenseWithPayment(data: CreateOperationDto): Promise<{
+    transaction: Transaction
+    payment: PendingPayment
+  }> {
+    try {
+      clearError()
+      state.value.loading.operation = true
+
+      // Validate supplier data
+      if (!data.counteragentId || !data.counteragentName) {
+        throw new Error('Counteragent ID and name are required for supplier expenses')
+      }
+
+      if (data.type !== 'expense') {
+        throw new Error('This method is only for expense operations')
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Creating supplier expense with payment', {
+        amount: data.amount,
+        counteragentId: data.counteragentId,
+        accountId: data.accountId
+      })
+
+      // Step 1: Create PendingPayment with status='completed' (payment already made)
+      const payment = await paymentService.createPayment({
+        counteragentId: data.counteragentId,
+        counteragentName: data.counteragentName,
+        amount: data.amount,
+        description: data.description,
+        category: 'supplier',
+        priority: 'medium',
+        createdBy: data.performedBy,
+        // No linkedOrders - this payment needs to be linked to POs
+        usedAmount: 0
+      })
+
+      // Mark as completed immediately (payment already happened via expense)
+      await paymentService.update(payment.id, {
+        status: 'completed',
+        paidAmount: data.amount,
+        paidDate: new Date().toISOString(),
+        assignedToAccount: data.accountId
+      })
+
+      // Update local cache
+      payment.status = 'completed'
+      payment.paidAmount = data.amount
+      payment.paidDate = new Date().toISOString()
+      payment.assignedToAccount = data.accountId
+
+      // Add to pending payments cache
+      state.value.pendingPayments.push(payment)
+
+      // Step 2: Create transaction with link to payment
+      const transactionData: CreateOperationDto = {
+        ...data,
+        relatedPaymentId: payment.id
+      }
+
+      const transaction = await transactionService.createTransaction(transactionData)
+
+      // Update account balance
+      const account = state.value.accounts.find(a => a.id === data.accountId)
+      if (account) {
+        account.balance = transaction.balanceAfter
+        account.lastTransactionDate = transaction.createdAt
+      }
+
+      // Refresh transactions
+      await fetchTransactions(data.accountId)
+
+      // Invalidate cache
+      state.value.allTransactionsCache = undefined
+      state.value.cacheTimestamp = undefined
+
+      DebugUtils.info(MODULE_NAME, 'Supplier expense with payment created successfully', {
+        transactionId: transaction.id,
+        paymentId: payment.id
+      })
+
+      return { transaction, payment }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create supplier expense with payment', { error })
+      setError(error)
+      throw error
+    } finally {
+      state.value.loading.operation = false
+    }
+  }
+
   // ============ RETURN ============
   return {
     // State
@@ -1645,6 +1743,7 @@ export const useAccountStore = defineStore('account', () => {
 
     // Transaction actions
     createOperation,
+    createSupplierExpenseWithPayment,
     transferBetweenAccounts,
     correctBalance,
     fetchTransactions,

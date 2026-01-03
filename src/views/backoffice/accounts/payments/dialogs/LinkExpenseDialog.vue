@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // src/views/backoffice/accounts/payments/dialogs/LinkExpenseDialog.vue
 // Sprint 4: Link Expense to Invoice Dialog
+// Sprint 7: Converted to sequential multi-invoice allocation
 
 import { ref, computed, watch } from 'vue'
 import type { ShiftExpenseOperation } from '@/stores/pos/shifts/types'
@@ -16,9 +17,17 @@ interface Props {
   loading?: boolean
 }
 
+// Link allocation item for multi-invoice linking
+export interface LinkAllocation {
+  invoice: InvoiceSuggestion
+  allocatedAmount: number
+  isFullyPaid: boolean // Whether invoice is fully paid by this allocation
+}
+
 interface Emits {
   (e: 'update:modelValue', value: boolean): void
   (e: 'confirm', invoice: InvoiceSuggestion, amount: number): void
+  (e: 'confirm-multiple', links: LinkAllocation[]): void
   (e: 'cancel'): void
 }
 
@@ -33,9 +42,10 @@ const emit = defineEmits<Emits>()
 // STATE
 // =============================================
 
-const selectedInvoice = ref<InvoiceSuggestion | null>(null)
-const linkAmount = ref(0)
 const searchQuery = ref('')
+
+// Allocation tracking - which invoices have been allocated and how much
+const allocations = ref<LinkAllocation[]>([])
 
 // =============================================
 // COMPUTED
@@ -57,36 +67,33 @@ const filteredSuggestions = computed(() => {
   )
 })
 
-// Maximum amount that can be linked - minimum of:
-// 1. Available from expense (expense.amount - alreadyUsedAmount)
-// 2. Unpaid amount on the selected invoice
-const maxLinkAmount = computed(() => {
-  if (!selectedInvoice.value) return props.availableAmount
-  return Math.min(props.availableAmount, selectedInvoice.value.unpaidAmount)
+// Remaining amount to allocate
+const remainingAmount = computed(() => {
+  const totalAllocated = allocations.value.reduce((sum, a) => sum + a.allocatedAmount, 0)
+  return props.availableAmount - totalAllocated
 })
 
-const amountDifference = computed(() => {
-  if (!selectedInvoice.value || !props.expense) return 0
-  return linkAmount.value - props.availableAmount
+// Total allocated amount
+const totalAllocated = computed(() => {
+  return allocations.value.reduce((sum, a) => sum + a.allocatedAmount, 0)
 })
 
+// Can confirm if at least one invoice is allocated
 const canConfirm = computed(() => {
-  return (
-    selectedInvoice.value !== null &&
-    linkAmount.value > 0 &&
-    linkAmount.value <= maxLinkAmount.value
-  )
+  return allocations.value.length > 0 && allocations.value.some(a => a.allocatedAmount > 0)
 })
 
-const amountError = computed(() => {
-  if (!selectedInvoice.value) return ''
-  if (linkAmount.value > props.availableAmount) {
-    return `Exceeds available amount (${formatIDR(props.availableAmount)})`
-  }
-  if (linkAmount.value > selectedInvoice.value.unpaidAmount) {
-    return `Exceeds invoice unpaid amount (${formatIDR(selectedInvoice.value.unpaidAmount)})`
-  }
-  return ''
+// Invoices with allocation info for display
+const invoicesWithAllocation = computed(() => {
+  return filteredSuggestions.value.map(inv => {
+    const allocation = allocations.value.find(a => a.invoice.id === inv.id)
+    return {
+      ...inv,
+      allocatedAmount: allocation?.allocatedAmount || 0,
+      isFullyPaid: allocation?.isFullyPaid || false,
+      isAllocated: (allocation?.allocatedAmount || 0) > 0
+    }
+  })
 })
 
 // =============================================
@@ -98,31 +105,17 @@ watch(
   () => props.expense,
   newExpense => {
     if (newExpense) {
-      // Default to available amount (not full expense amount)
-      linkAmount.value = props.availableAmount
-      selectedInvoice.value = null
+      allocations.value = []
       searchQuery.value = ''
     }
   }
 )
 
-// Update linkAmount when availableAmount changes
-watch(
-  () => props.availableAmount,
-  newAmount => {
-    if (newAmount > 0) {
-      linkAmount.value = newAmount
-    }
-  }
-)
-
-// Auto-select if only one suggestion with high score
+// Reset allocations when suggestions change
 watch(
   () => props.suggestions,
-  suggestions => {
-    if (suggestions.length === 1 && suggestions[0].matchScore >= 80) {
-      selectedInvoice.value = suggestions[0]
-    }
+  () => {
+    allocations.value = []
   }
 )
 
@@ -130,15 +123,81 @@ watch(
 // METHODS
 // =============================================
 
-function selectInvoice(invoice: InvoiceSuggestion) {
-  selectedInvoice.value = invoice
-  // Suggest the minimum of available amount and invoice unpaid amount
-  linkAmount.value = Math.min(props.availableAmount, invoice.unpaidAmount)
+/**
+ * Allocate payment amount to a specific invoice
+ * User clicks on an invoice to allocate funds sequentially
+ */
+function allocateToInvoice(invoice: InvoiceSuggestion) {
+  const existingIndex = allocations.value.findIndex(a => a.invoice.id === invoice.id)
+
+  // If already allocated, remove allocation (toggle off)
+  if (existingIndex >= 0) {
+    allocations.value.splice(existingIndex, 1)
+    return
+  }
+
+  // Can't add new allocation if no remaining amount
+  if (remainingAmount.value <= 0) return
+
+  // Allocate as much as possible (minimum of remaining amount and invoice unpaid)
+  const amountToAllocate = Math.min(remainingAmount.value, invoice.unpaidAmount)
+  const isFullyPaid = amountToAllocate >= invoice.unpaidAmount
+
+  allocations.value.push({
+    invoice,
+    allocatedAmount: amountToAllocate,
+    isFullyPaid
+  })
+}
+
+/**
+ * Clear all allocations
+ */
+function clearAllocations() {
+  allocations.value = []
+}
+
+/**
+ * Auto-allocate to all invoices in order (by match score, then date)
+ */
+function autoAllocateAll() {
+  allocations.value = []
+  let remaining = props.availableAmount
+
+  // Sort by match score (highest first), then by date (oldest first for FIFO)
+  const sortedInvoices = [...props.suggestions].sort((a, b) => {
+    if (b.matchScore !== a.matchScore) {
+      return b.matchScore - a.matchScore
+    }
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  })
+
+  for (const invoice of sortedInvoices) {
+    if (remaining <= 0) break
+
+    const amountToAllocate = Math.min(remaining, invoice.unpaidAmount)
+
+    allocations.value.push({
+      invoice,
+      allocatedAmount: amountToAllocate,
+      isFullyPaid: amountToAllocate >= invoice.unpaidAmount
+    })
+
+    remaining -= amountToAllocate
+  }
 }
 
 function handleConfirm() {
-  if (!selectedInvoice.value) return
-  emit('confirm', selectedInvoice.value, linkAmount.value)
+  if (!canConfirm.value) return
+
+  // If only one allocation, use legacy single-invoice emit for backwards compatibility
+  if (allocations.value.length === 1) {
+    const alloc = allocations.value[0]
+    emit('confirm', alloc.invoice, alloc.allocatedAmount)
+  } else {
+    // Multiple allocations - use new multi-invoice emit
+    emit('confirm-multiple', allocations.value)
+  }
 }
 
 function handleCancel() {
@@ -158,11 +217,11 @@ function getMatchScoreColor(score: number): string {
 </script>
 
 <template>
-  <v-dialog v-model="isOpen" max-width="700" persistent>
+  <v-dialog v-model="isOpen" max-width="700" persistent scrollable>
     <v-card v-if="expense">
       <v-card-title class="d-flex align-center">
         <v-icon start color="primary">mdi-link-variant</v-icon>
-        Link Expense to Invoice
+        Link Expense to Invoice(s)
       </v-card-title>
 
       <v-divider />
@@ -185,6 +244,33 @@ function getMatchScoreColor(score: number): string {
                 Available to link: {{ formatIDR(availableAmount) }}
               </div>
             </div>
+          </div>
+        </v-alert>
+
+        <!-- Allocation Summary -->
+        <v-alert type="info" variant="tonal" class="mb-4">
+          <div class="d-flex justify-space-between align-center">
+            <div>
+              <v-icon start size="small">mdi-cursor-pointer</v-icon>
+              Click on invoices below to allocate funds
+            </div>
+            <div class="d-flex gap-2">
+              <v-btn size="x-small" variant="outlined" @click="autoAllocateAll">
+                <v-icon start size="small">mdi-auto-fix</v-icon>
+                Auto (Best Match)
+              </v-btn>
+              <v-btn size="x-small" variant="text" @click="clearAllocations">Clear</v-btn>
+            </div>
+          </div>
+          <v-divider class="my-2" />
+          <div class="d-flex justify-space-between">
+            <span>Remaining to allocate:</span>
+            <span
+              :class="remainingAmount > 0 ? 'text-warning' : 'text-success'"
+              class="font-weight-bold"
+            >
+              {{ formatIDR(remainingAmount) }}
+            </span>
           </div>
         </v-alert>
 
@@ -211,29 +297,31 @@ function getMatchScoreColor(score: number): string {
           No matching invoices found for this supplier.
         </v-alert>
 
-        <!-- Invoice Suggestions -->
+        <!-- Invoice Suggestions with Allocation -->
         <template v-else>
           <div class="text-subtitle-2 mb-2">
-            Select Invoice ({{ filteredSuggestions.length }} found)
+            Select Invoice(s) ({{ filteredSuggestions.length }} found)
           </div>
 
-          <v-list lines="two" class="suggestions-list border rounded mb-4" max-height="300">
+          <v-list lines="two" class="suggestions-list border rounded mb-4">
             <v-list-item
-              v-for="invoice in filteredSuggestions"
+              v-for="invoice in invoicesWithAllocation"
               :key="invoice.id"
-              :active="selectedInvoice?.id === invoice.id"
-              class="suggestion-item"
-              @click="selectInvoice(invoice)"
+              class="suggestion-item mb-2"
+              :class="{
+                'allocated-item': invoice.isAllocated,
+                'fully-paid-item': invoice.isFullyPaid
+              }"
+              @click="allocateToInvoice(invoice)"
             >
               <template #prepend>
-                <v-avatar
-                  :color="selectedInvoice?.id === invoice.id ? 'primary' : 'grey-lighten-2'"
-                  size="40"
-                >
-                  <v-icon :color="selectedInvoice?.id === invoice.id ? 'white' : 'grey'">
-                    {{ selectedInvoice?.id === invoice.id ? 'mdi-check' : 'mdi-file-document' }}
-                  </v-icon>
-                </v-avatar>
+                <v-checkbox
+                  :model-value="invoice.isAllocated"
+                  hide-details
+                  readonly
+                  density="compact"
+                  class="mr-2"
+                />
               </template>
 
               <v-list-item-title class="font-weight-medium">
@@ -251,7 +339,7 @@ function getMatchScoreColor(score: number): string {
               <v-list-item-subtitle>
                 <div class="d-flex flex-wrap gap-2 mt-1">
                   <span>{{ invoice.supplierName }}</span>
-                  <v-chip size="x-small" color="success" variant="tonal">
+                  <v-chip size="x-small" color="warning" variant="tonal">
                     Unpaid: {{ formatIDR(invoice.unpaidAmount) }}
                   </v-chip>
                   <v-chip size="x-small" variant="outlined">
@@ -267,62 +355,36 @@ function getMatchScoreColor(score: number): string {
               </v-list-item-subtitle>
 
               <template #append>
-                <v-chip
-                  :color="invoice.status === 'completed' ? 'success' : 'warning'"
-                  size="small"
-                  variant="tonal"
-                >
-                  {{ invoice.status }}
-                </v-chip>
+                <div v-if="invoice.isAllocated" class="text-right">
+                  <div class="text-caption text-grey">Allocated:</div>
+                  <div
+                    class="font-weight-bold"
+                    :class="invoice.isFullyPaid ? 'text-success' : 'text-warning'"
+                  >
+                    {{ formatIDR(invoice.allocatedAmount) }}
+                  </div>
+                  <v-chip v-if="invoice.isFullyPaid" size="x-small" color="success" variant="flat">
+                    Full
+                  </v-chip>
+                  <v-chip v-else size="x-small" color="warning" variant="flat">Partial</v-chip>
+                </div>
+                <div v-else class="text-caption text-grey">Click to allocate</div>
               </template>
             </v-list-item>
           </v-list>
         </template>
 
-        <!-- Link Amount -->
-        <div v-if="selectedInvoice" class="link-amount-section pa-4 bg-grey-lighten-4 rounded">
-          <div class="text-subtitle-2 mb-3">Link Amount</div>
-
-          <v-text-field
-            v-model.number="linkAmount"
-            label="Amount to link"
-            type="number"
-            variant="outlined"
-            density="compact"
-            prefix="Rp"
-            :error-messages="amountError"
-            :hint="`Max: ${formatIDR(maxLinkAmount)}`"
-            persistent-hint
-          />
-
-          <!-- Amount Breakdown -->
-          <div class="d-flex justify-space-between text-body-2 mt-3">
-            <span>Available from expense:</span>
-            <span class="text-success">{{ formatIDR(availableAmount) }}</span>
-          </div>
-          <div class="d-flex justify-space-between text-body-2">
-            <span>Invoice unpaid:</span>
-            <span class="text-warning">{{ formatIDR(selectedInvoice.unpaidAmount) }}</span>
-          </div>
-          <v-divider class="my-2" />
-          <div class="d-flex justify-space-between font-weight-medium">
-            <span>Maximum linkable:</span>
-            <span class="text-primary">{{ formatIDR(maxLinkAmount) }}</span>
-          </div>
-
-          <!-- Info about remaining -->
-          <v-alert
-            v-if="linkAmount < availableAmount"
-            type="info"
-            variant="tonal"
-            density="compact"
-            class="mt-3"
-          >
-            <v-icon start size="small">mdi-information</v-icon>
-            Remaining {{ formatIDR(availableAmount - linkAmount) }} can be linked to another
-            invoice.
-          </v-alert>
-        </div>
+        <!-- Info about remaining -->
+        <v-alert
+          v-if="allocations.length > 0 && remainingAmount > 0"
+          type="info"
+          variant="tonal"
+          density="compact"
+          class="mt-3"
+        >
+          <v-icon start size="small">mdi-information</v-icon>
+          Remaining {{ formatIDR(remainingAmount) }} will stay unlinked. You can link it later.
+        </v-alert>
       </v-card-text>
 
       <v-divider />
@@ -332,6 +394,13 @@ function getMatchScoreColor(score: number): string {
 
         <v-spacer />
 
+        <div class="text-right mr-4">
+          <div class="text-caption text-grey">Total Allocated:</div>
+          <div class="text-h6 font-weight-bold text-primary">
+            {{ formatIDR(totalAllocated) }}
+          </div>
+        </div>
+
         <v-btn
           color="primary"
           variant="flat"
@@ -340,7 +409,7 @@ function getMatchScoreColor(score: number): string {
           @click="handleConfirm"
         >
           <v-icon start>mdi-link-variant</v-icon>
-          Link Expense
+          Link {{ allocations.length }} Invoice{{ allocations.length !== 1 ? 's' : '' }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -349,6 +418,7 @@ function getMatchScoreColor(score: number): string {
 
 <style scoped lang="scss">
 .suggestions-list {
+  max-height: 350px;
   overflow-y: auto;
 }
 
@@ -359,9 +429,15 @@ function getMatchScoreColor(score: number): string {
   &:hover {
     background-color: rgba(var(--v-theme-primary), 0.04);
   }
-}
 
-.link-amount-section {
-  border: 1px solid rgba(var(--v-border-color), 0.12);
+  &.allocated-item {
+    background-color: rgba(var(--v-theme-primary), 0.08);
+    border-color: rgb(var(--v-theme-primary)) !important;
+  }
+
+  &.fully-paid-item {
+    background-color: rgba(var(--v-theme-success), 0.08);
+    border-color: rgb(var(--v-theme-success)) !important;
+  }
 }
 </style>

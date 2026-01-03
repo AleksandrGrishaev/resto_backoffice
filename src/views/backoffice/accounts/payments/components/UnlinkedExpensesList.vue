@@ -1,15 +1,18 @@
 <script setup lang="ts">
 // src/views/backoffice/accounts/payments/components/UnlinkedExpensesList.vue
 // Sprint 4: Unlinked Expenses List Component
+// Sprint 7: Added account filter, source display, and backoffice payment support
 
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { ShiftExpenseOperation } from '@/stores/pos/shifts/types'
 import type { PendingPayment } from '@/stores/account/types'
+import type { ExpenseWithSource } from '@/stores/pos/shifts/composables/useExpenseLinking'
+import { useAccountStore } from '@/stores/account'
 import { formatIDR } from '@/utils/currency'
 import { TimeUtils } from '@/utils'
 
 interface Props {
-  expenses: ShiftExpenseOperation[]
+  expenses: (ShiftExpenseOperation | ExpenseWithSource)[]
   payments: PendingPayment[] // For showing available amounts
   loading?: boolean
 }
@@ -25,6 +28,13 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<Emits>()
 
+// Account store for getting account names
+const accountStore = useAccountStore()
+
+// Filter state
+const accountFilter = ref<string | null>(null)
+const sourceFilter = ref<string | null>(null) // 'pos' | 'backoffice' | null
+
 // =============================================
 // METHODS
 // =============================================
@@ -37,7 +47,7 @@ function handleLink(expense: ShiftExpenseOperation) {
  * Get available amount for an expense
  * If expense has relatedPaymentId, check the payment's usedAmount
  */
-function getAvailableAmount(expense: ShiftExpenseOperation): number {
+function getAvailableAmount(expense: ShiftExpenseOperation | ExpenseWithSource): number {
   if (!expense.relatedPaymentId) {
     return expense.amount
   }
@@ -51,21 +61,71 @@ function getAvailableAmount(expense: ShiftExpenseOperation): number {
 /**
  * Check if expense is partially linked
  */
-function isPartiallyLinked(expense: ShiftExpenseOperation): boolean {
+function isPartiallyLinked(expense: ShiftExpenseOperation | ExpenseWithSource): boolean {
   const available = getAvailableAmount(expense)
   return available > 0 && available < expense.amount
+}
+
+/**
+ * Get account name from ID
+ */
+function getAccountName(accountId: string | undefined): string {
+  if (!accountId) return 'Unknown'
+  const account = accountStore.getAccountById(accountId)
+  return account?.name || 'Unknown'
+}
+
+/**
+ * Get source type for display
+ */
+function getSourceType(expense: ShiftExpenseOperation | ExpenseWithSource): 'pos' | 'backoffice' {
+  return (expense as ExpenseWithSource).sourceType || (expense.shiftId ? 'pos' : 'backoffice')
 }
 
 // =============================================
 // COMPUTED (after methods so they can use getAvailableAmount)
 // =============================================
 
-const sortedExpenses = computed(() => {
-  return [...props.expenses].sort((a, b) => {
-    // Sort by date descending
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  })
+// Get unique accounts from expenses for filter
+const accountOptions = computed(() => {
+  const accountIds = new Set(
+    props.expenses.map(e => e.relatedAccountId).filter((id): id is string => !!id)
+  )
+  return Array.from(accountIds).map(id => ({
+    id,
+    name: getAccountName(id)
+  }))
 })
+
+// Source type options for filter
+const sourceOptions = [
+  { value: null, title: 'All Sources' },
+  { value: 'pos', title: 'POS (Cash Register)' },
+  { value: 'backoffice', title: 'Backoffice' }
+]
+
+// Filtered and sorted expenses
+const filteredExpenses = computed(() => {
+  let result = [...props.expenses]
+
+  // Filter by account
+  if (accountFilter.value) {
+    result = result.filter(exp => exp.relatedAccountId === accountFilter.value)
+  }
+
+  // Filter by source type
+  if (sourceFilter.value) {
+    result = result.filter(exp => getSourceType(exp) === sourceFilter.value)
+  }
+
+  // Sort by date descending
+  result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+  return result
+})
+
+// Legacy alias for template compatibility
+const sortedExpenses = filteredExpenses
 
 // Total available amount (not total expense amount)
 const totalAvailableAmount = computed(() => {
@@ -105,12 +165,46 @@ function formatDate(dateStr: string): string {
 
     <!-- Expenses List -->
     <template v-else>
+      <!-- Filters Row -->
+      <v-row class="mb-4" dense>
+        <v-col cols="12" sm="6" md="4">
+          <v-select
+            v-model="accountFilter"
+            :items="[{ id: null, name: 'All Accounts' }, ...accountOptions]"
+            item-title="name"
+            item-value="id"
+            label="Filter by Account"
+            density="compact"
+            variant="outlined"
+            hide-details
+            prepend-inner-icon="mdi-wallet"
+            clearable
+          />
+        </v-col>
+        <v-col cols="12" sm="6" md="4">
+          <v-select
+            v-model="sourceFilter"
+            :items="sourceOptions"
+            item-title="title"
+            item-value="value"
+            label="Filter by Source"
+            density="compact"
+            variant="outlined"
+            hide-details
+            prepend-inner-icon="mdi-source-branch"
+          />
+        </v-col>
+      </v-row>
+
       <!-- Summary -->
       <v-alert type="warning" variant="tonal" class="mb-4">
         <div class="d-flex align-center justify-space-between">
           <span>
             <v-icon start size="small">mdi-alert</v-icon>
-            {{ expenses.length }} expense(s) need to be linked
+            {{ filteredExpenses.length }} expense(s) need to be linked
+            <span v-if="filteredExpenses.length !== expenses.length" class="text-caption">
+              ({{ expenses.length }} total)
+            </span>
           </span>
           <span class="font-weight-bold">Total: {{ formatIDR(totalAvailableAmount) }}</span>
         </div>
@@ -149,9 +243,35 @@ function formatDate(dateStr: string): string {
                 {{ formatIDR(expense.amount) }}
               </v-chip>
 
-              <!-- Shift Info -->
-              <v-chip size="x-small" variant="outlined">
-                <v-icon start size="x-small">mdi-cash-register</v-icon>
+              <!-- Source Type Badge (POS vs Backoffice) -->
+              <v-chip
+                size="x-small"
+                :color="getSourceType(expense) === 'backoffice' ? 'info' : 'warning'"
+                variant="flat"
+              >
+                <v-icon start size="x-small">
+                  {{
+                    getSourceType(expense) === 'backoffice'
+                      ? 'mdi-desktop-mac'
+                      : 'mdi-cash-register'
+                  }}
+                </v-icon>
+                {{ getSourceType(expense) === 'backoffice' ? 'Backoffice' : 'POS' }}
+              </v-chip>
+
+              <!-- Source Account -->
+              <v-chip v-if="expense.relatedAccountId" size="x-small" color="purple" variant="tonal">
+                <v-icon start size="x-small">mdi-wallet</v-icon>
+                {{ getAccountName(expense.relatedAccountId) }}
+              </v-chip>
+
+              <!-- Shift Info (only for POS) -->
+              <v-chip
+                v-if="expense.shiftId && getSourceType(expense) === 'pos'"
+                size="x-small"
+                variant="outlined"
+              >
+                <v-icon start size="x-small">mdi-clock-outline</v-icon>
                 Shift: {{ expense.shiftId.slice(0, 8) }}...
               </v-chip>
 

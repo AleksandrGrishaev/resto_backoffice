@@ -1373,7 +1373,15 @@ export const useShiftsStore = defineStore('posShifts', () => {
       }
     }
 
-    DebugUtils.warn(MODULE_NAME, 'Expense not found for paymentId', { paymentId })
+    // This is expected for backoffice payments which don't have a shift expense
+    // Only log at debug level to avoid console noise
+    DebugUtils.debug(
+      MODULE_NAME,
+      'Expense not found for paymentId (expected for backoffice payments)',
+      {
+        paymentId
+      }
+    )
   }
 
   /**

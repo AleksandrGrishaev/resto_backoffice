@@ -186,16 +186,31 @@ const { form, loading, formState, formData, isFormValid, handleSubmit } = useDia
   initialData: initialData.value,
   onSubmit: async data => {
     try {
-      await accountStore.createOperation({
+      const operationData = {
         ...data,
         counteragentId: data.counteragentId || undefined,
         counteragentName: data.counteragentName || undefined,
         performedBy: {
-          type: 'user',
+          type: 'user' as const,
           id: authStore.userId,
           name: authStore.userName
         }
-      })
+      }
+
+      // Use unified method for supplier expenses to create PendingPayment for linking
+      const isSupplierExpense =
+        data.type === 'expense' &&
+        data.expenseCategory?.category === 'supplier' &&
+        data.counteragentId
+
+      if (isSupplierExpense) {
+        // Creates Transaction + PendingPayment for tracking in Unlinked tab
+        await accountStore.createSupplierExpenseWithPayment(operationData)
+      } else {
+        // Standard operation (income, non-supplier expense, etc.)
+        await accountStore.createOperation(operationData)
+      }
+
       emit('success')
     } catch (error) {
       if (error instanceof Error) {

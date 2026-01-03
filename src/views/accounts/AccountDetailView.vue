@@ -194,10 +194,18 @@
                 <v-chip
                   v-if="transaction.expenseCategory"
                   size="small"
-                  color="primary"
-                  variant="flat"
+                  :color="getCategoryChipColor(transaction)"
+                  :variant="getCategoryChipVariant(transaction)"
                 >
                   {{ getCategoryLabel(transaction.expenseCategory) }}
+                  <!-- Allocation indicator for supplier payments -->
+                  <v-icon
+                    v-if="isSupplierTransaction(transaction) && !isFullyAllocated(transaction)"
+                    size="x-small"
+                    class="ml-1"
+                  >
+                    mdi-alert-circle
+                  </v-icon>
                 </v-chip>
                 <span v-else class="text-grey">—</span>
               </td>
@@ -293,9 +301,14 @@ const accountStore = useAccountStore()
 const paymentSettingsStore = usePaymentSettingsStore()
 
 // Ensure payment methods are loaded for POS cash register check
+// Also load pending payments for allocation status display
 onMounted(async () => {
   if (paymentSettingsStore.paymentMethods.length === 0) {
     await paymentSettingsStore.fetchPaymentMethods()
+  }
+  // Load payments for allocation status in supplier payment chips
+  if (accountStore.allPayments.length === 0) {
+    await accountStore.fetchPayments()
   }
 })
 
@@ -438,6 +451,74 @@ function formatTransactionDate(date: string | Date): string {
 function getCategoryLabel(expenseCategory: ExpenseCategory): string {
   if (!expenseCategory) return 'No category'
   return accountStore.getCategoryLabel(expenseCategory.category)
+}
+
+// =============================================
+// SUPPLIER PAYMENT ALLOCATION HELPERS
+// =============================================
+
+/**
+ * Check if transaction is a supplier payment
+ */
+function isSupplierTransaction(transaction: Transaction): boolean {
+  return transaction.expenseCategory?.category === 'supplier'
+}
+
+/**
+ * Get related payment for a transaction
+ */
+function getRelatedPayment(transaction: Transaction) {
+  if (!transaction.relatedPaymentId) return null
+  return accountStore.allPayments.find(p => p.id === transaction.relatedPaymentId) || null
+}
+
+/**
+ * Check if supplier payment is fully allocated
+ */
+function isFullyAllocated(transaction: Transaction): boolean {
+  if (!isSupplierTransaction(transaction)) return true
+
+  const payment = getRelatedPayment(transaction)
+  if (!payment) return true // No payment data - assume OK
+
+  const totalLinked =
+    payment.linkedOrders?.filter(o => o.isActive).reduce((sum, o) => sum + o.linkedAmount, 0) || 0
+
+  return totalLinked >= payment.amount
+}
+
+/**
+ * Get chip color based on allocation status
+ */
+function getCategoryChipColor(transaction: Transaction): string {
+  if (!isSupplierTransaction(transaction)) return 'primary'
+
+  const payment = getRelatedPayment(transaction)
+  if (!payment) return 'primary'
+
+  const totalLinked =
+    payment.linkedOrders?.filter(o => o.isActive).reduce((sum, o) => sum + o.linkedAmount, 0) || 0
+
+  if (totalLinked === 0) return 'warning' // Not allocated - warning (orange)
+  if (totalLinked >= payment.amount) return 'primary' // Fully allocated - normal
+  return 'orange' // Partially allocated - orange
+}
+
+/**
+ * Get chip variant based on allocation status
+ */
+function getCategoryChipVariant(transaction: Transaction): 'flat' | 'outlined' {
+  if (!isSupplierTransaction(transaction)) return 'flat'
+
+  const payment = getRelatedPayment(transaction)
+  if (!payment) return 'flat'
+
+  const totalLinked =
+    payment.linkedOrders?.filter(o => o.isActive).reduce((sum, o) => sum + o.linkedAmount, 0) || 0
+
+  // Not allocated or partially - use flat to make it more visible
+  if (totalLinked < payment.amount) return 'flat'
+  return 'flat'
 }
 
 function getTransactionColor(type: OperationType): string {

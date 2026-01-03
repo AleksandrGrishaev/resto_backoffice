@@ -1,13 +1,59 @@
 // src/stores/pos/shifts/composables/useExpenseLinking.ts
 // Sprint 4: Expense Linking Composable for Backoffice
+// Sprint 7: Extended to include Backoffice payments
 
 import { ref, computed } from 'vue'
 import { supabase } from '@/supabase'
 import { useShiftsStore } from '../shiftsStore'
+import { useAccountStore } from '@/stores/account'
 import type { ShiftExpenseOperation, ExpenseLinkingStatus } from '../types'
+import type { PendingPayment } from '@/stores/account/types'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'useExpenseLinking'
+
+/**
+ * Map PendingPayment to ShiftExpenseOperation format for unified display
+ * Backoffice payments get sourceType='backoffice' to distinguish from POS
+ */
+function mapPaymentToExpenseFormat(payment: PendingPayment): ShiftExpenseOperation & {
+  sourceType: 'backoffice' | 'pos'
+} {
+  // Calculate linking status based on linkedOrders
+  const totalLinked =
+    payment.linkedOrders?.filter(o => o.isActive).reduce((sum, o) => sum + o.linkedAmount, 0) || 0
+
+  let linkingStatus: ExpenseLinkingStatus = 'unlinked'
+  if (totalLinked >= payment.amount) {
+    linkingStatus = 'linked'
+  } else if (totalLinked > 0) {
+    linkingStatus = 'partially_linked'
+  }
+
+  return {
+    id: payment.id,
+    shiftId: '', // Empty for backoffice payments
+    type: 'account_payment',
+    amount: payment.amount,
+    description: payment.description,
+    category: payment.category,
+    counteragentId: payment.counteragentId,
+    counteragentName: payment.counteragentName,
+    invoiceNumber: payment.invoiceNumber,
+    status: 'completed',
+    performedBy: payment.createdBy,
+    relatedPaymentId: payment.id, // Self-reference for linking
+    relatedAccountId: payment.assignedToAccount || '',
+    linkingStatus,
+    linkedAmount: totalLinked,
+    unlinkedAmount: payment.amount - totalLinked,
+    syncStatus: 'synced',
+    createdAt: payment.createdAt,
+    updatedAt: payment.updatedAt,
+    // Source tracking for UI distinction
+    sourceType: 'backoffice'
+  }
+}
 
 export interface InvoiceSuggestion {
   id: string
@@ -43,8 +89,14 @@ export interface ExpenseLinkRecord {
   unlinkedReason?: string
 }
 
+// Extended type for expenses with source tracking
+export type ExpenseWithSource = ShiftExpenseOperation & {
+  sourceType?: 'backoffice' | 'pos'
+}
+
 export function useExpenseLinking() {
   const shiftsStore = useShiftsStore()
+  const accountStore = useAccountStore()
 
   // =============================================
   // STATE
@@ -58,16 +110,82 @@ export function useExpenseLinking() {
   // COMPUTED
   // =============================================
 
-  // Unlinked expenses includes both 'unlinked' AND 'partially_linked'
-  // (partially_linked still have available amount that needs to be linked)
-  const unlinkedExpenses = computed(() => {
-    const unlinked = shiftsStore.getExpensesByLinkingStatus('unlinked')
-    const partiallyLinked = shiftsStore.getExpensesByLinkingStatus('partially_linked')
-    return [...unlinked, ...partiallyLinked]
+  /**
+   * Get backoffice supplier payments that are unlinked or partially linked
+   * These are payments created via createSupplierExpenseWithPayment() or complete_receipt_full RPC
+   */
+  const backofficeUnlinkedPayments = computed(() => {
+    return accountStore.allPayments
+      .filter(p => {
+        // Only completed supplier payments
+        if (p.status !== 'completed' || p.category !== 'supplier') {
+          return false
+        }
+
+        // Calculate how much is already linked
+        const totalLinked =
+          p.linkedOrders?.filter(o => o.isActive).reduce((sum, o) => sum + o.linkedAmount, 0) || 0
+
+        // Include if not fully linked
+        return totalLinked < p.amount
+      })
+      .map(p => mapPaymentToExpenseFormat(p))
   })
 
-  const linkedExpenses = computed(() => {
-    return shiftsStore.getExpensesByLinkingStatus('linked')
+  // Unlinked expenses includes:
+  // 1. POS shift expenses with 'unlinked' or 'partially_linked' status
+  // 2. Backoffice supplier payments that are not fully linked
+  const unlinkedExpenses = computed((): ExpenseWithSource[] => {
+    // POS shift expenses
+    const shiftUnlinked = shiftsStore
+      .getExpensesByLinkingStatus('unlinked')
+      .map(e => ({ ...e, sourceType: 'pos' as const }))
+    const shiftPartiallyLinked = shiftsStore
+      .getExpensesByLinkingStatus('partially_linked')
+      .map(e => ({ ...e, sourceType: 'pos' as const }))
+
+    // Backoffice payments
+    const backofficePayments = backofficeUnlinkedPayments.value
+
+    // Combine and sort by date (newest first)
+    const combined = [...shiftUnlinked, ...shiftPartiallyLinked, ...backofficePayments]
+    combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+    return combined
+  })
+
+  /**
+   * Get backoffice supplier payments that are fully linked
+   */
+  const backofficeLinkedPayments = computed(() => {
+    return accountStore.allPayments
+      .filter(p => {
+        // Only completed supplier payments
+        if (p.status !== 'completed' || p.category !== 'supplier') {
+          return false
+        }
+
+        // Calculate how much is already linked
+        const totalLinked =
+          p.linkedOrders?.filter(o => o.isActive).reduce((sum, o) => sum + o.linkedAmount, 0) || 0
+
+        // Include only if fully linked
+        return totalLinked >= p.amount && totalLinked > 0
+      })
+      .map(p => mapPaymentToExpenseFormat(p))
+  })
+
+  // Linked expenses from both POS and Backoffice
+  const linkedExpenses = computed((): ExpenseWithSource[] => {
+    const shiftLinked = shiftsStore
+      .getExpensesByLinkingStatus('linked')
+      .map(e => ({ ...e, sourceType: 'pos' as const }))
+    const backofficeLinked = backofficeLinkedPayments.value
+
+    const combined = [...shiftLinked, ...backofficeLinked]
+    combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+    return combined
   })
 
   const partiallyLinkedExpenses = computed(() => {
@@ -455,6 +573,59 @@ export function useExpenseLinking() {
   }
 
   /**
+   * Link expense to multiple invoices
+   * Processes each link sequentially
+   */
+  async function linkExpenseToMultipleInvoices(
+    expense: ShiftExpenseOperation,
+    links: Array<{ invoice: InvoiceSuggestion; allocatedAmount: number }>,
+    performedBy: { id: string; name: string }
+  ): Promise<{ success: boolean; error?: string; linkedCount: number }> {
+    try {
+      isLoading.value = true
+      error.value = null
+
+      let linkedCount = 0
+
+      for (const link of links) {
+        if (link.allocatedAmount <= 0) continue
+
+        const result = await linkExpenseToInvoice(
+          expense,
+          link.invoice,
+          link.allocatedAmount,
+          performedBy
+        )
+
+        if (result.success) {
+          linkedCount++
+        } else {
+          // Log error but continue with other links
+          DebugUtils.error(MODULE_NAME, 'Failed to link to invoice', {
+            invoiceId: link.invoice.id,
+            error: result.error
+          })
+        }
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Linked expense to multiple invoices', {
+        expenseId: expense.id,
+        totalLinks: links.length,
+        successfulLinks: linkedCount
+      })
+
+      return { success: linkedCount > 0, linkedCount }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to link to multiple invoices'
+      error.value = errorMsg
+      DebugUtils.error(MODULE_NAME, 'Failed to link to multiple invoices', { error: err })
+      return { success: false, error: errorMsg, linkedCount: 0 }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
    * Clear error
    */
   function clearError() {
@@ -477,6 +648,7 @@ export function useExpenseLinking() {
     getAvailableInvoices,
     getInvoiceSuggestions,
     linkExpenseToInvoice,
+    linkExpenseToMultipleInvoices,
     unlinkExpenseFromInvoice,
     clearError
   }

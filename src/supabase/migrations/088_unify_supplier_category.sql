@@ -1,23 +1,17 @@
--- RPC Function: complete_receipt_full
--- Purpose: Atomic receipt completion in single transaction
--- Performance: Replaces 45-60+ sequential API calls with 1 RPC call (20s → 1-2s)
--- Created: 2026-01-02
--- Migration: 085_complete_receipt_rpc.sql
+-- Migration: 088_unify_supplier_category
+-- Description: Unify 'supplier_debt' category to 'supplier' for consistency
+-- Date: 2026-01-03
+-- Issue: Two categories existed for the same purpose:
+--   - 'supplier' (used everywhere in app, manual payments, POS)
+--   - 'supplier_debt' (accidentally introduced in RPC complete_receipt_full)
 
--- PARAMETERS:
--- p_receipt_id: Receipt ID to complete
--- p_order_id: Related purchase order ID
--- p_delivery_date: Actual delivery timestamp
--- p_warehouse_id: Target warehouse
--- p_supplier_id: Supplier counteragent ID
--- p_supplier_name: Supplier name for payment record
--- p_total_amount: Total receipt amount
--- p_received_items: JSONB array of received items with structure:
---   [{ itemId, itemName, receivedQuantity, actualPrice, packageId, packageSize }]
+-- 1. MIGRATE EXISTING DATA: Change 'supplier_debt' to 'supplier'
+UPDATE pending_payments
+SET category = 'supplier',
+    updated_at = NOW()
+WHERE category = 'supplier_debt';
 
--- RETURNS:
--- JSONB: { success: boolean, convertedBatches, reconciledBatches, operationId, paymentId, error?, code? }
-
+-- 2. UPDATE RPC FUNCTION to use 'supplier' category
 CREATE OR REPLACE FUNCTION complete_receipt_full(
   p_receipt_id TEXT,
   p_order_id TEXT,
@@ -54,7 +48,6 @@ BEGIN
   END IF;
 
   -- 1. CONVERT TRANSIT BATCHES TO ACTIVE
-  -- Changes status of all batches from 'in_transit' to 'active'
   UPDATE storage_batches
   SET status = 'active',
       is_active = true,
@@ -65,7 +58,6 @@ BEGIN
   GET DIAGNOSTICS v_converted = ROW_COUNT;
 
   -- 2. UPDATE BATCH QUANTITIES/PRICES
-  -- Updates each batch with actual received quantities and prices
   FOR v_item IN SELECT * FROM jsonb_array_elements(p_received_items)
   LOOP
     UPDATE storage_batches
@@ -79,7 +71,6 @@ BEGIN
       AND item_id = v_item->>'itemId'
       AND status = 'active';
 
-    -- Build items array for storage_operation audit record
     v_items_array := v_items_array || jsonb_build_object(
       'itemId', v_item->>'itemId',
       'itemName', v_item->>'itemName',
@@ -89,7 +80,6 @@ BEGIN
   END LOOP;
 
   -- 3. RECONCILE NEGATIVE BATCHES
-  -- Marks negative batches as reconciled (they were created from shortages)
   UPDATE storage_batches
   SET reconciled_at = NOW(),
       is_active = false,
@@ -101,7 +91,6 @@ BEGIN
   GET DIAGNOSTICS v_reconciled = ROW_COUNT;
 
   -- 4. CREATE STORAGE OPERATION (audit trail)
-  -- Records the receipt operation for audit/accounting purposes
   v_operation_id := 'op_' || gen_random_uuid();
   INSERT INTO storage_operations (
     id, operation_type, document_number, operation_date, department,
@@ -112,8 +101,8 @@ BEGIN
   );
 
   -- 5. CREATE PENDING PAYMENT (debt to supplier)
-  -- Creates a payable record for the supplier
-  -- IMPORTANT: linked_orders is required for bill_status calculation (calculateBillStatus uses linkedOrders.linkedAmount)
+  -- IMPORTANT: Use 'supplier' category (unified with rest of app)
+  -- IMPORTANT: linked_orders is required for bill_status calculation
   v_payment_id := 'pp_' || gen_random_uuid();
   INSERT INTO pending_payments (
     id, counteragent_id, counteragent_name, amount, description,
@@ -133,7 +122,6 @@ BEGIN
   );
 
   -- 6. UPDATE RECEIPT STATUS
-  -- Marks receipt as completed and links to storage operation
   UPDATE supplierstore_receipts
   SET status = 'completed',
       storage_operation_id = v_operation_id,
@@ -141,14 +129,12 @@ BEGIN
   WHERE id = p_receipt_id;
 
   -- 7. UPDATE ORDER STATUS
-  -- Marks order as delivered
   UPDATE supplierstore_orders
   SET status = 'delivered',
       receipt_completed_at = NOW(),
       updated_at = NOW()
   WHERE id = p_order_id;
 
-  -- Return success with operation counts
   RETURN jsonb_build_object(
     'success', true,
     'convertedBatches', v_converted,
@@ -158,7 +144,6 @@ BEGIN
   );
 
 EXCEPTION WHEN OTHERS THEN
-  -- Automatic transaction rollback on any error
   RETURN jsonb_build_object(
     'success', false,
     'error', SQLERRM,
