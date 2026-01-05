@@ -1,11 +1,32 @@
 <!-- src/views/backoffice/alerts/components/AlertFilters.vue -->
 <!--
   Alert Filters Component
-  Provides category, severity, and status filters
+  Provides category, severity, status and view mode filters
 -->
 <template>
   <v-card flat class="alert-filters pa-3">
     <div class="d-flex flex-wrap gap-3 align-center">
+      <!-- View Mode Filter (Active/All) -->
+      <div class="filter-group">
+        <div class="filter-label text-caption text-medium-emphasis mb-1">View</div>
+        <v-btn-toggle
+          v-model="localViewMode"
+          density="compact"
+          divided
+          variant="outlined"
+          mandatory
+        >
+          <v-btn value="active" size="small" color="primary">
+            <v-icon icon="mdi-alert-circle" size="16" class="me-1" />
+            Pending
+          </v-btn>
+          <v-btn value="all" size="small">
+            <v-icon icon="mdi-history" size="16" class="me-1" />
+            All (7 days)
+          </v-btn>
+        </v-btn-toggle>
+      </div>
+
       <!-- Category Filter -->
       <div class="filter-group">
         <div class="filter-label text-caption text-medium-emphasis mb-1">Category</div>
@@ -35,8 +56,8 @@
         </v-btn-toggle>
       </div>
 
-      <!-- Status Filter -->
-      <div class="filter-group">
+      <!-- Status Filter (only visible in "all" mode) -->
+      <div v-if="localViewMode === 'all'" class="filter-group">
         <div class="filter-label text-caption text-medium-emphasis mb-1">Status</div>
         <v-btn-toggle v-model="localStatus" density="compact" divided variant="outlined">
           <v-btn value="" size="small">All</v-btn>
@@ -77,6 +98,12 @@ import {
 } from '@/stores/alerts'
 
 // =============================================
+// TYPES
+// =============================================
+
+export type ViewMode = 'active' | 'all'
+
+// =============================================
 // PROPS & EMITS
 // =============================================
 
@@ -84,12 +111,14 @@ const props = defineProps<{
   category?: AlertCategory | ''
   severity?: AlertSeverity | ''
   status?: AlertStatus | ''
+  viewMode?: ViewMode
 }>()
 
 const emit = defineEmits<{
   'update:category': [value: AlertCategory | undefined]
   'update:severity': [value: AlertSeverity | undefined]
   'update:status': [value: AlertStatus | undefined]
+  'update:viewMode': [value: ViewMode]
 }>()
 
 // =============================================
@@ -104,13 +133,18 @@ const statuses: AlertStatus[] = ['new', 'viewed', 'acknowledged', 'resolved']
 const localCategory = ref<AlertCategory | ''>(props.category || '')
 const localSeverity = ref<AlertSeverity | ''>(props.severity || '')
 const localStatus = ref<AlertStatus | ''>(props.status || '')
+const localViewMode = ref<ViewMode>(props.viewMode || 'active')
 
 // =============================================
 // COMPUTED
 // =============================================
 
 const hasActiveFilters = computed(() => {
-  return localCategory.value || localSeverity.value || localStatus.value
+  return (
+    localCategory.value ||
+    localSeverity.value ||
+    (localViewMode.value === 'all' && localStatus.value)
+  )
 })
 
 // =============================================
@@ -127,6 +161,14 @@ watch(localSeverity, val => {
 
 watch(localStatus, val => {
   emit('update:status', val || undefined)
+})
+
+watch(localViewMode, val => {
+  emit('update:viewMode', val)
+  // Reset status filter when switching to active mode
+  if (val === 'active') {
+    localStatus.value = ''
+  }
 })
 
 // Sync props to local state
@@ -148,6 +190,12 @@ watch(
     localStatus.value = val || ''
   }
 )
+watch(
+  () => props.viewMode,
+  val => {
+    if (val) localViewMode.value = val
+  }
+)
 
 // =============================================
 // METHODS
@@ -157,6 +205,7 @@ function clearFilters() {
   localCategory.value = ''
   localSeverity.value = ''
   localStatus.value = ''
+  // Keep viewMode, only reset other filters
 }
 </script>
 
