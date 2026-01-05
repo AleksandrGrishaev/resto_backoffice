@@ -40,7 +40,8 @@
             <v-col cols="12" md="4">
               <v-text-field
                 v-model="formData.displayName"
-                label="Short Name"
+                label="Short Name *"
+                :rules="[rules.required]"
                 variant="outlined"
                 prepend-inner-icon="mdi-tag"
                 density="compact"

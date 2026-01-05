@@ -119,7 +119,7 @@
           <receipt-table
             :receipts="receiptsArray"
             :orders="ordersArray"
-            :loading="supplierStore.state.loading?.requests || false"
+            :loading="supplierStore.state.loading?.receipts || false"
             @view-details="handleViewReceiptDetails"
             @edit-receipt="handleEditReceipt"
             @view-storage="handleViewStorage"
@@ -293,7 +293,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useSupplierStore } from '@/stores/supplier_2/supplierStore'
 import { useReceipts } from '@/stores/supplier_2/composables/useReceipts'
 import { useProcurementRequests } from '@/stores/supplier_2/composables/useProcurementRequests'
@@ -367,6 +367,11 @@ const isDeleting = ref(false)
 
 // Подсветка заказа при переходе
 const highlightedOrderId = ref<string | null>(null)
+
+// Watch for tab changes - refresh data when switching tabs
+watch(selectedTab, async newTab => {
+  await refreshTabData(newTab)
+})
 
 // =============================================
 // COMPUTED - Безопасные computed свойства
@@ -457,6 +462,29 @@ const isLoadingValue = computed(() => {
 function showSuccess(message: string) {
   successMessage.value = message
   showSuccessSnackbar.value = true
+}
+
+/**
+ * Refresh data for the specified tab from API
+ */
+async function refreshTabData(tab: string) {
+  try {
+    switch (tab) {
+      case 'requests':
+        await supplierStore.loadRequests()
+        break
+      case 'orders':
+        await supplierStore.loadOrders()
+        await recalculateBillStatuses()
+        break
+      case 'receipts':
+        await supplierStore.loadReceipts()
+        break
+    }
+  } catch (error) {
+    console.error(`${MODULE_NAME}: Failed to refresh tab data`, error)
+    handleError(`Failed to load ${tab} data`)
+  }
 }
 
 function handleError(error: string | Error | unknown) {
@@ -817,21 +845,24 @@ onMounted(async () => {
   console.log(`${MODULE_NAME}: Component mounted, initializing data`)
 
   try {
-    // Initialize all required stores in parallel
-    // ✅ CRITICAL: counteragentsStore must be initialized for supplier selection in order dialogs
+    // Initialize dependent stores (counteragents for supplier selection, payments for bill status)
     await Promise.all([
-      supplierStore.initialize(),
       counteragentsStore.initialize(),
       accountStore.fetchPayments() // Load payments for bill status display
     ])
 
-    // Recalculate bill statuses for all orders based on actual payment data
-    await recalculateBillStatuses()
+    // Check if supplier store is initialized, if not - load all data
+    if (!supplierStore.integrationState.isInitialized) {
+      await supplierStore.initialize()
+      await recalculateBillStatuses()
+    }
+    // If already initialized - show cached data (counters visible on all tabs)
 
     console.log(`${MODULE_NAME}: Data initialized successfully`, {
       suppliers: counteragentsStore.supplierCounterAgents.length,
       requests: supplierStore.state.requests?.length || 0,
-      orders: supplierStore.state.orders?.length || 0
+      orders: supplierStore.state.orders?.length || 0,
+      receipts: supplierStore.state.receipts?.length || 0
     })
   } catch (error) {
     console.error(`${MODULE_NAME}: Failed to initialize data`, error)

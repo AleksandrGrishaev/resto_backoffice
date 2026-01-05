@@ -1637,6 +1637,11 @@ export const useSupplierStore = defineStore('supplier', () => {
     getPerformanceReport,
 
     createSupplierBaskets,
-    updateRequestStatus
+    updateRequestStatus,
+
+    // Direct data loading (for tab refresh)
+    loadRequests,
+    loadOrders,
+    loadReceipts
   }
 })

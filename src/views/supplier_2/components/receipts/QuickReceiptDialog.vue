@@ -926,7 +926,7 @@ async function saveReceipt() {
     // 2. Call RPC function (single atomic transaction)
     const { data, error } = await supabase.rpc('create_quick_receipt_complete', {
       p_supplier_id: form.value.supplierId,
-      p_supplier_name: supplier.name,
+      p_supplier_name: supplier.displayName || supplier.name,
       p_items: rpcItems,
       p_delivery_date: form.value.deliveryDate,
       p_notes: form.value.notes || 'Quick Receipt Entry',
