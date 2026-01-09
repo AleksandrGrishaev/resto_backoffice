@@ -426,6 +426,14 @@ export function recalculateOrderTotals(order: PosOrder): void {
       } else {
         bill.paymentStatus = 'partial'
       }
+    } else {
+      // 🆕 FIX: All items cancelled - reset bill to unpaid with zero totals
+      // This ensures table can be freed when all items are cancelled
+      bill.paymentStatus = 'unpaid'
+      bill.subtotal = 0
+      bill.total = 0
+      // Reset bill-level discount since there's nothing to discount
+      bill.discountAmount = 0
     }
 
     // ✅ FIX: Sum subtotals (BEFORE discounts), not bill.total (AFTER discounts)
@@ -493,9 +501,10 @@ export function recalculateOrderTotals(order: PosOrder): void {
 
   // Пересчитать payment status
   const calculateOrderPaymentStatus = (bills: PosBill[]): OrderPaymentStatus => {
-    // Only consider active bills WITH items (empty bills don't affect payment status)
+    // Only consider active bills WITH non-cancelled items (empty/cancelled bills don't affect payment status)
+    // 🆕 FIX: Check for non-cancelled items, not just any items
     const activeBillsWithItems = bills.filter(
-      bill => bill.status !== 'cancelled' && bill.items.length > 0
+      bill => bill.status !== 'cancelled' && bill.items.some(item => item.status !== 'cancelled')
     )
 
     // If no bills have items, order is unpaid (nothing to pay)
