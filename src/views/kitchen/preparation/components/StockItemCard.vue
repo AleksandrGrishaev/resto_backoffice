@@ -29,10 +29,10 @@
           </div>
 
           <!-- Expiry -->
-          <div v-if="balance.oldestBatchDate" class="detail-item">
+          <div v-if="balance.oldestExpiryDate" class="detail-item">
             <v-icon size="14" class="mr-1" :color="expiryIconColor">mdi-clock-outline</v-icon>
             <span :class="expiryTextClass">
-              {{ formatExpiry(balance.oldestBatchDate) }}
+              {{ formatExpiry(balance.oldestExpiryDate) }}
             </span>
           </div>
 

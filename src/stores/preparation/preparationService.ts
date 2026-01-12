@@ -1602,6 +1602,15 @@ export class PreparationService {
             ? Math.floor(totalQuantity / preparationInfo.portionSize)
             : undefined
 
+        // ✅ Calculate oldest expiry date for UI display (sort by expiry, get earliest)
+        const batchesWithExpiry = sortedBatches.filter(b => b.expiryDate)
+        const oldestExpiryDate =
+          batchesWithExpiry.length > 0
+            ? batchesWithExpiry.sort(
+                (a, b) => new Date(a.expiryDate!).getTime() - new Date(b.expiryDate!).getTime()
+              )[0].expiryDate!
+            : ''
+
         const balance: PreparationBalance = {
           preparationId,
           preparationName: preparationInfo.name,
@@ -1615,6 +1624,7 @@ export class PreparationService {
           batches: sortedBatches,
           oldestBatchDate: sortedBatches[0].productionDate,
           newestBatchDate: sortedBatches[sortedBatches.length - 1].productionDate,
+          oldestExpiryDate,
           hasExpired,
           hasNearExpiry,
           belowMinStock,
@@ -1662,6 +1672,15 @@ export class PreparationService {
               ? Math.floor(actualBalance / preparationInfo.portionSize)
               : undefined
 
+          // ✅ Calculate oldest expiry date for UI display
+          const batchesWithExpiry = preparationBatches.filter(b => b.expiryDate)
+          const oldestExpiryDate =
+            batchesWithExpiry.length > 0
+              ? batchesWithExpiry.sort(
+                  (a, b) => new Date(a.expiryDate!).getTime() - new Date(b.expiryDate!).getTime()
+                )[0].expiryDate!
+              : ''
+
           const balance: PreparationBalance = {
             preparationId,
             preparationName: preparationInfo.name,
@@ -1679,6 +1698,7 @@ export class PreparationService {
               preparationBatches.length > 0
                 ? preparationBatches[preparationBatches.length - 1].productionDate
                 : '',
+            oldestExpiryDate,
             hasExpired: false,
             hasNearExpiry: false,
             belowMinStock: true,
@@ -1721,6 +1741,7 @@ export class PreparationService {
             batches: [],
             oldestBatchDate: '',
             newestBatchDate: '',
+            oldestExpiryDate: '', // No batches = no expiry
             hasExpired: false,
             hasNearExpiry: false,
             belowMinStock: true,

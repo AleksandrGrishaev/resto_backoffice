@@ -660,7 +660,7 @@ export function usePurchaseOrders() {
       const { data, error } = await supabase.rpc('send_purchase_order_to_supplier', {
         p_order_id: id,
         p_sent_date: new Date().toISOString(),
-        p_warehouse_id: 'wh_1'
+        p_warehouse_id: 'warehouse-winter'
       })
 
       if (error) {

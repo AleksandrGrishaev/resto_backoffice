@@ -113,6 +113,7 @@ export interface PreparationBalance {
   batches: PreparationBatch[]
   oldestBatchDate: string
   newestBatchDate: string
+  oldestExpiryDate: string // Earliest expiry date among active batches (for UI display)
   hasExpired: boolean
   hasNearExpiry: boolean
   belowMinStock: boolean

@@ -7,7 +7,7 @@
 -- PARAMETERS:
 -- p_order_id: Purchase order ID to send
 -- p_sent_date: Timestamp when order is sent (for audit trail)
--- p_warehouse_id: Target warehouse for transit batches (default: 'wh_1')
+-- p_warehouse_id: Target warehouse for transit batches (default: 'warehouse-winter')
 
 -- RETURNS:
 -- JSONB: { success: boolean, orderNumber, status, batchesCreated, batchIds, totalAmount, error?, code? }
@@ -15,7 +15,7 @@
 CREATE OR REPLACE FUNCTION send_purchase_order_to_supplier(
   p_order_id TEXT,
   p_sent_date TIMESTAMPTZ,
-  p_warehouse_id TEXT DEFAULT 'wh_1'
+  p_warehouse_id TEXT DEFAULT 'warehouse-winter'
 ) RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
