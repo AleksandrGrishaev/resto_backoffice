@@ -667,22 +667,19 @@ function calculateItemTotal(index: number) {
 }
 
 /**
- * Handle manual total change - recalculate package quantity
- * Formula: packageQuantity = total / unitPrice
+ * Handle manual total change - recalculate unit price
+ * Formula: unitPrice = total / packageQuantity
  */
 function handleTotalChange(index: number) {
   const item = form.value.items?.[index]
   if (!item) return
 
-  // Если есть цена за упаковку, пересчитываем количество упаковок
-  if (item.unitPrice && item.unitPrice > 0) {
-    item.packageQuantity = item.total / item.unitPrice
+  // Если есть количество упаковок, пересчитываем цену за упаковку
+  if (item.packageQuantity && item.packageQuantity > 0) {
+    item.unitPrice = item.total / item.packageQuantity
 
-    // Пересчитываем количество в базовых единицах
-    item.quantity = item.packageQuantity * (item.packageSize || 0)
-
-    // Обновляем baseCost
-    if (item.unitPrice && item.packageSize) {
+    // Обновляем baseCost (цена за базовую единицу)
+    if (item.packageSize && item.packageSize > 0) {
       item.baseCost = item.unitPrice / item.packageSize
     }
   }
