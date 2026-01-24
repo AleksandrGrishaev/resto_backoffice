@@ -639,43 +639,13 @@ export const useShiftsStore = defineStore('posShifts', () => {
 
           console.log('✅ Supplier expense transaction created:', transaction.id)
 
-          // ✅ STEP 2: Create PendingPayment for "Attach Existing Bill" in PO
-          if (data.counteragentId) {
-            try {
-              // 1. Create payment (will be 'pending' by default)
-              const pendingPayment = await accountStore.createPayment({
-                counteragentId: data.counteragentId,
-                counteragentName: data.counteragentName || '',
-                amount: data.amount,
-                description: data.description,
-                priority: 'medium',
-                category: 'supplier',
-                invoiceNumber: data.invoiceNumber,
-                notes: data.notes,
-                usedAmount: 0, // Not yet linked to PO
-                linkedOrders: [], // Will be filled when attached to PO
-                createdBy: data.performedBy
-              })
-
-              // 2. Update status to 'completed' (already paid from cash register)
-              await paymentService.update(pendingPayment.id, {
-                status: 'completed',
-                paidAmount: data.amount,
-                paidDate: new Date().toISOString()
-              })
-
-              // 3. Link expense to PendingPayment
-              expenseOperation.relatedPaymentId = pendingPayment.id
-
-              console.log('✅ Supplier expense PendingPayment created:', pendingPayment.id)
-            } catch (paymentError) {
-              console.error(
-                '❌ Failed to create PendingPayment for supplier expense:',
-                paymentError
-              )
-              // Continue - expense and transaction are created, only PendingPayment failed
-            }
-          }
+          // ❌ REMOVED: PendingPayment creation for direct supplier expenses
+          // REASON: Payment is already completed (paid from cash register)
+          // Creating a pending payment here causes:
+          // 1. Duplicate "unlinked" entries in Payments Management view
+          // 2. Confusion: payment is already completed, no need for pending payment
+          // The expense and transaction are sufficient records of this payment.
+          // If user needs to link this expense to a PO, they can do so via expense linking UI.
         } catch (txError) {
           console.error('❌ Failed to create supplier expense transaction:', txError)
           // Continue - expense is saved, transaction will be created at shift close

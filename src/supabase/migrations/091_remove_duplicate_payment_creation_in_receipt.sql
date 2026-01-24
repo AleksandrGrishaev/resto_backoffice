@@ -1,22 +1,16 @@
--- RPC Function: complete_receipt_full
--- Purpose: Atomic receipt completion in single transaction
--- Performance: Replaces 45-60+ sequential API calls with 1 RPC call (20s → 1-2s)
--- Created: 2026-01-02
--- Migration: 085_complete_receipt_rpc.sql
+-- Migration: 091_remove_duplicate_payment_creation_in_receipt
+-- Description: Fix duplicate pending payment creation during receipt completion
+-- Date: 2026-01-24
+-- Author: Claude Code
 
--- PARAMETERS:
--- p_receipt_id: Receipt ID to complete
--- p_order_id: Related purchase order ID
--- p_delivery_date: Actual delivery timestamp
--- p_warehouse_id: Target warehouse
--- p_supplier_id: Supplier counteragent ID
--- p_supplier_name: Supplier name for payment record
--- p_total_amount: Total receipt amount
--- p_received_items: JSONB array of received items with structure:
---   [{ itemId, itemName, receivedQuantity, actualPrice, packageId, packageSize }]
-
--- RETURNS:
--- JSONB: { success: boolean, convertedBatches, reconciledBatches, operationId, paymentId, error?, code? }
+-- CONTEXT:
+-- Previously, complete_receipt_full RPC was creating a new pending_payment on every receipt completion.
+-- However, pending_payment is already created when PO is created (with autoSyncEnabled: true).
+-- This caused duplicate payments for the same order.
+--
+-- FIX: Remove pending_payment creation from RPC function.
+-- The existing payment is auto-synced by useOrderPayments.syncOrderPaymentsAfterReceipt()
+-- which updates the amount based on actual delivered amount.
 
 CREATE OR REPLACE FUNCTION complete_receipt_full(
   p_receipt_id TEXT,
