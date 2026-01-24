@@ -590,13 +590,13 @@ export const useShiftsStore = defineStore('posShifts', () => {
       error.value = null
 
       // Создать расходную операцию
-      // ✅ Fix: Set linkingStatus for supplier expenses (need to be linked to PO later)
+      // ✅ Fix: Set correct type and linkingStatus for supplier expenses
       const isSupplierExpense = data.category === 'supplier'
 
       const expenseOperation: ShiftExpenseOperation = {
         id: `exp-${Date.now()}`,
         shiftId: data.shiftId,
-        type: 'direct_expense',
+        type: isSupplierExpense ? 'supplier_payment' : 'direct_expense',
         amount: data.amount,
         description: data.description,
         category: data.category,

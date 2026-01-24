@@ -176,7 +176,7 @@
                         :max="9999"
                         :disabled="!item.packageId"
                         :allow-decimal="true"
-                        :decimal-places="1"
+                        :decimal-places="3"
                         submit-label="OK"
                         @update:model-value="handlePackageQuantityChange(index)"
                       />
@@ -210,15 +210,19 @@
                       />
                     </td>
 
-                    <!-- Total Price -->
+                    <!-- Total Price (editable) -->
                     <td>
-                      <v-text-field
-                        :model-value="formatCurrency(item.total)"
+                      <NumericInputField
+                        v-model="item.total"
                         variant="outlined"
                         density="compact"
                         hide-details
-                        readonly
-                        class="font-weight-bold"
+                        :min="0"
+                        :max="99999999"
+                        :disabled="!item.packageId"
+                        :format-as-currency="true"
+                        submit-label="OK"
+                        @update:model-value="handleTotalChange(index)"
                       />
                     </td>
 
@@ -659,6 +663,28 @@ function calculateItemTotal(index: number) {
   // Обновляем baseCost если указана цена за упаковку
   if (item.unitPrice && item.packageSize) {
     item.baseCost = item.unitPrice / item.packageSize
+  }
+}
+
+/**
+ * Handle manual total change - recalculate package quantity
+ * Formula: packageQuantity = total / unitPrice
+ */
+function handleTotalChange(index: number) {
+  const item = form.value.items?.[index]
+  if (!item) return
+
+  // Если есть цена за упаковку, пересчитываем количество упаковок
+  if (item.unitPrice && item.unitPrice > 0) {
+    item.packageQuantity = item.total / item.unitPrice
+
+    // Пересчитываем количество в базовых единицах
+    item.quantity = item.packageQuantity * (item.packageSize || 0)
+
+    // Обновляем baseCost
+    if (item.unitPrice && item.packageSize) {
+      item.baseCost = item.unitPrice / item.packageSize
+    }
   }
 }
 
