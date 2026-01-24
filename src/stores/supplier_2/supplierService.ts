@@ -364,22 +364,30 @@ class SupplierService {
   // PURCHASE ORDERS METHODS
   // =============================================
 
-  async getOrders(): Promise<PurchaseOrder[]> {
+  async getOrders(options?: { limit?: number; offset?: number }): Promise<PurchaseOrder[]> {
     try {
-      const data = await executeSupabaseQuery(
-        supabase
-          .from('supplierstore_orders')
-          .select('*, supplierstore_order_items(*)')
-          .order('created_at', { ascending: false }),
-        `${MODULE_NAME}.getOrders`
-      )
+      const { limit = 25, offset = 0 } = options || {}
+
+      let query = supabase
+        .from('supplierstore_orders')
+        .select('*, supplierstore_order_items(*)', { count: 'exact' })
+        .order('created_at', { ascending: false })
+
+      // Apply pagination
+      if (limit) {
+        query = query.range(offset, offset + limit - 1)
+      }
+
+      const data = await executeSupabaseQuery(query, `${MODULE_NAME}.getOrders`)
 
       const orders = data.map(dbOrder =>
         mapOrderFromDB(dbOrder, dbOrder.supplierstore_order_items || [])
       )
 
       DebugUtils.info(MODULE_NAME, 'Orders fetched from Supabase', {
-        count: orders.length
+        count: orders.length,
+        limit,
+        offset
       })
 
       return orders
@@ -731,22 +739,31 @@ class SupplierService {
   // RECEIPTS METHODS
   // =============================================
 
-  async getReceipts(): Promise<Receipt[]> {
+  async getReceipts(options?: { limit?: number; offset?: number }): Promise<Receipt[]> {
     try {
-      // ✅ FETCH FROM SUPABASE (Phase 3)
-      const data = await executeSupabaseQuery(
-        supabase
-          .from('supplierstore_receipts')
-          .select('*, supplierstore_receipt_items(*)')
-          .order('delivery_date', { ascending: false }),
-        `${MODULE_NAME}.getReceipts`
-      )
+      const { limit = 25, offset = 0 } = options || {}
+
+      let query = supabase
+        .from('supplierstore_receipts')
+        .select('*, supplierstore_receipt_items(*)', { count: 'exact' })
+        .order('delivery_date', { ascending: false })
+
+      // Apply pagination
+      if (limit) {
+        query = query.range(offset, offset + limit - 1)
+      }
+
+      const data = await executeSupabaseQuery(query, `${MODULE_NAME}.getReceipts`)
 
       const receipts = data.map(dbReceipt =>
         mapReceiptFromDB(dbReceipt, dbReceipt.supplierstore_receipt_items || [])
       )
 
-      DebugUtils.info(MODULE_NAME, '✅ Receipts loaded from Supabase', { count: receipts.length })
+      DebugUtils.info(MODULE_NAME, '✅ Receipts loaded from Supabase', {
+        count: receipts.length,
+        limit,
+        offset
+      })
       return receipts
     } catch (error) {
       DebugUtils.error(

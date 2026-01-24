@@ -102,6 +102,7 @@
             @edit-order="handleEditOrder"
             @send-order="handleSendOrder"
             @start-receipt="handleStartReceipt"
+            @load-more="handleLoadMoreOrders"
           />
 
           <!-- Empty State -->
@@ -123,6 +124,7 @@
             @view-details="handleViewReceiptDetails"
             @edit-receipt="handleEditReceipt"
             @view-storage="handleViewStorage"
+            @load-more="handleLoadMoreReceipts"
           />
 
           <!-- Empty State -->
@@ -688,6 +690,30 @@ function handleEditOrder(order: PurchaseOrder) {
   // Открываем диалог редактирования
   selectedOrderForEdit.value = order
   showOrderEditDialog.value = true
+}
+
+async function handleLoadMoreOrders(): Promise<void> {
+  try {
+    const hasMore = await supplierStore.loadMoreOrders()
+    if (!hasMore) {
+      console.log(`${MODULE_NAME}: No more orders to load`)
+    }
+  } catch (error) {
+    console.error(`${MODULE_NAME}: Failed to load more orders`, error)
+    handleError('Failed to load more orders')
+  }
+}
+
+async function handleLoadMoreReceipts(): Promise<void> {
+  try {
+    const hasMore = await supplierStore.loadMoreReceipts()
+    if (!hasMore) {
+      console.log(`${MODULE_NAME}: No more receipts to load`)
+    }
+  } catch (error) {
+    console.error(`${MODULE_NAME}: Failed to load more receipts`, error)
+    handleError('Failed to load more receipts')
+  }
 }
 
 async function handleSendOrder(order: PurchaseOrder) {

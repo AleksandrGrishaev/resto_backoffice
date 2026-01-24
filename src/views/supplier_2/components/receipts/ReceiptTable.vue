@@ -62,7 +62,8 @@
       :items="filteredReceipts"
       :loading="loading"
       class="elevation-1"
-      :items-per-page="25"
+      :items-per-page="-1"
+      hide-default-footer
       :sort-by="[{ key: 'deliveryDate', order: 'desc' }]"
       item-key="id"
     >
@@ -229,6 +230,14 @@
         </div>
       </template>
     </v-data-table>
+
+    <!-- Load More Button -->
+    <div v-if="canLoadMore" class="text-center pa-4">
+      <v-btn color="primary" variant="outlined" :loading="loadingMore" @click="handleLoadMore">
+        <v-icon start>mdi-chevron-down</v-icon>
+        Load More Receipts
+      </v-btn>
+    </div>
   </div>
 </template>
 
@@ -250,10 +259,15 @@ interface Emits {
   (e: 'view-details', receipt: Receipt): void
   (e: 'edit-receipt', receipt: Receipt): void
   (e: 'view-storage', operationId: string): void
+  (e: 'load-more'): void
 }
 
 const props = defineProps<Props>()
 const emits = defineEmits<Emits>()
+
+// Load more state
+const loadingMore = ref(false)
+const canLoadMore = ref(true)
 
 // =============================================
 // LOCAL STATE
@@ -395,6 +409,18 @@ const filteredReceipts = computed(() => {
 function refreshData() {
   console.log('Refreshing receipts data')
   // Emit refresh event or call store method
+}
+
+async function handleLoadMore(): Promise<void> {
+  loadingMore.value = true
+  try {
+    emits('load-more')
+    // Parent will call store's loadMoreReceipts and we'll get updated props
+  } catch (error) {
+    console.error('Failed to load more receipts:', error)
+  } finally {
+    loadingMore.value = false
+  }
 }
 
 // =============================================

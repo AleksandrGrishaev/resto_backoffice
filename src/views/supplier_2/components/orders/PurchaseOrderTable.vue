@@ -77,8 +77,8 @@
       :items="filteredOrders"
       :loading="props.loading"
       density="comfortable"
-      :items-per-page="25"
-      :items-per-page-options="[25, 50, 100]"
+      :items-per-page="-1"
+      hide-default-footer
       class="elevation-1"
     >
       <!-- Status Column -->
@@ -265,6 +265,14 @@
       </template>
     </v-data-table>
 
+    <!-- Load More Button -->
+    <div v-if="canLoadMore" class="text-center pa-4">
+      <v-btn color="primary" variant="outlined" :loading="loadingMore" @click="handleLoadMore">
+        <v-icon start>mdi-chevron-down</v-icon>
+        Load More Orders
+      </v-btn>
+    </div>
+
     <!-- ✅ НОВЫЙ КОМПОНЕНТ: Order Details Dialog -->
     <purchase-order-details-dialog
       v-model="showDetailsDialog"
@@ -308,10 +316,15 @@ interface Emits {
   (e: 'edit-order', order: PurchaseOrder): void
   (e: 'send-order', order: PurchaseOrder): void
   (e: 'start-receipt', order: PurchaseOrder): void
+  (e: 'load-more'): void
 }
 
 const props = defineProps<Props>()
 const emits = defineEmits<Emits>()
+
+// Load more state
+const loadingMore = ref(false)
+const canLoadMore = ref(true)
 
 // =============================================
 // COMPOSABLES
@@ -552,6 +565,18 @@ function formatDate(dateString: string): string {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+async function handleLoadMore(): Promise<void> {
+  loadingMore.value = true
+  try {
+    emits('load-more')
+    // Parent will call store's loadMoreOrders and we'll get updated props
+  } catch (error) {
+    console.error('Failed to load more orders:', error)
+  } finally {
+    loadingMore.value = false
+  }
 }
 
 onMounted(async () => {

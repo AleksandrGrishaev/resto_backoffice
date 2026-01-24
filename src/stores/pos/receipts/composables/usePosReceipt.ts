@@ -859,7 +859,8 @@ export function usePosReceipt() {
 
   /**
    * Scenario B: Create unlinked expense (offline mode)
-   * При offline + есть pending payment - сначала отвязываем payment, затем создаём unlinked expense
+   * При offline + есть pending payment - сначала ОТМЕНЯЕМ payment, затем создаём unlinked expense
+   * ВАЖНО: Отменяем (cancel), а не отвязываем (unlink), чтобы избежать дублирования
    */
   async function createUnlinkedExpenseForOrder(
     order: PendingOrderForReceipt,
@@ -873,18 +874,20 @@ export function usePosReceipt() {
       pendingPaymentId: order.pendingPaymentId
     })
 
-    // Если есть pending payment - отвязываем его от заказа
+    // ✅ FIX: Если есть pending payment - ОТМЕНЯЕМ его (не просто отвязываем!)
     // Это предотвращает дублирование: unlinked expense + pending payment
+    // Когда кассир платит наличными, pending payment больше не нужен
     if (order.pendingPaymentId) {
       try {
-        await accountStore.unlinkPaymentFromOrder(order.pendingPaymentId, order.id)
-        DebugUtils.info(MODULE_NAME, 'Unlinked pending payment before creating unlinked expense', {
+        await accountStore.cancelPayment(order.pendingPaymentId)
+        DebugUtils.info(MODULE_NAME, 'Cancelled pending payment before creating unlinked expense', {
           paymentId: order.pendingPaymentId,
-          orderId: order.id
+          orderId: order.id,
+          reason: 'Cashier paid cash at receipt'
         })
       } catch (err) {
-        // Не блокируем создание expense если unlink не удался (offline)
-        DebugUtils.warn(MODULE_NAME, 'Failed to unlink pending payment (will retry on sync)', {
+        // Не блокируем создание expense если cancel не удался (offline)
+        DebugUtils.warn(MODULE_NAME, 'Failed to cancel pending payment (will retry on sync)', {
           error: err,
           paymentId: order.pendingPaymentId,
           orderId: order.id

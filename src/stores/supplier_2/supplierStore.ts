@@ -329,12 +329,13 @@ export const useSupplierStore = defineStore('supplier', () => {
   async function loadOrders(): Promise<void> {
     try {
       state.value.loading.orders = true
-      DebugUtils.info(MODULE_NAME, 'Loading orders from Supabase...')
+      DebugUtils.info(MODULE_NAME, 'Loading initial orders from Supabase...')
 
-      const orders = await supplierService.getOrders()
+      // Load first 25 orders
+      const orders = await supplierService.getOrders({ limit: 25, offset: 0 })
       state.value.orders = orders
 
-      DebugUtils.info(MODULE_NAME, 'Orders loaded from Supabase', {
+      DebugUtils.info(MODULE_NAME, 'Initial orders loaded from Supabase', {
         count: orders.length
       })
     } catch (error) {
@@ -345,18 +346,42 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   }
 
+  async function loadMoreOrders(): Promise<boolean> {
+    try {
+      const currentCount = state.value.orders.length
+      DebugUtils.info(MODULE_NAME, 'Loading more orders...', { offset: currentCount })
+
+      const moreOrders = await supplierService.getOrders({ limit: 25, offset: currentCount })
+
+      if (moreOrders.length > 0) {
+        state.value.orders.push(...moreOrders)
+        DebugUtils.info(MODULE_NAME, 'More orders loaded', {
+          loadedCount: moreOrders.length,
+          totalCount: state.value.orders.length
+        })
+        return moreOrders.length === 25 // Has more if we got full page
+      }
+
+      return false // No more data
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load more orders', { error })
+      throw error
+    }
+  }
+
   /**
    * ✅ NEW (Phase 3): Load receipts from Supabase
    */
   async function loadReceipts(): Promise<void> {
     try {
       state.value.loading.receipts = true
-      DebugUtils.info(MODULE_NAME, 'Loading receipts from Supabase...')
+      DebugUtils.info(MODULE_NAME, 'Loading initial receipts from Supabase...')
 
-      const receipts = await supplierService.getReceipts()
+      // Load first 25 receipts
+      const receipts = await supplierService.getReceipts({ limit: 25, offset: 0 })
       state.value.receipts = receipts
 
-      DebugUtils.info(MODULE_NAME, 'Receipts loaded from Supabase', {
+      DebugUtils.info(MODULE_NAME, 'Initial receipts loaded from Supabase', {
         count: receipts.length
       })
     } catch (error) {
@@ -364,6 +389,29 @@ export const useSupplierStore = defineStore('supplier', () => {
       throw error
     } finally {
       state.value.loading.receipts = false
+    }
+  }
+
+  async function loadMoreReceipts(): Promise<boolean> {
+    try {
+      const currentCount = state.value.receipts.length
+      DebugUtils.info(MODULE_NAME, 'Loading more receipts...', { offset: currentCount })
+
+      const moreReceipts = await supplierService.getReceipts({ limit: 25, offset: currentCount })
+
+      if (moreReceipts.length > 0) {
+        state.value.receipts.push(...moreReceipts)
+        DebugUtils.info(MODULE_NAME, 'More receipts loaded', {
+          loadedCount: moreReceipts.length,
+          totalCount: state.value.receipts.length
+        })
+        return moreReceipts.length === 25 // Has more if we got full page
+      }
+
+      return false // No more data
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load more receipts', { error })
+      throw error
     }
   }
 
@@ -1594,9 +1642,11 @@ export const useSupplierStore = defineStore('supplier', () => {
     deleteRequest,
     canDeleteRequest,
     getOrders,
+    loadMoreOrders,
     createOrder,
     updateOrder,
     getReceipts,
+    loadMoreReceipts,
     createReceipt,
     updateReceipt,
     completeReceipt,
