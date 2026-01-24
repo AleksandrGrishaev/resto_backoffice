@@ -377,8 +377,9 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         return { success: false, error: 'Cannot remove a paid bill' }
       }
 
-      // Cannot remove bill with items (must be empty)
-      if (bill.items.length > 0) {
+      // Cannot remove bill with active items (must be empty or only cancelled items)
+      const activeItems = bill.items.filter(item => item.status !== 'cancelled')
+      if (activeItems.length > 0) {
         return {
           success: false,
           error: 'Cannot remove bill with items. Move or remove items first.'
