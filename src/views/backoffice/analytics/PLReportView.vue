@@ -440,7 +440,7 @@ const error = ref<string | null>(null)
 const cogsMethod = ref<COGSMethod>('accrual')
 
 // Lifecycle
-onMounted(() => {
+onMounted(async () => {
   // Set default date range (current month)
   const now = new Date()
   const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -448,6 +448,9 @@ onMounted(() => {
 
   dateFrom.value = firstDay.toISOString().split('T')[0]
   dateTo.value = lastDay.toISOString().split('T')[0]
+
+  // Initialize accountStore to load categories for OPEX display
+  await accountStore.initializeStore()
 })
 
 // Methods

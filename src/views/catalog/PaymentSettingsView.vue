@@ -321,7 +321,7 @@ function handleCategorySaved() {
 onMounted(async () => {
   try {
     DebugUtils.debug(MODULE_NAME, 'Component mounted')
-    await Promise.all([store.initialize(), loadExpenseSettings()])
+    await Promise.all([store.initialize(), accountStore.initializeStore(), loadExpenseSettings()])
     // Load tolerance settings after store is initialized
     loadToleranceSettings()
   } catch (error) {

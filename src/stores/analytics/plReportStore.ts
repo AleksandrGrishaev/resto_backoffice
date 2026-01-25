@@ -36,6 +36,9 @@ export const usePLReportStore = defineStore('plReport', () => {
       const salesStore = useSalesStore()
       const accountStore = useAccountStore()
 
+      // Ensure categories are loaded for OPEX calculation
+      await accountStore.initializeStore()
+
       // 1. Calculate Revenue from sales_transactions
       DebugUtils.info(MODULE_NAME, 'Calculating revenue from sales transactions')
       const salesTransactions = await salesStore.getTransactionsByDateRange(dateFrom, dateTo)
@@ -387,7 +390,7 @@ export const usePLReportStore = defineStore('plReport', () => {
     // 2. Payments to suppliers (real cash)
     const supplierTransactions = await accountStore.getTransactionsByDateRange(dateFrom, dateTo)
     const purchases = supplierTransactions
-      .filter(t => t.type === 'expense' && t.expenseCategory?.category === 'product')
+      .filter(t => t.type === 'expense' && t.expenseCategory?.category === 'supplier')
       .reduce((sum, t) => sum + Math.abs(t.amount), 0)
 
     DebugUtils.info(MODULE_NAME, 'Supplier payments calculated', {
