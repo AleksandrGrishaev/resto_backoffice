@@ -121,22 +121,27 @@
         <v-chip size="small" variant="outlined">{{ item.items?.length || 0 }}</v-chip>
       </template>
 
-      <template #[`item.originalAmount`]="{ item }">
-        {{ formatCurrency(item.originalTotalAmount || item.totalAmount) }}
-      </template>
-      <!-- Total Amount Column -->
-      <template #[`item.deliveredAmount`]="{ item }">
-        <div v-if="item.actualDeliveredAmount" class="d-flex flex-column">
-          <span>{{ formatCurrency(item.actualDeliveredAmount) }}</span>
-          <span
-            v-if="hasAmountDifference(item)"
-            class="text-caption"
-            :class="getAmountDifferenceClass(item)"
-          >
-            {{ formatAmountDifference(item) }}
+      <!-- Total Amount Column (combined Original + Delivered) -->
+      <template #[`item.totalAmount`]="{ item }">
+        <div class="d-flex flex-column">
+          <!-- Main amount: delivered if available, otherwise original -->
+          <span class="font-weight-medium">
+            {{
+              formatCurrency(
+                item.actualDeliveredAmount || item.originalTotalAmount || item.totalAmount
+              )
+            }}
+          </span>
+          <!-- Show original amount if different from delivered -->
+          <span v-if="hasAmountDifference(item)" class="text-caption text-medium-emphasis">
+            <span class="text-decoration-line-through">
+              {{ formatCurrency(item.originalTotalAmount || item.totalAmount) }}
+            </span>
+            <span :class="getAmountDifferenceClass(item)" class="ml-1">
+              ({{ formatAmountDifference(item) }})
+            </span>
           </span>
         </div>
-        <span v-else class="text-medium-emphasis">—</span>
       </template>
 
       <template #[`item.receiptInfo`]="{ item }">
@@ -279,6 +284,7 @@
       :order="selectedOrder"
       @send-order="sendOrder"
       @start-receipt="startReceipt"
+      @edit-receipt="editReceipt"
     />
 
     <!-- Export Options Dialog -->
@@ -298,7 +304,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import { usePurchaseOrderExport } from '@/stores/supplier_2/composables/usePurchaseOrderExport'
-import type { PurchaseOrder, BillStatus } from '@/stores/supplier_2/types'
+import type { PurchaseOrder, BillStatus, Receipt } from '@/stores/supplier_2/types'
 import PurchaseOrderDetailsDialog from './PurchaseOrderDetailsDialog.vue'
 import OrderExportOptionsDialog from './OrderExportOptionsDialog.vue'
 import OrderPreviewDialog from './OrderPreviewDialog.vue'
@@ -316,6 +322,7 @@ interface Emits {
   (e: 'edit-order', order: PurchaseOrder): void
   (e: 'send-order', order: PurchaseOrder): void
   (e: 'start-receipt', order: PurchaseOrder): void
+  (e: 'edit-receipt', receipt: Receipt): void
   (e: 'load-more'): void
 }
 
@@ -374,8 +381,7 @@ const headers = [
   { title: 'Status', key: 'status', sortable: true, width: '120px' },
   { title: 'Bill Status', key: 'billStatus', sortable: false, width: '160px' },
   { title: 'Items', key: 'itemsCount', sortable: false, width: '80px', align: 'center' },
-  { title: 'Original', key: 'originalAmount', sortable: true, width: '120px', align: 'end' },
-  { title: 'Delivered', key: 'deliveredAmount', sortable: true, width: '120px', align: 'end' },
+  { title: 'Total', key: 'totalAmount', sortable: true, width: '140px', align: 'end' },
   { title: 'Receipt', key: 'receiptInfo', sortable: false, width: '100px' },
   { title: 'Order Date', key: 'orderDate', sortable: true, width: '140px' },
   { title: 'Actions', key: 'actions', sortable: false, width: '200px', align: 'center' }
@@ -495,6 +501,10 @@ function sendOrder(order: PurchaseOrder) {
 
 function startReceipt(order: PurchaseOrder) {
   emits('start-receipt', order)
+}
+
+function editReceipt(receipt: Receipt) {
+  emits('edit-receipt', receipt)
 }
 
 function duplicateOrder(order: PurchaseOrder) {

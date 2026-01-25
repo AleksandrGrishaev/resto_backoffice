@@ -29,9 +29,18 @@
             <v-col cols="6" md="3">
               <div class="text-subtitle-2 mb-1">Total Amount</div>
               <div class="text-h6 font-weight-bold">
-                {{ formatCurrency(order.totalAmount) }}
+                {{ formatCurrency(order.actualDeliveredAmount || order.totalAmount) }}
               </div>
-              <div v-if="order.isEstimatedTotal" class="text-caption text-warning">
+              <!-- Show original amount if different from delivered -->
+              <div v-if="hasDeliveredAmountDifference" class="text-caption">
+                <span class="text-decoration-line-through text-medium-emphasis">
+                  {{ formatCurrency(order.originalTotalAmount || order.totalAmount) }}
+                </span>
+                <span :class="deliveredAmountDifferenceClass" class="ml-1">
+                  ({{ formatDeliveredAmountDifference }})
+                </span>
+              </div>
+              <div v-else-if="order.isEstimatedTotal" class="text-caption text-warning">
                 Estimated Total
               </div>
             </v-col>
@@ -123,8 +132,20 @@
           Send to Supplier
         </v-btn>
 
+        <!-- Edit existing draft receipt -->
         <v-btn
-          v-if="canStartReceipt(order)"
+          v-if="draftReceiptForOrder"
+          color="purple"
+          variant="flat"
+          prepend-icon="mdi-pencil"
+          @click="editReceipt(draftReceiptForOrder)"
+        >
+          Edit Receipt
+        </v-btn>
+
+        <!-- Start new receipt -->
+        <v-btn
+          v-else-if="canStartReceipt(order)"
           color="purple"
           variant="flat"
           prepend-icon="mdi-truck-check"
@@ -363,9 +384,10 @@ import { ref, reactive, computed, watch } from 'vue'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import { useOrderPayments } from '@/stores/supplier_2/composables/useOrderPayments'
 import { usePurchaseOrderExport } from '@/stores/supplier_2/composables/usePurchaseOrderExport'
+import { useReceipts } from '@/stores/supplier_2/composables/useReceipts'
 import { useAlertsStore } from '@/stores/alerts'
 import { useAuthStore } from '@/stores/auth'
-import type { PurchaseOrder } from '@/stores/supplier_2/types'
+import type { PurchaseOrder, Receipt } from '@/stores/supplier_2/types'
 import type { PendingPayment } from '@/stores/account/types'
 import OrderItemsWidget from './order/OrderItemsWidget.vue'
 import OrderReceiptWidget from './order/OrderReceiptWidget.vue'
@@ -387,6 +409,7 @@ interface Emits {
   (e: 'update:modelValue', value: boolean): void
   (e: 'send-order', order: PurchaseOrder): void
   (e: 'start-receipt', order: PurchaseOrder): void
+  (e: 'edit-receipt', receipt: Receipt): void
 }
 
 const props = defineProps<Props>()
@@ -409,6 +432,8 @@ const {
 } = useOrderPayments()
 
 const { isPrinting, buildExportData } = usePurchaseOrderExport()
+
+const { getReceiptByOrderId } = useReceipts()
 
 // Preview dialogs
 const showPrintOptionsDialog = ref(false)
@@ -471,6 +496,41 @@ const isOpen = computed({
 const activeBills = computed(() =>
   selectedOrderBills.value.filter(bill => bill.status !== 'cancelled')
 )
+
+// =============================================
+// RECEIPT RELATED COMPUTED
+// =============================================
+
+// Get draft receipt for current order (if exists)
+const draftReceiptForOrder = computed((): Receipt | undefined => {
+  if (!props.order) return undefined
+  const receipt = getReceiptByOrderId(props.order.id)
+  return receipt?.status === 'draft' ? receipt : undefined
+})
+
+// Check if delivered amount differs from original
+const hasDeliveredAmountDifference = computed((): boolean => {
+  if (!props.order?.actualDeliveredAmount) return false
+  const original = props.order.originalTotalAmount || props.order.totalAmount
+  return Math.abs(props.order.actualDeliveredAmount - original) > 1
+})
+
+// Get CSS class for amount difference
+const deliveredAmountDifferenceClass = computed((): string => {
+  if (!props.order?.actualDeliveredAmount) return ''
+  const original = props.order.originalTotalAmount || props.order.totalAmount
+  const diff = props.order.actualDeliveredAmount - original
+  return diff > 0 ? 'text-warning' : 'text-error'
+})
+
+// Format delivered amount difference
+const formatDeliveredAmountDifference = computed((): string => {
+  if (!props.order?.actualDeliveredAmount) return ''
+  const original = props.order.originalTotalAmount || props.order.totalAmount
+  const diff = props.order.actualDeliveredAmount - original
+  const sign = diff > 0 ? '+' : ''
+  return `${sign}${formatCurrency(diff)}`
+})
 
 // Remaining amount to be billed
 const remainingAmount = computed(() => {
@@ -652,6 +712,11 @@ async function handlePrintWithOptions(options: { includePrices: boolean }) {
 
 function startReceipt(order: PurchaseOrder) {
   emits('start-receipt', order)
+  isOpen.value = false
+}
+
+function editReceipt(receipt: Receipt) {
+  emits('edit-receipt', receipt)
   isOpen.value = false
 }
 

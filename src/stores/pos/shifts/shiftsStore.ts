@@ -105,8 +105,9 @@ export const useShiftsStore = defineStore('posShifts', () => {
 
   /**
    * Загрузить смены
+   * @param options.all - загрузить ВСЕ смены (для Shift History view)
    */
-  async function loadShifts(): Promise<ServiceResponse<PosShift[]>> {
+  async function loadShifts(options?: { all?: boolean }): Promise<ServiceResponse<PosShift[]>> {
     try {
       loading.value.list = true
       error.value = null
@@ -117,7 +118,7 @@ export const useShiftsStore = defineStore('posShifts', () => {
         throw new Error(initResult.error)
       }
 
-      const result = await shiftsService.loadShifts()
+      const result = await shiftsService.loadShifts(options)
 
       if (result.success && result.data) {
         shifts.value = result.data

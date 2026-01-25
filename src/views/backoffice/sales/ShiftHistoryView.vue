@@ -348,7 +348,8 @@ async function loadShifts(): Promise<void> {
     loading.value = true
     showError.value = false
 
-    const result = await shiftsStore.loadShifts()
+    // ✅ Fix: Load ALL shifts for history view, not just active ones
+    const result = await shiftsStore.loadShifts({ all: true })
 
     if (!result.success) {
       throw new Error(result.error || 'Failed to load shifts')

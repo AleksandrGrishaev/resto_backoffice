@@ -102,6 +102,7 @@
             @edit-order="handleEditOrder"
             @send-order="handleSendOrder"
             @start-receipt="handleStartReceipt"
+            @edit-receipt="handleEditReceipt"
             @load-more="handleLoadMoreOrders"
           />
 
