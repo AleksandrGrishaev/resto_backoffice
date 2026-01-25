@@ -233,7 +233,60 @@ export const usePLReportStore = defineStore('plReport', () => {
       })
 
       // ============================================
-      // 6. Recalculate Gross and Net Profit using selected COGS method
+      // 6. Calculate Tax Collected from sales transactions
+      // ============================================
+      DebugUtils.info(MODULE_NAME, 'Calculating Tax Collected from sales')
+
+      const taxCollected = {
+        serviceTax: salesTransactions.reduce((sum, t) => sum + (t.service_tax_amount || 0), 0),
+        localTax: salesTransactions.reduce((sum, t) => sum + (t.government_tax_amount || 0), 0),
+        total: 0
+      }
+      taxCollected.total = taxCollected.serviceTax + taxCollected.localTax
+
+      DebugUtils.info(MODULE_NAME, 'Tax Collected calculated', {
+        serviceTax: taxCollected.serviceTax,
+        localTax: taxCollected.localTax,
+        total: taxCollected.total
+      })
+
+      // Total Collected = Revenue + Tax
+      const totalCollected = revenue.total + taxCollected.total
+
+      DebugUtils.info(MODULE_NAME, 'Total Collected calculated', {
+        revenue: revenue.total,
+        taxCollected: taxCollected.total,
+        totalCollected
+      })
+
+      // ============================================
+      // 7. Calculate Non-OPEX expenses (Tax, Investment, Shareholders)
+      // ============================================
+      DebugUtils.info(MODULE_NAME, 'Calculating non-OPEX expenses')
+
+      // Tax expenses (payments to government - category: tax)
+      const taxExpenses = allTransactions
+        .filter(t => t.type === 'expense' && t.expenseCategory?.category === 'tax')
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+
+      // Investment expenses (business development - category: invest)
+      const investmentExpenses = allTransactions
+        .filter(t => t.type === 'expense' && t.expenseCategory?.category === 'invest')
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+
+      // Shareholders payout (profit distribution - category: shareholders)
+      const shareholdersPayout = allTransactions
+        .filter(t => t.type === 'expense' && t.expenseCategory?.category === 'shareholders')
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+
+      DebugUtils.info(MODULE_NAME, 'Non-OPEX expenses calculated', {
+        taxExpenses,
+        investmentExpenses,
+        shareholdersPayout
+      })
+
+      // ============================================
+      // 8. Recalculate Gross and Net Profit using selected COGS method
       // ============================================
       const selectedCOGS = cogsCalculation.total
 
@@ -249,7 +302,7 @@ export const usePLReportStore = defineStore('plReport', () => {
         margin: grossProfit.margin
       })
 
-      // Calculate Net Profit using selected COGS method
+      // Calculate Net Profit (before taxes, investments, shareholders)
       const netProfit = {
         amount: revenue.total - selectedCOGS - opex.total,
         margin:
@@ -267,10 +320,31 @@ export const usePLReportStore = defineStore('plReport', () => {
         margin: netProfit.margin
       })
 
-      // 7. Create report with new COGS structure
+      // Calculate Final Profit (Net Profit - Tax - Investments, without shareholders)
+      // Shareholders payout is shown separately in Cash Flow section
+      const finalProfitAmount = netProfit.amount - taxExpenses - investmentExpenses
+      const finalProfit = {
+        amount: finalProfitAmount,
+        margin: revenue.total > 0 ? (finalProfitAmount / revenue.total) * 100 : 0
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Final profit calculated', {
+        netProfit: netProfit.amount,
+        taxExpenses,
+        investmentExpenses,
+        calculation: `${netProfit.amount} - ${taxExpenses} - ${investmentExpenses}`,
+        amount: finalProfit.amount,
+        margin: finalProfit.margin,
+        shareholdersPayout, // tracked separately for cash flow
+        retainedInBusiness: finalProfitAmount - shareholdersPayout
+      })
+
+      // 9. Create report with new structure
       const report: PLReport = {
         period: { dateFrom, dateTo },
         revenue,
+        taxCollected,
+        totalCollected,
         cogs: cogsCalculation, // ✅ SPRINT 4: New COGSCalculation structure
         cogsMethod: method, // ✅ SPRINT 4: Selected method
         grossProfit,
@@ -278,6 +352,10 @@ export const usePLReportStore = defineStore('plReport', () => {
         realFoodCost, // Keep for backward compatibility (Accrual method)
         opex,
         netProfit,
+        taxExpenses,
+        investmentExpenses,
+        shareholdersPayout,
+        finalProfit,
         generatedAt: TimeUtils.getCurrentLocalISO()
       }
 
@@ -285,13 +363,19 @@ export const usePLReportStore = defineStore('plReport', () => {
 
       DebugUtils.info(MODULE_NAME, 'P&L report generated successfully', {
         revenue: revenue.total,
+        taxCollected: taxCollected.total,
+        totalCollected,
         cogsMethod: method,
         cogs: cogsCalculation.total,
         cogsAccrual: accrualCOGS.total,
         cogsCash: cashCOGS.total,
         grossProfit: grossProfit.amount,
         opex: opex.total,
-        netProfit: netProfit.amount
+        netProfit: netProfit.amount,
+        taxExpenses,
+        investmentExpenses,
+        shareholdersPayout,
+        finalProfit: finalProfit.amount
       })
 
       return report

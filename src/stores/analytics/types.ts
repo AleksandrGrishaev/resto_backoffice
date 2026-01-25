@@ -56,6 +56,16 @@ export interface PLReport {
     byCategory: Record<string, number> // Group by menu category
   }
 
+  // Tax Collected section (from sales - service tax + local tax)
+  taxCollected: {
+    serviceTax: number // 5% service tax from sales
+    localTax: number // 10% local/government tax from sales
+    total: number
+  }
+
+  // Total Collected (Revenue + Tax Collected)
+  totalCollected: number
+
   // ✅ SPRINT 4: Cost of Goods Sold with multiple calculation methods
   cogs: COGSCalculation
   cogsMethod: COGSMethod // Selected method for P&L calculations
@@ -89,8 +99,23 @@ export interface PLReport {
     byCategory: Record<string, number> // Dynamic: only categories with transactions
   }
 
-  // Net Profit
+  // Net Profit (before taxes, investments, and shareholders)
   netProfit: {
+    amount: number
+    margin: number // Percentage
+  }
+
+  // Tax Expenses (payments to government - not collected from customers)
+  taxExpenses: number
+
+  // Investment Expenses (business development, equipment, etc.)
+  investmentExpenses: number
+
+  // Shareholders Payout (profit distribution to investors)
+  shareholdersPayout: number
+
+  // Final Profit (Net Profit - Tax Expenses - Investments - Shareholders)
+  finalProfit: {
     amount: number
     margin: number // Percentage
   }

@@ -150,39 +150,32 @@
 
           <!-- Summary Cards -->
           <v-row class="mb-4">
-            <v-col cols="12" :md="cogsMethod === 'accrual' ? 3 : 4">
+            <v-col cols="12" md="4">
               <v-card color="primary" variant="tonal">
                 <v-card-text>
-                  <div class="text-caption">Total Revenue</div>
-                  <div class="text-h5">{{ formatIDR(report.revenue.total) }}</div>
+                  <div class="text-caption">Total Collected</div>
+                  <div class="text-h5">{{ formatIDR(report.totalCollected || 0) }}</div>
+                  <div class="text-caption text-medium-emphasis">Revenue + Tax</div>
                 </v-card-text>
               </v-card>
             </v-col>
-            <v-col cols="12" :md="cogsMethod === 'accrual' ? 3 : 4">
-              <v-card color="warning" variant="tonal">
+            <v-col cols="12" md="4">
+              <v-card color="error" variant="tonal">
                 <v-card-text>
+                  <div class="text-caption">Total Expenses</div>
+                  <div class="text-h5">{{ formatIDR(totalExpenses) }}</div>
+                  <div class="text-caption text-medium-emphasis">COGS + OPEX + Tax</div>
+                </v-card-text>
+              </v-card>
+            </v-col>
+            <v-col cols="12" md="4">
+              <v-card :color="finalProfitColor" variant="tonal">
+                <v-card-text>
+                  <div class="text-caption">Final Profit</div>
+                  <div class="text-h5">{{ formatIDR(report.finalProfit?.amount || 0) }}</div>
                   <div class="text-caption">
-                    COGS ({{ cogsMethod === 'accrual' ? 'Accrual' : 'Cash' }})
+                    {{ (report.finalProfit?.margin || 0).toFixed(1) }}% margin
                   </div>
-                  <div class="text-h5">{{ formatIDR(report.cogs.total) }}</div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-            <v-col v-if="cogsMethod === 'accrual'" cols="12" md="3">
-              <v-card color="info" variant="tonal">
-                <v-card-text>
-                  <div class="text-caption">Gross Profit</div>
-                  <div class="text-h5">{{ formatIDR(report.grossProfit.amount) }}</div>
-                  <div class="text-caption">{{ report.grossProfit.margin.toFixed(1) }}% margin</div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-            <v-col cols="12" :md="cogsMethod === 'accrual' ? 3 : 4">
-              <v-card :color="netProfitColor" variant="tonal">
-                <v-card-text>
-                  <div class="text-caption">Net Profit</div>
-                  <div class="text-h5">{{ formatIDR(report.netProfit.amount) }}</div>
-                  <div class="text-caption">{{ report.netProfit.margin.toFixed(1) }}% margin</div>
                 </v-card-text>
               </v-card>
             </v-col>
@@ -231,6 +224,61 @@
                     <td>Total Revenue</td>
                     <td class="text-right">{{ formatIDR(report.revenue.total) }}</td>
                     <td class="text-right">100.0%</td>
+                  </tr>
+
+                  <tr><td colspan="3" class="py-2"></td></tr>
+
+                  <!-- Tax Collected Section -->
+                  <tr class="section-header">
+                    <td colspan="3" class="font-weight-bold text-info">TAX COLLECTED</td>
+                  </tr>
+                  <tr>
+                    <td class="pl-8">Service Tax (5%)</td>
+                    <td class="text-right">
+                      {{ formatIDR(report.taxCollected?.serviceTax || 0) }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        calculatePercentage(
+                          report.taxCollected?.serviceTax || 0,
+                          report.revenue.total
+                        )
+                      }}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="pl-8">Local Tax (10%)</td>
+                    <td class="text-right">{{ formatIDR(report.taxCollected?.localTax || 0) }}</td>
+                    <td class="text-right">
+                      {{
+                        calculatePercentage(
+                          report.taxCollected?.localTax || 0,
+                          report.revenue.total
+                        )
+                      }}
+                    </td>
+                  </tr>
+                  <tr class="font-weight-bold">
+                    <td>Total Tax Collected</td>
+                    <td class="text-right">{{ formatIDR(report.taxCollected?.total || 0) }}</td>
+                    <td class="text-right">
+                      {{
+                        calculatePercentage(report.taxCollected?.total || 0, report.revenue.total)
+                      }}
+                    </td>
+                  </tr>
+
+                  <tr><td colspan="3" class="py-1"></td></tr>
+
+                  <!-- Total Collected -->
+                  <tr class="font-weight-bold">
+                    <td class="text-subtitle-1">TOTAL COLLECTED</td>
+                    <td class="text-right text-subtitle-1">
+                      {{ formatIDR(report.totalCollected || 0) }}
+                    </td>
+                    <td class="text-right text-subtitle-1">
+                      {{ calculatePercentage(report.totalCollected || 0, report.revenue.total) }}
+                    </td>
                   </tr>
 
                   <tr><td colspan="3" class="py-2"></td></tr>
@@ -380,12 +428,104 @@
 
                   <!-- Net Profit -->
                   <tr class="font-weight-bold">
-                    <td class="text-h6">NET PROFIT</td>
-                    <td class="text-right text-h6" :class="netProfitClass">
+                    <td class="text-subtitle-1">NET PROFIT (Operating)</td>
+                    <td class="text-right text-subtitle-1" :class="netProfitClass">
                       {{ formatIDR(report.netProfit.amount) }}
                     </td>
-                    <td class="text-right text-h6" :class="netProfitClass">
+                    <td class="text-right text-subtitle-1" :class="netProfitClass">
                       {{ report.netProfit.margin.toFixed(1) }}%
+                    </td>
+                  </tr>
+
+                  <tr><td colspan="3" class="py-2"></td></tr>
+
+                  <!-- Non-Operating Expenses Section -->
+                  <tr class="section-header">
+                    <td colspan="3" class="font-weight-bold text-purple">NON-OPERATING EXPENSES</td>
+                  </tr>
+
+                  <!-- Tax Expenses -->
+                  <tr>
+                    <td class="pl-8">Tax Payments</td>
+                    <td class="text-right">{{ formatIDR(report.taxExpenses || 0) }}</td>
+                    <td class="text-right">
+                      {{ calculatePercentage(report.taxExpenses || 0, report.revenue.total) }}
+                    </td>
+                  </tr>
+
+                  <!-- Investment -->
+                  <tr>
+                    <td class="pl-8">Investments</td>
+                    <td class="text-right">{{ formatIDR(report.investmentExpenses || 0) }}</td>
+                    <td class="text-right">
+                      {{
+                        calculatePercentage(report.investmentExpenses || 0, report.revenue.total)
+                      }}
+                    </td>
+                  </tr>
+
+                  <tr class="font-weight-bold">
+                    <td>Total Non-Operating</td>
+                    <td class="text-right">
+                      {{ formatIDR((report.taxExpenses || 0) + (report.investmentExpenses || 0)) }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        calculatePercentage(
+                          (report.taxExpenses || 0) + (report.investmentExpenses || 0),
+                          report.revenue.total
+                        )
+                      }}
+                    </td>
+                  </tr>
+
+                  <tr><td colspan="3" class="py-2"></td></tr>
+
+                  <!-- Final Profit -->
+                  <tr class="font-weight-bold">
+                    <td class="text-h6">FINAL PROFIT</td>
+                    <td class="text-right text-h6" :class="finalProfitClass">
+                      {{ formatIDR(report.finalProfit?.amount || 0) }}
+                    </td>
+                    <td class="text-right text-h6" :class="finalProfitClass">
+                      {{ (report.finalProfit?.margin || 0).toFixed(1) }}%
+                    </td>
+                  </tr>
+
+                  <tr><td colspan="3" class="py-4"></td></tr>
+
+                  <!-- Cash Flow Section (Shareholders) -->
+                  <tr class="section-header">
+                    <td colspan="3" class="font-weight-bold text-teal">CASH FLOW (Period)</td>
+                  </tr>
+
+                  <!-- Shareholders Payout -->
+                  <tr>
+                    <td class="pl-8">Shareholders Payout</td>
+                    <td class="text-right">{{ formatIDR(report.shareholdersPayout || 0) }}</td>
+                    <td class="text-right">
+                      {{
+                        calculatePercentage(report.shareholdersPayout || 0, report.revenue.total)
+                      }}
+                    </td>
+                  </tr>
+
+                  <tr class="font-weight-bold">
+                    <td>Retained in Business</td>
+                    <td class="text-right" :class="retainedProfitClass">
+                      {{
+                        formatIDR(
+                          (report.finalProfit?.amount || 0) - (report.shareholdersPayout || 0)
+                        )
+                      }}
+                    </td>
+                    <td class="text-right" :class="retainedProfitClass">
+                      {{
+                        calculatePercentage(
+                          (report.finalProfit?.amount || 0) - (report.shareholdersPayout || 0),
+                          report.revenue.total
+                        )
+                      }}
                     </td>
                   </tr>
                 </tbody>
@@ -571,6 +711,34 @@ const inventoryChangeClass = computed(() => {
   if (change > 0) return 'text-success' // Inventory increased
   if (change < 0) return 'text-error' // Inventory decreased
   return ''
+})
+
+// Final Profit styling
+const finalProfitClass = computed(() => {
+  if (!report.value?.finalProfit) return ''
+  return report.value.finalProfit.amount >= 0 ? 'text-success' : 'text-error'
+})
+
+const finalProfitColor = computed(() => {
+  if (!report.value?.finalProfit) return 'grey'
+  return report.value.finalProfit.amount >= 0 ? 'success' : 'error'
+})
+
+// Retained Profit styling (after shareholders)
+const retainedProfitClass = computed(() => {
+  if (!report.value?.finalProfit) return ''
+  const retained = (report.value.finalProfit.amount || 0) - (report.value.shareholdersPayout || 0)
+  return retained >= 0 ? 'text-success' : 'text-error'
+})
+
+// Total Expenses (COGS + OPEX + Tax)
+const totalExpenses = computed(() => {
+  if (!report.value) return 0
+  return (
+    (report.value.cogs?.total || 0) +
+    (report.value.opex?.total || 0) +
+    (report.value.taxExpenses || 0)
+  )
 })
 </script>
 
