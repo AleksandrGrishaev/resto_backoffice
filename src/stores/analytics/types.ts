@@ -389,3 +389,67 @@ export interface ExcludedReasons {
   storage?: string[]
   preparation?: string[]
 }
+
+// ============================================
+// ✅ Product Variance Report Types
+// ============================================
+
+/**
+ * Stock amount (quantity and value)
+ * Used in Product Variance Report
+ */
+export interface StockAmount {
+  quantity: number
+  amount: number // IDR
+}
+
+/**
+ * Product Variance Row
+ * Formula: Opening + Received - Sales - Prep - Loss - Closing = Variance
+ */
+export interface ProductVarianceRow {
+  productId: string
+  productName: string
+  productCode?: string | null
+  unit: string
+  department: 'kitchen' | 'bar'
+
+  openingStock: StockAmount // Stock at period start
+  received: StockAmount // Purchases during period
+  salesWriteOff: StockAmount // sales_consumption
+  prepWriteOff: StockAmount // production_consumption
+  lossWriteOff: StockAmount // expired, spoiled, other
+  closingStock: StockAmount // Current stock
+  variance: StockAmount // Should be 0 if everything is correct
+}
+
+/**
+ * Product Variance Report
+ * Analyzes discrepancies between purchases and usage
+ */
+export interface VarianceReport {
+  period: {
+    dateFrom: string
+    dateTo: string
+  }
+
+  summary: {
+    totalProducts: number
+    productsWithVariance: number
+    totalVarianceAmount: number
+    totalReceivedAmount: number
+    totalSalesWriteOffAmount: number
+    totalPrepWriteOffAmount: number
+    totalLossWriteOffAmount: number
+  }
+
+  byDepartment: {
+    kitchen: { count: number; varianceAmount: number }
+    bar: { count: number; varianceAmount: number }
+  }
+
+  items: ProductVarianceRow[]
+
+  generatedAt: string
+  departmentFilter: 'kitchen' | 'bar' | 'all'
+}

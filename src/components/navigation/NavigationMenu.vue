@@ -243,6 +243,18 @@
           </template>
         </v-list-item>
 
+        <!-- Product Variance Report -->
+        <v-list-item
+          to="/analytics/variance-report"
+          prepend-icon="mdi-chart-bar-stacked"
+          color="primary"
+          class="ps-8"
+        >
+          <template #title>
+            <span>Variance Report</span>
+          </template>
+        </v-list-item>
+
         <!-- Print Documents (Inventory Sheets) -->
         <v-list-item
           to="/reports/print-docs"

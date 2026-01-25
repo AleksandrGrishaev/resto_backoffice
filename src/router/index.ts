@@ -457,6 +457,14 @@ const routes: RouteRecordRaw[] = [
             meta: {
               title: 'Cancelled Items Report'
             }
+          },
+          {
+            path: 'variance-report',
+            name: 'variance-report',
+            component: () => import('@/views/backoffice/analytics/VarianceReportView.vue'),
+            meta: {
+              title: 'Product Variance Report'
+            }
           }
         ]
       },
