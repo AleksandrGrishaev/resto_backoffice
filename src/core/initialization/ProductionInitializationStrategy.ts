@@ -603,9 +603,10 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
     results.push(await this.loadPOSFromAPI())
 
     // Sales & Write-off
+    // ✅ OPTIMIZATION: Use lightweight mode for POS - no history needed, only write capability
     const [salesResult, writeOffResult] = await Promise.all([
-      this.loadSalesFromAPI(),
-      this.loadWriteOffFromAPI()
+      this.loadSalesFromAPI(true), // lightweight=true for POS
+      this.loadWriteOffFromAPI(true) // lightweight=true for POS
     ])
     results.push(salesResult, writeOffResult)
 
@@ -674,17 +675,21 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
     }
   }
 
-  private async loadSalesFromAPI(): Promise<StoreInitResult> {
+  /**
+   * Load Sales store
+   * @param lightweight - If true, skip loading history (for POS mode).
+   *                      POS only needs recordSalesTransaction, not history.
+   */
+  private async loadSalesFromAPI(lightweight = false): Promise<StoreInitResult> {
     const start = Date.now()
 
     try {
       const store = useSalesStore()
 
-      DebugUtils.store(MODULE_NAME, '[PROD] Loading sales from API...')
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading sales from API...', { lightweight })
 
-      // TODO: Заменить на API вызов
       if (!store.initialized) {
-        await store.initialize()
+        await store.initialize({ lightweight })
       }
 
       return {
@@ -706,17 +711,21 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
     }
   }
 
-  private async loadWriteOffFromAPI(): Promise<StoreInitResult> {
+  /**
+   * Load WriteOff store
+   * @param lightweight - If true, skip loading history (for POS mode).
+   *                      POS only needs to create write-offs, not view history.
+   */
+  private async loadWriteOffFromAPI(lightweight = false): Promise<StoreInitResult> {
     const start = Date.now()
 
     try {
       const store = useRecipeWriteOffStore()
 
-      DebugUtils.store(MODULE_NAME, '[PROD] Loading write-offs from API...')
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading write-offs from API...', { lightweight })
 
-      // TODO: Заменить на API вызов
       if (!store.initialized) {
-        await store.initialize()
+        await store.initialize({ lightweight })
       }
 
       return {

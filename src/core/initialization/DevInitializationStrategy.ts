@@ -485,7 +485,11 @@ export class DevInitializationStrategy implements InitializationStrategy {
     if (posResult.success) this.loadedStores.add('pos')
 
     // Sales & Write-off (параллельно)
-    const [salesResult, writeOffResult] = await Promise.all([this.loadSales(), this.loadWriteOff()])
+    // ✅ OPTIMIZATION: Use lightweight mode for POS - no history needed, only write capability
+    const [salesResult, writeOffResult] = await Promise.all([
+      this.loadSales(true), // lightweight=true for POS
+      this.loadWriteOff(true) // lightweight=true for POS
+    ])
     results.push(salesResult, writeOffResult)
     if (salesResult.success) this.loadedStores.add('sales')
     if (writeOffResult.success) this.loadedStores.add('writeOff')
@@ -554,16 +558,20 @@ export class DevInitializationStrategy implements InitializationStrategy {
     }
   }
 
-  private async loadSales(): Promise<StoreInitResult> {
+  /**
+   * Load Sales store
+   * @param lightweight - If true, skip loading history (for POS mode)
+   */
+  private async loadSales(lightweight = false): Promise<StoreInitResult> {
     const start = Date.now()
 
     try {
       const store = useSalesStore()
 
-      DebugUtils.store(MODULE_NAME, '[DEV] Loading sales transactions...')
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading sales transactions...', { lightweight })
 
       if (!store.initialized) {
-        await store.initialize()
+        await store.initialize({ lightweight })
       }
 
       return {
@@ -585,16 +593,20 @@ export class DevInitializationStrategy implements InitializationStrategy {
     }
   }
 
-  private async loadWriteOff(): Promise<StoreInitResult> {
+  /**
+   * Load WriteOff store
+   * @param lightweight - If true, skip loading history (for POS mode)
+   */
+  private async loadWriteOff(lightweight = false): Promise<StoreInitResult> {
     const start = Date.now()
 
     try {
       const store = useRecipeWriteOffStore()
 
-      DebugUtils.store(MODULE_NAME, '[DEV] Loading recipe write-offs...')
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading recipe write-offs...', { lightweight })
 
       if (!store.initialized) {
-        await store.initialize()
+        await store.initialize({ lightweight })
       }
 
       return {

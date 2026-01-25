@@ -116,29 +116,65 @@ export const useSalesStore = defineStore('sales', () => {
 
   /**
    * Initialize store
+   * @param options.lightweight - If true, skip loading history (for POS mode)
+   *                              POS only needs recordSalesTransaction, not history
    */
-  async function initialize() {
+  async function initialize(options?: { lightweight?: boolean }) {
     if (state.value.initialized) {
       console.log(`✅ [${MODULE_NAME}] Already initialized`)
       return
     }
 
-    console.log(`🔄 [${MODULE_NAME}] Initializing...`)
+    const { lightweight = false } = options || {}
+
+    console.log(`🔄 [${MODULE_NAME}] Initializing...`, { lightweight })
+    state.value.loading = true
+
+    try {
+      // ✅ OPTIMIZATION: POS doesn't need sales history, only write capability
+      if (lightweight) {
+        state.value.transactions = []
+        state.value.initialized = true
+        console.log(`✅ [${MODULE_NAME}] Initialized in lightweight mode (no history loaded)`)
+      } else {
+        const result = await SalesService.getAllTransactions()
+        if (result.success && result.data) {
+          state.value.transactions = result.data
+          state.value.initialized = true
+          console.log(`✅ [${MODULE_NAME}] Initialized with ${result.data.length} transactions`)
+        } else {
+          throw new Error(result.error || 'Failed to load transactions')
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      state.value.error = message
+      console.error(`❌ [${MODULE_NAME}] Initialization failed:`, message)
+    } finally {
+      state.value.loading = false
+    }
+  }
+
+  /**
+   * Load transaction history (for backoffice reports)
+   * Call this when you need to display history
+   */
+  async function loadHistory() {
+    console.log(`🔄 [${MODULE_NAME}] Loading transaction history...`)
     state.value.loading = true
 
     try {
       const result = await SalesService.getAllTransactions()
       if (result.success && result.data) {
         state.value.transactions = result.data
-        state.value.initialized = true
-        console.log(`✅ [${MODULE_NAME}] Initialized with ${result.data.length} transactions`)
+        console.log(`✅ [${MODULE_NAME}] Loaded ${result.data.length} transactions`)
       } else {
         throw new Error(result.error || 'Failed to load transactions')
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       state.value.error = message
-      console.error(`❌ [${MODULE_NAME}] Initialization failed:`, message)
+      console.error(`❌ [${MODULE_NAME}] Failed to load history:`, message)
     } finally {
       state.value.loading = false
     }
@@ -500,6 +536,7 @@ export const useSalesStore = defineStore('sales', () => {
 
     // Actions
     initialize,
+    loadHistory, // ✅ For backoffice views that need transaction history
     recordSalesTransaction,
     fetchTransactions,
     getStatistics,

@@ -36,29 +36,65 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
 
   /**
    * Initialize store
+   * @param options.lightweight - If true, skip loading history (for POS mode)
+   *                              POS only needs write operations, not history
    */
-  async function initialize() {
+  async function initialize(options?: { lightweight?: boolean }) {
     if (state.value.initialized) {
       console.log(`✅ [${MODULE_NAME}] Already initialized`)
       return
     }
 
-    console.log(`🔄 [${MODULE_NAME}] Initializing...`)
+    const { lightweight = false } = options || {}
+
+    console.log(`🔄 [${MODULE_NAME}] Initializing...`, { lightweight })
+    state.value.loading = true
+
+    try {
+      // ✅ OPTIMIZATION: POS doesn't need write-off history, only write capability
+      if (lightweight) {
+        state.value.writeOffs = []
+        state.value.initialized = true
+        console.log(`✅ [${MODULE_NAME}] Initialized in lightweight mode (no history loaded)`)
+      } else {
+        const result = await RecipeWriteOffService.getAllWriteOffs()
+        if (result.success && result.data) {
+          state.value.writeOffs = result.data
+          state.value.initialized = true
+          console.log(`✅ [${MODULE_NAME}] Initialized with ${result.data.length} write-offs`)
+        } else {
+          throw new Error(result.error || 'Failed to load write-offs')
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      state.value.error = message
+      console.error(`❌ [${MODULE_NAME}] Initialization failed:`, message)
+    } finally {
+      state.value.loading = false
+    }
+  }
+
+  /**
+   * Load write-off history (for backoffice views like WriteOffHistoryView)
+   * Call this when you need to display history
+   */
+  async function loadHistory() {
+    console.log(`🔄 [${MODULE_NAME}] Loading write-off history...`)
     state.value.loading = true
 
     try {
       const result = await RecipeWriteOffService.getAllWriteOffs()
       if (result.success && result.data) {
         state.value.writeOffs = result.data
-        state.value.initialized = true
-        console.log(`✅ [${MODULE_NAME}] Initialized with ${result.data.length} write-offs`)
+        console.log(`✅ [${MODULE_NAME}] Loaded ${result.data.length} write-offs`)
       } else {
         throw new Error(result.error || 'Failed to load write-offs')
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       state.value.error = message
-      console.error(`❌ [${MODULE_NAME}] Initialization failed:`, message)
+      console.error(`❌ [${MODULE_NAME}] Failed to load history:`, message)
     } finally {
       state.value.loading = false
     }
@@ -448,6 +484,7 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
 
     // Actions
     initialize,
+    loadHistory, // ✅ For backoffice views that need write-off history
     processItemWriteOff,
     processItemWriteOffFromResult,
     getWriteOffsBySalesTransaction,

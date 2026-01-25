@@ -23,17 +23,23 @@ function safeMapFromSupabase(data: any[]): RecipeWriteOff[] {
 }
 
 // ✅ EGRESS OPTIMIZATION: Lightweight columns (no heavy JSONB)
+// Available columns: id, menu_item_id, variant_id, recipe_id, portion_size, sold_quantity,
+// department, operation_type, performed_at, performed_by, sales_transaction_id,
+// storage_operation_id, created_at, updated_at
+// HEAVY JSONB (excluded): write_off_items, decomposed_items, original_composition
 const LIGHTWEIGHT_COLUMNS = `
   id,
   menu_item_id,
-  menu_item_name,
+  variant_id,
+  recipe_id,
+  portion_size,
+  sold_quantity,
   department,
   operation_type,
-  quantity,
-  total_cost,
   performed_at,
   performed_by,
   sales_transaction_id,
+  storage_operation_id,
   created_at,
   updated_at
 `
@@ -451,10 +457,10 @@ export class RecipeWriteOffService {
   static async getSummary(filters?: WriteOffFilters): Promise<ServiceResponse<WriteOffSummary>> {
     try {
       // ✅ OPTIMIZATION: Build optimized SQL query for summary
-      // ✅ BUG FIX: Don't load write_off_items JSONB, use total_cost instead
+      // Only select minimal columns - actual cost comes from sales_transactions
       let query = supabase
         .from('recipe_write_offs')
-        .select('id, department, operation_type, sales_transaction_id, total_cost')
+        .select('id, department, operation_type, sales_transaction_id, sold_quantity')
         .order('performed_at', { ascending: false })
 
       // Apply SQL filters
@@ -534,18 +540,15 @@ export class RecipeWriteOffService {
         }
       }
 
-      // Helper function to get cost (actual or estimated)
-      // ✅ BUG FIX: Safe access to writeOffItems with null check
+      // Helper function to get cost (actual from sales_transactions)
       const getCost = (writeOff: RecipeWriteOff): number => {
-        // Use actual cost if available
+        // Use actual cost from sales_transactions (loaded above)
         if (actualCostMap.has(writeOff.id)) {
           return actualCostMap.get(writeOff.id)!
         }
-        // Fallback to estimated cost from writeOffItems (with null check)
-        if (!writeOff.writeOffItems || !Array.isArray(writeOff.writeOffItems)) {
-          return writeOff.totalCost || 0
-        }
-        return writeOff.writeOffItems.reduce((s, i) => s + i.totalCost, 0)
+        // No actual cost available - we don't load write_off_items JSONB for summary
+        // Return 0 and let the UI know data might be incomplete
+        return 0
       }
 
       // ✅ BUG FIX: For summary, count each write-off as 1 item

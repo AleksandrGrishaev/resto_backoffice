@@ -161,6 +161,11 @@ export class TransactionService {
     }
   }
 
+  // ✅ Alias for getAll() - used by store.ts
+  async getAllTransactions(): Promise<Transaction[]> {
+    return this.getAll()
+  }
+
   async getAccountTransactions(accountId: string): Promise<Transaction[]> {
     try {
       if (shouldUseSupabase()) {
