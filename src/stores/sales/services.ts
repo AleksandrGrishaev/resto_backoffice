@@ -13,38 +13,59 @@ const STORAGE_KEY = 'sales_transactions'
 export class SalesService {
   /**
    * Get all sales transactions
+   * NOTE: Uses pagination to bypass Supabase's default 1000 row limit
    */
   static async getAllTransactions(): Promise<ServiceResponse<SalesTransaction[]>> {
     try {
-      // Try Supabase first
-      const { data, error } = await supabase
-        .from('sales_transactions')
-        .select('*')
-        .order('sold_at', { ascending: false })
+      // Try Supabase first with pagination to get ALL records
+      // Supabase default limit is 1000 rows, so we need to paginate
+      const PAGE_SIZE = 1000
+      let allData: any[] = []
+      let from = 0
+      let hasMore = true
 
-      if (error) {
-        console.warn(
-          '⚠️ [SalesService] Supabase query failed, falling back to localStorage:',
-          error.message
-        )
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('sales_transactions')
+          .select('*')
+          .order('sold_at', { ascending: false })
+          .range(from, from + PAGE_SIZE - 1)
 
-        // Fallback to localStorage
-        const localData = localStorage.getItem(STORAGE_KEY)
-        const transactions: SalesTransaction[] = localData ? JSON.parse(localData) : []
+        if (error) {
+          console.warn(
+            '⚠️ [SalesService] Supabase query failed, falling back to localStorage:',
+            error.message
+          )
 
-        return {
-          success: true,
-          data: transactions,
-          metadata: {
-            timestamp: new Date().toISOString(),
-            source: 'local',
-            platform: 'web'
+          // Fallback to localStorage
+          const localData = localStorage.getItem(STORAGE_KEY)
+          const transactions: SalesTransaction[] = localData ? JSON.parse(localData) : []
+
+          return {
+            success: true,
+            data: transactions,
+            metadata: {
+              timestamp: new Date().toISOString(),
+              source: 'local',
+              platform: 'web'
+            }
           }
+        }
+
+        if (data && data.length > 0) {
+          allData = allData.concat(data)
+          from += PAGE_SIZE
+          // If we got less than PAGE_SIZE, we've reached the end
+          hasMore = data.length === PAGE_SIZE
+        } else {
+          hasMore = false
         }
       }
 
-      const transactions = data ? data.map(fromSupabase) : []
-      console.log(`✅ [SalesService] Loaded ${transactions.length} transactions from Supabase`)
+      const transactions = allData.map(fromSupabase)
+      console.log(
+        `✅ [SalesService] Loaded ${transactions.length} transactions from Supabase (paginated)`
+      )
 
       // Cache to localStorage
       localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions))
@@ -74,11 +95,87 @@ export class SalesService {
 
   /**
    * Get sales transactions with filters
+   * Optimized: applies date filters on server-side with pagination
    */
   static async getTransactions(
     filters?: SalesFilters
   ): Promise<ServiceResponse<SalesTransaction[]>> {
     try {
+      // If date filters provided, query Supabase directly with server-side filtering
+      if (filters?.dateFrom || filters?.dateTo) {
+        const PAGE_SIZE = 1000
+        let allData: any[] = []
+        let from = 0
+        let hasMore = true
+
+        while (hasMore) {
+          let query = supabase
+            .from('sales_transactions')
+            .select('*')
+            .order('sold_at', { ascending: false })
+
+          // Apply date filters on server side
+          if (filters.dateFrom) {
+            query = query.gte('sold_at', filters.dateFrom)
+          }
+          if (filters.dateTo) {
+            query = query.lte('sold_at', filters.dateTo)
+          }
+
+          // Apply other filters on server side if provided
+          if (filters.menuItemId) {
+            query = query.eq('menu_item_id', filters.menuItemId)
+          }
+          if (filters.paymentMethod) {
+            query = query.eq('payment_method', filters.paymentMethod)
+          }
+          if (filters.department) {
+            query = query.eq('department', filters.department)
+          }
+          if (filters.shiftId) {
+            query = query.eq('shift_id', filters.shiftId)
+          }
+
+          // Apply pagination
+          query = query.range(from, from + PAGE_SIZE - 1)
+
+          const { data, error } = await query
+
+          if (error) {
+            console.warn('⚠️ [SalesService] Supabase filtered query failed:', error.message)
+            // Fallback to client-side filtering
+            break
+          }
+
+          if (data && data.length > 0) {
+            allData = allData.concat(data)
+            from += PAGE_SIZE
+            hasMore = data.length === PAGE_SIZE
+          } else {
+            hasMore = false
+          }
+        }
+
+        // If we got data from server, return it
+        if (allData.length > 0) {
+          const transactions = allData.map(fromSupabase)
+          console.log(
+            `✅ [SalesService] Loaded ${transactions.length} filtered transactions from Supabase`
+          )
+
+          return {
+            success: true,
+            data: transactions,
+            metadata: {
+              timestamp: new Date().toISOString(),
+              source: 'api',
+              platform: 'web'
+            }
+          }
+        }
+      }
+
+      // Fallback: get all and filter client-side
       const allResult = await this.getAllTransactions()
       if (!allResult.success || !allResult.data) {
         return allResult
@@ -86,7 +183,7 @@ export class SalesService {
 
       let filtered = allResult.data
 
-      // Apply filters
+      // Apply filters client-side
       if (filters) {
         if (filters.dateFrom) {
           filtered = filtered.filter(t => t.soldAt >= filters.dateFrom!)
