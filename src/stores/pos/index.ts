@@ -20,6 +20,7 @@ import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store
 // ✅ Sprint 6: SyncService integration
 import { useSyncService } from '@/core/sync/SyncService'
 import { ShiftSyncAdapter } from '@/core/sync/adapters/ShiftSyncAdapter'
+import { ShiftUpdateAdapter } from '@/core/sync/adapters/ShiftUpdateAdapter'
 import { migrateLegacyShiftQueue } from '@/core/sync/migrations/migrateLegacyShiftQueue'
 
 // ✅ Sprint 7: Realtime integration for Kitchen updates
@@ -219,8 +220,9 @@ export const usePosStore = defineStore('pos', () => {
       platform.debugLog('POS', '🔄 Initializing SyncService...')
       const syncService = useSyncService()
 
-      // Register shift sync adapter
-      syncService.registerAdapter(new ShiftSyncAdapter())
+      // Register shift sync adapters
+      syncService.registerAdapter(new ShiftSyncAdapter()) // For closed shift account sync
+      syncService.registerAdapter(new ShiftUpdateAdapter()) // For active shift data sync to Supabase
 
       // Migrate legacy queue (one-time, auto-skips if no legacy data)
       await migrateLegacyShiftQueue()

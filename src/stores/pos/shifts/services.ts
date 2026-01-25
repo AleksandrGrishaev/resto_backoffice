@@ -39,6 +39,30 @@ export class ShiftsService {
     return ENV.supabase.enabled && navigator.onLine
   }
 
+  /**
+   * Add shift to SyncService queue for automatic retry
+   * Uses 'shift_update' entityType for active shift updates (not 'shift' which is for closed shift account sync)
+   */
+  private async addToSyncQueue(shift: PosShift): Promise<void> {
+    try {
+      const { useSyncService } = await import('@/core/sync/SyncService')
+      const syncService = useSyncService()
+
+      await syncService.addToQueue({
+        entityType: 'shift_update', // Different from 'shift' (ShiftSyncAdapter for account sync)
+        entityId: shift.id,
+        operation: 'update',
+        priority: 'high',
+        data: shift,
+        maxAttempts: 5
+      })
+
+      console.log('📋 Shift update added to sync queue:', shift.id)
+    } catch (err) {
+      console.warn('⚠️ Failed to add shift to sync queue:', err)
+    }
+  }
+
   // =============================================
   // ИНИЦИАЛИЗАЦИЯ
   // =============================================
@@ -401,11 +425,17 @@ export class ShiftsService {
           )
           updatedShift.syncStatus = 'pending'
           updatedShift.pendingSync = true
+
+          // Add to SyncService queue for automatic retry
+          await this.addToSyncQueue(updatedShift)
         }
       } else {
         // Offline mode - mark for sync
         updatedShift.syncStatus = 'pending'
         updatedShift.pendingSync = true
+
+        // Add to SyncService queue for automatic retry
+        await this.addToSyncQueue(updatedShift)
       }
 
       // Always save to localStorage

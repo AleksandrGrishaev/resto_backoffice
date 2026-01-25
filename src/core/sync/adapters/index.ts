@@ -3,6 +3,7 @@
 
 // Shift management
 export { ShiftSyncAdapter } from './ShiftSyncAdapter'
+export { ShiftUpdateAdapter } from './ShiftUpdateAdapter'
 
 // Kitchen Preparation (Sprint 3)
 export { PreparationBatchSyncAdapter } from './PreparationBatchSyncAdapter'
