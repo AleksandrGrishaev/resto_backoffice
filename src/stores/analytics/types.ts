@@ -453,3 +453,138 @@ export interface VarianceReport {
   generatedAt: string
   departmentFilter: 'kitchen' | 'bar' | 'all'
 }
+
+// ============================================
+// ✅ Product Variance Report V2 Types (with preparation traceability)
+// ============================================
+
+/**
+ * Product Variance Row V2
+ * Simplified view with traced sales/losses through preparations
+ * Formula: Loss % = (Total Loss) / (Total Sales) × 100
+ */
+export interface ProductVarianceRowV2 {
+  productId: string
+  productName: string
+  productCode?: string | null
+  unit: string
+  department: 'kitchen' | 'bar'
+
+  // Combined totals (direct + traced through preparations)
+  sales: StockAmount // Direct sales + traced from preparations
+  loss: StockAmount // Direct loss + traced from preparations
+
+  // Breakdown for detail dialog
+  directSales: StockAmount // sales_consumption write-offs
+  directLoss: StockAmount // expired, spoiled, other write-offs
+  tracedSales: StockAmount // Sales traced through preparations
+  tracedLoss: StockAmount // Losses traced through preparations
+
+  // Flags
+  hasPreparations: boolean // Whether product is used in preparations
+
+  // Calculated
+  lossPercent: number // (loss.amount / sales.amount) * 100
+}
+
+/**
+ * Variance Report V2
+ * Simplified report with preparation traceability
+ */
+export interface VarianceReportV2 {
+  period: {
+    dateFrom: string
+    dateTo: string
+  }
+
+  summary: {
+    totalProducts: number
+    productsWithActivity: number // Products with sales or losses
+    totalSalesAmount: number
+    totalLossAmount: number
+    overallLossPercent: number // (totalLoss / totalSales) * 100
+  }
+
+  byDepartment: {
+    kitchen: { count: number; salesAmount: number; lossAmount: number; lossPercent: number }
+    bar: { count: number; salesAmount: number; lossAmount: number; lossPercent: number }
+  }
+
+  items: ProductVarianceRowV2[]
+
+  generatedAt: string
+  departmentFilter: 'kitchen' | 'bar' | 'all'
+}
+
+// ============================================
+// ✅ Product Variance Detail Types (for drill-down dialog)
+// ============================================
+
+/**
+ * Preparation breakdown for a single product
+ * Shows how much of the product was used in each preparation
+ */
+export interface PreparationBreakdown {
+  preparationId: string
+  preparationName: string
+
+  // How much product was used to make this preparation
+  production: StockAmount
+
+  // Traced sales (preparation sold → attributed to product)
+  tracedSales: StockAmount
+
+  // Traced losses (preparation lost → attributed to product)
+  tracedLoss: StockAmount
+}
+
+/**
+ * Loss breakdown by reason
+ */
+export interface LossBreakdownItem {
+  reason: 'expired' | 'spoiled' | 'other' | 'expiration'
+  quantity: number
+  amount: number
+}
+
+/**
+ * Product Variance Detail
+ * Detailed breakdown for a single product (shown in dialog)
+ */
+export interface ProductVarianceDetail {
+  product: {
+    id: string
+    name: string
+    code?: string | null
+    unit: string
+    department: 'kitchen' | 'bar'
+  }
+
+  period: {
+    dateFrom: string
+    dateTo: string
+  }
+
+  // Direct sales/losses (product sold/lost directly)
+  directSales: StockAmount
+  directLoss: StockAmount
+
+  // Production consumption (product used to make preparations)
+  production: StockAmount
+
+  // Loss breakdown by reason
+  lossByReason: LossBreakdownItem[]
+
+  // Preparations that use this product
+  preparations: PreparationBreakdown[]
+
+  // Traced totals (from all preparations combined)
+  tracedTotals: {
+    salesQuantity: number
+    salesAmount: number
+    lossQuantity: number
+    lossAmount: number
+  }
+
+  generatedAt: string
+}
