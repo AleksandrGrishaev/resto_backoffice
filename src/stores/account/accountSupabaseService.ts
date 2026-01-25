@@ -293,17 +293,39 @@ export class AccountSupabaseService {
 
   /**
    * Get all transactions
+   * ✅ EGRESS OPTIMIZATION: Added date filter and limit
+   * @param options.daysBack - days to look back (default: 30)
+   * @param options.limit - max records (default: 500)
+   * @param options.loadAll - load all records (for reports)
    */
-  async getAllTransactions(): Promise<Transaction[]> {
+  async getAllTransactions(options?: {
+    daysBack?: number
+    limit?: number
+    loadAll?: boolean
+  }): Promise<Transaction[]> {
     if (!isSupabaseAvailable()) {
       throw new Error('Supabase not available')
     }
 
+    const { daysBack = 30, limit = 500, loadAll = false } = options || {}
+
     return withRetry(async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('transactions')
         .select('*')
         .order('created_at', { ascending: false })
+
+      // ✅ OPTIMIZATION: Apply date filter unless loadAll
+      // ✅ BUG FIX: Use Date.now() arithmetic for UTC-correct calculation
+      if (!loadAll) {
+        const dateFrom = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString()
+        query = query.gte('created_at', dateFrom)
+      }
+
+      // ✅ OPTIMIZATION: Apply limit
+      query = query.limit(loadAll ? 1000 : limit)
+
+      const { data, error } = await query
 
       if (error) {
         throw error
@@ -312,7 +334,8 @@ export class AccountSupabaseService {
       const transactions = data ? transactionsFromSupabase(data) : []
 
       DebugUtils.info(MODULE_NAME, '✅ Transactions loaded from Supabase', {
-        count: transactions.length
+        count: transactions.length,
+        daysBack: loadAll ? 'all' : daysBack
       })
 
       return transactions
@@ -321,20 +344,34 @@ export class AccountSupabaseService {
 
   /**
    * Get transactions for specific account
+   * ✅ EGRESS OPTIMIZATION: Added date filter and limit
    */
-  async getAccountTransactions(accountId: string): Promise<Transaction[]> {
+  async getAccountTransactions(
+    accountId: string,
+    options?: { daysBack?: number; limit?: number }
+  ): Promise<Transaction[]> {
     try {
       if (!isSupabaseAvailable()) {
         throw new Error('Supabase not available')
       }
 
-      const { data, error } = await withTimeout(
-        supabase
-          .from('transactions')
-          .select('*')
-          .eq('account_id', accountId)
-          .order('created_at', { ascending: false })
-      )
+      const { daysBack = 30, limit = 200 } = options || {}
+
+      let query = supabase
+        .from('transactions')
+        .select('*')
+        .eq('account_id', accountId)
+        .order('created_at', { ascending: false })
+
+      // ✅ OPTIMIZATION: Apply date filter
+      // ✅ BUG FIX: Use Date.now() arithmetic for UTC-correct calculation
+      const dateFrom = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString()
+      query = query.gte('created_at', dateFrom)
+
+      // ✅ OPTIMIZATION: Apply limit
+      query = query.limit(limit)
+
+      const { data, error } = await withTimeout(query)
 
       if (error) {
         DebugUtils.error(
@@ -349,7 +386,8 @@ export class AccountSupabaseService {
 
       DebugUtils.info(MODULE_NAME, '✅ Account transactions loaded from Supabase', {
         accountId,
-        count: transactions.length
+        count: transactions.length,
+        daysBack
       })
 
       return transactions
@@ -378,10 +416,10 @@ export class AccountSupabaseService {
         throw new Error('Account not found')
       }
 
-      // Get existing transactions to calculate current balance
-      const existingTransactions = await this.getAccountTransactions(data.accountId)
-      const currentBalance =
-        existingTransactions.length > 0 ? existingTransactions[0].balanceAfter : account.balance
+      // ✅ BUG FIX: Always use account.balance directly
+      // account.balance is updated on each transaction, so it's always current
+      // Using getAccountTransactions() with 30-day limit could miss older transactions
+      const currentBalance = account.balance
 
       // Calculate new balance
       let newBalance = currentBalance

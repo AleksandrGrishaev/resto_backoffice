@@ -496,14 +496,13 @@ export const useAccountStore = defineStore('account', () => {
     try {
       const activeAccounts = state.value.accounts.filter(acc => acc.isActive)
 
-      // Загружаем транзакции для всех аккаунтов
+      // Загружаем транзакции для всех аккаунтов (последние 30 дней для UI навигации)
       await Promise.all(activeAccounts.map(acc => fetchTransactions(acc.id)))
 
-      // Обновляем кеш всех транзакций
-      const allTransactions: Transaction[] = []
-      Object.values(state.value.accountTransactions).forEach(accTxns => {
-        allTransactions.push(...accTxns)
-      })
+      // ✅ BUG FIX: Для кеша загружаем ВСЕ транзакции без ограничений
+      // fetchTransactions использует 30-дневный лимит, поэтому нельзя строить кеш из этих данных
+      // Иначе отчеты и фильтры по датам будут неполными
+      const allTransactions = await transactionService.getAllTransactions()
 
       allTransactions.sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()

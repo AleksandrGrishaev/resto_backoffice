@@ -5,21 +5,100 @@ import { toSupabase, fromSupabase } from './supabase/mappers'
 
 const STORAGE_KEY = 'recipe_writeoffs'
 
+// ✅ BUG FIX: Safe map helper to handle individual item errors
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function safeMapFromSupabase(data: any[]): RecipeWriteOff[] {
+  const result: RecipeWriteOff[] = []
+  for (let i = 0; i < data.length; i++) {
+    try {
+      result.push(fromSupabase(data[i]))
+    } catch (err) {
+      console.error(`⚠️ [RecipeWriteOffService] Failed to parse write-off at index ${i}:`, err, {
+        rawData: data[i]
+      })
+      // Skip malformed record but continue processing
+    }
+  }
+  return result
+}
+
+// ✅ EGRESS OPTIMIZATION: Lightweight columns (no heavy JSONB)
+const LIGHTWEIGHT_COLUMNS = `
+  id,
+  menu_item_id,
+  menu_item_name,
+  department,
+  operation_type,
+  quantity,
+  total_cost,
+  performed_at,
+  performed_by,
+  sales_transaction_id,
+  created_at,
+  updated_at
+`
+
+// Full columns including heavy JSONB fields
+const FULL_COLUMNS = '*'
+
+export interface GetWriteOffsOptions {
+  /** Load all records (default: false - loads last 30 days) */
+  loadAll?: boolean
+  /** Days to look back (default: 30) */
+  daysBack?: number
+  /** Use lightweight columns without JSONB (default: true) */
+  lightweight?: boolean
+  /** Custom limit (default: none for date-filtered, 500 for loadAll) */
+  limit?: number
+}
+
 /**
  * Recipe Write-off Service
  * CRUD операции для recipe write-offs с Supabase (dual-write с localStorage)
+ *
+ * ✅ EGRESS OPTIMIZATION (Sprint 6):
+ * - Default: loads last 30 days only
+ * - Lightweight mode: excludes heavy JSONB fields (write_off_items)
+ * - Use loadAll: true for reports that need full history
  */
 export class RecipeWriteOffService {
   /**
-   * Get all write-offs
+   * Get all write-offs with optimized loading
+   *
+   * @param options - Loading options
+   * @param options.loadAll - Load all records (default: false)
+   * @param options.daysBack - Days to look back (default: 30)
+   * @param options.lightweight - Use lightweight columns (default: true)
    */
-  static async getAllWriteOffs(): Promise<ServiceResponse<RecipeWriteOff[]>> {
+  static async getAllWriteOffs(
+    options: GetWriteOffsOptions = {}
+  ): Promise<ServiceResponse<RecipeWriteOff[]>> {
+    const { loadAll = false, daysBack = 30, lightweight = true, limit } = options
+
     try {
-      // Try Supabase first
-      const { data, error } = await supabase
+      // ✅ OPTIMIZATION: Select only needed columns
+      const columns = lightweight ? LIGHTWEIGHT_COLUMNS : FULL_COLUMNS
+
+      let query = supabase
         .from('recipe_write_offs')
-        .select('*')
+        .select(columns)
         .order('performed_at', { ascending: false })
+
+      // ✅ OPTIMIZATION: Apply date filter unless loadAll is true
+      // ✅ BUG FIX: Use Date.now() arithmetic for UTC-correct calculation
+      if (!loadAll) {
+        const dateFrom = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString()
+        query = query.gte('performed_at', dateFrom)
+      }
+
+      // ✅ OPTIMIZATION: Apply limit
+      if (limit) {
+        query = query.limit(limit)
+      } else if (loadAll) {
+        query = query.limit(500) // Safety limit for full loads
+      }
+
+      const { data, error } = await query
 
       if (error) {
         console.warn(
@@ -42,8 +121,12 @@ export class RecipeWriteOffService {
         }
       }
 
-      const writeOffs = data ? data.map(fromSupabase) : []
-      console.log(`✅ [RecipeWriteOffService] Loaded ${writeOffs.length} write-offs from Supabase`)
+      // ✅ BUG FIX: Use safe map to handle malformed data
+      const writeOffs = data ? safeMapFromSupabase(data) : []
+      console.log(
+        `✅ [RecipeWriteOffService] Loaded ${writeOffs.length} write-offs from Supabase`,
+        { loadAll, daysBack, lightweight }
+      )
 
       // Cache to localStorage
       localStorage.setItem(STORAGE_KEY, JSON.stringify(writeOffs))
@@ -73,41 +156,59 @@ export class RecipeWriteOffService {
 
   /**
    * Get write-offs with filters
+   * ✅ OPTIMIZED: Uses SQL filtering instead of loading all + filtering in memory
    */
   static async getWriteOffs(filters?: WriteOffFilters): Promise<ServiceResponse<RecipeWriteOff[]>> {
     try {
-      const allResult = await this.getAllWriteOffs()
-      if (!allResult.success || !allResult.data) {
-        return allResult
-      }
+      // ✅ OPTIMIZATION: Apply filters at SQL level
+      let query = supabase
+        .from('recipe_write_offs')
+        .select(LIGHTWEIGHT_COLUMNS)
+        .order('performed_at', { ascending: false })
 
-      let filtered = allResult.data
-
-      // Apply filters
+      // Apply SQL filters
       if (filters) {
         if (filters.dateFrom) {
-          filtered = filtered.filter(w => w.performedAt >= filters.dateFrom!)
+          query = query.gte('performed_at', filters.dateFrom)
         }
         if (filters.dateTo) {
-          filtered = filtered.filter(w => w.performedAt <= filters.dateTo!)
+          query = query.lte('performed_at', filters.dateTo)
         }
         if (filters.menuItemId) {
-          filtered = filtered.filter(w => w.menuItemId === filters.menuItemId)
+          query = query.eq('menu_item_id', filters.menuItemId)
         }
         if (filters.department) {
-          filtered = filtered.filter(w => w.department === filters.department)
+          query = query.eq('department', filters.department)
         }
         if (filters.operationType && filters.operationType !== 'all') {
-          filtered = filtered.filter(w => w.operationType === filters.operationType)
+          query = query.eq('operation_type', filters.operationType)
         }
+      } else {
+        // Default: last 30 days
+        // ✅ BUG FIX: Use Date.now() arithmetic for UTC-correct calculation
+        const dateFrom = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+        query = query.gte('performed_at', dateFrom)
       }
+
+      // Safety limit
+      query = query.limit(500)
+
+      const { data, error } = await query
+
+      if (error) {
+        console.warn('⚠️ [RecipeWriteOffService] getWriteOffs failed:', error.message)
+        return { success: false, error: error.message }
+      }
+
+      const writeOffs = data ? safeMapFromSupabase(data) : []
+      console.log(`✅ [RecipeWriteOffService] getWriteOffs loaded ${writeOffs.length} records`)
 
       return {
         success: true,
-        data: filtered,
+        data: writeOffs,
         metadata: {
           timestamp: new Date().toISOString(),
-          source: 'local',
+          source: 'api',
           platform: 'web'
         }
       }
@@ -126,37 +227,33 @@ export class RecipeWriteOffService {
 
   /**
    * Get write-off by ID
+   * ✅ OPTIMIZED: Direct query by ID instead of loading all
    */
   static async getWriteOffById(id: string): Promise<ServiceResponse<RecipeWriteOff>> {
     try {
-      const allResult = await this.getAllWriteOffs()
-      if (!allResult.success || !allResult.data) {
-        return {
-          success: false,
-          error: 'Failed to get write-offs',
-          metadata: allResult.metadata
-        }
-      }
+      const { data, error } = await supabase
+        .from('recipe_write_offs')
+        .select(FULL_COLUMNS) // Full data for single record
+        .eq('id', id)
+        .single()
 
-      const writeOff = allResult.data.find(w => w.id === id)
-      if (!writeOff) {
-        return {
-          success: false,
-          error: `Write-off not found: ${id}`,
-          metadata: {
-            timestamp: new Date().toISOString(),
-            source: 'local',
-            platform: 'web'
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return {
+            success: false,
+            error: `Write-off not found: ${id}`,
+            metadata: { timestamp: new Date().toISOString(), source: 'api', platform: 'web' }
           }
         }
+        throw error
       }
 
       return {
         success: true,
-        data: writeOff,
+        data: fromSupabase(data),
         metadata: {
           timestamp: new Date().toISOString(),
-          source: 'local',
+          source: 'api',
           platform: 'web'
         }
       }
@@ -175,24 +272,28 @@ export class RecipeWriteOffService {
 
   /**
    * Get write-offs by sales transaction ID
+   * ✅ OPTIMIZED: Direct query by sales_transaction_id
    */
   static async getWriteOffsBySalesTransaction(
     salesTransactionId: string
   ): Promise<ServiceResponse<RecipeWriteOff[]>> {
     try {
-      const allResult = await this.getAllWriteOffs()
-      if (!allResult.success || !allResult.data) {
-        return allResult
-      }
+      const { data, error } = await supabase
+        .from('recipe_write_offs')
+        .select(FULL_COLUMNS) // Full data for transaction details
+        .eq('sales_transaction_id', salesTransactionId)
+        .order('performed_at', { ascending: false })
 
-      const filtered = allResult.data.filter(w => w.salesTransactionId === salesTransactionId)
+      if (error) throw error
+
+      const writeOffs = data ? safeMapFromSupabase(data) : []
 
       return {
         success: true,
-        data: filtered,
+        data: writeOffs,
         metadata: {
           timestamp: new Date().toISOString(),
-          source: 'local',
+          source: 'api',
           platform: 'web'
         }
       }
@@ -211,24 +312,34 @@ export class RecipeWriteOffService {
 
   /**
    * Get write-offs by menu item
+   * ✅ OPTIMIZED: Direct query by menu_item_id with date limit
    */
   static async getWriteOffsByMenuItem(
     menuItemId: string
   ): Promise<ServiceResponse<RecipeWriteOff[]>> {
     try {
-      const allResult = await this.getAllWriteOffs()
-      if (!allResult.success || !allResult.data) {
-        return allResult
-      }
+      // Default: last 30 days
+      // ✅ BUG FIX: Use Date.now() arithmetic for UTC-correct calculation
+      const dateFrom = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
-      const filtered = allResult.data.filter(w => w.menuItemId === menuItemId)
+      const { data, error } = await supabase
+        .from('recipe_write_offs')
+        .select(LIGHTWEIGHT_COLUMNS)
+        .eq('menu_item_id', menuItemId)
+        .gte('performed_at', dateFrom)
+        .order('performed_at', { ascending: false })
+        .limit(100)
+
+      if (error) throw error
+
+      const writeOffs = data ? safeMapFromSupabase(data) : []
 
       return {
         success: true,
-        data: filtered,
+        data: writeOffs,
         metadata: {
           timestamp: new Date().toISOString(),
-          source: 'local',
+          source: 'api',
           platform: 'web'
         }
       }
@@ -335,19 +446,55 @@ export class RecipeWriteOffService {
 
   /**
    * Get write-off summary statistics
+   * ✅ OPTIMIZED: Uses SQL filtering, loads full data only for filtered period
    */
   static async getSummary(filters?: WriteOffFilters): Promise<ServiceResponse<WriteOffSummary>> {
     try {
-      const result = await this.getWriteOffs(filters)
-      if (!result.success || !result.data) {
+      // ✅ OPTIMIZATION: Build optimized SQL query for summary
+      // ✅ BUG FIX: Don't load write_off_items JSONB, use total_cost instead
+      let query = supabase
+        .from('recipe_write_offs')
+        .select('id, department, operation_type, sales_transaction_id, total_cost')
+        .order('performed_at', { ascending: false })
+
+      // Apply SQL filters
+      if (filters) {
+        if (filters.dateFrom) {
+          query = query.gte('performed_at', filters.dateFrom)
+        }
+        if (filters.dateTo) {
+          query = query.lte('performed_at', filters.dateTo)
+        }
+        if (filters.menuItemId) {
+          query = query.eq('menu_item_id', filters.menuItemId)
+        }
+        if (filters.department) {
+          query = query.eq('department', filters.department)
+        }
+        if (filters.operationType && filters.operationType !== 'all') {
+          query = query.eq('operation_type', filters.operationType)
+        }
+      } else {
+        // Default: last 30 days
+        // ✅ BUG FIX: Use Date.now() arithmetic for UTC-correct calculation
+        const dateFrom = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+        query = query.gte('performed_at', dateFrom)
+      }
+
+      query = query.limit(1000) // Higher limit for summary
+
+      const { data, error } = await query
+
+      if (error) {
         return {
           success: false,
-          error: 'Failed to get write-offs for summary',
-          metadata: result.metadata
+          error: `Failed to get write-offs for summary: ${error.message}`,
+          metadata: { timestamp: new Date().toISOString(), source: 'api', platform: 'web' }
         }
       }
 
-      const writeOffs = result.data
+      const writeOffs = data ? safeMapFromSupabase(data) : []
+      console.log(`✅ [RecipeWriteOffService] getSummary loaded ${writeOffs.length} records`)
 
       // ✅ FIXED: Load actual costs from sales_transactions for accurate summary
       const actualCostMap = new Map<string, number>()
@@ -388,19 +535,30 @@ export class RecipeWriteOffService {
       }
 
       // Helper function to get cost (actual or estimated)
+      // ✅ BUG FIX: Safe access to writeOffItems with null check
       const getCost = (writeOff: RecipeWriteOff): number => {
         // Use actual cost if available
         if (actualCostMap.has(writeOff.id)) {
           return actualCostMap.get(writeOff.id)!
         }
-        // Fallback to estimated cost from writeOffItems
+        // Fallback to estimated cost from writeOffItems (with null check)
+        if (!writeOff.writeOffItems || !Array.isArray(writeOff.writeOffItems)) {
+          return writeOff.totalCost || 0
+        }
         return writeOff.writeOffItems.reduce((s, i) => s + i.totalCost, 0)
+      }
+
+      // ✅ BUG FIX: For summary, count each write-off as 1 item
+      // We don't load writeOffItems JSONB for performance, so we estimate
+      const getItemsCount = (_writeOff: RecipeWriteOff): number => {
+        // Each write-off represents at least 1 menu item
+        return 1
       }
 
       // Calculate totals
       const totalWriteOffs = writeOffs.length
       const totalCost = writeOffs.reduce((sum, w) => sum + getCost(w), 0)
-      const totalItems = writeOffs.reduce((sum, w) => sum + w.writeOffItems.length, 0)
+      const totalItems = writeOffs.reduce((sum, w) => sum + getItemsCount(w), 0)
 
       // By department
       const kitchen = writeOffs.filter(w => w.department === 'kitchen')

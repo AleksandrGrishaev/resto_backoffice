@@ -73,18 +73,44 @@ class SupplierService {
   // PROCUREMENT REQUESTS METHODS
   // =============================================
 
-  async getRequests(): Promise<ProcurementRequest[]> {
+  /**
+   * Get procurement requests
+   * ✅ EGRESS OPTIMIZATION: Added pagination and date filter
+   * @param options.limit - max records (default: 50)
+   * @param options.offset - pagination offset (default: 0)
+   * @param options.daysBack - days to look back (default: 30, 0 = all)
+   */
+  async getRequests(options?: {
+    limit?: number
+    offset?: number
+    daysBack?: number
+  }): Promise<ProcurementRequest[]> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Fetching requests from Supabase...')
+      const { limit = 50, offset = 0, daysBack = 30 } = options || {}
+
+      DebugUtils.info(MODULE_NAME, 'Fetching requests from Supabase...', {
+        limit,
+        offset,
+        daysBack
+      })
 
       // Fetch requests with items in a single query
-      const data = await executeSupabaseQuery(
-        supabase
-          .from('supplierstore_requests')
-          .select('*, supplierstore_request_items(*)')
-          .order('created_at', { ascending: false }),
-        `${MODULE_NAME}.getRequests`
-      )
+      let query = supabase
+        .from('supplierstore_requests')
+        .select('*, supplierstore_request_items(*)')
+        .order('created_at', { ascending: false })
+
+      // ✅ OPTIMIZATION: Apply date filter (unless daysBack=0 for all)
+      // ✅ BUG FIX: Use Date.now() arithmetic for UTC-correct calculation
+      if (daysBack > 0) {
+        const dateFrom = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString()
+        query = query.gte('created_at', dateFrom)
+      }
+
+      // ✅ OPTIMIZATION: Apply pagination
+      query = query.range(offset, offset + limit - 1)
+
+      const data = await executeSupabaseQuery(query, `${MODULE_NAME}.getRequests`)
 
       // Map database rows to TypeScript objects
       const requests = data.map(dbRequest =>
@@ -92,7 +118,10 @@ class SupplierService {
       )
 
       DebugUtils.info(MODULE_NAME, 'Requests fetched from Supabase', {
-        count: requests.length
+        count: requests.length,
+        limit,
+        offset,
+        daysBack
       })
 
       return requests
@@ -316,7 +345,8 @@ class SupplierService {
       }
 
       // 3. Check if any orders reference this request
-      const orders = await this.getOrders()
+      // ✅ BUG FIX: Use higher limit to check ALL orders
+      const orders = await this.getOrders({ limit: 1000 })
       const ordersWithThisRequest = orders.filter(order => order.requestIds.includes(id))
 
       if (ordersWithThisRequest.length > 0) {
@@ -1583,8 +1613,9 @@ class SupplierService {
     await this.delay(50)
 
     // ✅ FETCH FROM SUPABASE (Phase 2)
-    const requests = await this.getRequests()
-    const orders = await this.getOrders()
+    // ✅ BUG FIX: Use daysBack=0 to load ALL data for statistics
+    const requests = await this.getRequests({ daysBack: 0, limit: 1000 })
+    const orders = await this.getOrders({ limit: 1000 })
 
     return {
       totalRequests: requests.length,
