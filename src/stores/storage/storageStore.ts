@@ -547,7 +547,10 @@ export const useStorageStore = defineStore('storage', () => {
     }
   }
 
-  async function createWriteOff(data: CreateWriteOffData): Promise<StorageOperation> {
+  async function createWriteOff(
+    data: CreateWriteOffData,
+    options?: { skipReload?: boolean }
+  ): Promise<StorageOperation> {
     state.value.creatingOperation = true
     state.value.error = null
 
@@ -560,19 +563,22 @@ export const useStorageStore = defineStore('storage', () => {
 
       state.value.operations.unshift(response.data)
 
-      // Reload balances after operation
-      await loadBalances()
+      // ✅ EGRESS FIX: Skip reload for POS sales operations (saves ~300KB per payment)
+      // Balances will be reloaded on next backoffice access or manual refresh
+      if (!options?.skipReload) {
+        await loadBalances()
 
-      // ✅ FIXED: Reload preparation batches if any preparations were written off
-      const hasPreparations = data.items.some(item => item.itemType === 'preparation')
-      if (hasPreparations) {
-        try {
-          const { usePreparationStore } = await import('@/stores/preparation/preparationStore')
-          const preparationStore = usePreparationStore()
-          await preparationStore.fetchBalances(data.department as any)
-          DebugUtils.info(MODULE_NAME, '✅ Preparation batches reloaded after write-off')
-        } catch (error) {
-          DebugUtils.warn(MODULE_NAME, 'Failed to reload preparation batches', { error })
+        // Reload preparation batches if any preparations were written off
+        const hasPreparations = data.items.some(item => item.itemType === 'preparation')
+        if (hasPreparations) {
+          try {
+            const { usePreparationStore } = await import('@/stores/preparation/preparationStore')
+            const preparationStore = usePreparationStore()
+            await preparationStore.fetchBalances(data.department as any)
+            DebugUtils.info(MODULE_NAME, '✅ Preparation batches reloaded after write-off')
+          } catch (error) {
+            DebugUtils.warn(MODULE_NAME, 'Failed to reload preparation batches', { error })
+          }
         }
       }
 

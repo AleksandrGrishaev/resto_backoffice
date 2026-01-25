@@ -175,10 +175,11 @@ export class PaymentsService {
         }
       }
 
-      // Always save to localStorage (backup)
-      const allPayments = await this.getAllPayments()
-      const payments = allPayments.success && allPayments.data ? allPayments.data : []
-
+      // ✅ EGRESS FIX: Update localStorage directly without full reload
+      // Previously: getAllPayments() loaded today's payments from Supabase
+      // Now: Read existing cache, add new payment, save back
+      const cachedData = localStorage.getItem(this.STORAGE_KEY)
+      const payments: PosPayment[] = cachedData ? JSON.parse(cachedData) : []
       payments.push(payment)
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(payments))
       console.log('💾 Payment saved to localStorage (backup)')
@@ -219,9 +220,9 @@ export class PaymentsService {
         }
       }
 
-      // Always update in localStorage (backup)
-      const allPayments = await this.getAllPayments()
-      const payments = allPayments.success && allPayments.data ? allPayments.data : []
+      // ✅ EGRESS FIX: Update localStorage directly without full reload
+      const cachedData = localStorage.getItem(this.STORAGE_KEY)
+      const payments: PosPayment[] = cachedData ? JSON.parse(cachedData) : []
 
       const index = payments.findIndex(p => p.id === payment.id)
       if (index === -1) {

@@ -388,14 +388,15 @@ export class RecipeWriteOffService {
         )
 
         // Fallback to localStorage only
-        const allResult = await this.getAllWriteOffs()
-        const writeOffs = allResult.data || []
+        // ✅ EGRESS FIX: Update localStorage directly without full reload
+        const cachedData = localStorage.getItem(STORAGE_KEY)
+        const writeOffs: RecipeWriteOff[] = cachedData ? JSON.parse(cachedData) : []
         const existingIndex = writeOffs.findIndex(w => w.id === writeOff.id)
 
         if (existingIndex >= 0) {
           writeOffs[existingIndex] = updatedWriteOff
         } else {
-          writeOffs.push(updatedWriteOff)
+          writeOffs.unshift(updatedWriteOff) // Add to beginning (newest first)
         }
 
         localStorage.setItem(STORAGE_KEY, JSON.stringify(writeOffs))
@@ -413,15 +414,17 @@ export class RecipeWriteOffService {
 
       console.log(`✅ [RecipeWriteOffService] Write-off saved to Supabase: ${updatedWriteOff.id}`)
 
-      // Cache to localStorage (backup)
-      const allResult = await this.getAllWriteOffs()
-      const writeOffs = allResult.data || []
+      // ✅ EGRESS FIX: Update localStorage directly without full reload
+      // Previously: getAllWriteOffs() loaded 30 days of write-offs on every save
+      // Now: Read existing cache, update single record, save back
+      const cachedData = localStorage.getItem(STORAGE_KEY)
+      const writeOffs: RecipeWriteOff[] = cachedData ? JSON.parse(cachedData) : []
       const existingIndex = writeOffs.findIndex(w => w.id === writeOff.id)
 
       if (existingIndex >= 0) {
         writeOffs[existingIndex] = updatedWriteOff
       } else {
-        writeOffs.push(updatedWriteOff)
+        writeOffs.unshift(updatedWriteOff) // Add to beginning (newest first)
       }
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(writeOffs))

@@ -388,15 +388,15 @@ export class SalesService {
         )
 
         // Fallback to localStorage only
-        // ✅ BUG FIX: Use loadAll to find old transactions in fallback
-        const allResult = await this.getAllTransactions({ loadAll: true })
-        const transactions = allResult.data || []
+        // ✅ EGRESS FIX: Update localStorage directly without full reload
+        const cachedData = localStorage.getItem(STORAGE_KEY)
+        const transactions: SalesTransaction[] = cachedData ? JSON.parse(cachedData) : []
         const existingIndex = transactions.findIndex(t => t.id === transaction.id)
 
         if (existingIndex >= 0) {
           transactions[existingIndex] = updatedTransaction
         } else {
-          transactions.push(updatedTransaction)
+          transactions.unshift(updatedTransaction) // Add to beginning (newest first)
         }
 
         localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions))
@@ -414,16 +414,17 @@ export class SalesService {
 
       console.log(`✅ [SalesService] Transaction saved to Supabase: ${updatedTransaction.id}`)
 
-      // Cache to localStorage (backup)
-      // ✅ BUG FIX: Use loadAll to ensure transaction is found for caching
-      const allResult = await this.getAllTransactions({ loadAll: true })
-      const transactions = allResult.data || []
+      // ✅ EGRESS FIX: Update localStorage directly without full reload
+      // Previously: getAllTransactions({ loadAll: true }) loaded ALL 226+ records
+      // Now: Read existing cache, update single transaction, save back
+      const cachedData = localStorage.getItem(STORAGE_KEY)
+      const transactions: SalesTransaction[] = cachedData ? JSON.parse(cachedData) : []
       const existingIndex = transactions.findIndex(t => t.id === transaction.id)
 
       if (existingIndex >= 0) {
         transactions[existingIndex] = updatedTransaction
       } else {
-        transactions.push(updatedTransaction)
+        transactions.unshift(updatedTransaction) // Add to beginning (newest first)
       }
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions))

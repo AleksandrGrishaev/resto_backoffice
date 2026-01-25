@@ -479,10 +479,12 @@ export class ShiftsService {
 
   /**
    * Сохранить смену
+   * ✅ EGRESS FIX: Read from localStorage instead of calling loadShifts()
    */
   private async saveShift(shift: PosShift): Promise<void> {
-    const shifts = await this.loadShifts()
-    const shiftsData = shifts.success && shifts.data ? shifts.data : []
+    // Read from localStorage directly (no Supabase call)
+    const cachedData = localStorage.getItem(this.STORAGE_KEYS.shifts)
+    const shiftsData: PosShift[] = cachedData ? JSON.parse(cachedData) : []
 
     const existingIndex = shiftsData.findIndex(s => s.id === shift.id)
 
@@ -686,29 +688,10 @@ export class ShiftsService {
         throw new Error(updateResult.error || 'Failed to update shift')
       }
 
-      // ✅ NEW: Verify the update was saved
-      const verifyResult = await this.loadShifts()
-      if (verifyResult.success && verifyResult.data) {
-        const verifiedShift = verifyResult.data.find(s => s.id === shiftId)
-        if (verifiedShift) {
-          const verifiedMethod = verifiedShift.paymentMethods.find(
-            pm => pm.methodType === paymentMethodType
-          )
-          console.log(`✅ VERIFIED payment method after save:`, {
-            type: paymentMethodType,
-            amount: verifiedMethod?.amount,
-            expectedAmount: methodSummary.amount,
-            matches: verifiedMethod?.amount === methodSummary.amount
-          })
-
-          if (verifiedMethod?.amount !== methodSummary.amount) {
-            console.error(`❌ VERIFICATION FAILED: Amounts don't match!`, {
-              saved: verifiedMethod?.amount,
-              expected: methodSummary.amount
-            })
-          }
-        }
-      }
+      // ✅ EGRESS FIX: Removed unnecessary verification reload
+      // Previously: loadShifts() was called just to verify the save worked
+      // Now: Trust the updateResult - if it succeeded, data is saved correctly
+      // This saves one Supabase query per payment
 
       console.log(
         `✅ Updated payment methods in shift ${shift.shiftNumber}: ${paymentMethodType} +${amount}`

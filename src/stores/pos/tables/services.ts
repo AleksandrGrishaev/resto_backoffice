@@ -111,18 +111,22 @@ export class TablesService {
     orderId?: string
   ): Promise<ServiceResponse<PosTable>> {
     try {
-      const tables = await this.getAllTables()
-      if (!tables.success || !tables.data) {
-        throw new Error('Failed to load tables')
+      // ✅ EGRESS FIX: Read from localStorage instead of calling getAllTables()
+      // Previously: getAllTables() loaded ALL tables from Supabase on every status update
+      // Now: Read from localStorage cache (always populated during initialization)
+      const cachedData = localStorage.getItem(this.STORAGE_KEY)
+      if (!cachedData) {
+        throw new Error('Tables not loaded - localStorage cache empty')
       }
 
-      const tableIndex = tables.data.findIndex(t => t.id === tableId)
+      const tables: PosTable[] = JSON.parse(cachedData)
+      const tableIndex = tables.findIndex(t => t.id === tableId)
       if (tableIndex === -1) {
         throw new Error('Table not found')
       }
 
       const updatedTable: PosTable = {
-        ...tables.data[tableIndex],
+        ...tables[tableIndex],
         status,
         currentOrderId: orderId,
         updatedAt: TimeUtils.getCurrentLocalISO()
@@ -148,8 +152,8 @@ export class TablesService {
       }
 
       // 2. Always update localStorage (offline resilience)
-      tables.data[tableIndex] = updatedTable
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(tables.data))
+      tables[tableIndex] = updatedTable
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(tables))
       console.log(`💾 Table ${updatedTable.number} status saved to localStorage (backup)`)
 
       return {
@@ -172,24 +176,26 @@ export class TablesService {
     updates: Partial<PosTable>
   ): Promise<ServiceResponse<PosTable>> {
     try {
-      const tables = await this.getAllTables()
-      if (!tables.success || !tables.data) {
-        throw new Error('Failed to load tables')
+      // ✅ EGRESS FIX: Read from localStorage instead of getAllTables()
+      const cachedData = localStorage.getItem(this.STORAGE_KEY)
+      if (!cachedData) {
+        throw new Error('Tables not loaded - localStorage cache empty')
       }
 
-      const tableIndex = tables.data.findIndex(t => t.id === tableId)
+      const tables: PosTable[] = JSON.parse(cachedData)
+      const tableIndex = tables.findIndex(t => t.id === tableId)
       if (tableIndex === -1) {
         throw new Error('Table not found')
       }
 
       const updatedTable: PosTable = {
-        ...tables.data[tableIndex],
+        ...tables[tableIndex],
         ...updates,
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
 
-      tables.data[tableIndex] = updatedTable
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(tables.data))
+      tables[tableIndex] = updatedTable
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(tables))
 
       return {
         success: true,

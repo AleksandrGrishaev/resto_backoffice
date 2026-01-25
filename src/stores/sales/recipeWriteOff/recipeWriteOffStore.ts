@@ -182,7 +182,8 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
         notes: `Auto sales write-off: ${menuItem.name} - ${variant.name} (${billItem.quantity} portion${billItem.quantity > 1 ? 's' : ''})`
       }
 
-      const storageOperation = await storageStore.createWriteOff(writeOffData)
+      // ✅ EGRESS FIX: Skip balance reload for POS sales (saves ~300KB per payment)
+      const storageOperation = await storageStore.createWriteOff(writeOffData, { skipReload: true })
 
       console.log(`✅ [${MODULE_NAME}] Storage operation created:`, storageOperation.id)
 
@@ -345,7 +346,8 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
         notes: `Auto sales write-off: ${menuItem.name} - ${variant.name} (${billItem.quantity} portion${billItem.quantity > 1 ? 's' : ''})`
       }
 
-      const storageOperation = await storageStore.createWriteOff(writeOffData)
+      // ✅ EGRESS FIX: Skip balance reload for POS sales (saves ~300KB per payment)
+      const storageOperation = await storageStore.createWriteOff(writeOffData, { skipReload: true })
 
       console.log(`✅ [${MODULE_NAME}] Storage operation created:`, storageOperation.id)
 

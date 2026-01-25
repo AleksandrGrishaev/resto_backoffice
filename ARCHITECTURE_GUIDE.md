@@ -44,28 +44,7 @@
 
 ## Core Principles
 
-### 1. Role-Based Architecture
-
-**Strategy**: Load only the stores and features needed for the user's role.
-
-```typescript
-// User roles determine what gets loaded
-type UserRole = 'admin' | 'manager' | 'cashier' | 'waiter' | 'kitchen'
-
-// Initialization logic (in appInitializer.ts)
-if (hasRole(['admin', 'manager'])) {
-  // Load backoffice stores (products, recipes, suppliers, etc.)
-}
-if (hasRole(['admin', 'cashier', 'waiter'])) {
-  // Load POS stores (tables, orders, payments, shifts)
-}
-```
-
-**Benefits**:
-
-- Faster initial load (only load what's needed)
-- Better performance (less memory usage)
-- Clearer separation of concerns
+#
 
 ### 2. Modular Store Design
 
@@ -124,23 +103,6 @@ async createProduct(data: CreateProductData) {
 }
 ```
 
-### 4. Offline-First for Critical Operations
-
-**Strategy**: POS system works without internet
-
-```typescript
-// POS operations save to localStorage first
-await ordersStore.createOrder(orderData) // Instant response
-// Background sync happens later via SyncService
-```
-
-**Implementation**:
-
-- LocalStorage as primary cache
-- Background sync queue with exponential backoff
-- Conflict resolution strategies
-- Network status monitoring
-
 ### 5. Type Safety
 
 **Strict TypeScript Configuration**:
@@ -184,7 +146,6 @@ await ordersStore.createOrder(orderData) // Instant response
 ### Backend & Database
 
 - **Supabase**: Primary backend (PostgreSQL + Auth + Realtime)
-- **Firebase**: Legacy (being phased out)
 - **MCP Integration**: Direct database operations via Claude Code
 
 ### Build & Tools
@@ -206,13 +167,14 @@ await ordersStore.createOrder(orderData) // Instant response
 
 ### Directory Layout
 
+Возможно я все же добавил изначальные папки backend \ frontend - даже если это vue, и в backend поместил supabase, может еще что. Или потом сервер отдельно. Так как есть тяжелые запросы, которые не должны обрабатываться на frontend
+
 ```
 backoffice/
 ├── .env.development          # Dev environment variables
 ├── .env.production           # Prod environment variables
 ├── .mcp.json                 # MCP Supabase integration config
 ├── CLAUDE.md                 # Claude Code instructions
-├── ARCHITECTURE_GUIDE.md     # This document
 │
 ├── src/
 │   ├── main.ts               # App entry point (minimal bootstrap)
@@ -916,36 +878,6 @@ function getDefaultRoute(): string {
 
 The initialization system (`src/core/appInitializer.ts`) orchestrates the loading of stores based on user roles and context.
 
-### Initialization Flow
-
-```
-1. App.vue mounted
-   ↓
-2. Check authentication
-   ↓
-3. Get user roles
-   ↓
-4. useAppInitializer().initialize(roles)
-   ↓
-5. AppInitializer selects strategy (Dev/Production)
-   ↓
-6. Strategy executes 3 phases:
-   │
-   ├─ Phase 1: Critical stores (for all roles)
-   │  └─ products, recipes, menu, counteragents
-   │
-   ├─ Phase 2: Role-based stores
-   │  ├─ Backoffice (admin/manager): storage, suppliers, account
-   │  └─ POS (cashier/waiter): pos, kitchen
-   │
-   └─ Phase 3: Optional stores
-      └─ debug, analytics
-   ↓
-7. Show initialization summary
-   ↓
-8. App ready
-```
-
 ### Strategy Pattern
 
 **Dev Strategy**: Aggressive caching, debug logging
@@ -1186,63 +1118,6 @@ async function createOrder(orderData: CreateOrderData): Promise<ServiceResponse<
   }
 }
 ```
-
-### Background Sync System
-
-**Architecture** (`src/core/sync/`):
-
-```typescript
-// SyncService - Centralized sync queue manager
-interface SyncQueueItem {
-  id: string
-  entityType: string
-  entityId: string
-  operation: 'create' | 'update' | 'delete'
-  priority: 'critical' | 'high' | 'normal' | 'low'
-  data: any
-  attempts: number
-  maxAttempts: number
-  lastAttempt?: string
-  nextAttempt?: string
-  error?: string
-}
-
-// Adapter pattern for entity-specific sync logic
-interface ISyncAdapter {
-  entityType: string
-  sync(item: SyncQueueItem): Promise<ServiceResponse<void>>
-  handleConflict?(local: any, remote: any): any
-}
-
-// Usage
-const syncService = useSyncService()
-
-// Register adapters
-syncService.registerAdapter(new ShiftSyncAdapter())
-syncService.registerAdapter(new OrderSyncAdapter())
-
-// Add to queue
-syncService.addToQueue({
-  entityType: 'order',
-  entityId: order.id,
-  operation: 'create',
-  priority: 'high',
-  data: order
-})
-
-// Process queue (auto-called on network restore)
-await syncService.processQueue()
-```
-
-**Features**:
-
-- Priority-based processing
-- Exponential backoff (2^attempts, max 1 hour)
-- Automatic retry on failure
-- Conflict resolution strategies
-- Network status monitoring
-
----
 
 ## UI/UX Patterns
 
@@ -1619,7 +1494,6 @@ if (error) throw error
 
 **Migration Strategy**:
 
-1. Keep both Firebase and Supabase clients active
 2. Add `ENV.useSupabase` flag in environment config
 3. Implement Supabase version first
 4. Test in parallel
