@@ -1046,8 +1046,14 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
   /**
    * Пересчитать суммы заказа (wrapper для composable)
+   *
+   * @param orderId - Order ID to recalculate
+   * @param options.skipTableUpdate - Skip table status update (for discount-only operations)
    */
-  async function recalculateOrderTotals(orderId: string): Promise<void> {
+  async function recalculateOrderTotals(
+    orderId: string,
+    options?: { skipTableUpdate?: boolean }
+  ): Promise<void> {
     const order = orders.value.find(o => o.id === orderId)
     if (!order) return
 
@@ -1062,7 +1068,10 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
     // Автоматически управлять статусом стола после пересчета
     // (ловит изменения paymentStatus и order.status)
-    await updateTableStatusForOrder(orderId)
+    // ✅ EGRESS FIX: Skip for discount-only operations where table status doesn't change
+    if (!options?.skipTableUpdate) {
+      await updateTableStatusForOrder(orderId)
+    }
   }
 
   /**
@@ -1912,10 +1921,9 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       }
 
       // Recalculate order totals (will populate revenue breakdown)
-      await recalculateOrderTotals(foundOrder.id)
-
-      // Save order to persistence
-      await updateOrder(foundOrder)
+      // ✅ EGRESS FIX: recalculateOrderTotals already calls updateOrder internally
+      // Skip table update - discounts don't change table status
+      await recalculateOrderTotals(foundOrder.id, { skipTableUpdate: true })
 
       return result
     } catch (error) {
@@ -2006,10 +2014,9 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       }
 
       // Recalculate order totals (will populate revenue breakdown and sum up all item discounts including allocated bill discounts)
-      await recalculateOrderTotals(foundOrder.id)
-
-      // Save order to persistence
-      await updateOrder(foundOrder)
+      // ✅ EGRESS FIX: recalculateOrderTotals already calls updateOrder internally
+      // Skip table update - discounts don't change table status
+      await recalculateOrderTotals(foundOrder.id, { skipTableUpdate: true })
 
       return result
     } catch (error) {
@@ -2125,10 +2132,9 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       foundItem.discounts = []
 
       // Recalculate order totals
-      await recalculateOrderTotals(foundOrder.id)
-
-      // Save order to persistence
-      await updateOrder(foundOrder)
+      // ✅ EGRESS FIX: recalculateOrderTotals already calls updateOrder internally
+      // Skip table update - discounts don't change table status
+      await recalculateOrderTotals(foundOrder.id, { skipTableUpdate: true })
 
       console.log('✅ [ordersStore] Item discount removed successfully')
 
@@ -2182,10 +2188,9 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       foundBill.discountType = undefined
 
       // Recalculate order totals
-      await recalculateOrderTotals(foundOrder.id)
-
-      // Save order to persistence
-      await updateOrder(foundOrder)
+      // ✅ EGRESS FIX: recalculateOrderTotals already calls updateOrder internally
+      // Skip table update - discounts don't change table status
+      await recalculateOrderTotals(foundOrder.id, { skipTableUpdate: true })
 
       console.log('✅ [ordersStore] Bill discount removed successfully')
 

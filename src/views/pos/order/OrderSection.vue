@@ -931,22 +931,13 @@ const handleApplyDiscount = async (itemId: string): Promise<void> => {
   }
 }
 
-const handleDiscountSuccess = async (): Promise<void> => {
-  try {
-    showSuccess('Discount applied successfully')
-    hasUnsavedChanges.value = true
-
-    // Recalculate order totals
-    if (currentOrder.value) {
-      await ordersStore.recalculateOrderTotals(currentOrder.value.id)
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to recalculate totals'
-    showError(message)
-  } finally {
-    discountingItemId.value = null
-    discountingBillId.value = ''
-  }
+const handleDiscountSuccess = (): void => {
+  // ✅ EGRESS FIX: Don't call recalculateOrderTotals here
+  // applyItemDiscount/applyBillDiscount already handles recalculation and persistence
+  showSuccess('Discount applied successfully')
+  hasUnsavedChanges.value = true
+  discountingItemId.value = null
+  discountingBillId.value = ''
 }
 
 const handleDiscountCancel = (): void => {
