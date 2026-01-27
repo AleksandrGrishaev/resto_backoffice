@@ -13,8 +13,10 @@
             = theoretical usage from orders (decomposed through recipes).
             <strong>Write-offs</strong>
             = actual write-offs from storage.
+            <strong>In Preps</strong>
+            = products frozen in active preparations.
             <strong>Variance</strong>
-            = Opening + Received - Sales - Loss - Stock.
+            = Opening + Received - Sales - Loss - (Stock + In Preps).
           </p>
         </v-col>
       </v-row>
@@ -99,39 +101,61 @@
       <template v-if="report && !loading">
         <!-- Summary Cards -->
         <v-row class="mb-4">
-          <v-col cols="12" md="3">
+          <v-col cols="6" md="2">
             <v-card variant="tonal" color="primary">
-              <v-card-text>
-                <div class="text-caption">Total Products</div>
-                <div class="text-h5">{{ report.summary.totalProducts }}</div>
+              <v-card-text class="pa-3">
+                <div class="text-caption">Products</div>
+                <div class="text-h6">{{ report.summary.totalProducts }}</div>
+                <div class="text-caption text-medium-emphasis">
+                  {{ report.summary.productsWithActivity }} active
+                </div>
               </v-card-text>
             </v-card>
           </v-col>
-          <v-col cols="12" md="3">
-            <v-card variant="tonal" color="info">
-              <v-card-text>
-                <div class="text-caption">Products with Activity</div>
-                <div class="text-h5">{{ report.summary.productsWithActivity }}</div>
-              </v-card-text>
-            </v-card>
-          </v-col>
-          <v-col cols="12" md="3">
+          <v-col cols="6" md="2">
             <v-card variant="tonal" color="success">
-              <v-card-text>
-                <div class="text-caption">Total Sales</div>
-                <div class="text-h5">{{ formatIDR(report.summary.totalSalesAmount) }}</div>
+              <v-card-text class="pa-3">
+                <div class="text-caption">Sales</div>
+                <div class="text-h6">{{ formatIDR(report.summary.totalSalesAmount) }}</div>
               </v-card-text>
             </v-card>
           </v-col>
-          <v-col cols="12" md="3">
+          <v-col cols="6" md="2">
             <v-card variant="tonal" color="error">
-              <v-card-text>
-                <div class="text-caption">Total Loss</div>
-                <div class="text-h5">
-                  {{ formatIDR(report.summary.totalLossAmount) }}
-                  <span class="text-body-2">
-                    ({{ (report.summary.overallLossPercent ?? 0).toFixed(1) }}%)
-                  </span>
+              <v-card-text class="pa-3">
+                <div class="text-caption">Loss</div>
+                <div class="text-h6">{{ formatIDR(report.summary.totalLossAmount) }}</div>
+                <div class="text-caption text-error">
+                  {{ (report.summary.overallLossPercent ?? 0).toFixed(1) }}%
+                </div>
+              </v-card-text>
+            </v-card>
+          </v-col>
+          <v-col cols="6" md="2">
+            <v-card variant="tonal" color="info">
+              <v-card-text class="pa-3">
+                <div class="text-caption">In Preps</div>
+                <div class="text-h6">{{ formatIDR(report.summary.totalInPrepsAmount ?? 0) }}</div>
+              </v-card-text>
+            </v-card>
+          </v-col>
+          <v-col cols="12" md="4">
+            <v-card
+              variant="tonal"
+              :color="(report.summary.totalVarianceAmount ?? 0) > 0 ? 'error' : 'warning'"
+            >
+              <v-card-text class="pa-3">
+                <div class="text-caption">Total Variance</div>
+                <div class="text-h6">
+                  {{ (report.summary.totalVarianceAmount ?? 0) > 0 ? '+' : ''
+                  }}{{ formatIDR(report.summary.totalVarianceAmount ?? 0) }}
+                </div>
+                <div class="text-caption text-medium-emphasis">
+                  {{
+                    (report.summary.totalVarianceAmount ?? 0) > 0
+                      ? 'Product shortage'
+                      : 'Product surplus'
+                  }}
                 </div>
               </v-card-text>
             </v-card>
@@ -354,6 +378,19 @@
                   <span v-else class="text-medium-emphasis">—</span>
                 </template>
 
+                <!-- In Preps Column (products frozen in preparation batches) -->
+                <template #[`item.inPreps.amount`]="{ item }">
+                  <div v-if="(item.inPreps?.quantity ?? 0) > 0" class="stacked-cell">
+                    <div class="text-body-2 text-info">
+                      {{ formatQty(item.inPreps?.quantity ?? 0, item.unit) }} {{ item.unit }}
+                    </div>
+                    <div class="text-caption text-medium-emphasis">
+                      {{ formatIDR(item.inPreps?.amount ?? 0) }}
+                    </div>
+                  </div>
+                  <span v-else class="text-medium-emphasis">—</span>
+                </template>
+
                 <!-- Variance Column -->
                 <template #[`item.variance.amount`]="{ item }">
                   <div v-if="Math.abs(item.variance.amount) > 0.01" class="stacked-cell">
@@ -461,16 +498,17 @@ const departmentOptions = [
 ]
 
 const tableHeaders = [
-  { title: 'Product', key: 'productName', sortable: true, width: '150px' },
-  { title: 'Dept', key: 'department', sortable: true, width: '70px' },
-  { title: 'Opening', key: 'opening.amount', sortable: true, width: '90px' },
-  { title: 'Received', key: 'received.amount', sortable: true, width: '90px' },
-  { title: 'Sales', key: 'sales.amount', sortable: true, width: '95px' },
-  { title: 'Write-offs', key: 'writeoffs.amount', sortable: true, width: '95px' },
-  { title: 'Loss', key: 'loss.amount', sortable: true, width: '90px' },
-  { title: 'Stock', key: 'closing.amount', sortable: true, width: '90px' },
-  { title: 'Variance', key: 'variance.amount', sortable: true, width: '95px' },
-  { title: 'Loss %', key: 'lossPercent', sortable: true, width: '65px' },
+  { title: 'Product', key: 'productName', sortable: true, width: '140px' },
+  { title: 'Dept', key: 'department', sortable: true, width: '65px' },
+  { title: 'Opening', key: 'opening.amount', sortable: true, width: '85px' },
+  { title: 'Received', key: 'received.amount', sortable: true, width: '85px' },
+  { title: 'Sales', key: 'sales.amount', sortable: true, width: '85px' },
+  { title: 'Write-offs', key: 'writeoffs.amount', sortable: true, width: '85px' },
+  { title: 'Loss', key: 'loss.amount', sortable: true, width: '80px' },
+  { title: 'Stock', key: 'closing.amount', sortable: true, width: '80px' },
+  { title: 'In Preps', key: 'inPreps.amount', sortable: true, width: '80px' },
+  { title: 'Variance', key: 'variance.amount', sortable: true, width: '90px' },
+  { title: 'Loss %', key: 'lossPercent', sortable: true, width: '60px' },
   { title: '', key: 'actions', sortable: false, width: '40px' }
 ]
 

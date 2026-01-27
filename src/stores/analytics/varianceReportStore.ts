@@ -173,6 +173,8 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
           // V3: Use theoretical sales as main sales amount
           totalSalesAmount: data.summary.totalTheoreticalSalesAmount || 0,
           totalLossAmount: data.summary.totalLossAmount,
+          totalInPrepsAmount: data.summary.totalInPrepsAmount || 0,
+          totalVarianceAmount: data.summary.totalVarianceAmount || 0,
           overallLossPercent: data.summary.overallLossPercent
         },
         byDepartment: {
@@ -181,6 +183,8 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
             // V3: Use theoretical sales
             salesAmount: data.byDepartment.kitchen?.theoreticalSalesAmount || 0,
             lossAmount: data.byDepartment.kitchen?.lossAmount || 0,
+            inPrepsAmount: data.byDepartment.kitchen?.inPrepsAmount || 0,
+            varianceAmount: data.byDepartment.kitchen?.varianceAmount || 0,
             lossPercent: data.byDepartment.kitchen?.lossPercent || 0
           },
           bar: {
@@ -188,6 +192,8 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
             // V3: Use theoretical sales
             salesAmount: data.byDepartment.bar?.theoreticalSalesAmount || 0,
             lossAmount: data.byDepartment.bar?.lossAmount || 0,
+            inPrepsAmount: data.byDepartment.bar?.inPrepsAmount || 0,
+            varianceAmount: data.byDepartment.bar?.varianceAmount || 0,
             lossPercent: data.byDepartment.bar?.lossPercent || 0
           }
         },
@@ -213,6 +219,8 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
             tracedLoss: item.tracedLoss || { quantity: 0, amount: 0 },
             // Closing & Variance
             closing: item.closing || { quantity: 0, amount: 0 },
+            inPreps: item.inPreps || { quantity: 0, amount: 0 },
+            stockTotal: item.stockTotal || { quantity: 0, amount: 0 },
             variance: item.variance || { quantity: 0, amount: 0 },
             // V3: Sales vs Writeoffs difference
             salesWriteoffDiff: item.salesWriteoffDiff || { quantity: 0, amount: 0 },
@@ -422,8 +430,12 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
       'Sales-Writeoff Diff Amount',
       'Loss Qty',
       'Loss Amount',
-      'Stock Qty',
-      'Stock Amount',
+      'Raw Stock Qty',
+      'Raw Stock Amount',
+      'In Preps Qty',
+      'In Preps Amount',
+      'Stock Total Qty',
+      'Stock Total Amount',
       'Variance Qty',
       'Variance Amount',
       'Loss %',
@@ -449,6 +461,10 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
       item.loss.amount,
       item.closing.quantity,
       item.closing.amount,
+      item.inPreps?.quantity ?? 0,
+      item.inPreps?.amount ?? 0,
+      item.stockTotal?.quantity ?? 0,
+      item.stockTotal?.amount ?? 0,
       item.variance.quantity,
       item.variance.amount,
       (item.lossPercent ?? 0).toFixed(2),

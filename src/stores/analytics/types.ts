@@ -488,8 +488,10 @@ export interface ProductVarianceRowV2 {
   tracedLoss: StockAmount // Losses traced through preparations
 
   // Closing & Variance
-  closing: StockAmount // Stock at period end
-  variance: StockAmount // Opening + Received - Sales - Loss - Closing (should be 0)
+  closing: StockAmount // Stock at period end (raw products in batches)
+  inPreps: StockAmount // Products "frozen" in active preparation batches
+  stockTotal: StockAmount // closing + inPreps (total stock)
+  variance: StockAmount // Opening + Received - Sales - Loss - StockTotal (should be 0)
 
   // Sales vs Writeoffs difference (to see recipe/write-off discrepancy)
   salesWriteoffDiff: StockAmount // sales - writeoffs (positive = more theoretical than actual)
@@ -516,12 +518,28 @@ export interface VarianceReportV2 {
     productsWithActivity: number // Products with sales or losses
     totalSalesAmount: number
     totalLossAmount: number
+    totalInPrepsAmount: number // Products "frozen" in preparation batches
+    totalVarianceAmount: number
     overallLossPercent: number // (totalLoss / totalSales) * 100
   }
 
   byDepartment: {
-    kitchen: { count: number; salesAmount: number; lossAmount: number; lossPercent: number }
-    bar: { count: number; salesAmount: number; lossAmount: number; lossPercent: number }
+    kitchen: {
+      count: number
+      salesAmount: number
+      lossAmount: number
+      inPrepsAmount: number
+      varianceAmount: number
+      lossPercent: number
+    }
+    bar: {
+      count: number
+      salesAmount: number
+      lossAmount: number
+      inPrepsAmount: number
+      varianceAmount: number
+      lossPercent: number
+    }
   }
 
   items: ProductVarianceRowV2[]
