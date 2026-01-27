@@ -1,23 +1,18 @@
--- RPC Function: complete_receipt_full
--- Purpose: Atomic receipt completion in single transaction
--- Performance: Replaces 45-60+ sequential API calls with 1 RPC call (20s → 1-2s)
--- Created: 2026-01-02
--- Updated: 2026-01-27 (Migration 098 - fix JSON key names)
+-- Migration: 098_fix_complete_receipt_json_keys
+-- Description: Fix JSON key names in complete_receipt_full RPC to match client-sent keys
+-- Date: 2026-01-27
+-- Author: Claude Code
 
--- PARAMETERS:
--- p_receipt_id: Receipt ID to complete
--- p_order_id: Related purchase order ID
--- p_delivery_date: Actual delivery timestamp
--- p_warehouse_id: Target warehouse
--- p_supplier_id: Supplier counteragent ID
--- p_supplier_name: Supplier name for payment record
--- p_total_amount: Total receipt amount
--- p_received_items: JSONB array of received items with structure:
---   [{ itemId, itemName, receivedQuantity, actualPrice, packageId, packageSize }]
-
--- RETURNS:
--- JSONB: { success: boolean, convertedBatches, reconciledBatches, operationId,
---          originalAmount, actualDeliveredAmount, error?, code? }
+-- CONTEXT:
+-- The client (useReceipts.ts) sends items with 'actualPrice' key:
+--   { itemId, itemName, receivedQuantity, actualPrice, packageId, packageSize }
+--
+-- But migration 092 introduced a bug where v_actual_delivered calculation looks for:
+--   'actualBaseCost' and 'orderedBaseCost' (which don't exist in the JSON)
+--
+-- This causes COALESCE(NULL, NULL, 0) = 0, resulting in total_amount = 0
+--
+-- FIX: Update the v_actual_delivered calculation to use 'actualPrice' (which client sends)
 
 CREATE OR REPLACE FUNCTION complete_receipt_full(
   p_receipt_id TEXT,
@@ -160,3 +155,14 @@ EXCEPTION WHEN OTHERS THEN
   );
 END;
 $$;
+
+-- POST-MIGRATION VALIDATION
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc WHERE proname = 'complete_receipt_full'
+  ) THEN
+    RAISE EXCEPTION 'Function complete_receipt_full was not created';
+  END IF;
+  RAISE NOTICE 'Migration 098 completed: complete_receipt_full fixed to use actualPrice key';
+END $$;

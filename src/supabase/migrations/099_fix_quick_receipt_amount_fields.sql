@@ -1,62 +1,15 @@
--- Function: create_quick_receipt_complete
--- Description: Optimized quick receipt creation with batch price updates
--- Version: 2.1 (Added original_total_amount and actual_delivered_amount)
--- Date: 2026-01-02
--- Updated: 2026-01-27 (Migration 099 - fix amount fields)
+-- Migration: 099_fix_quick_receipt_amount_fields
+-- Description: Fix create_quick_receipt_complete RPC to populate original_total_amount and actual_delivered_amount
+-- Date: 2026-01-27
 -- Author: Claude Code
 
--- OVERVIEW:
--- Creates order + receipt + items + updates product/package prices in one atomic transaction.
--- This function replaces the previous N+1 pattern where price updates were done sequentially
--- in client code (10 items = 20 DB calls = 7-10 seconds).
+-- CONTEXT:
+-- The create_quick_receipt_complete function was not setting original_total_amount and
+-- actual_delivered_amount when creating the order. This caused UI to fall back to totalAmount
+-- instead of showing actual delivered amount properly.
 --
--- PERFORMANCE:
--- - Before: 20+ sequential DB calls (7-10 seconds for 10 items)
--- - After: 1 RPC call with batch updates (1-3 seconds total)
--- - Speedup: 5-7x faster
---
--- PARAMETERS:
--- - p_supplier_id: Supplier UUID
--- - p_supplier_name: Supplier name
--- - p_items: JSONB array of items (see structure below)
--- - p_delivery_date: Receipt delivery date
--- - p_notes: Optional notes
--- - p_tax_amount: Optional tax amount in IDR
--- - p_tax_percentage: Optional tax percentage
--- - p_update_prices: Enable/disable price updates (default: true)
---
--- ITEMS STRUCTURE:
--- [
---   {
---     "item_id": "product_uuid",
---     "item_name": "Product Name",
---     "quantity": 1000,              -- Base quantity (e.g., grams)
---     "unit": "g",                   -- Base unit
---     "price_per_unit": 28,          -- Cost per base unit (IDR/g)
---     "package_id": "package_uuid",
---     "package_name": "Package Name",
---     "package_quantity": 1,         -- Number of packages
---     "package_unit": "kg",          -- Package unit
---     "package_price": 28000         -- Price per package
---   }
--- ]
---
--- RETURNS:
--- {
---   "order_id": "uuid",
---   "order_number": "PO-260127-001",
---   "receipt_id": "uuid",
---   "receipt_number": "RCP-260127-001",
---   "total_amount": 280000,
---   "original_total_amount": 280000,
---   "actual_delivered_amount": 280000,
---   "items": [...],
---   "priceUpdates": {
---     "productsUpdated": 10,
---     "packagesUpdated": 10,
---     "enabled": true
---   }
--- }
+-- FIX: Add original_total_amount and actual_delivered_amount to the INSERT statement.
+-- For Quick Receipt, original = actual = total (since it's instant delivery with no discrepancies).
 
 CREATE OR REPLACE FUNCTION create_quick_receipt_complete(
   p_supplier_id text,
@@ -306,13 +259,30 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
--- Grant execute permission to authenticated and anonymous users
+-- Grant permissions
 GRANT EXECUTE ON FUNCTION create_quick_receipt_complete TO authenticated;
 GRANT EXECUTE ON FUNCTION create_quick_receipt_complete TO anon;
 
--- Add function documentation
-COMMENT ON FUNCTION create_quick_receipt_complete IS
-'Optimized quick receipt creation with batch price updates.
-Creates order + items + receipt + items + updates product/package prices in one atomic transaction.
-Returns complete data for client-side storage integration.
-Performance: Reduces 20+ sequential DB operations to 1 RPC call (5-7x speedup).';
+-- POST-MIGRATION: Fix existing Quick Receipt orders that have NULL amount fields
+UPDATE supplierstore_orders
+SET
+  original_total_amount = total_amount,
+  actual_delivered_amount = total_amount
+WHERE status = 'delivered'
+  AND original_total_amount IS NULL
+  AND actual_delivered_amount IS NULL
+  AND total_amount IS NOT NULL;
+
+-- Validation
+DO $$
+DECLARE
+  v_fixed_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO v_fixed_count
+  FROM supplierstore_orders
+  WHERE status = 'delivered'
+    AND original_total_amount IS NOT NULL
+    AND actual_delivered_amount IS NOT NULL;
+
+  RAISE NOTICE 'Migration 099 completed: % delivered orders now have amount fields populated', v_fixed_count;
+END $$;
