@@ -470,9 +470,15 @@ export interface ProductVarianceRowV2 {
   unit: string
   department: 'kitchen' | 'bar'
 
+  // Stock movement
+  opening: StockAmount // Stock at period start
+  received: StockAmount // Purchases during period
+
   // Combined totals (direct + traced through preparations)
   sales: StockAmount // Direct sales + traced from preparations
   loss: StockAmount // Direct loss + traced from preparations
+  closing: StockAmount // Stock at period end
+  variance: StockAmount // Opening + Received - Sales - Loss - Closing (should be 0)
 
   // Breakdown for detail dialog
   directSales: StockAmount // sales_consumption write-offs

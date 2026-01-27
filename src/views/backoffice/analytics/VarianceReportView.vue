@@ -188,18 +188,27 @@
         <v-row>
           <v-col cols="12">
             <v-card variant="outlined">
-              <v-card-title class="d-flex justify-space-between align-center">
+              <v-card-title class="d-flex justify-space-between align-center flex-wrap ga-2">
                 <span>Product Variance Details</span>
-                <v-text-field
-                  v-model="searchQuery"
-                  prepend-inner-icon="mdi-magnify"
-                  label="Search products"
-                  variant="outlined"
-                  density="compact"
-                  hide-details
-                  clearable
-                  style="max-width: 300px"
-                />
+                <div class="d-flex align-center ga-3">
+                  <v-checkbox
+                    v-model="showOnlyWithVariance"
+                    label="Show only with variance"
+                    density="compact"
+                    hide-details
+                    class="flex-grow-0"
+                  />
+                  <v-text-field
+                    v-model="searchQuery"
+                    prepend-inner-icon="mdi-magnify"
+                    label="Search products"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                    clearable
+                    style="max-width: 250px"
+                  />
+                </div>
               </v-card-title>
               <v-divider />
               <v-data-table
@@ -207,9 +216,10 @@
                 :items="filteredItems"
                 :items-per-page="50"
                 :search="searchQuery"
-                :sort-by="[{ key: 'lossPercent', order: 'desc' }]"
+                :sort-by="[{ key: 'variance.amount', order: 'desc' }]"
                 density="comfortable"
                 class="elevation-0 clickable-rows"
+                :row-props="getRowProps"
                 @click:row="handleRowClick"
               >
                 <!-- Product Name Column -->
@@ -242,6 +252,32 @@
                   >
                     {{ item.department === 'kitchen' ? 'Kitchen' : 'Bar' }}
                   </v-chip>
+                </template>
+
+                <!-- Opening Stock Column -->
+                <template #[`item.opening.amount`]="{ item }">
+                  <div v-if="item.opening.quantity > 0" class="stacked-cell">
+                    <div class="text-body-2">
+                      {{ formatQty(item.opening.quantity, item.unit) }} {{ item.unit }}
+                    </div>
+                    <div class="text-caption text-medium-emphasis">
+                      {{ formatIDR(item.opening.amount) }}
+                    </div>
+                  </div>
+                  <span v-else class="text-medium-emphasis">—</span>
+                </template>
+
+                <!-- Received Column -->
+                <template #[`item.received.amount`]="{ item }">
+                  <div v-if="item.received.quantity > 0" class="stacked-cell">
+                    <div class="text-body-2 text-success">
+                      +{{ formatQty(item.received.quantity, item.unit) }} {{ item.unit }}
+                    </div>
+                    <div class="text-caption text-medium-emphasis">
+                      {{ formatIDR(item.received.amount) }}
+                    </div>
+                  </div>
+                  <span v-else class="text-medium-emphasis">—</span>
                 </template>
 
                 <!-- Sales Column (Stacked: Direct + Traced) -->
@@ -280,16 +316,37 @@
                   </div>
                 </template>
 
-                <!-- Loss Percent Column -->
-                <template #[`item.lossPercent`]="{ item }">
-                  <span
-                    v-if="(item.lossPercent ?? 0) > 0 || item.loss.amount > 0"
-                    class="font-weight-medium"
-                    :class="getLossPercentClass(item.lossPercent ?? 0)"
-                  >
-                    {{ (item.lossPercent ?? 0).toFixed(1) }}%
-                  </span>
+                <!-- Stock (Closing) Column -->
+                <template #[`item.closing.amount`]="{ item }">
+                  <div v-if="item.closing.quantity > 0" class="stacked-cell">
+                    <div class="text-body-2 font-weight-medium">
+                      {{ formatQty(item.closing.quantity, item.unit) }} {{ item.unit }}
+                    </div>
+                    <div class="text-caption text-medium-emphasis">
+                      {{ formatIDR(item.closing.amount) }}
+                    </div>
+                  </div>
                   <span v-else class="text-medium-emphasis">—</span>
+                </template>
+
+                <!-- Variance Column -->
+                <template #[`item.variance.amount`]="{ item }">
+                  <div v-if="Math.abs(item.variance.amount) > 0.01" class="stacked-cell">
+                    <div
+                      class="text-body-2 font-weight-bold"
+                      :class="item.variance.amount > 0 ? 'text-error' : 'text-warning'"
+                    >
+                      {{ item.variance.amount > 0 ? '+' : ''
+                      }}{{ formatQty(item.variance.quantity, item.unit) }} {{ item.unit }}
+                    </div>
+                    <div
+                      class="text-caption"
+                      :class="item.variance.amount > 0 ? 'text-error' : 'text-warning'"
+                    >
+                      {{ item.variance.amount > 0 ? '+' : '' }}{{ formatIDR(item.variance.amount) }}
+                    </div>
+                  </div>
+                  <span v-else class="text-success font-weight-medium">OK</span>
                 </template>
 
                 <!-- Actions Column -->
@@ -351,6 +408,7 @@ const dateFrom = ref('')
 const dateTo = ref('')
 const departmentFilter = ref<'all' | 'kitchen' | 'bar'>('all')
 const searchQuery = ref('')
+const showOnlyWithVariance = ref(false)
 const error = ref<string | null>(null)
 const showDetailDialog = ref(false)
 const selectedProductId = ref<string | null>(null)
@@ -366,21 +424,30 @@ const departmentOptions = [
 ]
 
 const tableHeaders = [
-  { title: 'Product', key: 'productName', sortable: true, width: '250px' },
-  { title: 'Dept', key: 'department', sortable: true, width: '100px' },
-  { title: 'Sales', key: 'sales.amount', sortable: true, width: '180px' },
-  { title: 'Loss', key: 'loss.amount', sortable: true, width: '180px' },
-  { title: 'Loss %', key: 'lossPercent', sortable: true, width: '100px' },
-  { title: '', key: 'actions', sortable: false, width: '60px' }
+  { title: 'Product', key: 'productName', sortable: true, width: '170px' },
+  { title: 'Dept', key: 'department', sortable: true, width: '80px' },
+  { title: 'Opening', key: 'opening.amount', sortable: true, width: '115px' },
+  { title: 'Received', key: 'received.amount', sortable: true, width: '115px' },
+  { title: 'Sales', key: 'sales.amount', sortable: true, width: '120px' },
+  { title: 'Loss', key: 'loss.amount', sortable: true, width: '120px' },
+  { title: 'Stock', key: 'closing.amount', sortable: true, width: '115px' },
+  { title: 'Variance', key: 'variance.amount', sortable: true, width: '120px' },
+  { title: '', key: 'actions', sortable: false, width: '50px' }
 ]
 
 const filteredItems = computed(() => {
   if (!report.value) return []
 
-  // Filter by department (client-side, no reload)
   let items = report.value.items
+
+  // Filter by department (client-side, no reload)
   if (departmentFilter.value !== 'all') {
     items = items.filter(item => item.department === departmentFilter.value)
+  }
+
+  // Filter only items with variance
+  if (showOnlyWithVariance.value) {
+    items = items.filter(item => Math.abs(item.variance.amount) > 0.01)
   }
 
   return items
@@ -405,6 +472,32 @@ function getLossPercentClass(percent: number): string {
   if (percent <= 5) return 'text-success'
   if (percent <= 15) return 'text-warning'
   return 'text-error'
+}
+
+/**
+ * Get row styling based on variance severity
+ * Positive variance = product "disappeared" (theft, unrecorded usage)
+ * Negative variance = product "appeared" (receipt error, unrecorded delivery)
+ */
+function getRowProps({ item }: { item: ProductVarianceRowV2 }) {
+  const varianceAmount = Math.abs(item.variance?.amount ?? 0)
+
+  if (varianceAmount < 0.01) {
+    return {} // No variance - normal row
+  }
+
+  // Critical: variance > 100,000 IDR
+  if (varianceAmount > 100000) {
+    return { class: 'row-critical' }
+  }
+
+  // Warning: variance > 10,000 IDR
+  if (varianceAmount > 10000) {
+    return { class: 'row-warning' }
+  }
+
+  // Minor variance
+  return { class: 'row-minor' }
 }
 
 async function handleGenerateReport() {
@@ -458,6 +551,31 @@ onMounted(() => {
 
     &:hover {
       background-color: rgba(var(--v-theme-primary), 0.04);
+    }
+
+    // Row highlighting based on variance severity
+    &.row-critical {
+      background-color: rgba(var(--v-theme-error), 0.12);
+
+      &:hover {
+        background-color: rgba(var(--v-theme-error), 0.18);
+      }
+    }
+
+    &.row-warning {
+      background-color: rgba(var(--v-theme-warning), 0.1);
+
+      &:hover {
+        background-color: rgba(var(--v-theme-warning), 0.16);
+      }
+    }
+
+    &.row-minor {
+      background-color: rgba(var(--v-theme-warning), 0.04);
+
+      &:hover {
+        background-color: rgba(var(--v-theme-warning), 0.08);
+      }
     }
   }
 }
