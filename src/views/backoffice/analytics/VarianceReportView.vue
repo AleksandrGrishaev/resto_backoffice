@@ -229,12 +229,12 @@
                   <v-text-field
                     v-model="searchQuery"
                     prepend-inner-icon="mdi-magnify"
-                    label="Search products"
+                    placeholder="Search products..."
                     variant="outlined"
                     density="compact"
                     hide-details
                     clearable
-                    style="max-width: 250px"
+                    style="min-width: 300px"
                   />
                 </div>
               </v-card-title>
@@ -246,8 +246,10 @@
                 :search="searchQuery"
                 :sort-by="[{ key: 'variance.amount', order: 'desc' }]"
                 density="comfortable"
-                class="elevation-0 clickable-rows"
+                class="elevation-0 clickable-rows sticky-header-table"
                 :row-props="getRowProps"
+                fixed-header
+                height="600"
                 @click:row="handleRowClick"
               >
                 <!-- Product Name Column -->
@@ -620,6 +622,13 @@ onMounted(() => {
   .stacked-cell {
     line-height: 1.3;
     padding: 4px 0;
+  }
+
+  // Sticky header table - header stays fixed when scrolling inside table
+  .sticky-header-table {
+    :deep(thead th) {
+      background-color: rgb(var(--v-theme-surface)) !important;
+    }
   }
 
   .clickable-rows :deep(tbody tr) {

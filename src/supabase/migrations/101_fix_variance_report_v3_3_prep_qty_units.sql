@@ -1,29 +1,30 @@
--- Function: get_product_variance_report_v3
--- Description: Product Variance Report with full stock movement tracking
--- Version: v3.4 (2026-01-27)
+-- Migration: 101_fix_variance_report_v3_3_prep_qty_units
+-- Description: Fix products_from_preparations calculation - prep_qty is in PORTIONS, not grams
+-- Date: 2026-01-27
+-- Version: v3.3
+
+-- CONTEXT:
+-- In CTE #12 (products_from_preparations), the input prep_qty comes from all_preps which
+-- calculates: order_qty * composition_qty * component_qty / recipe_portion_size
+-- This gives us NUMBER OF PORTIONS ordered, not grams.
 --
--- CHANGELOG:
--- v3.0: Initial version with theoretical sales from orders
--- v3.1: Added inventory_snapshots for opening stock
--- v3.2: Fixed portion_size usage in products_in_active_preps
--- v3.3: Fixed products_from_preparations - prep_qty is PORTIONS, not grams (but broke weight-type!)
--- v3.4: Handle BOTH portion-type and weight-type preparations correctly
+-- So the formula should be:
+--   prep_qty (portions) * ingredient_per_portion (grams per portion) = total grams
 --
--- Key concepts:
--- - PORTION-TYPE (portion_type='portion'): prep_qty = number of portions, use portion_size
--- - WEIGHT-TYPE (portion_type='weight'): prep_qty = grams/ml, use output_quantity
+-- The WRONG formula was:
+--   prep_qty * ingredient_per_portion / portion_size
+-- This incorrectly treated prep_qty as grams and divided by portion_size again.
 --
--- Key formulas:
--- - Variance = Opening + Received - Sales - Loss - (Closing + InPreps)
--- - TheoreticalSales = DirectProducts + ProductsFromRecipes + ProductsFromPreparations
+-- Example: 18 Tuna Steaks ordered, each uses 1 portion of "Tuna portion 200g"
+-- - prep_qty = 18 (portions)
+-- - ingredient_per_portion = 200g
+-- - CORRECT: 18 * 200 = 3,600g of Tuna lion consumed
+-- - WRONG: 18 * 200 / 200 = 18g (100x less!)
 --
--- ProductsFromPreparations (CTE #12):
---   PORTION-TYPE: prep_qty * ingredient_per_portion
---   WEIGHT-TYPE:  prep_qty * ingredient_qty / output_quantity
---
--- ProductsInActivePreps (CTE #15):
---   PORTION-TYPE: batch_grams * ingredient_per_portion / portion_size
---   WEIGHT-TYPE:  batch_grams * ingredient_qty / output_quantity
+-- This also affects any other portion-type preparations like:
+-- - Chicken portions
+-- - Fish portions
+-- - Any semi-finished products stored as portions
 
 CREATE OR REPLACE FUNCTION get_product_variance_report_v3(
   p_start_date TIMESTAMP WITH TIME ZONE,
@@ -131,7 +132,7 @@ BEGIN
     GROUP BY rc.component_id
   ),
 
-  -- 9. Preparations from recipes
+  -- 9. Preparations from recipes (result is in PORTIONS)
   preps_from_recipes AS (
     SELECT rc.component_id::UUID as preparation_id,
            SUM(oc.order_qty * oc.composition_qty * rc.component_qty / NULLIF(rc.recipe_portion_size, 0)) as qty
@@ -141,13 +142,13 @@ BEGIN
     GROUP BY rc.component_id
   ),
 
-  -- 10. Direct preparations
+  -- 10. Direct preparations (result is in PORTIONS)
   direct_preps_from_orders AS (
     SELECT oc.composition_id::UUID as preparation_id, SUM(oc.order_qty * oc.composition_qty) as qty
     FROM order_compositions oc WHERE oc.composition_type = 'preparation' GROUP BY oc.composition_id
   ),
 
-  -- 11. All preparations
+  -- 11. All preparations (qty is in PORTIONS, not grams!)
   all_preps AS (
     SELECT preparation_id, SUM(qty) as qty FROM (
       SELECT * FROM preps_from_recipes UNION ALL SELECT * FROM direct_preps_from_orders
@@ -155,19 +156,12 @@ BEGIN
   ),
 
   -- 12. Products from preparations (for theoretical sales)
-  -- FIX v3.4: Handle BOTH portion-type and weight-type preparations differently
+  -- FIX v3.3: prep_qty is in PORTIONS, so we just multiply by ingredient_per_portion
+  -- DO NOT divide by portion_size here - that was the bug!
+  -- Formula: prep_portions * ingredient_per_portion = grams consumed
   products_from_preparations AS (
     SELECT pi.ingredient_id as product_id,
-           SUM(
-             CASE
-               WHEN p.portion_type = 'portion' THEN
-                 -- Portion-type: ap.qty is number of portions
-                 ap.qty * pi.quantity
-               ELSE
-                 -- Weight-type: ap.qty is grams, scale by recipe ratio
-                 ap.qty * pi.quantity / NULLIF(p.output_quantity, 0)
-             END
-           ) as qty
+           SUM(ap.qty * pi.quantity) as qty  -- ap.qty is portions, pi.quantity is grams per portion
     FROM all_preps ap
     JOIN preparations p ON p.id = ap.preparation_id
     JOIN preparation_ingredients pi ON pi.preparation_id = p.id
@@ -192,28 +186,15 @@ BEGIN
   ),
 
   -- 15. Products in active preparation batches
-  -- FIX v3.4: Handle portion-type vs weight-type
+  -- Here batch.current_quantity IS in grams, so we DO divide by portion_size
+  -- Formula: (batch_grams / portion_size) * ingredient_per_portion = ingredient_grams_in_batch
   products_in_active_preps AS (
     SELECT
       pi.ingredient_id::TEXT as item_id,
-      SUM(
-        CASE
-          WHEN p.portion_type = 'portion' THEN
-            pb.current_quantity * pi.quantity / NULLIF(p.portion_size, 0)
-          ELSE
-            pb.current_quantity * pi.quantity / NULLIF(p.output_quantity, 0)
-        END
-      ) as qty,
-      SUM(
-        CASE
-          WHEN p.portion_type = 'portion' THEN
-            pb.current_quantity * pi.quantity / NULLIF(p.portion_size, 0)
-          ELSE
-            pb.current_quantity * pi.quantity / NULLIF(p.output_quantity, 0)
-        END *
-        COALESCE((SELECT AVG(sb.cost_per_unit) FROM storage_batches sb
-                  WHERE sb.item_id = pi.ingredient_id::TEXT AND sb.status = 'active'), 0)
-      ) as amount
+      SUM(pb.current_quantity * pi.quantity / NULLIF(p.portion_size, 0)) as qty,
+      SUM(pb.current_quantity * pi.quantity / NULLIF(p.portion_size, 0) *
+          COALESCE((SELECT AVG(sb.cost_per_unit) FROM storage_batches sb
+                    WHERE sb.item_id = pi.ingredient_id::TEXT AND sb.status = 'active'), 0)) as amount
     FROM preparation_batches pb
     JOIN preparations p ON p.id = pb.preparation_id
     JOIN preparation_ingredients pi ON pi.preparation_id = p.id
@@ -265,13 +246,10 @@ BEGIN
   ),
 
   -- 20. Prep recipes for traced calculations
+  -- NOTE: prep_portion_size is needed here because prep_sales/prep_losses are in GRAMS
   prep_recipes AS (
-    SELECT p.id as preparation_id,
-           p.portion_type,
-           p.portion_size as prep_portion_size,
-           p.output_quantity as prep_output_quantity,
-           pi.ingredient_id as product_id,
-           pi.quantity as recipe_product_qty
+    SELECT p.id as preparation_id, p.portion_size as prep_portion_size,
+           pi.ingredient_id as product_id, pi.quantity as recipe_product_qty
     FROM preparations p
     JOIN preparation_ingredients pi ON pi.preparation_id = p.id
     WHERE pi.type = 'product' AND p.is_active = true
@@ -287,35 +265,13 @@ BEGIN
     GROUP BY (item->>'preparationId')::UUID
   ),
 
-  -- 22. Traced sales - FIX v3.4: Handle portion-type vs weight-type
+  -- 22. Traced sales (prep_sales qty is in GRAMS, so we divide by portion_size)
   traced_sales_writeoffs AS (
     SELECT pr.product_id::TEXT as item_id,
-           SUM(
-             CASE
-               WHEN pr.portion_type = 'portion' THEN
-                 CASE WHEN pr.prep_portion_size > 0
-                      THEN (ps.qty / pr.prep_portion_size) * pr.recipe_product_qty
-                      ELSE 0 END
-               ELSE
-                 CASE WHEN pr.prep_output_quantity > 0
-                      THEN ps.qty * pr.recipe_product_qty / pr.prep_output_quantity
-                      ELSE 0 END
-             END
-           ) as qty,
-           SUM(
-             CASE WHEN ps.qty > 0 THEN (ps.cost / ps.qty) *
-               CASE
-                 WHEN pr.portion_type = 'portion' THEN
-                   CASE WHEN pr.prep_portion_size > 0
-                        THEN (ps.qty / pr.prep_portion_size) * pr.recipe_product_qty
-                        ELSE 0 END
-                 ELSE
-                   CASE WHEN pr.prep_output_quantity > 0
-                        THEN ps.qty * pr.recipe_product_qty / pr.prep_output_quantity
-                        ELSE 0 END
-               END
-             ELSE 0 END
-           ) as amount
+           SUM(CASE WHEN pr.prep_portion_size > 0 THEN (ps.qty / pr.prep_portion_size) * pr.recipe_product_qty ELSE 0 END) as qty,
+           SUM(CASE WHEN ps.qty > 0 THEN (ps.cost / ps.qty) *
+               CASE WHEN pr.prep_portion_size > 0 THEN (ps.qty / pr.prep_portion_size) * pr.recipe_product_qty ELSE 0 END
+               ELSE 0 END) as amount
     FROM prep_sales ps JOIN prep_recipes pr ON ps.preparation_id = pr.preparation_id
     GROUP BY pr.product_id
   ),
@@ -330,35 +286,13 @@ BEGIN
     GROUP BY (item->>'preparationId')::UUID
   ),
 
-  -- 24. Traced losses - FIX v3.4: Handle portion-type vs weight-type
+  -- 24. Traced losses (prep_losses qty is in GRAMS, so we divide by portion_size)
   traced_losses AS (
     SELECT pr.product_id::TEXT as item_id,
-           SUM(
-             CASE
-               WHEN pr.portion_type = 'portion' THEN
-                 CASE WHEN pr.prep_portion_size > 0
-                      THEN (pl.qty / pr.prep_portion_size) * pr.recipe_product_qty
-                      ELSE 0 END
-               ELSE
-                 CASE WHEN pr.prep_output_quantity > 0
-                      THEN pl.qty * pr.recipe_product_qty / pr.prep_output_quantity
-                      ELSE 0 END
-             END
-           ) as qty,
-           SUM(
-             CASE WHEN pl.qty > 0 THEN (pl.cost / pl.qty) *
-               CASE
-                 WHEN pr.portion_type = 'portion' THEN
-                   CASE WHEN pr.prep_portion_size > 0
-                        THEN (pl.qty / pr.prep_portion_size) * pr.recipe_product_qty
-                        ELSE 0 END
-                 ELSE
-                   CASE WHEN pr.prep_output_quantity > 0
-                        THEN pl.qty * pr.recipe_product_qty / pr.prep_output_quantity
-                        ELSE 0 END
-               END
-             ELSE 0 END
-           ) as amount
+           SUM(CASE WHEN pr.prep_portion_size > 0 THEN (pl.qty / pr.prep_portion_size) * pr.recipe_product_qty ELSE 0 END) as qty,
+           SUM(CASE WHEN pl.qty > 0 THEN (pl.cost / pl.qty) *
+               CASE WHEN pr.prep_portion_size > 0 THEN (pl.qty / pr.prep_portion_size) * pr.recipe_product_qty ELSE 0 END
+               ELSE 0 END) as amount
     FROM prep_losses pl JOIN prep_recipes pr ON pl.preparation_id = pr.preparation_id
     GROUP BY pr.product_id
   ),
@@ -474,7 +408,7 @@ BEGIN
     ) ORDER BY ABS(variance_amount) DESC NULLS LAST), '[]'::jsonb) FROM combined),
     'generatedAt', NOW(),
     'departmentFilter', COALESCE(p_department, 'all'),
-    'version', 'v3.4'
+    'version', 'v3.3'
   ) INTO v_result;
 
   RETURN v_result;

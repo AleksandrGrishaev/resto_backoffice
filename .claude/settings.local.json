@@ -62,7 +62,13 @@
       "mcp__playwright__browser_press_key",
       "Bash(git log:*)",
       "Bash(npx vue-tsc:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(rm:*)",
+      "Bash(source:*)",
+      "Bash(nvm install:*)",
+      "Bash(nvm use:*)",
+      "Bash(node --version:*)",
+      "Bash(pnpm install:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

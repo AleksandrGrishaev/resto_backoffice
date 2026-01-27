@@ -1,0 +1,25 @@
+-- Migration: 102_fix_variance_report_v3_4_portion_vs_weight_type
+-- Description: Fix products_from_preparations to handle both portion-type and weight-type preparations
+-- Date: 2026-01-27
+-- Version: v3.4
+
+-- CONTEXT:
+-- Preparations have TWO different types that require different formulas:
+--
+-- 1. PORTION-TYPE (portion_type = 'portion'):
+--    - Example: "Tuna portion 200g" - output_quantity=1, portion_size=200
+--    - all_preps.qty = number of PORTIONS ordered
+--    - Formula: prep_qty * ingredient_per_portion = grams consumed
+--    - Example: 18 portions * 200g = 3,600g tuna
+--
+-- 2. WEIGHT-TYPE (portion_type = 'weight'):
+--    - Example: "Cheese sauce" - output_quantity=400ml, portion_size=NULL
+--    - all_preps.qty = GRAMS/ML of sauce ordered
+--    - Recipe: "to make 400ml sauce, use 80ml cream"
+--    - Formula: prep_qty * ingredient_qty / output_quantity = grams consumed
+--    - Example: 1000ml sauce ordered * 80ml cream / 400ml = 200ml cream consumed
+--
+-- The v3.3 fix only worked for portion-type, breaking weight-type calculations.
+-- This fix handles BOTH types correctly using CASE WHEN on portion_type.
+
+-- See full function in src/supabase/functions/get_product_variance_report.sql

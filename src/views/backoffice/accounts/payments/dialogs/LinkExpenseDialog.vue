@@ -350,7 +350,7 @@ function getMatchScoreColor(score: number): string {
                   <v-chip size="x-small" variant="outlined">
                     Total: {{ formatIDR(invoice.totalAmount) }}
                   </v-chip>
-                  <v-chip size="x-small" variant="outlined">
+                  <v-chip size="x-small" color="info" variant="tonal">
                     {{ formatDate(invoice.createdAt) }}
                   </v-chip>
                 </div>
