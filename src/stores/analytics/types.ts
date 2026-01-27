@@ -474,17 +474,25 @@ export interface ProductVarianceRowV2 {
   opening: StockAmount // Stock at period start
   received: StockAmount // Purchases during period
 
-  // Combined totals (direct + traced through preparations)
-  sales: StockAmount // Direct sales + traced from preparations
+  // THEORETICAL SALES (from orders decomposition - main metric)
+  sales: StockAmount // Theoretical: decomposed from orders through recipes
+
+  // ACTUAL WRITE-OFFS (from storage_operations - for comparison)
+  writeoffs: StockAmount // Actual: write-offs with reason = sales_consumption
+  directWriteoffs: StockAmount // Direct product write-offs
+  tracedWriteoffs: StockAmount // Traced through preparations
+
+  // Loss
   loss: StockAmount // Direct loss + traced from preparations
+  directLoss: StockAmount // expired, spoiled, other write-offs
+  tracedLoss: StockAmount // Losses traced through preparations
+
+  // Closing & Variance
   closing: StockAmount // Stock at period end
   variance: StockAmount // Opening + Received - Sales - Loss - Closing (should be 0)
 
-  // Breakdown for detail dialog
-  directSales: StockAmount // sales_consumption write-offs
-  directLoss: StockAmount // expired, spoiled, other write-offs
-  tracedSales: StockAmount // Sales traced through preparations
-  tracedLoss: StockAmount // Losses traced through preparations
+  // Sales vs Writeoffs difference (to see recipe/write-off discrepancy)
+  salesWriteoffDiff: StockAmount // sales - writeoffs (positive = more theoretical than actual)
 
   // Flags
   hasPreparations: boolean // Whether product is used in preparations

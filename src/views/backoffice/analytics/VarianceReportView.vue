@@ -9,8 +9,12 @@
         <v-col cols="12">
           <h1 class="text-h4 mb-2">Product Variance Report</h1>
           <p class="text-body-2 text-medium-emphasis mb-4">
-            Analyze product usage with full traceability through preparations. Click on a row to see
-            breakdown details.
+            <strong>Sales</strong>
+            = theoretical usage from orders (decomposed through recipes).
+            <strong>Write-offs</strong>
+            = actual write-offs from storage.
+            <strong>Variance</strong>
+            = Opening + Received - Sales - Loss - Stock.
           </p>
         </v-col>
       </v-row>
@@ -280,22 +284,43 @@
                   <span v-else class="text-medium-emphasis">—</span>
                 </template>
 
-                <!-- Sales Column (Stacked: Direct + Traced) -->
+                <!-- Sales Column (Theoretical from orders) -->
                 <template #[`item.sales.amount`]="{ item }">
-                  <div class="stacked-cell">
+                  <div v-if="item.sales.quantity > 0" class="stacked-cell">
                     <div class="text-body-2">
                       {{ formatQty(item.sales.quantity, item.unit) }} {{ item.unit }}
                     </div>
                     <div class="text-caption text-medium-emphasis">
                       {{ formatIDR(item.sales.amount) }}
                     </div>
+                  </div>
+                  <span v-else class="text-medium-emphasis">—</span>
+                </template>
+
+                <!-- Write-offs Column (Actual from storage_operations) -->
+                <template #[`item.writeoffs.amount`]="{ item }">
+                  <div v-if="(item.writeoffs?.quantity ?? 0) > 0" class="stacked-cell">
+                    <div class="text-body-2">
+                      {{ formatQty(item.writeoffs?.quantity ?? 0, item.unit) }} {{ item.unit }}
+                    </div>
+                    <div class="text-caption text-medium-emphasis">
+                      {{ formatIDR(item.writeoffs?.amount ?? 0) }}
+                    </div>
+                    <!-- Show difference only if both Sales and Write-offs have values -->
                     <div
-                      v-if="item.hasPreparations && item.tracedSales.amount > 0"
-                      class="text-caption text-primary"
+                      v-if="
+                        item.sales.amount > 0 && Math.abs(item.salesWriteoffDiff?.amount ?? 0) > 100
+                      "
+                      class="text-caption"
+                      :class="
+                        (item.salesWriteoffDiff?.amount ?? 0) > 0 ? 'text-warning' : 'text-info'
+                      "
                     >
-                      ({{ formatIDR(item.tracedSales.amount) }} traced)
+                      {{ (item.salesWriteoffDiff?.amount ?? 0) > 0 ? '+' : ''
+                      }}{{ formatIDR(item.salesWriteoffDiff?.amount ?? 0) }}
                     </div>
                   </div>
+                  <span v-else class="text-medium-emphasis">—</span>
                 </template>
 
                 <!-- Loss Column (Stacked: Direct + Traced) -->
@@ -347,6 +372,18 @@
                     </div>
                   </div>
                   <span v-else class="text-success font-weight-medium">OK</span>
+                </template>
+
+                <!-- Loss Percent Column -->
+                <template #[`item.lossPercent`]="{ item }">
+                  <span
+                    v-if="(item.lossPercent ?? 0) > 0"
+                    class="font-weight-medium"
+                    :class="getLossPercentClass(item.lossPercent ?? 0)"
+                  >
+                    {{ (item.lossPercent ?? 0).toFixed(1) }}%
+                  </span>
+                  <span v-else class="text-medium-emphasis">—</span>
                 </template>
 
                 <!-- Actions Column -->
@@ -424,15 +461,17 @@ const departmentOptions = [
 ]
 
 const tableHeaders = [
-  { title: 'Product', key: 'productName', sortable: true, width: '170px' },
-  { title: 'Dept', key: 'department', sortable: true, width: '80px' },
-  { title: 'Opening', key: 'opening.amount', sortable: true, width: '115px' },
-  { title: 'Received', key: 'received.amount', sortable: true, width: '115px' },
-  { title: 'Sales', key: 'sales.amount', sortable: true, width: '120px' },
-  { title: 'Loss', key: 'loss.amount', sortable: true, width: '120px' },
-  { title: 'Stock', key: 'closing.amount', sortable: true, width: '115px' },
-  { title: 'Variance', key: 'variance.amount', sortable: true, width: '120px' },
-  { title: '', key: 'actions', sortable: false, width: '50px' }
+  { title: 'Product', key: 'productName', sortable: true, width: '150px' },
+  { title: 'Dept', key: 'department', sortable: true, width: '70px' },
+  { title: 'Opening', key: 'opening.amount', sortable: true, width: '90px' },
+  { title: 'Received', key: 'received.amount', sortable: true, width: '90px' },
+  { title: 'Sales', key: 'sales.amount', sortable: true, width: '95px' },
+  { title: 'Write-offs', key: 'writeoffs.amount', sortable: true, width: '95px' },
+  { title: 'Loss', key: 'loss.amount', sortable: true, width: '90px' },
+  { title: 'Stock', key: 'closing.amount', sortable: true, width: '90px' },
+  { title: 'Variance', key: 'variance.amount', sortable: true, width: '95px' },
+  { title: 'Loss %', key: 'lossPercent', sortable: true, width: '65px' },
+  { title: '', key: 'actions', sortable: false, width: '40px' }
 ]
 
 const filteredItems = computed(() => {

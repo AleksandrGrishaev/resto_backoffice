@@ -1,7 +1,7 @@
 // src/stores/analytics/varianceReportStore.ts
 // ✅ Product Variance Report Store
 // Analyzes discrepancies between purchases and usage
-// V2: Includes preparation traceability
+// V3: Theoretical sales from orders + actual write-offs for comparison
 
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
@@ -125,9 +125,11 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
   }
 
   /**
-   * Generate Product Variance Report V2 with preparation traceability
-   * Shows combined Sales and Loss (direct + traced through preparations)
-   * Formula: Loss % = (Total Loss) / (Total Sales) × 100
+   * Generate Product Variance Report V2 (V3 backend) with theoretical sales from orders
+   * Shows:
+   * - Theoretical Sales (from orders decomposition) - MAIN metric
+   * - Actual Write-offs (from storage_operations) - for comparison
+   * Formula: Variance = Opening + Received - Sales - Loss - Closing
    */
   async function generateReportV2(
     dateFrom: string,
@@ -138,14 +140,14 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
       loading.value = true
       error.value = null
 
-      DebugUtils.info(MODULE_NAME, 'Generating variance report V2', {
+      DebugUtils.info(MODULE_NAME, 'Generating variance report V3', {
         dateFrom,
         dateTo,
         department
       })
 
-      // Call the V2 RPC function
-      const { data, error: rpcError } = await supabase.rpc('get_product_variance_report_v2', {
+      // Call the V3 RPC function (theoretical sales from orders)
+      const { data, error: rpcError } = await supabase.rpc('get_product_variance_report_v3', {
         p_start_date: dateFrom,
         p_end_date: dateTo,
         p_department: department
@@ -168,20 +170,23 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
         summary: {
           totalProducts: data.summary.totalProducts,
           productsWithActivity: data.summary.productsWithActivity,
-          totalSalesAmount: data.summary.totalSalesAmount,
+          // V3: Use theoretical sales as main sales amount
+          totalSalesAmount: data.summary.totalTheoreticalSalesAmount || 0,
           totalLossAmount: data.summary.totalLossAmount,
           overallLossPercent: data.summary.overallLossPercent
         },
         byDepartment: {
           kitchen: {
             count: data.byDepartment.kitchen?.count || 0,
-            salesAmount: data.byDepartment.kitchen?.salesAmount || 0,
+            // V3: Use theoretical sales
+            salesAmount: data.byDepartment.kitchen?.theoreticalSalesAmount || 0,
             lossAmount: data.byDepartment.kitchen?.lossAmount || 0,
             lossPercent: data.byDepartment.kitchen?.lossPercent || 0
           },
           bar: {
             count: data.byDepartment.bar?.count || 0,
-            salesAmount: data.byDepartment.bar?.salesAmount || 0,
+            // V3: Use theoretical sales
+            salesAmount: data.byDepartment.bar?.theoreticalSalesAmount || 0,
             lossAmount: data.byDepartment.bar?.lossAmount || 0,
             lossPercent: data.byDepartment.bar?.lossPercent || 0
           }
@@ -193,18 +198,27 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
             productCode: item.productCode,
             unit: item.unit,
             department: item.department,
-            opening: item.opening,
-            received: item.received,
-            sales: item.sales,
-            loss: item.loss,
-            closing: item.closing,
-            variance: item.variance,
-            directSales: item.directSales,
-            directLoss: item.directLoss,
-            tracedSales: item.tracedSales,
-            tracedLoss: item.tracedLoss,
-            hasPreparations: item.hasPreparations,
-            lossPercent: item.lossPercent
+            // Stock movement
+            opening: item.opening || { quantity: 0, amount: 0 },
+            received: item.received || { quantity: 0, amount: 0 },
+            // V3: Theoretical sales from orders (MAIN)
+            sales: item.sales || { quantity: 0, amount: 0 },
+            // V3: Actual write-offs (for comparison)
+            writeoffs: item.writeoffs || { quantity: 0, amount: 0 },
+            directWriteoffs: item.directWriteoffs || { quantity: 0, amount: 0 },
+            tracedWriteoffs: item.tracedWriteoffs || { quantity: 0, amount: 0 },
+            // Loss
+            loss: item.loss || { quantity: 0, amount: 0 },
+            directLoss: item.directLoss || { quantity: 0, amount: 0 },
+            tracedLoss: item.tracedLoss || { quantity: 0, amount: 0 },
+            // Closing & Variance
+            closing: item.closing || { quantity: 0, amount: 0 },
+            variance: item.variance || { quantity: 0, amount: 0 },
+            // V3: Sales vs Writeoffs difference
+            salesWriteoffDiff: item.salesWriteoffDiff || { quantity: 0, amount: 0 },
+            // Flags & calculated
+            hasPreparations: item.hasPreparations || false,
+            lossPercent: item.lossPercent ?? 0
           })
         ),
         generatedAt: data.generatedAt,
@@ -213,15 +227,16 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
 
       currentReportV2.value = report
 
-      DebugUtils.info(MODULE_NAME, 'Variance report V2 generated', {
+      DebugUtils.info(MODULE_NAME, 'Variance report V3 generated', {
         totalProducts: report.summary.totalProducts,
         productsWithActivity: report.summary.productsWithActivity,
+        totalSalesAmount: report.summary.totalSalesAmount,
         overallLossPercent: report.summary.overallLossPercent
       })
 
       return report
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to generate variance report V2'
+      const message = err instanceof Error ? err.message : 'Failed to generate variance report'
       error.value = message
       DebugUtils.error(MODULE_NAME, message, { err })
       throw err
@@ -387,7 +402,7 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
   }
 
   /**
-   * Export V2 report to CSV format (simplified view)
+   * Export V2 report to CSV format (V3 with theoretical sales + write-offs)
    */
   function exportToCSVV2(report: VarianceReportV2): string {
     const headers = [
@@ -399,8 +414,12 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
       'Opening Amount',
       'Received Qty',
       'Received Amount',
-      'Sales Qty',
-      'Sales Amount',
+      'Sales (Theoretical) Qty',
+      'Sales (Theoretical) Amount',
+      'Write-offs (Actual) Qty',
+      'Write-offs (Actual) Amount',
+      'Sales-Writeoff Diff Qty',
+      'Sales-Writeoff Diff Amount',
       'Loss Qty',
       'Loss Amount',
       'Stock Qty',
@@ -422,6 +441,10 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
       item.received.amount,
       item.sales.quantity,
       item.sales.amount,
+      item.writeoffs?.quantity ?? 0,
+      item.writeoffs?.amount ?? 0,
+      item.salesWriteoffDiff?.quantity ?? 0,
+      item.salesWriteoffDiff?.amount ?? 0,
       item.loss.quantity,
       item.loss.amount,
       item.closing.quantity,
