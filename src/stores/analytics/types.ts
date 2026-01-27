@@ -620,3 +620,200 @@ export interface ProductVarianceDetail {
 
   generatedAt: string
 }
+
+// ============================================
+// ✅ Product Variance Detail V2 Types (Enhanced drill-down dialog)
+// ============================================
+
+/**
+ * Opening stock detail from inventory_snapshots
+ */
+export interface OpeningStockDetail {
+  quantity: number
+  amount: number
+  snapshot: {
+    date: string
+    source: 'inventory' | 'calculated' | 'shift_close' | 'manual'
+    documentId: string | null
+    documentNumber: string | null
+  } | null
+}
+
+/**
+ * Receipt detail for received products
+ */
+export interface ReceiptDetail {
+  receiptId: string
+  receiptNumber: string
+  date: string
+  supplierName: string
+  quantity: number
+  unitCost: number
+  totalCost: number
+}
+
+/**
+ * Received products detail
+ */
+export interface ReceivedDetail {
+  quantity: number
+  amount: number
+  receipts: ReceiptDetail[]
+  totalReceiptsCount: number
+}
+
+/**
+ * Menu item sales detail
+ */
+export interface MenuItemSalesDetail {
+  menuItemId: string
+  menuItemName: string
+  variantName: string
+  quantitySold: number
+  productUsed: number
+  productCost: number
+}
+
+/**
+ * Preparation consumption detail
+ */
+export interface PreparationConsumptionDetail {
+  preparationId: string
+  preparationName: string
+  batchesProduced: number
+  productUsed: number
+  productCost: number
+}
+
+/**
+ * Sales breakdown detail
+ */
+export interface SalesDetail {
+  quantity: number
+  amount: number
+  direct: StockAmount
+  viaPreparations: StockAmount
+  topMenuItems: MenuItemSalesDetail[]
+  totalMenuItemsCount: number
+  preparations: PreparationConsumptionDetail[]
+}
+
+/**
+ * Loss detail item
+ */
+export interface LossDetailItem {
+  date: string
+  reason: 'expired' | 'spoiled' | 'other' | 'expiration'
+  quantity: number
+  amount: number
+  batchNumber: string | null
+  notes: string | null
+}
+
+/**
+ * Traced loss from preparations
+ */
+export interface TracedLossDetail {
+  quantity: number
+  amount: number
+  preparations: Array<{
+    preparationName: string
+    lossQuantity: number
+    lossAmount: number
+  }>
+}
+
+/**
+ * Loss breakdown detail
+ */
+export interface LossDetail {
+  quantity: number
+  amount: number
+  byReason: Array<{
+    reason: string
+    quantity: number
+    amount: number
+    percentage: number
+  }>
+  details: LossDetailItem[]
+  tracedFromPreps: TracedLossDetail
+}
+
+/**
+ * Batch detail for closing stock
+ */
+export interface BatchDetail {
+  batchId: string
+  batchNumber: string
+  receiptDate: string
+  quantity: number
+  costPerUnit: number
+  totalValue: number
+}
+
+/**
+ * Preparation batch detail for products frozen in preps
+ */
+export interface PreparationBatchDetail {
+  preparationId: string
+  preparationName: string
+  batchDate: string
+  productQuantity: number
+  productCost: number
+}
+
+/**
+ * Closing stock detail
+ */
+export interface ClosingStockDetail {
+  rawStock: {
+    quantity: number
+    amount: number
+    batches: BatchDetail[]
+  }
+  inPreparations: {
+    quantity: number
+    amount: number
+    preparations: PreparationBatchDetail[]
+  }
+  total: StockAmount
+}
+
+/**
+ * Variance interpretation
+ */
+export interface VarianceDetail {
+  quantity: number
+  amount: number
+  interpretation: 'shortage' | 'surplus' | 'balanced'
+  possibleReasons: string[]
+}
+
+/**
+ * Product Variance Detail V2
+ * Enhanced detailed breakdown with drill-down into source documents
+ */
+export interface ProductVarianceDetailV2 {
+  product: {
+    id: string
+    name: string
+    code: string | null
+    unit: string
+    department: 'kitchen' | 'bar'
+  }
+
+  period: {
+    dateFrom: string
+    dateTo: string
+  }
+
+  // Formula components with drill-down
+  opening: OpeningStockDetail
+  received: ReceivedDetail
+  sales: SalesDetail
+  loss: LossDetail
+  closing: ClosingStockDetail
+  variance: VarianceDetail
+
+  generatedAt: string
+}

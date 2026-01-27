@@ -428,7 +428,6 @@
                 <!-- Actions Column -->
                 <template #[`item.actions`]="{ item }">
                   <v-btn
-                    v-if="item.hasPreparations"
                     icon
                     size="small"
                     variant="text"
@@ -436,9 +435,7 @@
                     @click.stop="openDetailDialog(item)"
                   >
                     <v-icon>mdi-information-outline</v-icon>
-                    <v-tooltip activator="parent" location="top">
-                      View preparation breakdown
-                    </v-tooltip>
+                    <v-tooltip activator="parent" location="top">View variance breakdown</v-tooltip>
                   </v-btn>
                 </template>
               </v-data-table>
@@ -459,8 +456,8 @@
       </v-row>
     </v-container>
 
-    <!-- Product Detail Dialog -->
-    <ProductVarianceDetailDialog
+    <!-- Product Detail Dialog V2 -->
+    <ProductVarianceDetailDialogV2
       v-model="showDetailDialog"
       :product-id="selectedProductId"
       :date-from="dateFrom"
@@ -474,7 +471,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useVarianceReportStore } from '@/stores/analytics/varianceReportStore'
 import { formatIDR } from '@/utils/currency'
 import type { ProductVarianceRowV2 } from '@/stores/analytics/types'
-import ProductVarianceDetailDialog from './ProductVarianceDetailDialog.vue'
+import ProductVarianceDetailDialogV2 from './ProductVarianceDetailDialogV2.vue'
 
 // Store
 const store = useVarianceReportStore()
@@ -596,9 +593,8 @@ function handleExportCSV() {
 }
 
 function handleRowClick(_event: Event, { item }: { item: ProductVarianceRowV2 }) {
-  if (item.hasPreparations) {
-    openDetailDialog(item)
-  }
+  // V2 dialog works for all products, not just those with preparations
+  openDetailDialog(item)
 }
 
 function openDetailDialog(item: ProductVarianceRowV2) {

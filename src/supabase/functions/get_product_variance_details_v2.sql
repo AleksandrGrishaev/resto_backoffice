@@ -1,0 +1,56 @@
+-- Function: get_product_variance_details_v2
+-- Description: Enhanced RPC function for Product Variance Detail Dialog V2
+--              Returns complete breakdown with drill-down into source documents
+-- Date: 2026-01-27
+-- Author: Claude
+--
+-- Usage:
+--   SELECT get_product_variance_details_v2(
+--     '550e8400-e29b-41d4-a716-446655440000'::UUID,  -- product_id
+--     '2026-01-01'::TIMESTAMPTZ,                     -- start_date
+--     '2026-01-31'::TIMESTAMPTZ                      -- end_date
+--   );
+--
+-- Returns JSONB with structure:
+-- {
+--   "product": { "id", "name", "code", "unit", "department" },
+--   "period": { "dateFrom", "dateTo" },
+--   "opening": {
+--     "quantity", "amount",
+--     "snapshot": { "date", "source", "documentId", "documentNumber" }
+--   },
+--   "received": {
+--     "quantity", "amount",
+--     "receipts": [{ "receiptId", "receiptNumber", "date", "supplierName", "quantity", "unitCost", "totalCost" }],
+--     "totalReceiptsCount": number
+--   },
+--   "sales": {
+--     "quantity", "amount",
+--     "direct": { "quantity", "amount" },
+--     "viaPreparations": { "quantity", "amount" },
+--     "topMenuItems": [{ "menuItemName", "variantName", "quantitySold", "productUsed", "productCost" }],
+--     "totalMenuItemsCount": number,
+--     "preparations": [{ "preparationName", "batchesProduced", "productUsed", "productCost" }]
+--   },
+--   "loss": {
+--     "quantity", "amount",
+--     "byReason": [{ "reason", "quantity", "amount", "percentage" }],
+--     "details": [{ "date", "reason", "quantity", "amount", "batchNumber", "notes" }],
+--     "tracedFromPreps": { "quantity", "amount", "preparations": [...] }
+--   },
+--   "closing": {
+--     "rawStock": { "quantity", "amount", "batches": [...] },
+--     "inPreparations": { "quantity", "amount", "preparations": [...] },
+--     "total": { "quantity", "amount" }
+--   },
+--   "variance": { "quantity", "amount", "interpretation", "possibleReasons" }
+-- }
+--
+-- Key implementation notes:
+--   - supplierstore_orders.supplier_id is TEXT, counteragents.id is UUID - cast required
+--   - storage_batches uses receipt_date (not received_date)
+--   - preparation_batches uses production_date (not produced_at)
+--   - recipe_components.component_id is TEXT, needs cast to UUID for joins
+--   - composition_id from menu_items JSONB variants is TEXT, needs cast for UUID joins
+--
+-- See migration file: 103_product_variance_details_v2_rpc.sql for the full implementation

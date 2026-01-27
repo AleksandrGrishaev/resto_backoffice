@@ -12,7 +12,8 @@ import type {
   ProductVarianceRow,
   VarianceReportV2,
   ProductVarianceRowV2,
-  ProductVarianceDetail
+  ProductVarianceDetail,
+  ProductVarianceDetailV2
 } from './types'
 
 const MODULE_NAME = 'VarianceReportStore'
@@ -22,8 +23,10 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
   const currentReport = ref<VarianceReport | null>(null)
   const currentReportV2 = ref<VarianceReportV2 | null>(null)
   const currentDetail = ref<ProductVarianceDetail | null>(null)
+  const currentDetailV2 = ref<ProductVarianceDetailV2 | null>(null)
   const loading = ref(false)
   const loadingDetail = ref(false)
+  const loadingDetailV2 = ref(false)
   const error = ref<string | null>(null)
 
   /**
@@ -497,12 +500,130 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
   }
 
   /**
+   * Get detailed variance breakdown V2 for a single product
+   * Enhanced version with complete drill-down into source documents
+   */
+  async function getProductDetailV2(
+    productId: string,
+    dateFrom: string,
+    dateTo: string
+  ): Promise<ProductVarianceDetailV2> {
+    try {
+      loadingDetailV2.value = true
+
+      DebugUtils.info(MODULE_NAME, 'Getting product variance detail V2', {
+        productId,
+        dateFrom,
+        dateTo
+      })
+
+      // Call the V2 detail RPC function
+      const { data, error: rpcError } = await supabase.rpc('get_product_variance_details_v2', {
+        p_product_id: productId,
+        p_start_date: dateFrom,
+        p_end_date: dateTo
+      })
+
+      if (rpcError) {
+        throw new Error(`RPC error: ${rpcError.message}`)
+      }
+
+      if (!data) {
+        throw new Error('No data returned from RPC function')
+      }
+
+      // Transform the response to match TypeScript types
+      const detail: ProductVarianceDetailV2 = {
+        product: {
+          id: data.product?.id || productId,
+          name: data.product?.name || 'Unknown Product',
+          code: data.product?.code || null,
+          unit: data.product?.unit || 'unit',
+          department: data.product?.department || 'kitchen'
+        },
+        period: {
+          dateFrom: data.period?.dateFrom || dateFrom,
+          dateTo: data.period?.dateTo || dateTo
+        },
+        opening: {
+          quantity: data.opening?.quantity ?? 0,
+          amount: data.opening?.amount ?? 0,
+          snapshot: data.opening?.snapshot || null
+        },
+        received: {
+          quantity: data.received?.quantity ?? 0,
+          amount: data.received?.amount ?? 0,
+          receipts: data.received?.receipts || [],
+          totalReceiptsCount: data.received?.totalReceiptsCount ?? 0
+        },
+        sales: {
+          quantity: data.sales?.quantity ?? 0,
+          amount: data.sales?.amount ?? 0,
+          direct: data.sales?.direct || { quantity: 0, amount: 0 },
+          viaPreparations: data.sales?.viaPreparations || { quantity: 0, amount: 0 },
+          topMenuItems: data.sales?.topMenuItems || [],
+          totalMenuItemsCount: data.sales?.totalMenuItemsCount ?? 0,
+          preparations: data.sales?.preparations || []
+        },
+        loss: {
+          quantity: data.loss?.quantity ?? 0,
+          amount: data.loss?.amount ?? 0,
+          byReason: data.loss?.byReason || [],
+          details: data.loss?.details || [],
+          tracedFromPreps: data.loss?.tracedFromPreps || {
+            quantity: 0,
+            amount: 0,
+            preparations: []
+          }
+        },
+        closing: {
+          rawStock: {
+            quantity: data.closing?.rawStock?.quantity ?? 0,
+            amount: data.closing?.rawStock?.amount ?? 0,
+            batches: data.closing?.rawStock?.batches || []
+          },
+          inPreparations: {
+            quantity: data.closing?.inPreparations?.quantity ?? 0,
+            amount: data.closing?.inPreparations?.amount ?? 0,
+            preparations: data.closing?.inPreparations?.preparations || []
+          },
+          total: data.closing?.total || { quantity: 0, amount: 0 }
+        },
+        variance: {
+          quantity: data.variance?.quantity ?? 0,
+          amount: data.variance?.amount ?? 0,
+          interpretation: data.variance?.interpretation || 'balanced',
+          possibleReasons: data.variance?.possibleReasons || []
+        },
+        generatedAt: data.generatedAt || new Date().toISOString()
+      }
+
+      currentDetailV2.value = detail
+
+      DebugUtils.info(MODULE_NAME, 'Product variance detail V2 retrieved', {
+        productName: detail.product.name,
+        variance: detail.variance.interpretation
+      })
+
+      return detail
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to get product variance detail V2'
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
+    } finally {
+      loadingDetailV2.value = false
+    }
+  }
+
+  /**
    * Clear current report
    */
   function clearReport(): void {
     currentReport.value = null
     currentReportV2.value = null
     currentDetail.value = null
+    currentDetailV2.value = null
     error.value = null
   }
 
@@ -511,8 +632,10 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
     currentReport,
     currentReportV2,
     currentDetail,
+    currentDetailV2,
     loading,
     loadingDetail,
+    loadingDetailV2,
     error,
 
     // Actions - V1 (legacy)
@@ -524,6 +647,7 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
     // Actions - V2 (with preparation traceability)
     generateReportV2,
     getProductDetail,
+    getProductDetailV2,
     exportToCSVV2,
     downloadCSVV2,
 
