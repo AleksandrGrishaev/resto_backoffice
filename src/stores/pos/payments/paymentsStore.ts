@@ -36,7 +36,7 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
 
   /**
    * Initialize payments store
-   * Loads all payments from storage
+   * Loads payments for active shift (if exists) or today's payments
    */
   async function initialize(): Promise<ServiceResponse<void>> {
     if (initialized.value) {
@@ -49,8 +49,22 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
     try {
       console.log('💳 [paymentsStore] Initializing...')
 
-      // Load all payments from storage
-      const result = await paymentsService.getAllPayments()
+      // ✅ Check if there's an active shift
+      const { useShiftsStore } = await import('../shifts/shiftsStore')
+      const shiftsStore = useShiftsStore()
+      const currentShift = shiftsStore.currentShift
+
+      let result: ServiceResponse<PosPayment[]>
+
+      if (currentShift) {
+        // Load payments for active shift
+        console.log('💳 Loading payments for active shift:', currentShift.shiftNumber)
+        result = await paymentsService.getAllPayments({ shiftId: currentShift.id })
+      } else {
+        // Load today's payments (fallback when no active shift)
+        console.log("💳 Loading today's payments (no active shift)")
+        result = await paymentsService.getAllPayments()
+      }
 
       if (result.success && result.data) {
         payments.value = result.data

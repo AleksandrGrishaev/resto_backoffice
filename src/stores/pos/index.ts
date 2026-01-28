@@ -193,15 +193,18 @@ export const usePosStore = defineStore('pos', () => {
       platform.debugLog('POS', '📦 Loading POS data in parallel...')
       const startTime = performance.now()
 
-      // Phase 1: Core POS data (parallel)
+      // Phase 1: Core POS data
       // ✅ Sprint 8: Production performance logging
       console.log('⏱️ [POS] Starting data load...')
 
+      // ✅ Step 1: Load shifts FIRST (to know current shift for payments filtering)
+      await shiftsStore.loadShifts()
+
+      // ✅ Step 2: Load other data in parallel (payments now can use currentShift)
       await Promise.all([
         tablesStore.initialize(),
         ordersStore.loadOrders(),
-        paymentsStore.initialize(),
-        shiftsStore.loadShifts()
+        paymentsStore.initialize()
       ])
 
       const phase1Time = performance.now() - startTime
