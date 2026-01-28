@@ -214,8 +214,12 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
             sales: item.sales || { quantity: 0, amount: 0 },
             // V4: Actual write-offs (production_consumption)
             writeoffs: item.writeoffs || { quantity: 0, amount: 0 },
+            // V4: Difference between theoretical sales and actual write-offs
+            salesWriteoffDiff: item.salesWriteoffDiff || { quantity: 0, amount: 0 },
             // V4: Loss (expired/spoiled + negative corrections)
             loss: item.loss || { quantity: 0, amount: 0 },
+            // V4: Traced loss from preparations (for display compatibility)
+            tracedLoss: item.tracedLoss || { quantity: 0, amount: 0 },
             // V4: Gain (positive corrections)
             gain: item.gain || { quantity: 0, amount: 0 },
             // V4: Expected vs Actual

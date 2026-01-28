@@ -235,16 +235,24 @@ BEGIN
     'formula', 'Expected = Opening + Received - Sales - WriteOffs - Loss + Gain; Variance = Expected - Actual',
     'summary', (SELECT jsonb_build_object(
       'totalProducts', COUNT(*), 'productsWithActivity', COUNT(*) FILTER (WHERE sales_qty > 0 OR loss_qty > 0),
+      'totalTheoreticalSalesAmount', ROUND(COALESCE(SUM(sales_amount), 0), 2),
       'totalSalesAmount', ROUND(COALESCE(SUM(sales_amount), 0), 2),
       'totalLossAmount', ROUND(COALESCE(SUM(loss_amount), 0), 2),
       'totalGainAmount', ROUND(COALESCE(SUM(gain_amount), 0), 2),
-      'totalVarianceAmount', ROUND(COALESCE(SUM(variance_amount), 0), 2)
+      'totalInPrepsAmount', ROUND(COALESCE(SUM(in_preps_amount), 0), 2),
+      'totalVarianceAmount', ROUND(COALESCE(SUM(variance_amount), 0), 2),
+      'overallLossPercent', CASE WHEN SUM(sales_amount) > 0 THEN ROUND((SUM(loss_amount) / SUM(sales_amount)) * 100, 2) ELSE 0 END
     ) FROM product_report),
     'byDepartment', (SELECT jsonb_object_agg(department, dept_data) FROM (
       SELECT department, jsonb_build_object(
-        'productsCount', COUNT(*), 'salesAmount', ROUND(COALESCE(SUM(sales_amount), 0), 2),
-        'lossAmount', ROUND(COALESCE(SUM(loss_amount), 0), 2), 'gainAmount', ROUND(COALESCE(SUM(gain_amount), 0), 2),
-        'varianceAmount', ROUND(COALESCE(SUM(variance_amount), 0), 2)
+        'productsCount', COUNT(*),
+        'theoreticalSalesAmount', ROUND(COALESCE(SUM(sales_amount), 0), 2),
+        'salesAmount', ROUND(COALESCE(SUM(sales_amount), 0), 2),
+        'lossAmount', ROUND(COALESCE(SUM(loss_amount), 0), 2),
+        'gainAmount', ROUND(COALESCE(SUM(gain_amount), 0), 2),
+        'inPrepsAmount', ROUND(COALESCE(SUM(in_preps_amount), 0), 2),
+        'varianceAmount', ROUND(COALESCE(SUM(variance_amount), 0), 2),
+        'lossPercent', CASE WHEN SUM(sales_amount) > 0 THEN ROUND((SUM(loss_amount) / SUM(sales_amount)) * 100, 2) ELSE 0 END
       ) as dept_data FROM product_report GROUP BY department
     ) dept_agg),
     'products', (SELECT jsonb_agg(jsonb_build_object(
@@ -254,14 +262,17 @@ BEGIN
       'received', jsonb_build_object('quantity', ROUND(received_qty, 3), 'amount', ROUND(received_amount, 2)),
       'sales', jsonb_build_object('quantity', ROUND(sales_qty, 3), 'amount', ROUND(sales_amount, 2)),
       'writeoffs', jsonb_build_object('quantity', ROUND(writeoff_qty, 3), 'amount', ROUND(writeoff_amount, 2)),
+      'salesWriteoffDiff', jsonb_build_object('quantity', ROUND(sales_qty - writeoff_qty, 3), 'amount', ROUND(sales_amount - writeoff_amount, 2)),
       'loss', jsonb_build_object('quantity', ROUND(loss_qty, 3), 'amount', ROUND(loss_amount, 2)),
+      'tracedLoss', jsonb_build_object('quantity', 0, 'amount', 0),
       'gain', jsonb_build_object('quantity', ROUND(gain_qty, 3), 'amount', ROUND(gain_amount, 2)),
       'expected', jsonb_build_object('quantity', ROUND(expected_qty, 3), 'amount', ROUND(expected_amount, 2)),
       'actual', jsonb_build_object('quantity', ROUND(actual_qty, 3), 'amount', ROUND(actual_amount, 2)),
       'closing', jsonb_build_object('quantity', ROUND(closing_qty, 3), 'amount', ROUND(closing_amount, 2)),
       'inPreps', jsonb_build_object('quantity', ROUND(in_preps_qty, 3), 'amount', ROUND(in_preps_amount, 2)),
       'hasPreparations', has_preparations,
-      'variance', jsonb_build_object('quantity', ROUND(variance_qty, 3), 'amount', ROUND(variance_amount, 2))
+      'variance', jsonb_build_object('quantity', ROUND(variance_qty, 3), 'amount', ROUND(variance_amount, 2)),
+      'lossPercent', CASE WHEN sales_qty > 0 THEN ROUND((loss_qty / sales_qty) * 100, 2) ELSE 0 END
     ) ORDER BY ABS(variance_amount) DESC) FROM product_report),
     'generatedAt', NOW()
   ) INTO v_result;

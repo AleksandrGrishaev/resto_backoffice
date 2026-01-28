@@ -478,10 +478,16 @@ export interface ProductVarianceRowV2 {
   sales: StockAmount // Theoretical: decomposed from orders through recipes
 
   // ACTUAL WRITE-OFFS (production_consumption)
-  writeoffs: StockAmount // Write-offs for production
+  writeoffs?: StockAmount // Write-offs for production
+
+  // Difference between theoretical sales and actual write-offs
+  salesWriteoffDiff?: StockAmount // sales - writeoffs (positive = under-written-off)
 
   // Loss (expired/spoiled + negative corrections)
   loss: StockAmount // Direct loss + negative corrections from inventory
+
+  // Traced loss from preparations (for display compatibility)
+  tracedLoss?: StockAmount // Loss traced from preparation batches
 
   // Gain (positive corrections - found more than system)
   gain?: StockAmount // Positive corrections from inventory
