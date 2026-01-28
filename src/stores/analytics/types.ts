@@ -477,26 +477,26 @@ export interface ProductVarianceRowV2 {
   // THEORETICAL SALES (from orders decomposition - main metric)
   sales: StockAmount // Theoretical: decomposed from orders through recipes
 
-  // ACTUAL WRITE-OFFS (from storage_operations - for comparison)
-  writeoffs: StockAmount // Actual: write-offs with reason = sales_consumption
-  productionWriteoffs?: StockAmount // Write-offs for production_consumption
-  directWriteoffs?: StockAmount // Direct product write-offs
-  tracedWriteoffs?: StockAmount // Traced through preparations
+  // ACTUAL WRITE-OFFS (production_consumption)
+  writeoffs: StockAmount // Write-offs for production
 
-  // Loss (includes inventory corrections)
-  loss: StockAmount // Direct loss + traced from preparations + corrections
-  corrections?: StockAmount // Inventory corrections (from inventories)
-  directLoss?: StockAmount // expired, spoiled, other write-offs
-  tracedLoss?: StockAmount // Losses traced through preparations
+  // Loss (expired/spoiled + negative corrections)
+  loss: StockAmount // Direct loss + negative corrections from inventory
 
-  // Closing & Variance
+  // Gain (positive corrections - found more than system)
+  gain?: StockAmount // Positive corrections from inventory
+
+  // V4: Expected vs Actual
+  expected?: StockAmount // Opening + Received - Sales - WriteOffs - Loss + Gain
+  actual?: StockAmount // closing + inPreps (current stock)
+
+  // Closing & Stock
   closing: StockAmount // Stock at period end (raw products in batches)
   inPreps: StockAmount // Products "frozen" in active preparation batches
   stockTotal: StockAmount // closing + inPreps (total stock)
-  variance: StockAmount // Opening + Received - Sales - Loss - StockTotal (should be 0)
 
-  // Sales vs Writeoffs difference (to see recipe/write-off discrepancy)
-  salesWriteoffDiff: StockAmount // sales - writeoffs (positive = more theoretical than actual)
+  // VARIANCE = Expected - Actual (negative = shortage, positive = surplus)
+  variance: StockAmount
 
   // Flags
   hasPreparations: boolean // Whether product is used in preparations

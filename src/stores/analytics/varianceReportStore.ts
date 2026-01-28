@@ -210,31 +210,26 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
             // Stock movement
             opening: item.opening || { quantity: 0, amount: 0 },
             received: item.received || { quantity: 0, amount: 0 },
-            // V3: Theoretical sales from orders (MAIN) - field name is theoreticalSales
-            sales: item.theoreticalSales || { quantity: 0, amount: 0 },
-            // V3: Actual write-offs (for comparison)
+            // V4: Sales from theoretical calculation
+            sales: item.sales || { quantity: 0, amount: 0 },
+            // V4: Actual write-offs (production_consumption)
             writeoffs: item.writeoffs || { quantity: 0, amount: 0 },
-            productionWriteoffs: item.productionWriteoffs || { quantity: 0, amount: 0 },
-            directWriteoffs: item.directWriteoffs || { quantity: 0, amount: 0 },
-            tracedWriteoffs: item.tracedWriteoffs || { quantity: 0, amount: 0 },
-            // Loss (includes corrections)
+            // V4: Loss (expired/spoiled + negative corrections)
             loss: item.loss || { quantity: 0, amount: 0 },
-            corrections: item.corrections || { quantity: 0, amount: 0 },
-            directLoss: item.directLoss || { quantity: 0, amount: 0 },
-            tracedLoss: item.tracedLoss || { quantity: 0, amount: 0 },
-            // Closing & Variance - field name is closingStock
-            closing: item.closingStock || { quantity: 0, amount: 0 },
+            // V4: Gain (positive corrections)
+            gain: item.gain || { quantity: 0, amount: 0 },
+            // V4: Expected vs Actual
+            expected: item.expected || { quantity: 0, amount: 0 },
+            actual: item.actual || { quantity: 0, amount: 0 },
+            // Closing & InPreps (for display)
+            closing: item.closing || { quantity: 0, amount: 0 },
             inPreps: item.inPreps || { quantity: 0, amount: 0 },
             stockTotal: {
-              quantity: (item.closingStock?.quantity || 0) + (item.inPreps?.quantity || 0),
-              amount: (item.closingStock?.amount || 0) + (item.inPreps?.amount || 0)
+              quantity: (item.closing?.quantity || 0) + (item.inPreps?.quantity || 0),
+              amount: (item.closing?.amount || 0) + (item.inPreps?.amount || 0)
             },
+            // V4: Variance = Expected - Actual
             variance: item.variance || { quantity: 0, amount: 0 },
-            // V3: Sales vs Writeoffs difference (calculated)
-            salesWriteoffDiff: {
-              quantity: (item.theoreticalSales?.quantity || 0) - (item.writeoffs?.quantity || 0),
-              amount: (item.theoreticalSales?.amount || 0) - (item.writeoffs?.amount || 0)
-            },
             // Flags & calculated
             hasPreparations: item.hasPreparations || false,
             lossPercent: item.lossPercent ?? 0
