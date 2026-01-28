@@ -398,21 +398,19 @@ export const usePreparationStore = defineStore('preparation', () => {
       state.value.loading.inventory = true
       state.value.error = null
 
-      const correctionOperations = await preparationService.finalizeInventory(inventoryId)
+      // ✅ UPDATED: finalizeInventory now returns void (operations created internally)
+      await preparationService.finalizeInventory(inventoryId)
 
       const inventoryIndex = state.value.inventories.findIndex(inv => inv.id === inventoryId)
       if (inventoryIndex !== -1) {
         state.value.inventories[inventoryIndex].status = 'confirmed'
       }
 
-      correctionOperations.forEach(op => {
-        state.value.operations.unshift(op)
-      })
-
-      // ✅ FIXED: After inventory finalization, sync all data including batches
+      // ✅ UPDATED: Re-fetch all data after finalization to get new operations and batches
       const inventory = state.value.inventories[inventoryIndex]
       if (inventory) {
         await fetchBalances(inventory.department)
+        await fetchOperations(inventory.department)
       }
     } catch (error) {
       const message =

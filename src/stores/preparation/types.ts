@@ -10,14 +10,15 @@ export type ProductionSlot = 'morning' | 'afternoon' | 'evening' | 'any'
 export type ProductionScheduleSlot = 'urgent' | 'morning' | 'afternoon' | 'evening'
 export type ProductionScheduleStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
 export type SyncStatus = 'pending' | 'synced' | 'failed'
-// ✅ SIMPLIFIED: Only production, inventory, and write_off operations
-export type PreparationOperationType = 'receipt' | 'inventory' | 'write_off'
+// ✅ SIMPLIFIED: Production, inventory, write_off, and correction operations
+export type PreparationOperationType = 'receipt' | 'inventory' | 'write_off' | 'correction'
 // ✅ SIMPLIFIED: Only production and inventory_adjustment sources
 export type BatchSourceType =
   | 'production'
   | 'correction'
   | 'opening_balance'
   | 'inventory_adjustment'
+  | 'negative_correction' // ✅ NEW: Correction for negative stock balance
 export type BatchStatus = 'active' | 'expired' | 'depleted' | 'written_off'
 export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 
@@ -94,6 +95,13 @@ export interface PreparationOperation extends BaseEntity {
     notes?: string
   }
 
+  // ✅ Correction Details (only for correction operations)
+  correctionDetails?: {
+    reason: 'inventory_adjustment' | 'negative_correction' | 'theft' | 'damage' | 'other'
+    relatedInventoryId?: string
+    relatedDocumentNumber?: string
+  }
+
   relatedInventoryId?: string
   relatedStorageOperationIds?: string[] // ✨ NEW: Link to storage_operations when raw products are written off for production
   status: 'draft' | 'confirmed'
@@ -154,6 +162,7 @@ export interface PreparationInventoryItem {
   notes?: string
   countedBy?: string
   confirmed?: boolean
+  userInteracted?: boolean
 }
 
 // DTOs
@@ -164,6 +173,7 @@ export interface CreatePreparationReceiptData {
   sourceType: BatchSourceType
   notes?: string
   skipAutoWriteOff?: boolean // ✨ NEW: Skip auto write-off for inventory corrections
+  relatedInventoryId?: string // ✨ NEW: Link to inventory document for deficit coverage
 }
 
 export interface PreparationReceiptItem {
@@ -186,6 +196,27 @@ export interface CreatePreparationWriteOffData {
 export interface PreparationWriteOffItem {
   preparationId: string
   quantity: number
+  notes?: string
+}
+
+// ✅ NEW: Correction DTOs
+export interface CreateCorrectionData {
+  department: PreparationDepartment
+  responsiblePerson: string
+  items: CorrectionItem[]
+  correctionDetails: {
+    reason: 'inventory_adjustment' | 'negative_correction' | 'theft' | 'damage' | 'other'
+    relatedInventoryId?: string
+    relatedDocumentNumber?: string
+  }
+  affectsKPI?: boolean // Default: true
+  notes?: string
+}
+
+export interface CorrectionItem {
+  preparationId: string
+  quantity: number // Can be positive (surplus) or negative (shortage)
+  unit: string
   notes?: string
 }
 

@@ -24,6 +24,8 @@ import type {
   CreatePreparationReceiptData,
   CreatePreparationInventoryData,
   CreatePreparationWriteOffData,
+  CreateCorrectionData,
+  CorrectionItem,
   PreparationInventoryDocument,
   PreparationInventoryItem,
   PreparationWriteOffStatistics,
@@ -474,6 +476,99 @@ export class PreparationService {
   }
 
   /**
+   * Get last known cost for a preparation from most recent active batches
+   * Used for negative stock corrections and inventory adjustments
+   * @param preparationId - The preparation ID
+   * @returns Last known cost per unit, or fallback to estimated/average cost
+   */
+  getLastKnownCost(preparationId: string): number {
+    try {
+      const prepInfo = this.getPreparationInfo(preparationId)
+
+      // Get active batches for this preparation, sorted by production date (newest first)
+      const activeBatches = this.batches
+        .filter(
+          b =>
+            b.preparationId === preparationId &&
+            b.status === 'active' &&
+            b.currentQuantity > 0 &&
+            !b.isNegative &&
+            !b.reconciledAt
+        )
+        .sort((a, b) => new Date(b.productionDate).getTime() - new Date(a.productionDate).getTime())
+
+      // Return cost from most recent active batch
+      if (activeBatches.length > 0) {
+        const lastCost = activeBatches[0].costPerUnit
+        DebugUtils.info(MODULE_NAME, 'Using last known cost from recent active batch', {
+          preparationId,
+          preparationName: prepInfo.name,
+          lastCost,
+          batchNumber: activeBatches[0].batchNumber
+        })
+        return lastCost
+      }
+
+      // Fallback 1: Search in ALL batches (including depleted) if no active batches
+      const allBatches = this.batches
+        .filter(
+          b =>
+            b.preparationId === preparationId &&
+            !b.isNegative &&
+            !b.reconciledAt &&
+            b.costPerUnit > 0 // Only batches with valid cost
+        )
+        .sort((a, b) => new Date(b.productionDate).getTime() - new Date(a.productionDate).getTime())
+
+      if (allBatches.length > 0) {
+        const lastCost = allBatches[0].costPerUnit
+        DebugUtils.warn(
+          MODULE_NAME,
+          'No active batches, using cost from most recent batch (any status)',
+          {
+            preparationId,
+            preparationName: prepInfo.name,
+            lastCost,
+            batchNumber: allBatches[0].batchNumber,
+            batchStatus: allBatches[0].status
+          }
+        )
+        return lastCost
+      }
+
+      // Fallback 2: Use estimatedCost from preparation info
+      if (prepInfo.estimatedCost && prepInfo.estimatedCost > 0) {
+        DebugUtils.warn(MODULE_NAME, 'No batches found, using estimated cost', {
+          preparationId,
+          preparationName: prepInfo.name,
+          estimatedCost: prepInfo.estimatedCost
+        })
+        return prepInfo.estimatedCost
+      }
+
+      // Fallback 3: Use lastKnownCost from preparation info
+      if (prepInfo.lastKnownCost && prepInfo.lastKnownCost > 0) {
+        DebugUtils.warn(MODULE_NAME, 'Using last known cost from preparation info', {
+          preparationId,
+          preparationName: prepInfo.name,
+          lastKnownCost: prepInfo.lastKnownCost
+        })
+        return prepInfo.lastKnownCost
+      }
+
+      // Fallback 4: Return 0 (should not happen in normal operation)
+      DebugUtils.error(MODULE_NAME, 'No cost information available for preparation', {
+        preparationId,
+        preparationName: prepInfo.name
+      })
+      return 0
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error getting last known cost', { preparationId, error })
+      return 0
+    }
+  }
+
+  /**
    * Calculate FIFO allocation in portions (converts to weight internally)
    * @param preparationId - The preparation ID
    * @param department - The department
@@ -787,6 +882,245 @@ export class PreparationService {
       return stats
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to calculate write-off statistics', { error })
+      throw error
+    }
+  }
+
+  // ===========================
+  // CORRECTION OPERATIONS
+  // ===========================
+
+  /**
+   * Creates a correction operation for inventory adjustments
+   * Handles both positive (surplus) and negative (shortage) corrections
+   *
+   * @param data - Correction operation data
+   * @returns Created preparation operation
+   */
+  async createCorrection(data: CreateCorrectionData): Promise<PreparationOperation> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Creating preparation correction operation', { data })
+
+      const operationItems = []
+      let totalValue = 0
+
+      for (const item of data.items) {
+        const preparationInfo = this.getPreparationInfo(item.preparationId)
+
+        if (item.quantity > 0) {
+          // SURPLUS: Create new batch with correction source
+          const costPerUnit = preparationInfo.lastKnownCost || preparationInfo.estimatedCost || 0
+          const batchValue = item.quantity * costPerUnit
+
+          const newBatch: PreparationBatch = {
+            id: crypto.randomUUID(),
+            batchNumber: `PREP-CORR-${String(this.batches.length + 1).padStart(4, '0')}`,
+            preparationId: item.preparationId,
+            department: data.department,
+            initialQuantity: item.quantity,
+            currentQuantity: item.quantity,
+            unit: item.unit,
+            costPerUnit,
+            totalValue: batchValue,
+            productionDate: TimeUtils.getCurrentLocalISO(),
+            sourceType: 'correction',
+            notes: `Inventory correction: ${data.correctionDetails.reason}`,
+            status: 'active',
+            isActive: true,
+            createdAt: TimeUtils.getCurrentLocalISO(),
+            updatedAt: TimeUtils.getCurrentLocalISO()
+          }
+
+          // Insert batch into Supabase
+          const { error: batchError } = await supabase
+            .from('preparation_batches')
+            .insert(batchToSupabase(newBatch))
+
+          if (batchError) {
+            DebugUtils.error(MODULE_NAME, 'Failed to insert batch into Supabase', {
+              batchError
+            })
+            throw batchError
+          }
+
+          this.batches.push(newBatch)
+          totalValue += batchValue
+
+          operationItems.push({
+            id: `prep-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            preparationId: item.preparationId,
+            preparationName: preparationInfo.name,
+            quantity: item.quantity,
+            unit: item.unit,
+            batchAllocations: [
+              {
+                batchId: newBatch.id,
+                batchNumber: newBatch.batchNumber,
+                quantity: item.quantity,
+                costPerUnit,
+                batchDate: newBatch.productionDate
+              }
+            ],
+            totalCost: batchValue,
+            notes: item.notes
+          })
+
+          DebugUtils.info(MODULE_NAME, '✅ Created surplus batch', {
+            preparationId: item.preparationId,
+            quantity: item.quantity,
+            cost: batchValue
+          })
+        } else if (item.quantity < 0) {
+          // SHORTAGE: Allocate from FIFO, create negative batch if needed
+          const quantityToAllocate = Math.abs(item.quantity)
+
+          const { allocations, remainingQuantity } = this.calculateFifoAllocation(
+            item.preparationId,
+            data.department,
+            quantityToAllocate
+          )
+
+          let totalCost = allocations.reduce(
+            (sum, alloc) => sum + alloc.quantity * alloc.costPerUnit,
+            0
+          )
+
+          // Update batches with allocations
+          for (const allocation of allocations) {
+            const batchIndex = this.batches.findIndex(b => b.id === allocation.batchId)
+            if (batchIndex !== -1) {
+              const batch = this.batches[batchIndex]
+
+              const newQuantity = batch.currentQuantity - allocation.quantity
+              batch.currentQuantity = Math.round(newQuantity * 10000) / 10000
+              batch.totalValue = Math.round(batch.currentQuantity * batch.costPerUnit * 100) / 100
+              batch.updatedAt = TimeUtils.getCurrentLocalISO()
+
+              if (batch.currentQuantity <= 0.0001 && !batch.isNegative) {
+                batch.currentQuantity = 0
+                batch.totalValue = 0
+                batch.status = 'depleted'
+                batch.isActive = false
+              }
+
+              // Update batch in Supabase
+              const { error: batchUpdateError } = await supabase
+                .from('preparation_batches')
+                .update(batchToSupabaseUpdate(batch))
+                .eq('id', batch.id)
+
+              if (batchUpdateError) {
+                DebugUtils.error(MODULE_NAME, 'Failed to update batch in Supabase', {
+                  batchUpdateError
+                })
+                throw batchUpdateError
+              }
+
+              this.batches[batchIndex] = batch
+            }
+          }
+
+          // Create negative batch if needed
+          if (remainingQuantity > 0) {
+            DebugUtils.warn(MODULE_NAME, '⚠️ Insufficient stock - creating negative batch', {
+              preparationId: item.preparationId,
+              needed: quantityToAllocate,
+              available: quantityToAllocate - remainingQuantity,
+              shortage: remainingQuantity
+            })
+
+            const negativeBatchService = await import('./negativeBatchService')
+            const result = await negativeBatchService.negativeBatchService.createNegativeBatch(
+              item.preparationId,
+              data.department,
+              remainingQuantity,
+              'inventory_shortage'
+            )
+
+            if (result.error) {
+              throw new Error(result.error)
+            }
+
+            // Add negative batch to allocations
+            allocations.push({
+              batchId: result.batchId!,
+              batchNumber: result.batchNumber!,
+              quantity: remainingQuantity,
+              costPerUnit: result.costPerUnit || 0,
+              batchDate: TimeUtils.getCurrentLocalISO()
+            })
+
+            totalCost += (result.costPerUnit || 0) * remainingQuantity
+
+            DebugUtils.info(MODULE_NAME, '✅ Created negative batch for shortage', {
+              batchId: result.batchId,
+              quantity: remainingQuantity
+            })
+          }
+
+          totalValue += totalCost
+
+          operationItems.push({
+            id: `prep-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            preparationId: item.preparationId,
+            preparationName: preparationInfo.name,
+            quantity: item.quantity, // Keep negative sign
+            unit: item.unit,
+            batchAllocations: allocations,
+            totalCost,
+            notes: item.notes
+          })
+
+          DebugUtils.info(MODULE_NAME, '✅ Processed shortage', {
+            preparationId: item.preparationId,
+            quantity: item.quantity,
+            cost: totalCost
+          })
+        }
+      }
+
+      const operation: PreparationOperation = {
+        id: crypto.randomUUID(),
+        operationType: 'correction',
+        documentNumber: `PREP-CORR-${String(this.operations.length + 1).padStart(3, '0')}`,
+        operationDate: TimeUtils.getCurrentLocalISO(),
+        department: data.department,
+        responsiblePerson: data.responsiblePerson,
+        items: operationItems,
+        totalValue: Math.abs(totalValue),
+        correctionDetails: data.correctionDetails,
+        relatedInventoryId: data.correctionDetails.relatedInventoryId,
+        status: 'confirmed',
+        notes: data.notes,
+        createdAt: TimeUtils.getCurrentLocalISO(),
+        updatedAt: TimeUtils.getCurrentLocalISO()
+      }
+
+      // Insert operation into Supabase
+      const { error: operationError } = await supabase
+        .from('preparation_operations')
+        .insert(operationToSupabase(operation))
+
+      if (operationError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to insert operation into Supabase', {
+          operationError
+        })
+        throw operationError
+      }
+
+      this.operations.push(operation)
+      await this.recalculateBalances(data.department)
+
+      DebugUtils.info(MODULE_NAME, '✅ Correction operation created', {
+        operationId: operation.id,
+        reason: data.correctionDetails.reason,
+        totalValue,
+        itemsCount: operationItems.length
+      })
+
+      return operation
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create correction operation', { error })
       throw error
     }
   }
@@ -1277,7 +1611,107 @@ export class PreparationService {
     }
   }
 
-  async finalizeInventory(inventoryId: string): Promise<PreparationOperation[]> {
+  /**
+   * Covers negative stock deficits by creating production receipts
+   * Automatically writes off raw materials according to recipes
+   *
+   * @private
+   * @param items - Items with negative stock (systemQuantity < 0)
+   * @param inventory - Parent inventory document
+   */
+  private async coverDeficitsViaProduction(
+    items: PreparationInventoryItem[],
+    inventory: PreparationInventoryDocument
+  ): Promise<void> {
+    const recipesStore = useRecipesStore()
+
+    for (const item of items) {
+      const preparation = recipesStore.preparations.find(p => p.id === item.preparationId)
+      if (!preparation) {
+        DebugUtils.warn(MODULE_NAME, 'Preparation not found for deficit coverage', {
+          preparationId: item.preparationId
+        })
+        continue
+      }
+
+      const deficitQuantity = Math.abs(item.systemQuantity)
+      const actualQuantity = item.actualQuantity || 0
+      const totalQuantityNeeded = deficitQuantity + actualQuantity
+
+      DebugUtils.info(MODULE_NAME, 'Covering deficit via production', {
+        preparation: preparation.name,
+        deficitQuantity,
+        actualQuantity,
+        totalQuantityNeeded
+      })
+
+      // Create production receipt (will auto write-off raw materials)
+      await this.createReceipt({
+        department: inventory.department,
+        responsiblePerson: inventory.countedBy || inventory.responsiblePerson,
+        items: [
+          {
+            preparationId: item.preparationId,
+            quantity: totalQuantityNeeded,
+            costPerUnit: 0, // Will be calculated from actual FIFO cost
+            notes: `Deficit coverage from inventory ${inventory.documentNumber}`
+          }
+        ],
+        sourceType: 'negative_correction',
+        skipAutoWriteOff: false, // ✅ DO write off raw materials
+        relatedInventoryId: inventory.id,
+        notes: `Auto-production to cover negative stock from inventory ${inventory.documentNumber}`
+      })
+
+      DebugUtils.info(MODULE_NAME, '✅ Deficit covered via production', {
+        preparation: preparation.name,
+        quantityProduced: totalQuantityNeeded
+      })
+    }
+  }
+
+  /**
+   * Creates correction operations for normal inventory discrepancies
+   * Handles both shortages (negative) and surpluses (positive)
+   *
+   * @private
+   * @param items - Items with discrepancies (systemQuantity >= 0)
+   * @param inventory - Parent inventory document
+   */
+  private async createInventoryCorrections(
+    items: PreparationInventoryItem[],
+    inventory: PreparationInventoryDocument
+  ): Promise<void> {
+    for (const item of items) {
+      await this.createCorrection({
+        department: inventory.department,
+        responsiblePerson: inventory.countedBy || inventory.responsiblePerson,
+        items: [
+          {
+            preparationId: item.preparationId,
+            quantity: item.difference, // Keep sign: +/- (surplus/shortage)
+            unit: item.unit,
+            notes: `Inventory adjustment from ${inventory.documentNumber}`
+          }
+        ],
+        correctionDetails: {
+          reason: 'inventory_adjustment',
+          relatedInventoryId: inventory.id,
+          relatedDocumentNumber: inventory.documentNumber
+        },
+        affectsKPI: true, // All inventory discrepancies affect KPI
+        notes: `Inventory adjustment: ${inventory.documentNumber}`
+      })
+
+      DebugUtils.info(MODULE_NAME, '✅ Inventory correction created', {
+        preparation: item.preparationName,
+        difference: item.difference,
+        unit: item.unit
+      })
+    }
+  }
+
+  async finalizeInventory(inventoryId: string): Promise<void> {
     try {
       const inventoryIndex = this.inventories.findIndex(inv => inv.id === inventoryId)
       if (inventoryIndex === -1) {
@@ -1290,81 +1724,44 @@ export class PreparationService {
         throw new Error('Inventory already finalized')
       }
 
-      // Find items with discrepancies
-      const itemsWithDiscrepancies = inventory.items.filter(
-        item => Math.abs(item.difference) > 0.01
-      )
+      // ✅ NEW UNIFIED APPROACH: Split items into 3 categories
+      const negativeCorrectionItems = [] // systemQuantity < 0 (needs production)
+      const normalDiscrepancyItems = [] // systemQuantity >= 0, has difference (needs correction)
+      const matchedItems = [] // no difference
 
-      const correctionOperations: PreparationOperation[] = []
+      for (const item of inventory.items) {
+        if (item.systemQuantity < 0) {
+          // Has negative stock - needs production receipt to cover deficit
+          negativeCorrectionItems.push(item)
+        } else if (Math.abs(item.difference) > 0.01) {
+          // Normal discrepancy - needs correction operation
+          normalDiscrepancyItems.push(item)
+        } else {
+          // No discrepancy
+          matchedItems.push(item)
+        }
+      }
 
-      // Create write-off operations for negative discrepancies (actualQuantity < systemQuantity)
-      if (itemsWithDiscrepancies.length > 0) {
-        DebugUtils.info(MODULE_NAME, 'Creating write-off operations for inventory discrepancies', {
-          count: itemsWithDiscrepancies.length,
-          inventoryId: inventory.id
+      DebugUtils.info(MODULE_NAME, 'Inventory finalization - item categorization', {
+        negativeCorrectionItems: negativeCorrectionItems.length,
+        normalDiscrepancyItems: normalDiscrepancyItems.length,
+        matchedItems: matchedItems.length
+      })
+
+      // STEP 1: Handle negative corrections via production (write off raw materials)
+      if (negativeCorrectionItems.length > 0) {
+        DebugUtils.info(MODULE_NAME, 'Covering deficits via production', {
+          count: negativeCorrectionItems.length
         })
+        await this.coverDeficitsViaProduction(negativeCorrectionItems, inventory)
+      }
 
-        // Group items by sign (negative = shortage, positive = surplus)
-        const shortageItems = itemsWithDiscrepancies.filter(item => item.difference < 0)
-        const surplusItems = itemsWithDiscrepancies.filter(item => item.difference > 0)
-
-        // Handle shortages (write-off needed)
-        if (shortageItems.length > 0) {
-          const writeOffData: CreatePreparationWriteOffData = {
-            department: inventory.department,
-            responsiblePerson: inventory.responsiblePerson,
-            reason: 'other', // Inventory adjustment
-            items: shortageItems.map(item => ({
-              preparationId: item.preparationId,
-              quantity: Math.abs(item.difference), // Use absolute value for write-off
-              notes: `Inventory adjustment: ${inventory.documentNumber}`
-            })),
-            notes: `Inventory adjustment: ${inventory.documentNumber}`
-          }
-
-          // Create write-off operation (this will update batches via FIFO)
-          const writeOffOperation = await this.createWriteOff(writeOffData)
-          correctionOperations.push(writeOffOperation)
-
-          DebugUtils.info(MODULE_NAME, 'Write-off operation created for inventory shortages', {
-            operationId: writeOffOperation.id,
-            itemCount: shortageItems.length,
-            totalValue: writeOffOperation.totalValue
-          })
-        }
-
-        // Handle surpluses (receipt/correction needed)
-        if (surplusItems.length > 0) {
-          DebugUtils.info(MODULE_NAME, 'Surplus items found in inventory', {
-            count: surplusItems.length,
-            totalValue: surplusItems.reduce((sum, item) => sum + item.valueDifference, 0)
-          })
-
-          // Create receipt for surplus items
-          const receiptData: CreatePreparationReceiptData = {
-            department: inventory.department,
-            responsiblePerson: inventory.responsiblePerson,
-            sourceType: 'inventory_adjustment',
-            items: surplusItems.map(item => ({
-              preparationId: item.preparationId,
-              quantity: item.difference, // Positive value
-              costPerUnit: item.averageCost,
-              expiryDate: TimeUtils.getDateDaysFromNow(2), // 2 days default
-              notes: `Inventory adjustment: ${inventory.documentNumber} (surplus found)`
-            })),
-            notes: `Inventory adjustment: ${inventory.documentNumber} (surplus)`,
-            skipAutoWriteOff: true // ✨ Skip auto write-off for inventory corrections
-          }
-
-          const receiptOperation = await this.createReceipt(receiptData)
-          correctionOperations.push(receiptOperation)
-
-          DebugUtils.info(MODULE_NAME, 'Receipt operation created for inventory surplus', {
-            operationId: receiptOperation.id,
-            itemCount: surplusItems.length,
-            totalValue: receiptOperation.totalValue
-          })
-        }
+      // STEP 2: Handle normal discrepancies via correction operations
+      if (normalDiscrepancyItems.length > 0) {
+        DebugUtils.info(MODULE_NAME, 'Creating inventory corrections', {
+          count: normalDiscrepancyItems.length
+        })
+        await this.createInventoryCorrections(normalDiscrepancyItems, inventory)
       }
 
       // Update inventory status
@@ -1393,14 +1790,13 @@ export class PreparationService {
       // Recalculate balances after all operations
       await this.recalculateBalances(inventory.department)
 
-      DebugUtils.info(MODULE_NAME, 'Inventory finalized successfully', {
+      DebugUtils.info(MODULE_NAME, '✅ Inventory finalized successfully', {
         inventoryId,
         documentNumber: inventory.documentNumber,
-        discrepancies: itemsWithDiscrepancies.length,
-        correctionOperations: correctionOperations.length
+        negativeCorrectionItems: negativeCorrectionItems.length,
+        normalDiscrepancyItems: normalDiscrepancyItems.length,
+        matchedItems: matchedItems.length
       })
-
-      return correctionOperations
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to finalize preparation inventory', {
         error,
@@ -1529,11 +1925,13 @@ export class PreparationService {
 
       // ✅ FIXED: Filter batches by preparation department, not batch department
       // ⚠️ Include negative batches (currentQuantity < 0) for display
+      // ✅ FIX: Exclude reconciled negative batches from balance calculation
       const activeBatches = this.batches.filter(
         b =>
           departmentPreparationIds.has(b.preparationId) &&
           b.status === 'active' &&
-          b.currentQuantity !== 0 // Include both positive and negative quantities
+          b.currentQuantity !== 0 && // Include both positive and negative quantities
+          !b.reconciledAt // ✅ FIX: Exclude reconciled negative batches
       )
 
       // Group batches by preparationId
@@ -1547,8 +1945,11 @@ export class PreparationService {
       }
 
       // ✅ FIXED: Calculate actual balances from batches using preparation department
+      // ✅ FIX: Exclude reconciled negative batches from balance calculation
       const actualBalances = new Map<string, number>()
-      const allBatches = this.batches.filter(b => departmentPreparationIds.has(b.preparationId))
+      const allBatches = this.batches.filter(
+        b => departmentPreparationIds.has(b.preparationId) && !b.reconciledAt // ✅ FIX
+      )
 
       allBatches.forEach(batch => {
         if (batch.status === 'active') {

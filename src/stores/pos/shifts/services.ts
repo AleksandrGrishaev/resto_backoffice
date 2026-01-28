@@ -14,7 +14,7 @@ import { supabase } from '@/supabase'
 import { getSupabaseErrorMessage } from '@/supabase/config'
 import { toSupabaseInsert, toSupabaseUpdate, fromSupabase } from './supabaseMappers'
 import { ENV } from '@/config/environment'
-import { extractErrorDetails } from '@/utils'
+import { extractErrorDetails, StorageMonitor } from '@/utils'
 import { executeSupabaseMutation } from '@/utils/supabase'
 
 /**
@@ -139,7 +139,7 @@ export class ShiftsService {
           )
 
           // Cache in localStorage for offline access
-          localStorage.setItem(this.STORAGE_KEYS.shifts, JSON.stringify(shifts))
+          await this.saveShiftsSafely(shifts)
 
           return { success: true, data: shifts }
         }
@@ -524,7 +524,7 @@ export class ShiftsService {
       shiftsData.push(shift)
     }
 
-    localStorage.setItem(this.STORAGE_KEYS.shifts, JSON.stringify(shiftsData))
+    await this.saveShiftsSafely(shiftsData)
   }
 
   /**
@@ -818,6 +818,79 @@ export class ShiftsService {
         success: false,
         error: error instanceof Error ? error.message : 'Sync failed'
       }
+    }
+  }
+
+  /**
+   * Safe save shifts to localStorage with quota error handling
+   * Uses StorageMonitor.safeSetItem to handle QuotaExceededError
+   */
+  private async saveShiftsSafely(shifts: PosShift[]): Promise<void> {
+    await StorageMonitor.safeSetItem(this.STORAGE_KEYS.shifts, JSON.stringify(shifts))
+  }
+
+  /**
+   * Clean up old completed shifts from localStorage
+   *
+   * Retention policy:
+   * - Keep active shift (always)
+   * - Keep shifts with pending sync
+   * - Remove completed shifts older than retentionDays
+   *
+   * @param retentionDays - Number of days to keep old shifts (default: 7)
+   * @returns Cleanup statistics
+   */
+  async cleanupOldShifts(retentionDays: number = 7): Promise<{
+    removed: number
+    kept: number
+  }> {
+    try {
+      const cachedData = localStorage.getItem(this.STORAGE_KEYS.shifts)
+      if (!cachedData) {
+        return { removed: 0, kept: 0 }
+      }
+
+      const shifts: PosShift[] = JSON.parse(cachedData)
+      const cutoffDate = new Date()
+      cutoffDate.setDate(cutoffDate.getDate() - retentionDays)
+
+      // Filter shifts to keep
+      const shiftsToKeep = shifts.filter(shift => {
+        // Always keep active shift
+        if (shift.status === 'active') {
+          return true
+        }
+
+        // Keep shifts with pending sync
+        if (shift.pendingSync || shift.syncStatus === 'pending') {
+          return true
+        }
+
+        // Keep recent shifts (< retentionDays)
+        const shiftDate = new Date(shift.createdAt)
+        if (shiftDate >= cutoffDate) {
+          return true
+        }
+
+        // Remove old completed shifts
+        return false
+      })
+
+      const removed = shifts.length - shiftsToKeep.length
+
+      // Save cleaned shifts
+      if (removed > 0) {
+        await this.saveShiftsSafely(shiftsToKeep)
+        console.log(`✅ Cleaned up ${removed} old shifts (kept ${shiftsToKeep.length})`)
+      }
+
+      return {
+        removed,
+        kept: shiftsToKeep.length
+      }
+    } catch (error) {
+      console.error('❌ Failed to cleanup shifts:', error)
+      return { removed: 0, kept: 0 }
     }
   }
 }

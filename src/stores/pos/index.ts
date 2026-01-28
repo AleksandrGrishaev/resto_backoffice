@@ -28,6 +28,9 @@ import { useOrdersRealtime } from './orders/useOrdersRealtime'
 import { useTablesRealtime } from './tables/useTablesRealtime'
 import { ENV } from '@/config/environment'
 
+// ✅ Storage cleanup system
+import { StorageMonitor } from '@/utils'
+
 // Types (упрощенные)
 interface DailySalesStats {
   totalAmount: number
@@ -162,6 +165,22 @@ export const usePosStore = defineStore('pos', () => {
     try {
       platform.debugLog('POS', '🔍 Starting POS initialization...')
       error.value = null
+
+      // ✅ CRITICAL: Check localStorage usage and cleanup if needed
+      // This runs for ALL roles (cashier, kitchen, bar) on app load
+      // Prevents quota exceeded errors on kitchen/bar monitors that never open shifts
+      const { needsCleanup, level } = StorageMonitor.needsCleanup()
+      if (needsCleanup) {
+        console.log(
+          `⚠️  localStorage ${level}: ${(StorageMonitor.estimateUsage().usagePercent * 100).toFixed(1)}% full, triggering cleanup...`
+        )
+        await StorageMonitor.performCleanup(level)
+      } else {
+        const usage = StorageMonitor.estimateUsage()
+        console.log(
+          `✅ localStorage usage: ${(usage.usagePercent * 100).toFixed(1)}% (${(usage.totalSize / 1024).toFixed(0)} KB)`
+        )
+      }
 
       // Простая проверка что stores доступны
       const storesAvailable = !!(tablesStore && ordersStore && paymentsStore && shiftsStore)

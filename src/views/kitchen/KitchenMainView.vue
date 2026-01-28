@@ -114,7 +114,7 @@ import { useKitchenStore } from '@/stores/kitchen'
 import { useKitchenDishes } from '@/stores/kitchen/composables'
 import { useAuthStore } from '@/stores/auth'
 import { useWakeLock, useOrderAlertService } from '@/core/pwa'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, StorageMonitor } from '@/utils'
 import KitchenLayout from '@/layouts/KitchenLayout.vue'
 import KitchenSidebar from './components/KitchenSidebar.vue'
 import OrdersScreen from './orders/OrdersScreen.vue'
@@ -212,6 +212,21 @@ const initializeKitchen = async (): Promise<void> => {
     initError.value = null
 
     DebugUtils.debug(MODULE_NAME, 'Starting Kitchen initialization...')
+
+    // ✅ CRITICAL: Check localStorage usage and cleanup if needed
+    // Kitchen monitors never open shifts, so cleanup must run on app load
+    const { needsCleanup, level } = StorageMonitor.needsCleanup()
+    if (needsCleanup) {
+      console.log(
+        `⚠️  [Kitchen] localStorage ${level}: ${(StorageMonitor.estimateUsage().usagePercent * 100).toFixed(1)}% full, triggering cleanup...`
+      )
+      await StorageMonitor.performCleanup(level)
+    } else {
+      const usage = StorageMonitor.estimateUsage()
+      console.log(
+        `✅ [Kitchen] localStorage usage: ${(usage.usagePercent * 100).toFixed(1)}% (${(usage.totalSize / 1024).toFixed(0)} KB)`
+      )
+    }
 
     const result = await kitchenStore.initialize()
 

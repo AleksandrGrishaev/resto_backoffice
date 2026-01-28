@@ -75,20 +75,23 @@
             <div class="mb-4">
               <h4 class="mb-2">Current Batches (FIFO Order)</h4>
               <p class="text-body-2 text-medium-emphasis">
-                Oldest batches are consumed first. Total: {{ item.batches.length }} batch{{
-                  item.batches.length !== 1 ? 'es' : ''
+                Oldest batches are consumed first. Total: {{ activeBatchesOnly.length }} batch{{
+                  activeBatchesOnly.length !== 1 ? 'es' : ''
                 }}
               </p>
             </div>
 
-            <div v-if="item.batches.length === 0" class="text-center py-8 text-medium-emphasis">
+            <div
+              v-if="activeBatchesOnly.length === 0"
+              class="text-center py-8 text-medium-emphasis"
+            >
               <v-icon icon="mdi-chef-hat" size="48" class="mb-2" />
               <div>No active batches</div>
             </div>
 
             <div v-else class="batches-list">
               <v-card
-                v-for="(batch, index) in item.batches"
+                v-for="(batch, index) in activeBatchesOnly"
                 :key="batch.id"
                 variant="outlined"
                 class="mb-3"
@@ -344,7 +347,11 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { PreparationBalance, PreparationDepartment } from '@/stores/preparation'
+import type {
+  PreparationBalance,
+  PreparationDepartment,
+  PreparationBatch
+} from '@/stores/preparation'
 import { useRecipesStore } from '@/stores/recipes'
 
 // Props
@@ -404,6 +411,19 @@ const expiredBatchesCount = computed(() => {
   return props.item.batches.filter(batch => batch.expiryDate && isExpired(batch.expiryDate)).length
 })
 
+// ✅ FIX: Filter out reconciled negative batches (only show active/unreconciled batches)
+const activeBatchesOnly = computed(() => {
+  if (!props.item?.batches) return []
+
+  return props.item.batches.filter((batch: PreparationBatch) => {
+    // Show all positive batches
+    if (!batch.isNegative && batch.currentQuantity >= 0) return true
+
+    // For negative batches, only show unreconciled ones
+    return !batch.reconciledAt
+  })
+})
+
 // Methods
 function formatDepartment(department: PreparationDepartment): string {
   return department === 'kitchen' ? 'Kitchen' : 'Bar'
@@ -430,9 +450,10 @@ function formatDate(dateString: string): string {
 function formatSource(sourceType: string): string {
   const sources: Record<string, string> = {
     production: 'Production',
-    correction: 'Correction',
+    correction: 'Inventory Adjustment',
     opening_balance: 'Opening Balance',
-    inventory_adjustment: 'Inventory Adjustment'
+    inventory_adjustment: 'Inventory Adjustment', // Legacy support
+    negative_correction: 'Deficit Coverage (Production)'
   }
   return sources[sourceType] || sourceType
 }

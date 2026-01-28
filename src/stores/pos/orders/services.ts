@@ -12,7 +12,7 @@ import type {
   ItemPaymentStatus
 } from '../types'
 import type { MenuItemVariant, SelectedModifier } from '@/stores/menu'
-import { TimeUtils, generateId, extractErrorDetails } from '@/utils'
+import { TimeUtils, generateId, extractErrorDetails, StorageMonitor } from '@/utils'
 import { departmentNotificationService } from '../service/DepartmentNotificationService'
 import { ENV } from '@/config/environment'
 import { supabase } from '@/supabase/client'
@@ -424,7 +424,7 @@ export class OrdersService {
 
       // Always update localStorage
       allItems[itemIndex] = updatedItem
-      localStorage.setItem(this.ITEMS_KEY, JSON.stringify(allItems))
+      await this.saveItemsSafely(allItems)
 
       return { success: true, data: updatedItem }
     } catch (error) {
@@ -464,7 +464,7 @@ export class OrdersService {
       }
 
       allItems.splice(itemIndex, 1)
-      localStorage.setItem(this.ITEMS_KEY, JSON.stringify(allItems))
+      await this.saveItemsSafely(allItems)
 
       return { success: true }
     } catch (error) {
@@ -535,7 +535,7 @@ export class OrdersService {
         updatedAt: cancelledAt
       }
 
-      localStorage.setItem(this.ITEMS_KEY, JSON.stringify(allItems))
+      await this.saveItemsSafely(allItems)
 
       return { success: true }
     } catch (error) {
@@ -586,7 +586,7 @@ export class OrdersService {
           writeOffOperationId,
           updatedAt
         }
-        localStorage.setItem(this.ITEMS_KEY, JSON.stringify(allItems))
+        await this.saveItemsSafely(allItems)
       }
 
       return { success: true }
@@ -692,7 +692,7 @@ export class OrdersService {
       }
 
       // Save to localStorage
-      localStorage.setItem(this.ITEMS_KEY, JSON.stringify(allItems))
+      await this.saveItemsSafely(allItems)
 
       orders.data[orderIndex] = updatedOrder
       localStorage.setItem(
@@ -757,7 +757,7 @@ export class OrdersService {
 
       // Always update localStorage
       allItems[itemIndex] = updatedItem
-      localStorage.setItem(this.ITEMS_KEY, JSON.stringify(allItems))
+      await this.saveItemsSafely(allItems)
 
       return { success: true, data: updatedItem }
     } catch (error) {
@@ -806,7 +806,7 @@ export class OrdersService {
         }
       }
 
-      localStorage.setItem(this.ITEMS_KEY, JSON.stringify(allItems))
+      await this.saveItemsSafely(allItems)
 
       return { success: true }
     } catch (error) {
@@ -855,7 +855,7 @@ export class OrdersService {
         }
       }
 
-      localStorage.setItem(this.ITEMS_KEY, JSON.stringify(allItems))
+      await this.saveItemsSafely(allItems)
 
       return { success: true }
     } catch (error) {
@@ -994,7 +994,7 @@ export class OrdersService {
           const allItems = this.getAllStoredItems()
           const filteredItems = allItems.filter(item => item.billId !== bill.id)
           filteredItems.push(...bill.items)
-          localStorage.setItem(this.ITEMS_KEY, JSON.stringify(filteredItems))
+          await this.saveItemsSafely(filteredItems)
         }
       }
 
@@ -1094,7 +1094,7 @@ export class OrdersService {
         const allItems = this.getAllStoredItems()
         const filteredItems = allItems.filter(item => item.billId !== bill.id)
         filteredItems.push(...bill.items)
-        localStorage.setItem(this.ITEMS_KEY, JSON.stringify(filteredItems))
+        await this.saveItemsSafely(filteredItems)
       }
 
       console.log('💾 Order updated in localStorage', {
@@ -1410,7 +1410,7 @@ export class OrdersService {
     const allItems = this.getAllStoredItems()
     const filteredItems = allItems.filter(item => item.billId !== billId)
     filteredItems.push(...items)
-    localStorage.setItem(this.ITEMS_KEY, JSON.stringify(filteredItems))
+    await this.saveItemsSafely(filteredItems)
   }
 
   private getAllStoredBills(): PosBill[] {
@@ -1434,5 +1434,93 @@ export class OrdersService {
     const date = new Date()
     const timeStr = date.getTime().toString().slice(-6)
     return `BILL-${timeStr}`
+  }
+
+  /**
+   * Safe save items to localStorage with quota error handling
+   * Uses StorageMonitor.safeSetItem to handle QuotaExceededError
+   */
+  private async saveItemsSafely(items: PosBillItem[]): Promise<void> {
+    await StorageMonitor.safeSetItem(this.ITEMS_KEY, JSON.stringify(items))
+  }
+
+  /**
+   * Clean up old order items from localStorage
+   *
+   * Retention policy:
+   * - Remove items from paid orders older than retentionDays
+   * - Remove items from cancelled orders older than retentionDays
+   * - Keep all items from unpaid/partial orders (need attention)
+   * - Keep all items from recent orders (< retentionDays)
+   *
+   * @param retentionDays - Number of days to keep old data (default: 7)
+   * @returns Cleanup statistics
+   */
+  async cleanupOldOrderItems(retentionDays: number = 7): Promise<{
+    removed: number
+    kept: number
+    sizeFreed: number
+  }> {
+    try {
+      const allItems = this.getAllStoredItems()
+      const allBills = this.getAllStoredBills()
+      const allOrders = await this.getAllOrders({ all: true })
+
+      if (!allOrders.success || !allOrders.data) {
+        console.warn('⚠️  Cannot cleanup: failed to load orders')
+        return { removed: 0, kept: allItems.length, sizeFreed: 0 }
+      }
+
+      // Calculate cutoff date
+      const cutoffDate = new Date()
+      cutoffDate.setDate(cutoffDate.getDate() - retentionDays)
+
+      // Build set of cleanable order IDs
+      const cleanableOrderIds = new Set<string>()
+      allOrders.data.forEach(order => {
+        const orderDate = new Date(order.createdAt)
+        const isPaid = order.paymentStatus === 'paid'
+        const isCancelled = order.paymentStatus === 'cancelled'
+        const isOld = orderDate < cutoffDate
+
+        // Can clean if: (paid OR cancelled) AND old
+        if ((isPaid || isCancelled) && isOld) {
+          cleanableOrderIds.add(order.id)
+        }
+      })
+
+      // Build map of billId → orderId for quick lookup
+      const billToOrderMap = new Map<string, string>()
+      allBills.forEach(bill => {
+        billToOrderMap.set(bill.id, bill.orderId)
+      })
+
+      // Filter items: keep if NOT cleanable
+      const itemsToKeep = allItems.filter(item => {
+        const orderId = billToOrderMap.get(item.billId)
+
+        // Keep if order not found (orphaned item - safer to keep)
+        if (!orderId) {
+          return true
+        }
+
+        // Keep if order is NOT cleanable
+        return !cleanableOrderIds.has(orderId)
+      })
+
+      const removed = allItems.length - itemsToKeep.length
+      const sizeFreed = removed * 1024 // Estimate 1KB per item
+
+      // Save cleaned items
+      if (removed > 0) {
+        await this.saveItemsSafely(itemsToKeep)
+        console.log(`✅ Cleaned up ${removed} old order items (kept ${itemsToKeep.length})`)
+      }
+
+      return { removed, kept: itemsToKeep.length, sizeFreed }
+    } catch (error) {
+      console.error('❌ Failed to cleanup order items:', error)
+      return { removed: 0, kept: 0, sizeFreed: 0 }
+    }
   }
 }

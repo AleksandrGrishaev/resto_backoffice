@@ -432,9 +432,10 @@ function formatDate(dateString?: string): string {
 function formatSource(sourceType?: string): string {
   const sources: Record<string, string> = {
     purchase: 'Purchase',
-    correction: 'Correction',
+    correction: 'Inventory Adjustment',
     opening_balance: 'Opening Balance',
-    inventory_adjustment: 'Inventory Adjustment'
+    inventory_adjustment: 'Inventory Adjustment', // Legacy support
+    negative_correction: 'Deficit Coverage'
   }
   return sources[sourceType || ''] || sourceType || 'Unknown'
 }

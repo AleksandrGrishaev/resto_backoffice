@@ -68,7 +68,10 @@
       "Bash(nvm install:*)",
       "Bash(nvm use:*)",
       "Bash(node --version:*)",
-      "Bash(pnpm install:*)"
+      "Bash(pnpm install:*)",
+      "Bash(/Users/peaker/.nvm/versions/node/v20.18.0/bin/node -e \"const { createClient } = require(''@supabase/supabase-js''); const supabase = createClient(''https://fjkfckjpnbcyuknsnchy.supabase.co'', ''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqa2Zja2pwbmJjeXVrbnNuY2h5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU2NTUzNzMsImV4cCI6MjA1MTIzMTM3M30.VR_wYxM52rS8gR_SFepqfLo5_0KeY-B6pM7-2eQ2Q0E''); supabase.from(''storage_batches'').select(''*'').limit(1).then(r => console.log(JSON.stringify(r.data || [], null, 2)));\")",
+      "Bash(pnpm exec vue-tsc:*)",
+      "Bash(node test-inventory-correction.mjs:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
