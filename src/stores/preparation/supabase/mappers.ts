@@ -244,7 +244,12 @@ export function inventoryDocumentFromSupabase(row: any): PreparationInventoryDoc
     totalValueDifference: Number(row.total_value_difference),
     notes: row.notes,
     // JSONB field (already parsed by Supabase client)
-    items: row.items,
+    // ⭐ PHASE 2: Ensure portionType and portionSize are preserved from items
+    items: (row.items || []).map((item: any) => ({
+      ...item,
+      portionType: item.portionType || item.portion_type || 'weight',
+      portionSize: item.portionSize || item.portion_size || undefined
+    })),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }

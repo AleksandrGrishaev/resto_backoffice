@@ -346,7 +346,26 @@ const valueDifference = computed(() => {
  * Has any changes been made
  */
 const hasChanges = computed(() => {
-  return inventoryItems.value.some(item => hasItemBeenCounted(item))
+  const result = inventoryItems.value.some(item => hasItemBeenCounted(item))
+
+  // Debug logging
+  if (inventoryItems.value.length > 0) {
+    const countedCount = inventoryItems.value.filter(item => hasItemBeenCounted(item)).length
+    DebugUtils.debug(MODULE_NAME, 'hasChanges check', {
+      result,
+      countedCount,
+      totalItems: inventoryItems.value.length,
+      sampleItem: inventoryItems.value[0]
+        ? {
+            confirmed: inventoryItems.value[0].confirmed,
+            userInteracted: inventoryItems.value[0].userInteracted,
+            countedBy: inventoryItems.value[0].countedBy
+          }
+        : null
+    })
+  }
+
+  return result
 })
 
 /**
@@ -475,7 +494,10 @@ function initializeItems() {
     notes: '',
     countedBy: '',
     confirmed: false,
-    userInteracted: false
+    userInteracted: false,
+    // ⭐ PHASE 2: Include portion type info from balance for UI display
+    portionType: balance.portionType || 'weight',
+    portionSize: balance.portionSize
   }))
 
   DebugUtils.info(MODULE_NAME, 'Preparation inventory items initialized', {

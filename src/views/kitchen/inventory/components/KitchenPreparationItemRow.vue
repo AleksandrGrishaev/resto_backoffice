@@ -40,21 +40,21 @@
               variant="outlined"
               size="large"
               class="quantity-btn"
-              :disabled="localQuantity <= 0"
+              :disabled="displayQuantity <= 0"
               @click="decrementQuantity"
             >
               <v-icon size="24">mdi-minus</v-icon>
             </v-btn>
 
             <NumericInputField
-              v-model="localQuantity"
+              v-model="displayQuantity"
               variant="outlined"
               density="comfortable"
               hide-details
               class="quantity-input mx-2"
               :suffix="inputSuffix"
-              :allow-decimal="true"
-              :decimal-places="3"
+              :allow-decimal="!usePortionInput"
+              :decimal-places="usePortionInput ? 0 : 3"
               :min="0"
               force-tablet-mode
               @update:model-value="handleQuantityChange"
@@ -68,6 +68,19 @@
               @click="incrementQuantity"
             >
               <v-icon size="24">mdi-plus</v-icon>
+            </v-btn>
+
+            <!-- Unit toggle button (only for portion-type items) -->
+            <v-btn
+              v-if="isPortionType"
+              icon
+              variant="text"
+              size="small"
+              class="ml-2 unit-toggle-btn"
+              :title="usePortionInput ? 'Switch to grams' : 'Switch to portions'"
+              @click="toggleInputMode"
+            >
+              <v-icon size="20">{{ usePortionInput ? 'mdi-weight-gram' : 'mdi-numeric' }}</v-icon>
             </v-btn>
           </div>
         </v-col>
@@ -162,13 +175,48 @@ const emit = defineEmits<{
 // =============================================
 
 const showNotes = ref(false)
-const localQuantity = ref(props.modelValue.actualQuantity)
+const localQuantity = ref(props.modelValue.actualQuantity) // Always stored in grams internally
 const localNotes = ref(props.modelValue.notes || '')
 const hasUserInteracted = ref(props.modelValue.userInteracted || false)
+
+// ⭐ NEW: Input mode toggle - for portion-type items, default to portion input
+const usePortionInput = ref(
+  props.modelValue.portionType === 'portion' && !!props.modelValue.portionSize
+)
 
 // =============================================
 // COMPUTED
 // =============================================
+
+/**
+ * Check if this is a portion-type item
+ */
+const isPortionType = computed(() => {
+  return props.modelValue.portionType === 'portion' && !!props.modelValue.portionSize
+})
+
+/**
+ * Display quantity based on input mode
+ * - Portion mode: show portions (integer)
+ * - Gram mode: show grams (decimal)
+ */
+const displayQuantity = computed({
+  get() {
+    if (usePortionInput.value && props.modelValue.portionSize) {
+      // Convert grams to portions
+      return Math.round(localQuantity.value / props.modelValue.portionSize)
+    }
+    return localQuantity.value
+  },
+  set(value: number) {
+    if (usePortionInput.value && props.modelValue.portionSize) {
+      // Convert portions to grams
+      localQuantity.value = value * props.modelValue.portionSize
+    } else {
+      localQuantity.value = value
+    }
+  }
+})
 
 /**
  * Item icon - always preparation icon
@@ -178,14 +226,10 @@ const itemIcon = computed(() => {
 })
 
 /**
- * Check if item is confirmed or has changes
+ * Check if item is confirmed (user explicitly clicked confirm button)
  */
 const isConfirmed = computed(() => {
-  return (
-    props.modelValue.confirmed === true ||
-    Math.abs(props.modelValue.actualQuantity - props.modelValue.systemQuantity) > 0.001 ||
-    !!props.modelValue.countedBy
-  )
+  return props.modelValue.confirmed === true
 })
 
 /**
@@ -239,11 +283,13 @@ const formattedValueDiff = computed(() => {
 })
 
 /**
- * Input suffix - shows "gram" for weight-type, "pcs" for portion-type
+ * Input suffix - depends on input mode
+ * - Portion mode: "pcs"
+ * - Gram mode: "gram"
  */
 const inputSuffix = computed(() => {
-  if (props.modelValue.portionType === 'portion' && props.modelValue.portionSize) {
-    return 'gram (input weight)'
+  if (usePortionInput.value && props.modelValue.portionSize) {
+    return 'pcs'
   }
   return props.modelValue.unit
 })
@@ -282,36 +328,69 @@ function formatQuantity(value: number): string {
 }
 
 /**
- * Increment quantity
+ * Toggle input mode between portions and grams
+ */
+function toggleInputMode() {
+  usePortionInput.value = !usePortionInput.value
+}
+
+/**
+ * Increment quantity (respects current input mode)
  */
 function incrementQuantity() {
   hasUserInteracted.value = true
-  localQuantity.value++
+  if (usePortionInput.value && props.modelValue.portionSize) {
+    // Increment by 1 portion
+    localQuantity.value += props.modelValue.portionSize
+  } else {
+    // Increment by 1 gram
+    localQuantity.value++
+  }
   emitUpdate()
 }
 
 /**
- * Decrement quantity
+ * Decrement quantity (respects current input mode)
  */
 function decrementQuantity() {
-  if (localQuantity.value > 0) {
-    hasUserInteracted.value = true
-    localQuantity.value--
-    emitUpdate()
+  hasUserInteracted.value = true
+  if (usePortionInput.value && props.modelValue.portionSize) {
+    // Decrement by 1 portion
+    const newValue = localQuantity.value - props.modelValue.portionSize
+    if (newValue >= 0) {
+      localQuantity.value = newValue
+      emitUpdate()
+    }
+  } else {
+    // Decrement by 1 gram
+    if (localQuantity.value > 0) {
+      localQuantity.value--
+      emitUpdate()
+    }
   }
 }
 
 /**
  * Handle quantity change from NumericInputField
+ * Value comes in as displayed units (portions or grams depending on mode)
  */
 function handleQuantityChange(value: number | string) {
   const numValue = typeof value === 'string' ? parseFloat(value) || 0 : value
   // Ensure non-negative values only
   const sanitizedValue = Math.max(0, numValue)
-  if (sanitizedValue !== props.modelValue.actualQuantity) {
+
+  // Convert to grams if in portion mode
+  let gramsValue: number
+  if (usePortionInput.value && props.modelValue.portionSize) {
+    gramsValue = sanitizedValue * props.modelValue.portionSize
+  } else {
+    gramsValue = sanitizedValue
+  }
+
+  if (gramsValue !== props.modelValue.actualQuantity) {
     hasUserInteracted.value = true
   }
-  localQuantity.value = sanitizedValue
+  localQuantity.value = gramsValue
   emitUpdate()
 }
 
@@ -495,6 +574,16 @@ watch(
   padding-top: var(--spacing-sm);
 }
 
+.unit-toggle-btn {
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
 /* Mobile adjustments */
 @media (max-width: 600px) {
   .quantity-input {
@@ -505,6 +594,10 @@ watch(
   .confirm-btn {
     min-width: 48px !important;
     min-height: 48px !important;
+  }
+
+  .unit-toggle-btn {
+    display: none; /* Hide toggle on mobile to save space */
   }
 }
 </style>

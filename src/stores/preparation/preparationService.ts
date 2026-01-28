@@ -291,6 +291,23 @@ export class PreparationService {
 
       this.inventories = (data || []).map(inventoryDocumentFromSupabase)
 
+      // ⭐ PHASE 2: Enrich old inventory items with portionType/portionSize from preparations
+      const recipesStore = useRecipesStore()
+      if (recipesStore.initialized && recipesStore.preparations.length > 0) {
+        for (const inventory of this.inventories) {
+          for (const item of inventory.items) {
+            // If item doesn't have portionType/portionSize, get it from preparation
+            if (!item.portionType || !item.portionSize) {
+              const preparation = recipesStore.preparations.find(p => p.id === item.preparationId)
+              if (preparation) {
+                item.portionType = preparation.portionType || 'weight'
+                item.portionSize = preparation.portionSize
+              }
+            }
+          }
+        }
+      }
+
       DebugUtils.info(MODULE_NAME, 'Inventory documents loaded from Supabase', {
         count: this.inventories.length
       })
