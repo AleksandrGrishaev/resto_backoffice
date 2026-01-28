@@ -14,8 +14,7 @@
               </div>
               <div class="text-caption text-medium-emphasis">
                 System:
-                <strong>{{ formatQuantity(modelValue.systemQuantity) }}</strong>
-                {{ modelValue.unit }}
+                <strong>{{ formatDisplayQuantity(modelValue.systemQuantity) }}</strong>
                 <span v-if="modelValue.systemQuantity < 0" class="text-error ml-1">(Neg)</span>
                 <span v-else-if="modelValue.systemQuantity === 0" class="text-warning ml-1">
                   (0)
@@ -53,7 +52,7 @@
               density="comfortable"
               hide-details
               class="quantity-input mx-2"
-              :suffix="modelValue.unit"
+              :suffix="inputSuffix"
               :allow-decimal="true"
               :decimal-places="3"
               :min="0"
@@ -218,7 +217,7 @@ const differenceColor = computed(() => {
 const formattedDifference = computed(() => {
   const diff = props.modelValue.difference
   const prefix = diff > 0 ? '+' : ''
-  return `${prefix}${formatQuantity(diff)} ${props.modelValue.unit}`
+  return `${prefix}${formatDisplayQuantity(diff)}`
 })
 
 /**
@@ -239,12 +238,43 @@ const formattedValueDiff = computed(() => {
   )
 })
 
+/**
+ * Input suffix - shows "gram" for weight-type, "pcs" for portion-type
+ */
+const inputSuffix = computed(() => {
+  if (props.modelValue.portionType === 'portion' && props.modelValue.portionSize) {
+    return 'gram (input weight)'
+  }
+  return props.modelValue.unit
+})
+
 // =============================================
 // METHODS
 // =============================================
 
 /**
- * Format quantity for display
+ * Format quantity for display (supports weight and portion types)
+ * For portion-type: shows portions + grams (e.g., "15 pcs (474g)")
+ * For weight-type: shows grams only (e.g., "474 gram")
+ */
+function formatDisplayQuantity(value: number): string {
+  // For portion-type preparations, show portions + grams
+  if (
+    props.modelValue.portionType === 'portion' &&
+    props.modelValue.portionSize &&
+    props.modelValue.portionSize > 0
+  ) {
+    const portions = Math.floor(value / props.modelValue.portionSize)
+    const grams = Math.round(value)
+    return `${portions} pcs (${grams}g)`
+  }
+
+  // For weight-type preparations, show grams only
+  return `${formatQuantity(value)} ${props.modelValue.unit}`
+}
+
+/**
+ * Format quantity for display (simple format, no units)
  */
 function formatQuantity(value: number): string {
   if (Number.isInteger(value)) return value.toString()
@@ -276,10 +306,12 @@ function decrementQuantity() {
  */
 function handleQuantityChange(value: number | string) {
   const numValue = typeof value === 'string' ? parseFloat(value) || 0 : value
-  if (numValue !== props.modelValue.actualQuantity) {
+  // Ensure non-negative values only
+  const sanitizedValue = Math.max(0, numValue)
+  if (sanitizedValue !== props.modelValue.actualQuantity) {
     hasUserInteracted.value = true
   }
-  localQuantity.value = numValue
+  localQuantity.value = sanitizedValue
   emitUpdate()
 }
 

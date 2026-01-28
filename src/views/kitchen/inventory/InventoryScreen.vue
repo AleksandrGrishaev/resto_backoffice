@@ -315,8 +315,14 @@
       @error="handleError"
     />
 
-    <!-- Details Dialog (for completed inventories) -->
+    <!-- Details Dialog (for completed product inventories) -->
     <InventoryDetailsDialog v-model="showDetailsDialog" :inventory="selectedInventory" />
+
+    <!-- Details Dialog (for completed preparation inventories) -->
+    <PreparationInventoryDetailsDialog
+      v-model="showPreparationDetailsDialog"
+      :inventory="selectedPreparationInventory"
+    />
 
     <!-- Snackbar -->
     <v-snackbar v-model="showSnackbar" :color="snackbarColor" :timeout="4000">
@@ -343,6 +349,7 @@ import { DebugUtils, TimeUtils } from '@/utils'
 import KitchenInventoryDialog from './KitchenInventoryDialog.vue'
 import KitchenPreparationInventoryDialog from './KitchenPreparationInventoryDialog.vue'
 import InventoryDetailsDialog from '@/views/storage/components/InventoryDetailsDialog.vue'
+import PreparationInventoryDetailsDialog from '@/views/Preparation/components/InventoryDetailsDialog.vue'
 
 const MODULE_NAME = 'InventoryScreen'
 
@@ -377,6 +384,7 @@ const inventoryType = ref<'products' | 'preparations'>('products')
 const showInventoryDialog = ref(false)
 const showPreparationInventoryDialog = ref(false)
 const showDetailsDialog = ref(false)
+const showPreparationDetailsDialog = ref(false)
 const selectedInventory = ref<InventoryDocument | null>(null)
 const selectedPreparationInventory = ref<PreparationInventoryDocument | null>(null)
 const showSnackbar = ref(false)
@@ -578,7 +586,8 @@ function handlePreparationInventoryClick(inv: PreparationInventoryDocument) {
       inventoryId: inv.id
     })
   } else {
-    // TODO: Open details dialog for viewing (can reuse or create separate)
+    // Open details dialog for viewing
+    showPreparationDetailsDialog.value = true
     DebugUtils.info(MODULE_NAME, 'Viewing completed preparation inventory', {
       inventoryId: inv.id
     })

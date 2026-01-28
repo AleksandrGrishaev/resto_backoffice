@@ -10,6 +10,7 @@
       'stock-expired': isExpired
     }"
     variant="outlined"
+    @click="handleViewDetails"
   >
     <v-card-text class="card-content pa-3">
       <!-- Status Indicator -->
@@ -112,6 +113,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   produce: [preparationId: string]
   'write-off': [preparationId: string]
+  'view-details': [balance: PreparationBalance]
 }>()
 
 // =============================================
@@ -145,11 +147,17 @@ const expiryTextClass = computed(() => {
 // METHODS
 // =============================================
 
-function handleProduce(): void {
+function handleViewDetails(): void {
+  emit('view-details', props.balance)
+}
+
+function handleProduce(event: Event): void {
+  event.stopPropagation() // Prevent view details from triggering
   emit('produce', props.balance.preparationId)
 }
 
-function handleWriteOff(): void {
+function handleWriteOff(event: Event): void {
+  event.stopPropagation() // Prevent view details from triggering
   if (!isOutOfStock.value) {
     emit('write-off', props.balance.preparationId)
   }
@@ -249,8 +257,9 @@ function formatCost(cost: number): string {
 <style scoped lang="scss">
 .stock-card {
   overflow: visible;
-  transition: border-color 0.2s;
+  transition: all 0.2s;
   min-height: 64px;
+  cursor: pointer;
 
   &.stock-out,
   &.stock-expired {
@@ -262,6 +271,11 @@ function formatCost(cost: number): string {
   &.stock-expiring {
     border-color: rgb(var(--v-theme-warning));
     background-color: rgba(var(--v-theme-warning), 0.05);
+  }
+
+  &:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
   }
 }
 

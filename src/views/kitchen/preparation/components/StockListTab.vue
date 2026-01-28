@@ -80,6 +80,7 @@
         :balance="balance"
         @produce="handleProduce"
         @write-off="handleWriteOff"
+        @view-details="handleViewDetails"
       />
     </div>
 
@@ -123,6 +124,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   produce: [preparationId: string]
   'write-off': [preparationId: string]
+  'view-details': [balance: PreparationBalance]
 }>()
 
 // =============================================
@@ -216,6 +218,10 @@ function handleProduce(preparationId: string): void {
 
 function handleWriteOff(preparationId: string): void {
   emit('write-off', preparationId)
+}
+
+function handleViewDetails(balance: PreparationBalance): void {
+  emit('view-details', balance)
 }
 </script>
 

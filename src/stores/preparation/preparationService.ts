@@ -1505,7 +1505,10 @@ export class PreparationService {
           averageCost: balance ? balance.averageCost : preparation.costPerPortion || 0,
           valueDifference: 0,
           notes: '',
-          countedBy: ''
+          countedBy: '',
+          // ⭐ PHASE 2: Include portion type info for UI display
+          portionType: preparation.portionType || 'weight',
+          portionSize: preparation.portionSize
         })
       }
 
@@ -1725,19 +1728,30 @@ export class PreparationService {
       }
 
       // ✅ NEW UNIFIED APPROACH: Split items into 3 categories
-      const negativeCorrectionItems = [] // systemQuantity < 0 (needs production)
-      const normalDiscrepancyItems = [] // systemQuantity >= 0, has difference (needs correction)
-      const matchedItems = [] // no difference
+      const negativeCorrectionItems = [] // systemQuantity < 0 AND user interacted (needs production)
+      const normalDiscrepancyItems = [] // systemQuantity >= 0, has difference AND user interacted (needs correction)
+      const matchedItems = [] // no difference OR not interacted with
+
+      // Helper to check if item was counted/touched by user
+      const hasItemBeenCounted = (item: PreparationInventoryItem): boolean => {
+        return item.confirmed === true || item.userInteracted === true || !!item.countedBy
+      }
 
       for (const item of inventory.items) {
+        // Only process items that user explicitly interacted with
+        if (!hasItemBeenCounted(item)) {
+          matchedItems.push(item)
+          continue
+        }
+
         if (item.systemQuantity < 0) {
-          // Has negative stock - needs production receipt to cover deficit
+          // Has negative stock AND user touched it - needs production receipt to cover deficit
           negativeCorrectionItems.push(item)
         } else if (Math.abs(item.difference) > 0.01) {
-          // Normal discrepancy - needs correction operation
+          // Normal discrepancy AND user touched it - needs correction operation
           normalDiscrepancyItems.push(item)
         } else {
-          // No discrepancy
+          // User touched it but no difference (e.g., confirmed existing value)
           matchedItems.push(item)
         }
       }

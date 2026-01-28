@@ -163,6 +163,9 @@ export interface PreparationInventoryItem {
   countedBy?: string
   confirmed?: boolean
   userInteracted?: boolean
+  // ⭐ PHASE 2: Portion type support for UI display
+  portionType?: PortionType // 'weight' (default) or 'portion'
+  portionSize?: number // Size of one portion in grams (only for portionType='portion')
 }
 
 // DTOs

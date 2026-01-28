@@ -128,6 +128,7 @@
             :loading="preparationStore.state.loading.balances"
             @produce="openProductionDialogForPrep"
             @write-off="openPrepWriteOffDialogForPrep"
+            @view-details="handleViewDetails"
           />
         </v-window-item>
 
@@ -183,6 +184,9 @@
       @cancel="handleSingleWriteOffCancel"
     />
 
+    <!-- Preparation Item Details Dialog (Batches + Write-offs) -->
+    <PrepItemDetailsDialog v-model="showItemDetailsDialog" :item="selectedBalanceForDetails" />
+
     <!-- Snackbar for notifications -->
     <v-snackbar
       v-model="snackbar.show"
@@ -217,6 +221,7 @@ import {
   ScheduleConfirmDialog
 } from './dialogs'
 import PreparationQuantityDialog from '@/views/Preparation/components/writeoff/PreparationQuantityDialog.vue'
+import PrepItemDetailsDialog from './dialogs/PrepItemDetailsDialog.vue'
 import { useBackgroundTasks } from '@/core/background'
 import type { PreparationBalance, ProductionRecommendation } from '@/stores/preparation/types'
 import type { ProductionScheduleItem } from '@/stores/kitchenKpi'
@@ -277,9 +282,11 @@ const showPrepWriteOffDialog = ref(false)
 const showProductWriteOffDialog = ref(false)
 const showScheduleConfirmDialog = ref(false)
 const showSingleWriteOffDialog = ref(false)
+const showItemDetailsDialog = ref(false)
 const selectedPreparationId = ref<string | null>(null)
 const selectedPreparation = ref<{ id: string; name: string; unit: string } | null>(null)
 const selectedTask = ref<ProductionScheduleItem | null>(null)
+const selectedBalanceForDetails = ref<PreparationBalance | null>(null)
 
 // Template refs
 const historyTabRef = ref<ComponentPublicInstance<{ refreshHistory: () => Promise<void> }> | null>(
@@ -469,6 +476,18 @@ function openPrepWriteOffDialogForPrep(preparationId: string): void {
 function openProductWriteOffDialog(): void {
   showProductWriteOffDialog.value = true
   DebugUtils.debug(MODULE_NAME, 'Opening product write-off dialog')
+}
+
+/**
+ * Handle view details for a preparation item
+ */
+function handleViewDetails(balance: PreparationBalance): void {
+  selectedBalanceForDetails.value = balance
+  showItemDetailsDialog.value = true
+  DebugUtils.debug(MODULE_NAME, 'Opening item details dialog', {
+    preparationId: balance.preparationId,
+    preparationName: balance.preparationName
+  })
 }
 
 /**
