@@ -1,5 +1,34 @@
 # Product Variance Report
 
+## TODO (2026-01-27)
+
+### Исправлено:
+
+- [x] **Знак Variance** - исправлен в v3.5. Теперь: `+` = surplus (больше чем ожидалось), `-` = shortage (меньше чем ожидалось)
+- [x] **Portion-type preparations** - исправлен расчёт in_preps для portion-type (было 170x завышение для Tuna)
+
+### Требует доработки (после инвентаризации в феврале):
+
+1. **Opening In Preps** - Opening НЕ включает продукты в полуфабрикатах
+
+   - Сейчас: Opening = только raw stock из `inventory_snapshots`
+   - Надо: Opening = raw stock + продукты в prep batches на дату открытия
+   - Проблема: нет исторических данных о состоянии батчей на прошлые даты
+   - Решение: после инвентаризации полуфабрикатов в феврале, считать от этой даты
+
+2. **Closing In Preps** - показывает ТЕКУЩЕЕ состояние, а не на конец периода
+
+   - Сейчас: `pb.current_quantity` - это сегодняшнее значение
+   - Надо: состояние батчей на дату конца периода
+   - Решение: то же - работаем с данными после февральской инвентаризации
+
+3. **Историческое состояние батчей полуфабрикатов**
+   - Списание работает корректно (проверено 2026-01-27)
+   - Старые данные (до января) не имеют корректных списаний
+   - Рекомендация: начать отсчёт с февральской инвентаризации
+
+---
+
 ## Overview
 
 Product Variance Report analyzes discrepancies between expected and actual product inventory. It helps identify:
@@ -12,93 +41,25 @@ Product Variance Report analyzes discrepancies between expected and actual produ
 ## Key Formula
 
 ```
-Variance = Opening + Received - Sales - Loss - Stock
+Variance = Opening + Received - Sales - Loss - Closing
 ```
 
-| Field          | Description                                                |
-| -------------- | ---------------------------------------------------------- |
-| **Opening**    | Stock at the beginning of selected period                  |
-| **Received**   | Products received from suppliers during period             |
-| **Sales**      | Theoretical usage from orders (decomposed through recipes) |
-| **Write-offs** | Actual write-offs from storage (for comparison)            |
-| **Loss**       | Products written off (expired, spoiled, other)             |
-| **Stock**      | Current stock at the end of period                         |
-| **Variance**   | Should be 0 if everything is recorded correctly            |
-
-## Sales Calculation (V3)
-
-### Two Types of Sales Metrics
-
-The report shows **two different sales metrics** for comparison:
-
-### 1. Sales (Theoretical) - MAIN METRIC
-
-Calculated by **decomposing completed orders through recipes** to products.
-
-**Decomposition Path:**
-
-```
-Completed Orders
-  → Order Items (menu items sold)
-    → Menu Item Variants
-      → Composition (recipe/preparation/product)
-        → Recipe Components (products/preparations)
-          → Preparation Ingredients (products)
-            → PRODUCTS (final decomposition)
-```
-
-**Example:**
-
-```
-Order: 2x "Burger Meal"
-  → Menu Variant composition: 1x "Burger Recipe"
-    → Recipe components: 150g beef, 50g bun, 20g sauce
-      → Theoretical product usage: 300g beef, 100g bun, 40g sauce
-```
-
-This is the **main metric** used in variance calculation because it represents what **should have been used** based on recipes.
-
-### 2. Write-offs (Actual) - COMPARISON METRIC
-
-Based on actual write-off operations from storage:
-
-```
-storage_operations WHERE write_off_details.reason = 'sales_consumption'
-```
-
-This shows what was **actually written off** in the system. The difference between Sales and Write-offs can reveal:
-
-- **Recipe errors** - if theoretical > actual, recipes may have incorrect quantities
-- **Unrecorded usage** - if actual > theoretical, products are being used without orders
-- **System not synced** - write-offs not happening when orders are completed
-
-### Sales vs Write-offs Difference
-
-When the difference is significant (> Rp 100), it's shown in the Write-offs column:
-
-- **Positive (+)** = Theoretical sales > Actual write-offs (possible recipe over-estimation)
-- **Negative (-)** = Theoretical sales < Actual write-offs (unrecorded usage or manual write-offs)
-
-## How Loss is Calculated
-
-Loss includes write-offs with reasons:
-
-- `expired` - Product expired
-- `spoiled` - Product spoiled before expiration
-- `other` - Other losses (theft, damage, etc.)
-- `expiration` - Alternative expiration reason
-
-Loss is also traced through preparations (same logic as write-offs).
-
-**Total Loss = Direct Loss + Traced Loss**
+| Field        | Description                                                               |
+| ------------ | ------------------------------------------------------------------------- |
+| **Opening**  | Stock at the beginning of selected period (from inventory snapshot)       |
+| **Received** | Products received from suppliers during period                            |
+| **Sales**    | Theoretical usage from orders (direct + via recipes + via preparations)   |
+| **Loss**     | Products written off (expired, spoiled, other) + traced from preparations |
+| **Closing**  | Current stock at end of period (raw batches + in preparations)            |
+| **Variance** | Should be 0 if everything is recorded correctly                           |
 
 ## Understanding Variance
 
-### Variance = 0 (OK)
+### Variance = 0 (Balanced)
 
 Everything is recorded correctly. All product movements are accounted for.
 
-### Variance > 0 (Product "Disappeared")
+### Variance > 0 (Shortage - Product "Disappeared")
 
 Product is missing. Possible causes:
 
@@ -107,13 +68,101 @@ Product is missing. Possible causes:
 - **Recipe errors** - Actual usage higher than recipe specifies
 - **Unrecorded spoilage** - Product thrown away without logging
 
-### Variance < 0 (Product "Appeared")
+### Variance < 0 (Surplus - Product "Appeared")
 
 More product than expected. Possible causes:
 
 - **Receipt errors** - Received more than logged
 - **Recipe errors** - Actual usage lower than recipe specifies
 - **Inventory count errors** - Wrong stock count
+
+## Sales Calculation
+
+### Three Paths of Product Sales
+
+The report traces product usage through three paths:
+
+#### 1. Direct Product Sales
+
+Product sold directly as part of menu item composition:
+
+```
+Menu Item Variant → Composition (type='product') → Product
+```
+
+#### 2. Sales via Recipes
+
+Product used as ingredient in recipes that are sold:
+
+```
+Menu Item Variant → Composition (type='recipe') → Recipe Components → Product
+```
+
+#### 3. Sales via Preparations
+
+Product used in preparations that are consumed through orders:
+
+```
+Menu Item Variant → Composition (type='preparation') → Preparation Ingredients → Product
+            OR
+Menu Item Variant → Composition (type='recipe') → Recipe Components (type='preparation') → Preparation Ingredients → Product
+```
+
+**Total Sales = Direct Sales + Sales via Recipes + Sales via Preparations**
+
+## Loss Calculation
+
+### Direct Losses
+
+Write-off operations for the product with reasons:
+
+- `expired` - Product expired
+- `spoiled` - Product spoiled before expiration
+- `expiration` - Alternative expiration reason
+- `other` - Other losses (theft, damage, etc.)
+
+### Traced Losses (from Preparations)
+
+When a preparation containing this product is written off, the proportional product loss is traced back:
+
+```
+Preparation Write-off × (Product Quantity per Batch / Output Quantity) = Traced Product Loss
+```
+
+**Total Loss = Direct Loss + Traced Loss**
+
+## Opening Stock
+
+Opening stock is retrieved from `inventory_snapshots` table for the day before period start.
+
+Requirements:
+
+- Inventory snapshot must exist for the product
+- Snapshot date = period start date - 1 day
+
+If no snapshot exists, opening stock is 0.
+
+## Closing Stock
+
+Closing stock consists of two parts:
+
+### 1. Raw Stock (Direct Batches)
+
+Active storage batches with `current_quantity > 0`:
+
+```sql
+storage_batches WHERE item_id = product AND status = 'active'
+```
+
+### 2. Stock in Preparations
+
+Product quantity "locked" in active preparation batches:
+
+```
+Preparation Batch Quantity × (Product per Batch / Output Quantity)
+```
+
+**Total Closing = Raw Stock + Stock in Preparations**
 
 ## Row Color Coding
 
@@ -131,44 +180,119 @@ More product than expected. Possible causes:
 - **Show only with variance** - Hide products with zero variance
 - **Search** - Find specific products by name
 
-## Detail Dialog
+## Detail Dialog (V2)
 
-Click on a row (for products with preparations) to see:
+Click on any product row to open the detailed breakdown dialog.
 
-- **Direct Sales/Loss** - Product sold/lost directly
-- **Traced Sales/Loss** - Attributed from preparation sales/losses
-- **Preparations breakdown** - Which preparations use this product and their contribution
+### Formula Bar
+
+Visual representation of the variance formula with clickable values:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Opening  +  Received  -  Sales  -  Loss  -  Closing  =  VARIANCE  │
+│  [100 kg]    [+50 kg]   [-80 kg]  [-5 kg]  [-60 kg]    [+5 kg]     │
+│  Rp 500K     Rp 250K    Rp 400K   Rp 25K   Rp 300K     Rp 25K      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Expandable Sections
+
+#### 1. Opening Section
+
+- Quantity and amount from snapshot
+- Link to source inventory document
+- Snapshot date and source type
+
+#### 2. Received Section
+
+- Total quantity and amount
+- Top 5 receipts with:
+  - Receipt number and date
+  - Supplier name
+  - Quantity, unit cost, total cost
+- "Show more" for additional receipts
+
+#### 3. Sales Section
+
+- Direct vs Via Preparations breakdown
+- Top 5 menu items by product usage:
+  - Menu item name and variant
+  - Quantity sold
+  - Product used
+  - Product cost
+- Preparations that produced this product
+
+#### 4. Loss Section
+
+- Breakdown by reason (expired, spoiled, other)
+- Recent loss details with batch numbers
+- Traced losses from preparation write-offs
+
+#### 5. Closing Section
+
+- Raw stock with batch details:
+  - Batch number
+  - Receipt date
+  - Quantity and cost
+- Stock in preparations:
+  - Preparation name
+  - Production date
+  - Product quantity locked
+
+#### 6. Variance Section
+
+- Final variance quantity and amount
+- Interpretation (shortage/surplus/balanced)
+- Possible reasons for variance
 
 ## Best Practices
 
 1. **Run weekly** - Generate report at least once a week
 2. **Investigate red rows** - Critical variances need immediate attention
-3. **Compare Sales vs Write-offs** - Large differences indicate system sync issues
-4. **Check recipes** - High variance may indicate recipe errors
-5. **Verify receipts** - Negative variance often means receipt quantity errors
+3. **Check recipes** - High variance may indicate recipe quantity errors
+4. **Verify receipts** - Negative variance often means receipt quantity errors
+5. **Review preparations** - Large traced losses may indicate production issues
 6. **Track trends** - Compare reports over time to identify patterns
+7. **Create snapshots** - Run inventory counts to establish accurate opening balances
 
 ## Technical Details
 
-### SQL Function
+### RPC Functions
 
-`get_product_variance_report_v3(p_start_date, p_end_date, p_department)`
+| Function                          | Purpose                               |
+| --------------------------------- | ------------------------------------- |
+| `get_product_variance_report_v3`  | Main report with summary per product  |
+| `get_product_variance_details_v2` | Detailed breakdown for single product |
 
-### Data Sources
+### Key Tables
 
-- `products` - Product catalog
-- `orders` / `order_items` - Completed orders (for theoretical sales)
-- `menu_items` - Menu item variants and compositions
-- `recipes` / `recipe_components` - Recipe definitions
-- `preparations` / `preparation_ingredients` - Preparation definitions
-- `storage_batches` - Current stock (closing)
-- `storage_operations` - Write-offs (actual sales, loss)
-- `preparation_operations` - Preparation write-offs
-- `supplierstore_receipts` / `supplierstore_receipt_items` - Received products
+| Table                                      | Purpose                     |
+| ------------------------------------------ | --------------------------- |
+| `products`                                 | Product catalog             |
+| `inventory_snapshots`                      | Opening stock snapshots     |
+| `supplierstore_receipt_items`              | Received quantities         |
+| `orders` / `order_items` / `payments`      | Completed orders            |
+| `menu_items` (variants JSONB)              | Menu compositions           |
+| `recipes` / `recipe_components`            | Recipe definitions          |
+| `preparations` / `preparation_ingredients` | Preparation definitions     |
+| `storage_operations`                       | Product write-offs          |
+| `preparation_operations`                   | Preparation write-offs      |
+| `storage_batches`                          | Current product batches     |
+| `preparation_batches`                      | Current preparation batches |
+
+### Schema Notes
+
+- `supplierstore_orders.supplier_id` is TEXT (requires cast to UUID for counteragents join)
+- `storage_batches.receipt_date` - batch receipt date
+- `preparation_batches.production_date` - batch production date
+- `recipe_components.component_id` is TEXT
+- `menu_items.variants[].composition[].id` is TEXT in JSONB
 
 ### Limitations
 
-- Opening stock is calculated as batches with `receipt_date < period_start`
+- Opening stock requires inventory snapshot for date before period start
 - Only active products are included
 - Only confirmed operations are counted
-- Theoretical sales require completed orders with `paid_at` in period
+- Sales require completed payments within period
+- Preparations consumption is calculated from order decomposition, not actual production

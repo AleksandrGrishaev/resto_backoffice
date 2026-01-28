@@ -1,149 +1,108 @@
-# Current Sprint: Product Variance Report - Opening Balance & In Preparations
+# Product Variance Report - Sprint Summary (2026-01-28)
 
-**Created:** 2026-01-27 (UTC+8)
-**Status:** Planning Complete
+## Completed Today
 
----
+### 1. Added Menu Items Breakdown for Sales via Preparations ✅
 
-## Problem Statement
+**Problem:** The "Sales (Theoretical)" section showed "No sales in this period" for products like Tuna Lion that are only used via preparations.
 
-### 1. Opening Balance shows "—" (dash) for most products
+**Solution:**
 
-**Root Cause:** The current RPC function `get_product_variance_report_v3` calculates Opening as:
+- Updated `get_product_variance_details_v2` function (v2.2)
+- Added CTEs to track menu items that use preparations containing this product
+- Added `viaPreparation` field to `topMenuItems` response
 
-```sql
-opening_stock AS (
-  SELECT item_id, SUM(current_quantity) as qty
-  FROM storage_batches
-  WHERE receipt_date < p_start_date  -- batches received BEFORE period
-)
-```
+**Result for Tuna Lion (Jan 2-30, 2026):**
+| Menu Item | Variant | Sold | Product Used | Via |
+|-----------|---------|------|--------------|-----|
+| Tuna Steak | Regular | 18 | 3,600g | Tuna portion 200g |
+| Smash tuna ciabatta | Ciabatta | 9 | 1,080g | Tuna portion 120g |
+| Tuna steak Ciabatta | Regular | 6 | 720g | Tuna portion 120g |
+| **Total** | | **33** | **5,400g** | |
 
-**The issue:** `current_quantity` is the **CURRENT** state, not historical. When a batch is consumed, `current_quantity` becomes 0, making Opening = 0.
+**Files changed:**
 
-**Example:**
-
-- Batch received on Dec 15 with 10kg
-- By Jan 1, it was consumed (current_quantity = 0)
-- Report for Jan 1-15 shows Opening = 0 (dash) because there's no historical record
-
-### 2. Products "frozen" in Preparations not accounted for
-
-**Current data (top products locked in preparations):**
-
-| Product             | Locked in Preparations |
-| ------------------- | ---------------------- |
-| Pisang (banana)     | 159,100 g              |
-| **Ayum Filet dada** | **114,760 g**          |
-| Tuna lion           | 88,800 g               |
-| Mozarella cheese    | 52,500 g               |
-
-**Impact:** Variance shows -677,323g for Ayum Filet, but ~114,760g is actually in preparation batches (not lost).
+- `src/supabase/migrations/106_add_sales_breakdown_to_variance_details_v2.sql` (new)
+- `src/supabase/functions/get_product_variance_details_v2.sql` (updated docs)
+- `src/views/backoffice/analytics/ProductVarianceDetailDialogV2.vue` (UI update)
 
 ---
 
-## Solution Overview
+## Previously Completed (2026-01-27)
 
-### Part 1: Inventory Snapshots Table
+### 1. Fixed Variance Sign ✅
 
-Create a new table `inventory_snapshots` to store daily stock levels.
+- **Was:** `-7,719` (shortage) - incorrect
+- **Now:** `+7,719` (surplus) - correct
+- **Version:** v3.5
 
-**Data sources:**
+### 2. Fixed portion-type preparations calculation ✅
 
-- Confirmed inventory documents (actualQuantity from physical counts)
-- Calculated daily snapshots between inventories
+- **Problem:** Tuna Lion showed In Preps = 108,800g instead of 640g (170x inflation)
+- **Cause:** For portion-type need to divide by `portion_size`, not `output_quantity`
+- **Migration:** `104_fix_variance_details_v2_portion_type.sql`
 
-**Available inventories for backfill:**
+### 3. Verified Sales Calculation ✅
 
-| Date       | Document   | Department | Items |
-| ---------- | ---------- | ---------- | ----- |
-| 2025-12-31 | INV-692319 | kitchen    | 169   |
-| 2026-01-01 | INV-131170 | bar        | 45    |
-| 2026-01-01 | INV-677269 | kitchen    | 169   |
-| 2026-01-01 | INV-847001 | bar        | 45    |
-| 2026-01-17 | INV-319058 | kitchen    | 170   |
-| 2026-01-19 | INV-883835 | kitchen    | 170   |
-| 2026-01-25 | INV-226102 | bar        | 45    |
-| 2026-01-25 | INV-041203 | kitchen    | 170   |
-
-### Part 2: "In Preparations" Column
-
-Add new column showing products decomposed from active preparation batches.
-
-**New formula:**
-
-```
-Stock Total = Raw Stock + In Preparations
-Variance = Opening + Received - Sales - Loss - Stock Total
-```
+- Sales = 5,400g is **correct**
+- Formula verified:
+  - Tuna Steak: 18 × 200g = 3,600g
+  - Smash tuna ciabatta: 9 × 120g = 1,080g
+  - Tuna steak Ciabatta: 6 × 120g = 720g
+  - Total: 5,400g ✓
 
 ---
 
-## Implementation Plan
+## Deferred (until February inventory)
 
-### Phase 1: Database Infrastructure
+### Opening/Closing In Preps - Historical Data
 
-- [ ] Create table `inventory_snapshots`
-- [ ] Add indexes and RLS policies
+**Problem:** Cannot determine preparation batch state at past dates.
 
-```sql
-CREATE TABLE inventory_snapshots (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  snapshot_date DATE NOT NULL,
-  item_id TEXT NOT NULL,
-  item_type TEXT NOT NULL DEFAULT 'product',
-  department TEXT,
-  quantity NUMERIC NOT NULL,
-  unit TEXT,
-  total_cost NUMERIC NOT NULL DEFAULT 0,
-  average_cost NUMERIC NOT NULL DEFAULT 0,
-  source TEXT NOT NULL, -- 'inventory', 'calculated', 'shift_close'
-  source_document_id TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(snapshot_date, item_id)
-);
-```
+**What doesn't work:**
 
-### Phase 2: Backfill Historical Data
+- Opening does NOT include products in preparations at period start
+- Closing In Preps shows CURRENT state, not period end
 
-- [ ] Load inventory documents (actualQuantity) as snapshots
-- [ ] Calculate intermediate days between inventories:
-  - `snapshot[day] = snapshot[day-1] + receipts - writeoffs`
+**Why deferred:**
 
-### Phase 3: Update RPC Function
+- Old data (before January 2026) doesn't have correct batch write-offs
+- Need preparation inventory count to establish baseline
+- After February inventory, can calculate correctly
 
-- [ ] Add CTE `products_in_preparations`
-- [ ] Add CTE `opening_from_snapshots`
-- [ ] Add output fields: `in_preps_qty`, `in_preps_amount`
-
-### Phase 4: Update UI
-
-- [ ] Add "In Preps" column to VarianceReportView.vue
-- [ ] Update Variance calculation: Stock Total = Raw + In Preps
-
-### Phase 5: Automation
-
-- [ ] Create function `create_inventory_snapshot()`
-- [ ] Create trigger on shift close
+**Documentation:** `src/About/docs/reports/ProductVarianceReport.md` (TODO at start)
 
 ---
 
-## Critical Files
+## Current Variance Report Status
 
-| File                                                             | Purpose              |
-| ---------------------------------------------------------------- | -------------------- |
-| `src/supabase/migrations/097_product_variance_report_v3_rpc.sql` | Current RPC function |
-| `src/views/backoffice/analytics/VarianceReportView.vue`          | UI component         |
-| `src/stores/analytics/varianceReportStore.ts`                    | Store                |
+For **Tuna Lion (Jan 2-30, 2026)**:
+
+| Metric           | Value       | Status                              |
+| ---------------- | ----------- | ----------------------------------- |
+| Opening          | 3,200g      | ⚠️ Missing preps (known limitation) |
+| Received         | 6,600g      | ✅ Correct                          |
+| Sales            | 5,400g      | ✅ Correct (now with breakdown!)    |
+| Loss             | 0g          | ✅ Correct                          |
+| Closing Raw      | 11,479g     | ✅ Correct                          |
+| Closing In Preps | 640g        | ⚠️ Current state, not period-end    |
+| **Variance**     | **+7,719g** | ✅ Sign is correct                  |
 
 ---
 
-## Verification
+## Files Changed This Sprint
 
-After implementation:
+| File                                                 | Status            | Description          |
+| ---------------------------------------------------- | ----------------- | -------------------- |
+| `106_add_sales_breakdown_to_variance_details_v2.sql` | Created + Applied | Menu items via preps |
+| `get_product_variance_details_v2.sql`                | Updated           | Docs v2.2            |
+| `ProductVarianceDetailDialogV2.vue`                  | Updated           | Via column + totals  |
+| `104_fix_variance_details_v2_portion_type.sql`       | Created + Applied | Portion-type fix     |
 
-1. Run Variance Report for Jan 1-15, 2026
-2. Verify Opening shows values (not "—")
-3. Compare Opening with inventory data from Dec 31 / Jan 1
-4. Verify "In Preps" column shows ~114,760g for Ayum Filet
-5. Variance for Ayum Filet should decrease by ~114,760g
+---
+
+## Next Sprint
+
+1. **February:** Conduct preparation inventory count
+2. **After inventory:** Add Opening/Closing In Preps to formula
+3. **Optional:** Create migration to persist v3.5 changes

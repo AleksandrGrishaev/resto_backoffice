@@ -279,7 +279,7 @@
 
               <!-- Menu Items Table -->
               <div v-if="detail.sales.topMenuItems.length > 0" class="mb-3">
-                <div class="text-subtitle-2 mb-2">Top Menu Items</div>
+                <div class="text-subtitle-2 mb-2">Menu Items Breakdown</div>
                 <v-table density="compact" class="elevation-0">
                   <thead>
                     <tr>
@@ -288,6 +288,7 @@
                       <th class="text-right">Sold</th>
                       <th class="text-right">Product Used</th>
                       <th class="text-right">Cost</th>
+                      <th v-if="hasViaPreparationItems">Via</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -302,8 +303,23 @@
                         {{ formatQty(item.productUsed) }} {{ detail.product.unit }}
                       </td>
                       <td class="text-right">{{ formatIDR(item.productCost) }}</td>
+                      <td v-if="hasViaPreparationItems" class="text-caption text-medium-emphasis">
+                        {{ item.viaPreparation || '-' }}
+                      </td>
                     </tr>
                   </tbody>
+                  <!-- Total row -->
+                  <tfoot>
+                    <tr class="font-weight-medium">
+                      <td colspan="2">Total</td>
+                      <td class="text-right">{{ formatQty(totalMenuItemsSold) }}</td>
+                      <td class="text-right">
+                        {{ formatQty(detail.sales.quantity) }} {{ detail.product.unit }}
+                      </td>
+                      <td class="text-right">{{ formatIDR(detail.sales.amount) }}</td>
+                      <td v-if="hasViaPreparationItems"></td>
+                    </tr>
+                  </tfoot>
                 </v-table>
                 <div v-if="detail.sales.totalMenuItemsCount > 5" class="text-center mt-2">
                   <v-btn variant="text" size="small" color="primary">
@@ -685,6 +701,23 @@ const varianceLabel = computed(() => {
   if (interpretation === 'shortage') return 'Shortage'
   if (interpretation === 'surplus') return 'Surplus'
   return 'OK'
+})
+
+// Check if any menu item has viaPreparation field
+const hasViaPreparationItems = computed(() => {
+  if (!detail.value?.sales?.topMenuItems) return false
+  return detail.value.sales.topMenuItems.some(
+    (item: { viaPreparation?: string }) => item.viaPreparation
+  )
+})
+
+// Calculate total menu items sold
+const totalMenuItemsSold = computed(() => {
+  if (!detail.value?.sales?.topMenuItems) return 0
+  return detail.value.sales.topMenuItems.reduce(
+    (sum: number, item: { quantitySold: number }) => sum + item.quantitySold,
+    0
+  )
 })
 
 // Watch for dialog open

@@ -1,8 +1,17 @@
 -- Function: get_product_variance_details_v2
 -- Description: Enhanced RPC function for Product Variance Detail Dialog V2
 --              Returns complete breakdown with drill-down into source documents
--- Date: 2026-01-27
+-- Date: 2026-01-28
 -- Author: Claude
+-- Version: v2.2
+--
+-- CHANGELOG:
+-- v2.0: Initial implementation
+-- v2.1: Fixed portion-type handling in in_preps CTE (bug: 170x inflation for Tuna Lion)
+-- v2.2: Added menu items breakdown for sales via preparations
+--       - Now shows which menu items consume this product via preparations
+--       - Added viaPreparation field to topMenuItems
+--       - Fixed "No sales in this period" for products only used in preps
 --
 -- Usage:
 --   SELECT get_product_variance_details_v2(
@@ -28,7 +37,7 @@
 --     "quantity", "amount",
 --     "direct": { "quantity", "amount" },
 --     "viaPreparations": { "quantity", "amount" },
---     "topMenuItems": [{ "menuItemName", "variantName", "quantitySold", "productUsed", "productCost" }],
+--     "topMenuItems": [{ "menuItemName", "variantName", "quantitySold", "productUsed", "productCost", "viaPreparation" }],
 --     "totalMenuItemsCount": number,
 --     "preparations": [{ "preparationName", "batchesProduced", "productUsed", "productCost" }]
 --   },
@@ -52,5 +61,9 @@
 --   - preparation_batches uses production_date (not produced_at)
 --   - recipe_components.component_id is TEXT, needs cast to UUID for joins
 --   - composition_id from menu_items JSONB variants is TEXT, needs cast for UUID joins
+--   - PORTION-TYPE preps (portion_type='portion'): use portion_size as divisor
+--   - WEIGHT-TYPE preps (portion_type='weight'): use output_quantity as divisor
 --
--- See migration file: 103_product_variance_details_v2_rpc.sql for the full implementation
+-- See migration files:
+--   - 104_fix_variance_details_v2_portion_type.sql (v2.1)
+--   - 106_add_sales_breakdown_to_variance_details_v2.sql (v2.2)
