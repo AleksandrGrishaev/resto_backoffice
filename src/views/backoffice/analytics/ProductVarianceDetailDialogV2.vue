@@ -366,174 +366,6 @@
             </v-expansion-panel-text>
           </v-expansion-panel>
 
-          <!-- Actual Write-offs Section -->
-          <v-expansion-panel
-            v-if="detail.actualWriteOffs"
-            id="actualWriteOffs"
-            value="actualWriteOffs"
-          >
-            <v-expansion-panel-title>
-              <div class="d-flex align-center justify-space-between w-100 pr-4">
-                <div class="d-flex align-center">
-                  <v-icon class="mr-2" color="orange">mdi-file-document-edit</v-icon>
-                  <span class="font-weight-medium">Actual Write-offs</span>
-                  <v-chip
-                    v-if="detail.actualWriteOffs.differenceFromTheoretical"
-                    :color="writeOffDifferenceColor"
-                    size="x-small"
-                    variant="tonal"
-                    class="ml-2"
-                  >
-                    {{ writeOffDifferenceLabel }}
-                  </v-chip>
-                </div>
-                <div class="text-right">
-                  <span class="text-body-2">
-                    {{ formatQty(detail.actualWriteOffs.total.quantity) }} {{ detail.product.unit }}
-                  </span>
-                  <span class="text-caption text-medium-emphasis ml-2">
-                    {{ formatIDR(detail.actualWriteOffs.total.amount) }}
-                  </span>
-                </div>
-              </div>
-            </v-expansion-panel-title>
-            <v-expansion-panel-text>
-              <!-- Comparison with Theoretical -->
-              <v-alert
-                v-if="detail.actualWriteOffs.differenceFromTheoretical"
-                :type="writeOffDifferenceAlertType"
-                variant="tonal"
-                density="compact"
-                class="mb-3"
-              >
-                <div class="d-flex justify-space-between align-center">
-                  <div>
-                    <strong>Theoretical vs Actual:</strong>
-                    {{ formatQty(detail.sales.quantity) }} vs
-                    {{ formatQty(detail.actualWriteOffs.total.quantity) }}
-                    {{ detail.product.unit }}
-                  </div>
-                  <div>
-                    <strong>Difference:</strong>
-                    {{ detail.actualWriteOffs.differenceFromTheoretical.quantity > 0 ? '+' : '' }}
-                    {{ formatQty(detail.actualWriteOffs.differenceFromTheoretical.quantity) }}
-                    {{ detail.product.unit }}
-                  </div>
-                </div>
-              </v-alert>
-
-              <!-- Write-off breakdown chips -->
-              <div class="d-flex gap-2 mb-3 flex-wrap">
-                <v-chip size="small" variant="tonal" color="primary">
-                  Sales: {{ formatQty(detail.actualWriteOffs.salesConsumption.quantity) }}
-                  {{ detail.product.unit }}
-                </v-chip>
-                <v-chip size="small" variant="tonal" color="secondary">
-                  Production: {{ formatQty(detail.actualWriteOffs.productionConsumption.quantity) }}
-                  {{ detail.product.unit }}
-                </v-chip>
-                <v-chip
-                  v-if="detail.actualWriteOffs.corrections.quantity !== 0"
-                  size="small"
-                  variant="tonal"
-                  :color="detail.actualWriteOffs.corrections.quantity > 0 ? 'success' : 'error'"
-                >
-                  Corrections:
-                  {{ detail.actualWriteOffs.corrections.quantity > 0 ? '+' : '' }}
-                  {{ formatQty(detail.actualWriteOffs.corrections.quantity) }}
-                  {{ detail.product.unit }}
-                </v-chip>
-              </div>
-
-              <!-- Production Consumption Details -->
-              <div
-                v-if="
-                  detail.actualWriteOffs.productionConsumption.details &&
-                  detail.actualWriteOffs.productionConsumption.details.length > 0
-                "
-                class="mb-3"
-              >
-                <div class="text-subtitle-2 mb-2">Production Write-offs</div>
-                <v-table density="compact" class="elevation-0">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th class="text-right">Qty</th>
-                      <th class="text-right">Amount</th>
-                      <th>Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="(item, idx) in detail.actualWriteOffs.productionConsumption.details"
-                      :key="idx"
-                    >
-                      <td>{{ formatDate(item.date) }}</td>
-                      <td class="text-right">
-                        {{ formatQty(item.quantity) }} {{ detail.product.unit }}
-                      </td>
-                      <td class="text-right">{{ formatIDR(item.amount) }}</td>
-                      <td class="text-caption text-truncate" style="max-width: 200px">
-                        {{ formatProductionNotes(item.notes) }}
-                      </td>
-                    </tr>
-                  </tbody>
-                </v-table>
-              </div>
-
-              <!-- Inventory Corrections Details -->
-              <div
-                v-if="
-                  detail.actualWriteOffs.corrections.details &&
-                  detail.actualWriteOffs.corrections.details.length > 0
-                "
-              >
-                <div class="text-subtitle-2 mb-2">Inventory Corrections</div>
-                <v-table density="compact" class="elevation-0">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th class="text-right">Adjustment</th>
-                      <th class="text-right">Amount</th>
-                      <th>Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="(item, idx) in detail.actualWriteOffs.corrections.details"
-                      :key="idx"
-                    >
-                      <td>{{ formatDate(item.date) }}</td>
-                      <td
-                        class="text-right"
-                        :class="item.quantity > 0 ? 'text-success' : 'text-error'"
-                      >
-                        {{ item.quantity > 0 ? '+' : '' }}{{ formatQty(item.quantity) }}
-                        {{ detail.product.unit }}
-                      </td>
-                      <td class="text-right">{{ formatIDR(item.amount) }}</td>
-                      <td class="text-caption text-truncate" style="max-width: 200px">
-                        {{ formatCorrectionNotes(item.notes) }}
-                      </td>
-                    </tr>
-                  </tbody>
-                </v-table>
-              </div>
-
-              <v-alert
-                v-if="
-                  detail.actualWriteOffs.total.quantity === 0 &&
-                  detail.actualWriteOffs.corrections.quantity === 0
-                "
-                type="info"
-                variant="tonal"
-                density="compact"
-              >
-                No write-offs in this period
-              </v-alert>
-            </v-expansion-panel-text>
-          </v-expansion-panel>
-
           <!-- Loss Section -->
           <v-expansion-panel id="loss" value="loss">
             <v-expansion-panel-title>
@@ -798,6 +630,174 @@
                   </v-chip>
                 </v-chip-group>
               </div>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
+
+          <!-- Actual Write-offs Section (Analysis) -->
+          <v-expansion-panel
+            v-if="detail.actualWriteOffs"
+            id="actualWriteOffs"
+            value="actualWriteOffs"
+          >
+            <v-expansion-panel-title>
+              <div class="d-flex align-center justify-space-between w-100 pr-4">
+                <div class="d-flex align-center">
+                  <v-icon class="mr-2" color="orange">mdi-file-document-edit</v-icon>
+                  <span class="font-weight-medium">Actual Write-offs (Analysis)</span>
+                  <v-chip
+                    v-if="detail.actualWriteOffs.differenceFromTheoretical"
+                    :color="writeOffDifferenceColor"
+                    size="x-small"
+                    variant="tonal"
+                    class="ml-2"
+                  >
+                    {{ writeOffDifferenceLabel }}
+                  </v-chip>
+                </div>
+                <div class="text-right">
+                  <span class="text-body-2">
+                    {{ formatQty(detail.actualWriteOffs.total.quantity) }} {{ detail.product.unit }}
+                  </span>
+                  <span class="text-caption text-medium-emphasis ml-2">
+                    {{ formatIDR(detail.actualWriteOffs.total.amount) }}
+                  </span>
+                </div>
+              </div>
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
+              <!-- Comparison with Theoretical -->
+              <v-alert
+                v-if="detail.actualWriteOffs.differenceFromTheoretical"
+                :type="writeOffDifferenceAlertType"
+                variant="tonal"
+                density="compact"
+                class="mb-3"
+              >
+                <div class="d-flex justify-space-between align-center">
+                  <div>
+                    <strong>Theoretical vs Actual:</strong>
+                    {{ formatQty(detail.sales.quantity) }} vs
+                    {{ formatQty(detail.actualWriteOffs.total.quantity) }}
+                    {{ detail.product.unit }}
+                  </div>
+                  <div>
+                    <strong>Difference:</strong>
+                    {{ detail.actualWriteOffs.differenceFromTheoretical.quantity > 0 ? '+' : '' }}
+                    {{ formatQty(detail.actualWriteOffs.differenceFromTheoretical.quantity) }}
+                    {{ detail.product.unit }}
+                  </div>
+                </div>
+              </v-alert>
+
+              <!-- Write-off breakdown chips -->
+              <div class="d-flex gap-2 mb-3 flex-wrap">
+                <v-chip size="small" variant="tonal" color="primary">
+                  Sales: {{ formatQty(detail.actualWriteOffs.salesConsumption.quantity) }}
+                  {{ detail.product.unit }}
+                </v-chip>
+                <v-chip size="small" variant="tonal" color="secondary">
+                  Production: {{ formatQty(detail.actualWriteOffs.productionConsumption.quantity) }}
+                  {{ detail.product.unit }}
+                </v-chip>
+                <v-chip
+                  v-if="detail.actualWriteOffs.corrections.quantity !== 0"
+                  size="small"
+                  variant="tonal"
+                  :color="detail.actualWriteOffs.corrections.quantity > 0 ? 'success' : 'error'"
+                >
+                  Corrections:
+                  {{ detail.actualWriteOffs.corrections.quantity > 0 ? '+' : '' }}
+                  {{ formatQty(detail.actualWriteOffs.corrections.quantity) }}
+                  {{ detail.product.unit }}
+                </v-chip>
+              </div>
+
+              <!-- Production Consumption Details -->
+              <div
+                v-if="
+                  detail.actualWriteOffs.productionConsumption.details &&
+                  detail.actualWriteOffs.productionConsumption.details.length > 0
+                "
+                class="mb-3"
+              >
+                <div class="text-subtitle-2 mb-2">Production Write-offs</div>
+                <v-table density="compact" class="elevation-0">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th class="text-right">Qty</th>
+                      <th class="text-right">Amount</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="(item, idx) in detail.actualWriteOffs.productionConsumption.details"
+                      :key="idx"
+                    >
+                      <td>{{ formatDate(item.date) }}</td>
+                      <td class="text-right">
+                        {{ formatQty(item.quantity) }} {{ detail.product.unit }}
+                      </td>
+                      <td class="text-right">{{ formatIDR(item.amount) }}</td>
+                      <td class="text-caption text-truncate" style="max-width: 200px">
+                        {{ formatProductionNotes(item.notes) }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </v-table>
+              </div>
+
+              <!-- Inventory Corrections Details -->
+              <div
+                v-if="
+                  detail.actualWriteOffs.corrections.details &&
+                  detail.actualWriteOffs.corrections.details.length > 0
+                "
+              >
+                <div class="text-subtitle-2 mb-2">Inventory Corrections</div>
+                <v-table density="compact" class="elevation-0">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th class="text-right">Adjustment</th>
+                      <th class="text-right">Amount</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="(item, idx) in detail.actualWriteOffs.corrections.details"
+                      :key="idx"
+                    >
+                      <td>{{ formatDate(item.date) }}</td>
+                      <td
+                        class="text-right"
+                        :class="item.quantity > 0 ? 'text-success' : 'text-error'"
+                      >
+                        {{ item.quantity > 0 ? '+' : '' }}{{ formatQty(item.quantity) }}
+                        {{ detail.product.unit }}
+                      </td>
+                      <td class="text-right">{{ formatIDR(item.amount) }}</td>
+                      <td class="text-caption text-truncate" style="max-width: 200px">
+                        {{ formatCorrectionNotes(item.notes) }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </v-table>
+              </div>
+
+              <v-alert
+                v-if="
+                  detail.actualWriteOffs.total.quantity === 0 &&
+                  detail.actualWriteOffs.corrections.quantity === 0
+                "
+                type="info"
+                variant="tonal"
+                density="compact"
+              >
+                No write-offs in this period
+              </v-alert>
             </v-expansion-panel-text>
           </v-expansion-panel>
         </v-expansion-panels>
