@@ -142,7 +142,7 @@
           <v-col cols="12" md="4">
             <v-card
               variant="tonal"
-              :color="(report.summary.totalVarianceAmount ?? 0) > 0 ? 'error' : 'warning'"
+              :color="(report.summary.totalVarianceAmount ?? 0) > 0 ? 'warning' : 'error'"
             >
               <v-card-text class="pa-3">
                 <div class="text-caption">Total Variance</div>
@@ -153,8 +153,8 @@
                 <div class="text-caption text-medium-emphasis">
                   {{
                     (report.summary.totalVarianceAmount ?? 0) > 0
-                      ? 'Product shortage'
-                      : 'Product surplus'
+                      ? 'Product surplus'
+                      : 'Product shortage'
                   }}
                 </div>
               </v-card-text>
@@ -393,19 +393,19 @@
                   <span v-else class="text-medium-emphasis">—</span>
                 </template>
 
-                <!-- Variance Column -->
+                <!-- Variance Column (positive = surplus, negative = shortage) -->
                 <template #[`item.variance.amount`]="{ item }">
                   <div v-if="Math.abs(item.variance.amount) > 0.01" class="stacked-cell">
                     <div
                       class="text-body-2 font-weight-bold"
-                      :class="item.variance.amount > 0 ? 'text-error' : 'text-warning'"
+                      :class="item.variance.amount > 0 ? 'text-warning' : 'text-error'"
                     >
                       {{ item.variance.amount > 0 ? '+' : ''
                       }}{{ formatQty(item.variance.quantity, item.unit) }} {{ item.unit }}
                     </div>
                     <div
                       class="text-caption"
-                      :class="item.variance.amount > 0 ? 'text-error' : 'text-warning'"
+                      :class="item.variance.amount > 0 ? 'text-warning' : 'text-error'"
                     >
                       {{ item.variance.amount > 0 ? '+' : '' }}{{ formatIDR(item.variance.amount) }}
                     </div>
@@ -552,8 +552,8 @@ function getLossPercentClass(percent: number): string {
 
 /**
  * Get row styling based on variance severity
- * Positive variance = product "disappeared" (theft, unrecorded usage)
- * Negative variance = product "appeared" (receipt error, unrecorded delivery)
+ * Positive variance = surplus (more product than expected)
+ * Negative variance = shortage (less product than expected - theft, unrecorded usage)
  */
 function getRowProps({ item }: { item: ProductVarianceRowV2 }) {
   const varianceAmount = Math.abs(item.variance?.amount ?? 0)

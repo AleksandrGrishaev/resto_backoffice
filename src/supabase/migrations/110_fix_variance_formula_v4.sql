@@ -5,7 +5,7 @@
 -- NEW FORMULA:
 -- Expected = Opening + Received - Sales - WriteOffs - Loss + Gain
 -- Actual = batches + in_preps (if today) OR snapshot (if past)
--- Variance = Expected - Actual
+-- Variance = Actual - Expected (positive = surplus, negative = shortage)
 --
 -- Where:
 -- - Opening = snapshot on (start_date - 1)
@@ -206,12 +206,13 @@ BEGIN
         - COALESCE(dl.amount, 0) - COALESCE(cl.amount, 0) + COALESCE(cg.amount, 0)) as expected_amount,
       COALESCE(ac.qty, 0) + COALESCE(pip.qty, 0) as actual_qty,
       COALESCE(ac.amount, 0) + COALESCE(pip.amount, 0) as actual_amount,
-      (COALESCE(os.qty, 0) + COALESCE(r.qty, 0) - COALESCE(ts.qty, 0) - COALESCE(pw.qty, 0)
-        - COALESCE(dl.qty, 0) - COALESCE(cl.qty, 0) + COALESCE(cg.qty, 0))
-        - (COALESCE(ac.qty, 0) + COALESCE(pip.qty, 0)) as variance_qty,
-      (COALESCE(os.amount, 0) + COALESCE(r.amount, 0) - COALESCE(ts.qty, 0) * pi.avg_cost - COALESCE(pw.amount, 0)
-        - COALESCE(dl.amount, 0) - COALESCE(cl.amount, 0) + COALESCE(cg.amount, 0))
-        - (COALESCE(ac.amount, 0) + COALESCE(pip.amount, 0)) as variance_amount
+      -- Variance = Actual - Expected (positive = surplus, negative = shortage)
+      (COALESCE(ac.qty, 0) + COALESCE(pip.qty, 0))
+        - (COALESCE(os.qty, 0) + COALESCE(r.qty, 0) - COALESCE(ts.qty, 0) - COALESCE(pw.qty, 0)
+        - COALESCE(dl.qty, 0) - COALESCE(cl.qty, 0) + COALESCE(cg.qty, 0)) as variance_qty,
+      (COALESCE(ac.amount, 0) + COALESCE(pip.amount, 0))
+        - (COALESCE(os.amount, 0) + COALESCE(r.amount, 0) - COALESCE(ts.qty, 0) * pi.avg_cost - COALESCE(pw.amount, 0)
+        - COALESCE(dl.amount, 0) - COALESCE(cl.amount, 0) + COALESCE(cg.amount, 0)) as variance_amount
     FROM product_info pi
     LEFT JOIN opening_stock os ON os.item_id = pi.id::TEXT
     LEFT JOIN received r ON r.item_id = pi.id::TEXT
@@ -232,7 +233,7 @@ BEGIN
     'version', 'v4',
     'period', jsonb_build_object('dateFrom', p_start_date::DATE, 'dateTo', p_end_date::DATE,
       'openingSnapshotDate', v_opening_date, 'closingSource', CASE WHEN v_is_current_period THEN 'batches' ELSE 'snapshot' END),
-    'formula', 'Expected = Opening + Received - Sales - WriteOffs - Loss + Gain; Variance = Expected - Actual',
+    'formula', 'Expected = Opening + Received - Sales - WriteOffs - Loss + Gain; Variance = Actual - Expected',
     'summary', (SELECT jsonb_build_object(
       'totalProducts', COUNT(*), 'productsWithActivity', COUNT(*) FILTER (WHERE sales_qty > 0 OR loss_qty > 0),
       'totalTheoreticalSalesAmount', ROUND(COALESCE(SUM(sales_amount), 0), 2),
