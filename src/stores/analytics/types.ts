@@ -479,13 +479,15 @@ export interface ProductVarianceRowV2 {
 
   // ACTUAL WRITE-OFFS (from storage_operations - for comparison)
   writeoffs: StockAmount // Actual: write-offs with reason = sales_consumption
-  directWriteoffs: StockAmount // Direct product write-offs
-  tracedWriteoffs: StockAmount // Traced through preparations
+  productionWriteoffs?: StockAmount // Write-offs for production_consumption
+  directWriteoffs?: StockAmount // Direct product write-offs
+  tracedWriteoffs?: StockAmount // Traced through preparations
 
-  // Loss
-  loss: StockAmount // Direct loss + traced from preparations
-  directLoss: StockAmount // expired, spoiled, other write-offs
-  tracedLoss: StockAmount // Losses traced through preparations
+  // Loss (includes inventory corrections)
+  loss: StockAmount // Direct loss + traced from preparations + corrections
+  corrections?: StockAmount // Inventory corrections (from inventories)
+  directLoss?: StockAmount // expired, spoiled, other write-offs
+  tracedLoss?: StockAmount // Losses traced through preparations
 
   // Closing & Variance
   closing: StockAmount // Stock at period end (raw products in batches)

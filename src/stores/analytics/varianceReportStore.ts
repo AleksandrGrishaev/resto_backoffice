@@ -182,25 +182,25 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
         },
         byDepartment: {
           kitchen: {
-            count: data.byDepartment.kitchen?.count || 0,
+            count: data.byDepartment?.kitchen?.productsCount || 0,
             // V3: Use theoretical sales
-            salesAmount: data.byDepartment.kitchen?.theoreticalSalesAmount || 0,
-            lossAmount: data.byDepartment.kitchen?.lossAmount || 0,
-            inPrepsAmount: data.byDepartment.kitchen?.inPrepsAmount || 0,
-            varianceAmount: data.byDepartment.kitchen?.varianceAmount || 0,
-            lossPercent: data.byDepartment.kitchen?.lossPercent || 0
+            salesAmount: data.byDepartment?.kitchen?.theoreticalSalesAmount || 0,
+            lossAmount: data.byDepartment?.kitchen?.lossAmount || 0,
+            inPrepsAmount: data.byDepartment?.kitchen?.inPrepsAmount || 0,
+            varianceAmount: data.byDepartment?.kitchen?.varianceAmount || 0,
+            lossPercent: data.byDepartment?.kitchen?.lossPercent || 0
           },
           bar: {
-            count: data.byDepartment.bar?.count || 0,
+            count: data.byDepartment?.bar?.productsCount || 0,
             // V3: Use theoretical sales
-            salesAmount: data.byDepartment.bar?.theoreticalSalesAmount || 0,
-            lossAmount: data.byDepartment.bar?.lossAmount || 0,
-            inPrepsAmount: data.byDepartment.bar?.inPrepsAmount || 0,
-            varianceAmount: data.byDepartment.bar?.varianceAmount || 0,
-            lossPercent: data.byDepartment.bar?.lossPercent || 0
+            salesAmount: data.byDepartment?.bar?.theoreticalSalesAmount || 0,
+            lossAmount: data.byDepartment?.bar?.lossAmount || 0,
+            inPrepsAmount: data.byDepartment?.bar?.inPrepsAmount || 0,
+            varianceAmount: data.byDepartment?.bar?.varianceAmount || 0,
+            lossPercent: data.byDepartment?.bar?.lossPercent || 0
           }
         },
-        items: (data.items || []).map(
+        items: (data.products || []).map(
           (item: any): ProductVarianceRowV2 => ({
             productId: item.productId,
             productName: item.productName,
@@ -210,23 +210,31 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
             // Stock movement
             opening: item.opening || { quantity: 0, amount: 0 },
             received: item.received || { quantity: 0, amount: 0 },
-            // V3: Theoretical sales from orders (MAIN)
-            sales: item.sales || { quantity: 0, amount: 0 },
+            // V3: Theoretical sales from orders (MAIN) - field name is theoreticalSales
+            sales: item.theoreticalSales || { quantity: 0, amount: 0 },
             // V3: Actual write-offs (for comparison)
             writeoffs: item.writeoffs || { quantity: 0, amount: 0 },
+            productionWriteoffs: item.productionWriteoffs || { quantity: 0, amount: 0 },
             directWriteoffs: item.directWriteoffs || { quantity: 0, amount: 0 },
             tracedWriteoffs: item.tracedWriteoffs || { quantity: 0, amount: 0 },
-            // Loss
+            // Loss (includes corrections)
             loss: item.loss || { quantity: 0, amount: 0 },
+            corrections: item.corrections || { quantity: 0, amount: 0 },
             directLoss: item.directLoss || { quantity: 0, amount: 0 },
             tracedLoss: item.tracedLoss || { quantity: 0, amount: 0 },
-            // Closing & Variance
-            closing: item.closing || { quantity: 0, amount: 0 },
+            // Closing & Variance - field name is closingStock
+            closing: item.closingStock || { quantity: 0, amount: 0 },
             inPreps: item.inPreps || { quantity: 0, amount: 0 },
-            stockTotal: item.stockTotal || { quantity: 0, amount: 0 },
+            stockTotal: {
+              quantity: (item.closingStock?.quantity || 0) + (item.inPreps?.quantity || 0),
+              amount: (item.closingStock?.amount || 0) + (item.inPreps?.amount || 0)
+            },
             variance: item.variance || { quantity: 0, amount: 0 },
-            // V3: Sales vs Writeoffs difference
-            salesWriteoffDiff: item.salesWriteoffDiff || { quantity: 0, amount: 0 },
+            // V3: Sales vs Writeoffs difference (calculated)
+            salesWriteoffDiff: {
+              quantity: (item.theoreticalSales?.quantity || 0) - (item.writeoffs?.quantity || 0),
+              amount: (item.theoreticalSales?.amount || 0) - (item.writeoffs?.amount || 0)
+            },
             // Flags & calculated
             hasPreparations: item.hasPreparations || false,
             lossPercent: item.lossPercent ?? 0
