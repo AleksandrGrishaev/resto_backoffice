@@ -110,13 +110,45 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
     const results: StoreInitResult[] = []
     const requiredStores = getStoresForContext(this.currentContext, userRoles || [])
 
-    // ✅ Sprint 9: Если critical stores уже загружены - пропускаем
+    // ✅ Sprint 9 + FIX: Проверяем РЕАЛЬНУЮ инициализацию stores, не только флаг loadedStores
+    // BUG FIX: После browser refresh, loadedStores может содержать записи,
+    // но фактические stores могут быть не инициализированы (state lost)
+    const productsStore = useProductsStore()
+    const recipesStore = useRecipesStore()
+    const menuStore = useMenuStore()
+
+    // Проверяем реальное наличие данных в stores
+    // productsStore: проверяем products.length > 0
+    // recipesStore: проверяем initialized флаг
+    // menuStore: проверяем state.menuItems.length > 0
+    const storesActuallyInitialized =
+      productsStore.products.length > 0 &&
+      recipesStore.initialized &&
+      (menuStore.state?.menuItems?.length ?? 0) > 0
+
+    // Если loadedStores говорит что загружено, но stores не инициализированы - очищаем флаги
     if (
       this.loadedStores.has('products') &&
       this.loadedStores.has('recipes') &&
-      this.loadedStores.has('menu')
+      this.loadedStores.has('menu') &&
+      !storesActuallyInitialized
     ) {
-      DebugUtils.info(MODULE_NAME, '⏭️ [PROD] Critical stores already loaded, skipping', {
+      DebugUtils.warn(
+        MODULE_NAME,
+        '⚠️ [PROD] Stores marked as loaded but NOT initialized! Clearing flags and reloading...',
+        {
+          loadedStores: Array.from(this.loadedStores),
+          productsCount: productsStore.products.length,
+          recipesInitialized: recipesStore.initialized,
+          menuItemsCount: menuStore.state?.menuItems?.length ?? 0
+        }
+      )
+      this.loadedStores.clear()
+    }
+
+    // Если все stores реально инициализированы - пропускаем
+    if (storesActuallyInitialized && this.loadedStores.has('products')) {
+      DebugUtils.info(MODULE_NAME, '⏭️ [PROD] Critical stores verified and ready, skipping', {
         context: this.currentContext,
         loadedStores: Array.from(this.loadedStores)
       })
