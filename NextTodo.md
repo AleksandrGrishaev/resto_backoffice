@@ -28,6 +28,42 @@
 
 ---
 
+### 2. Added Actual Write-offs Section for Variance Analysis ✅
+
+**Problem:** Need to compare actual write-offs with theoretical sales to identify discrepancies.
+
+**Solution:**
+
+- Updated `get_product_variance_details_v2` function (v2.3)
+- Added new `actualWriteOffs` section with breakdown:
+  - `salesConsumption` - direct sales write-offs from POS
+  - `productionConsumption` - write-offs for preparation production (with details)
+  - `corrections` - inventory adjustment corrections (with details)
+  - `differenceFromTheoretical` - comparison with theoretical sales
+
+**Result for Tuna Lion (Jan 2-30, 2026):**
+| Category | Quantity | Notes |
+|----------|----------|-------|
+| Sales Consumption | 0g | (via POS - none for this product) |
+| Production Consumption | 3,720g | Write-offs for prep batches |
+| Corrections | +1,135g net | Inventory adjustments |
+| **Total Write-offs** | **4,855g** | |
+| Theoretical Sales | 5,400g | From menu items sold |
+| **Difference** | **-545g** | Under-written-off |
+
+**Interpretation:** Less product was written off than theoretically consumed. This can happen when:
+
+- Old prep batches were used (already had inventory)
+- Write-off timing doesn't match sales period
+
+**Files changed:**
+
+- `src/supabase/migrations/107_add_actual_writeoffs_to_variance_details_v2.sql` (new)
+- `src/supabase/functions/get_product_variance_details_v2.sql` (updated docs v2.3)
+- `src/views/backoffice/analytics/ProductVarianceDetailDialogV2.vue` (new section)
+
+---
+
 ## Previously Completed (2026-01-27)
 
 ### 1. Fixed Variance Sign ✅
@@ -92,12 +128,13 @@ For **Tuna Lion (Jan 2-30, 2026)**:
 
 ## Files Changed This Sprint
 
-| File                                                 | Status            | Description          |
-| ---------------------------------------------------- | ----------------- | -------------------- |
-| `106_add_sales_breakdown_to_variance_details_v2.sql` | Created + Applied | Menu items via preps |
-| `get_product_variance_details_v2.sql`                | Updated           | Docs v2.2            |
-| `ProductVarianceDetailDialogV2.vue`                  | Updated           | Via column + totals  |
-| `104_fix_variance_details_v2_portion_type.sql`       | Created + Applied | Portion-type fix     |
+| File                                                  | Status            | Description               |
+| ----------------------------------------------------- | ----------------- | ------------------------- |
+| `106_add_sales_breakdown_to_variance_details_v2.sql`  | Created + Applied | Menu items via preps      |
+| `107_add_actual_writeoffs_to_variance_details_v2.sql` | Created + Applied | Actual write-offs section |
+| `get_product_variance_details_v2.sql`                 | Updated           | Docs v2.3                 |
+| `ProductVarianceDetailDialogV2.vue`                   | Updated           | Via column + write-offs   |
+| `104_fix_variance_details_v2_portion_type.sql`        | Created + Applied | Portion-type fix          |
 
 ---
 

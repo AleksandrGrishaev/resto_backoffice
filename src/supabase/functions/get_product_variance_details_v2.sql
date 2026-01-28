@@ -3,7 +3,7 @@
 --              Returns complete breakdown with drill-down into source documents
 -- Date: 2026-01-28
 -- Author: Claude
--- Version: v2.2
+-- Version: v2.3
 --
 -- CHANGELOG:
 -- v2.0: Initial implementation
@@ -12,6 +12,10 @@
 --       - Now shows which menu items consume this product via preparations
 --       - Added viaPreparation field to topMenuItems
 --       - Fixed "No sales in this period" for products only used in preps
+-- v2.3: Added actual write-offs breakdown for variance analysis
+--       - New section: actualWriteOffs with salesConsumption, productionConsumption, corrections
+--       - Compares actual write-offs with theoretical sales
+--       - Helps identify under/over write-off situations
 --
 -- Usage:
 --   SELECT get_product_variance_details_v2(
@@ -52,7 +56,14 @@
 --     "inPreparations": { "quantity", "amount", "preparations": [...] },
 --     "total": { "quantity", "amount" }
 --   },
---   "variance": { "quantity", "amount", "interpretation", "possibleReasons" }
+--   "variance": { "quantity", "amount", "interpretation", "possibleReasons" },
+--   "actualWriteOffs": {
+--     "salesConsumption": { "quantity", "amount", "operationsCount" },
+--     "productionConsumption": { "quantity", "amount", "operationsCount", "details": [...] },
+--     "corrections": { "quantity", "amount", "operationsCount", "details": [...] },
+--     "total": { "quantity", "amount" },
+--     "differenceFromTheoretical": { "quantity", "amount", "interpretation" }
+--   }
 -- }
 --
 -- Key implementation notes:
@@ -67,3 +78,4 @@
 -- See migration files:
 --   - 104_fix_variance_details_v2_portion_type.sql (v2.1)
 --   - 106_add_sales_breakdown_to_variance_details_v2.sql (v2.2)
+--   - 107_add_actual_writeoffs_to_variance_details_v2.sql (v2.3)
