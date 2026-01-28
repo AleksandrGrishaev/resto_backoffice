@@ -790,6 +790,49 @@ export interface VarianceDetail {
 }
 
 /**
+ * Actual Write-offs Detail (Analysis section)
+ * Compares actual write-offs with theoretical sales
+ */
+export interface ActualWriteOffsDetail {
+  salesConsumption: {
+    quantity: number
+    amount: number
+    operationsCount: number
+  }
+  productionConsumption: {
+    quantity: number
+    amount: number
+    operationsCount: number
+    details: Array<{
+      date: string
+      quantity: number
+      amount: number
+      notes: string
+    }>
+  }
+  corrections: {
+    quantity: number
+    amount: number
+    operationsCount: number
+    details: Array<{
+      date: string
+      quantity: number
+      amount: number
+      notes: string
+    }>
+  }
+  total: {
+    quantity: number
+    amount: number
+  }
+  differenceFromTheoretical: {
+    quantity: number
+    amount: number
+    interpretation: 'matched' | 'under_written_off' | 'over_written_off'
+  }
+}
+
+/**
  * Product Variance Detail V2
  * Enhanced detailed breakdown with drill-down into source documents
  */
@@ -814,6 +857,9 @@ export interface ProductVarianceDetailV2 {
   loss: LossDetail
   closing: ClosingStockDetail
   variance: VarianceDetail
+
+  // Analysis section (optional - for comparing actual vs theoretical)
+  actualWriteOffs?: ActualWriteOffsDetail
 
   generatedAt: string
 }

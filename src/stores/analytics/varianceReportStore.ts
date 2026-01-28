@@ -595,6 +595,38 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
           interpretation: data.variance?.interpretation || 'balanced',
           possibleReasons: data.variance?.possibleReasons || []
         },
+        // Analysis section - actual write-offs vs theoretical
+        actualWriteOffs: data.actualWriteOffs
+          ? {
+              salesConsumption: {
+                quantity: data.actualWriteOffs.salesConsumption?.quantity ?? 0,
+                amount: data.actualWriteOffs.salesConsumption?.amount ?? 0,
+                operationsCount: data.actualWriteOffs.salesConsumption?.operationsCount ?? 0
+              },
+              productionConsumption: {
+                quantity: data.actualWriteOffs.productionConsumption?.quantity ?? 0,
+                amount: data.actualWriteOffs.productionConsumption?.amount ?? 0,
+                operationsCount: data.actualWriteOffs.productionConsumption?.operationsCount ?? 0,
+                details: data.actualWriteOffs.productionConsumption?.details || []
+              },
+              corrections: {
+                quantity: data.actualWriteOffs.corrections?.quantity ?? 0,
+                amount: data.actualWriteOffs.corrections?.amount ?? 0,
+                operationsCount: data.actualWriteOffs.corrections?.operationsCount ?? 0,
+                details: data.actualWriteOffs.corrections?.details || []
+              },
+              total: {
+                quantity: data.actualWriteOffs.total?.quantity ?? 0,
+                amount: data.actualWriteOffs.total?.amount ?? 0
+              },
+              differenceFromTheoretical: {
+                quantity: data.actualWriteOffs.differenceFromTheoretical?.quantity ?? 0,
+                amount: data.actualWriteOffs.differenceFromTheoretical?.amount ?? 0,
+                interpretation:
+                  data.actualWriteOffs.differenceFromTheoretical?.interpretation || 'matched'
+              }
+            }
+          : undefined,
         generatedAt: data.generatedAt || new Date().toISOString()
       }
 
