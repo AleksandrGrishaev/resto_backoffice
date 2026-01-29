@@ -273,25 +273,11 @@ export const usePreparationStore = defineStore('preparation', () => {
       // ✅ FIXED: Sync both balances AND batches
       await fetchBalances(data.department)
 
-      // ✅ NEW: Auto-reconcile negative batches for each preparation
-      try {
-        const { reconciliationService } = await import('./reconciliationService')
+      // ✅ REMOVED (Migration 111): Auto-reconciliation of negative batches
+      // Negative batches now remain active to allow proper balance calculation
+      // Reconciliation will happen during inventory count instead of receipt creation
 
-        for (const item of data.items) {
-          await reconciliationService.autoReconcileOnNewBatch(item.preparationId)
-        }
-
-        DebugUtils.info(MODULE_NAME, '✅ Negative batch reconciliation completed')
-
-        // ✅ FIX: Refresh batches AFTER reconciliation to update in-memory state
-        await fetchBalances(data.department)
-        DebugUtils.info(MODULE_NAME, '✅ Batches refreshed after reconciliation')
-      } catch (reconciliationError) {
-        // Log error but don't fail the receipt creation
-        DebugUtils.warn(MODULE_NAME, 'Failed to auto-reconcile negative batches', {
-          error: reconciliationError
-        })
-      }
+      DebugUtils.info(MODULE_NAME, '✅ Batches refreshed after receipt creation')
 
       return operation
     } catch (error) {

@@ -514,26 +514,13 @@ export const useStorageStore = defineStore('storage', () => {
       // Reload balances after operation
       await loadBalances()
 
-      // ✅ NEW: Auto-reconcile negative batches for each product
-      try {
-        const { reconciliationService } = await import('./reconciliationService')
+      // ✅ REMOVED (Migration 111): Auto-reconciliation of negative batches
+      // Negative batches now remain active to allow proper balance calculation
+      // Reconciliation will happen during inventory count instead of receipt creation
 
-        for (const item of data.items) {
-          await reconciliationService.autoReconcileOnNewBatch(item.itemId)
-        }
-
-        DebugUtils.info(MODULE_NAME, '✅ Negative batch reconciliation completed')
-
-        // ✅ FIX: Refresh batches after reconciliation to update UI
-        // This ensures reconciled batches show correct status in UI
-        await fetchBalances(data.department)
-        DebugUtils.info(MODULE_NAME, '✅ Batches refreshed after reconciliation')
-      } catch (reconciliationError) {
-        // Log error but don't fail the receipt creation
-        DebugUtils.warn(MODULE_NAME, 'Failed to auto-reconcile negative batches', {
-          error: reconciliationError
-        })
-      }
+      // Refresh balances to reflect new batches
+      await fetchBalances(data.department)
+      DebugUtils.info(MODULE_NAME, '✅ Batches refreshed after receipt creation')
 
       DebugUtils.info(MODULE_NAME, '✅ Receipt created successfully')
       return response.data

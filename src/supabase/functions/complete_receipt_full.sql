@@ -104,16 +104,12 @@ BEGIN
     );
   END LOOP;
 
-  -- 3. RECONCILE NEGATIVE BATCHES
-  UPDATE storage_batches
-  SET reconciled_at = NOW(),
-      is_active = false,
-      updated_at = NOW()
-  WHERE item_id IN (SELECT elem->>'itemId' FROM jsonb_array_elements(p_received_items) elem)
-    AND is_negative = true
-    AND reconciled_at IS NULL
-    AND warehouse_id = p_warehouse_id;
-  GET DIAGNOSTICS v_reconciled = ROW_COUNT;
+  -- 3. NEGATIVE BATCHES NO LONGER AUTO-RECONCILED (Migration 111)
+  -- Negative batches now remain active (is_active=true) to allow proper
+  -- balance calculation via SUM(current_quantity). They will be closed
+  -- during inventory reconciliation instead of receipt completion.
+  -- Return 0 for reconciledBatches count (no longer reconciling)
+  v_reconciled := 0;
 
   -- 4. CREATE STORAGE OPERATION (audit trail)
   v_operation_id := 'op_' || gen_random_uuid();

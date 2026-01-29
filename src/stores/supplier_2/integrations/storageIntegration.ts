@@ -379,20 +379,10 @@ export class SupplierStorageIntegration {
           batchCount: existingBatches.length
         })
 
-        // ✅ FIX: Trigger auto-reconciliation for negative batches
-        // Even though batches were created via transit conversion,
-        // we still need to reconcile any negative batches for these products
-        const { reconciliationService } = await import('@/stores/storage/reconciliationService')
-
-        for (const batch of existingBatches) {
-          if (batch.itemType === 'product') {
-            DebugUtils.info(MODULE_NAME, 'Triggering reconciliation for product', {
-              productId: batch.itemId,
-              batchNumber: batch.batchNumber
-            })
-            await reconciliationService.autoReconcileOnNewBatch(batch.itemId)
-          }
-        }
+        // ✅ REMOVED (Migration 111): Auto-reconciliation of negative batches
+        // Negative batches now remain active to allow proper balance calculation
+        // via SUM(current_quantity). They will be closed during inventory
+        // reconciliation instead of receipt completion.
 
         // Return first batch ID as operation reference (for compatibility)
         const operationId = existingBatches[0].id

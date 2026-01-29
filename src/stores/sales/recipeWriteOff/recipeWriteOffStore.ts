@@ -265,6 +265,34 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
       if (saveResult.success && saveResult.data) {
         state.value.writeOffs.push(saveResult.data)
         console.log(`✅ [${MODULE_NAME}] Write-off record saved:`, saveResult.data.id)
+
+        // 8. ✅ FIX: Update order_items with write_off_operation_id for audit trail
+        try {
+          const { default: supabase } = await import('@/supabase/client')
+
+          const { data: updatedItems, error } = await supabase
+            .from('order_items')
+            .update({
+              write_off_operation_id: saveResult.data.storageOperationId
+            })
+            .eq('menu_item_id', billItem.menuItemId)
+            .is('write_off_operation_id', null)
+            .order('created_at', { ascending: false })
+            .limit(billItem.quantity)
+            .select()
+
+          if (error) {
+            console.error(`⚠️ [${MODULE_NAME}] Failed to update order_items:`, error)
+          } else {
+            console.log(
+              `✅ [${MODULE_NAME}] Updated ${updatedItems?.length || 0} order_items with write_off_operation_id`
+            )
+          }
+        } catch (updateError) {
+          console.error(`⚠️ [${MODULE_NAME}] Error updating order_items:`, updateError)
+          // Non-critical error, write-off still succeeded
+        }
+
         return saveResult.data
       } else {
         throw new Error(saveResult.error || 'Failed to save write-off')
@@ -425,6 +453,34 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
       if (saveResult.success && saveResult.data) {
         state.value.writeOffs.push(saveResult.data)
         console.log(`✅ [${MODULE_NAME}] Write-off record saved:`, saveResult.data.id)
+
+        // 8. ✅ FIX: Update order_items with write_off_operation_id for audit trail
+        try {
+          const { default: supabase } = await import('@/supabase/client')
+
+          const { data: updatedItems, error } = await supabase
+            .from('order_items')
+            .update({
+              write_off_operation_id: saveResult.data.storageOperationId
+            })
+            .eq('menu_item_id', billItem.menuItemId)
+            .is('write_off_operation_id', null)
+            .order('created_at', { ascending: false })
+            .limit(billItem.quantity)
+            .select()
+
+          if (error) {
+            console.error(`⚠️ [${MODULE_NAME}] Failed to update order_items:`, error)
+          } else {
+            console.log(
+              `✅ [${MODULE_NAME}] Updated ${updatedItems?.length || 0} order_items with write_off_operation_id`
+            )
+          }
+        } catch (updateError) {
+          console.error(`⚠️ [${MODULE_NAME}] Error updating order_items:`, updateError)
+          // Non-critical error, write-off still succeeded
+        }
+
         return saveResult.data
       } else {
         throw new Error(saveResult.error || 'Failed to save write-off')

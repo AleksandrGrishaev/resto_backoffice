@@ -308,9 +308,11 @@ export function useReceipts() {
       DebugUtils.info(MODULE_NAME, '✅ RPC complete_receipt_full succeeded', {
         timing: `${rpcTime.toFixed(0)}ms`,
         convertedBatches: data.convertedBatches,
-        reconciledBatches: data.reconciledBatches,
+        reconciledBatches: data.reconciledBatches, // ✅ Migration 111: Now always 0 (negative batches stay active)
         operationId: data.operationId,
-        paymentId: data.paymentId
+        paymentId: data.paymentId,
+        note:
+          data.reconciledBatches === 0 ? 'Negative batches remain active (new behavior)' : undefined
       })
 
       // Refresh local state in background (non-blocking)

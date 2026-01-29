@@ -234,15 +234,15 @@ export class StorageService {
     neededQuantity: number
   ): Promise<ServiceResponse<BatchAllocation[]>> {
     try {
-      // Fetch batches in FIFO order (oldest first)
+      // ✅ CHANGED (Migration 111): Removed gt('current_quantity', 0) to include negative batches
+      // Fetch batches in FIFO order (oldest first), including active negative batches
       const batches = await executeSupabaseQuery(
         supabase
           .from('storage_batches')
           .select('*')
           .eq('item_id', itemId)
           .eq('warehouse_id', warehouseId)
-          .eq('status', 'active')
-          .gt('current_quantity', 0)
+          .eq('is_active', true) // ✅ CHANGED: Use is_active instead of status
           .order('receipt_date', { ascending: true })
           .order('created_at', { ascending: true }),
         `${MODULE_NAME}.allocateFIFO`
@@ -261,13 +261,38 @@ export class StorageService {
         }
       }
 
-      // Allocate quantities using FIFO logic
+      // ✅ NEW: Separate positive and negative batches for priority allocation
+      const positiveBatches = batches.filter(b => Number(b.current_quantity) > 0)
+      const negativeBatches = batches.filter(b => Number(b.current_quantity) < 0)
+      const orderedBatches = [...positiveBatches, ...negativeBatches]
+
+      // Allocate quantities using FIFO logic (positive first, then negative)
       let remaining = neededQuantity
       const allocations: BatchAllocation[] = []
 
-      for (const batch of batches) {
+      for (const batch of orderedBatches) {
         if (remaining <= 0) break
 
+        // ✅ NEW: Skip zero-quantity batches
+        if (Number(batch.current_quantity) === 0) continue
+
+        // ✅ NEW: Handle negative batches
+        if (Number(batch.current_quantity) < 0) {
+          const allocatedQty = Math.min(remaining, Math.abs(Number(batch.current_quantity)))
+
+          allocations.push({
+            batchId: batch.id,
+            batchNumber: batch.batch_number,
+            quantity: allocatedQty,
+            costPerUnit: Number(batch.cost_per_unit),
+            batchDate: batch.receipt_date
+          })
+
+          remaining -= allocatedQty
+          continue
+        }
+
+        // ✅ EXISTING: Handle positive batches
         const allocatedQty = Math.min(remaining, Number(batch.current_quantity))
 
         allocations.push({
@@ -284,7 +309,7 @@ export class StorageService {
       // Check if we have enough quantity
       if (remaining > 0) {
         const available = neededQuantity - remaining
-        // FIX: Allow negative stock - just log warning instead of throwing error
+        // Allow negative stock - just log warning instead of throwing error
         DebugUtils.warn(MODULE_NAME, '⚠️ Insufficient quantity - allowing negative stock', {
           itemId,
           needed: neededQuantity,
@@ -323,21 +348,21 @@ export class StorageService {
     neededQuantity: number
   ): Promise<ServiceResponse<BatchAllocation[]>> {
     try {
-      // Fetch batches in FIFO order (oldest first)
+      // ✅ CHANGED (Migration 111): Removed gt('current_quantity', 0) to include negative batches
+      // Fetch batches in FIFO order (oldest first), including active negative batches
       const batches = await executeSupabaseQuery(
         supabase
           .from('preparation_batches')
           .select('*')
           .eq('preparation_id', preparationId)
           .eq('department', department)
-          .eq('status', 'active')
-          .gt('current_quantity', 0)
+          .eq('is_active', true) // ✅ CHANGED: Use is_active instead of status
           .order('production_date', { ascending: true })
           .order('created_at', { ascending: true }),
         `${MODULE_NAME}.allocatePreparationFIFO`
       )
 
-      // ✅ FIX: Don't throw error when no batches - return empty allocations
+      // Don't throw error when no batches - return empty allocations
       // This allows negative batch creation logic to work
       if (!batches || batches.length === 0) {
         DebugUtils.warn(MODULE_NAME, '⚠️ No active batches found - will need negative batch', {
@@ -351,13 +376,38 @@ export class StorageService {
         }
       }
 
-      // Allocate quantities using FIFO logic
+      // ✅ NEW: Separate positive and negative batches for priority allocation
+      const positiveBatches = batches.filter(b => Number(b.current_quantity) > 0)
+      const negativeBatches = batches.filter(b => Number(b.current_quantity) < 0)
+      const orderedBatches = [...positiveBatches, ...negativeBatches]
+
+      // Allocate quantities using FIFO logic (positive first, then negative)
       let remaining = neededQuantity
       const allocations: BatchAllocation[] = []
 
-      for (const batch of batches) {
+      for (const batch of orderedBatches) {
         if (remaining <= 0) break
 
+        // ✅ NEW: Skip zero-quantity batches
+        if (Number(batch.current_quantity) === 0) continue
+
+        // ✅ NEW: Handle negative batches
+        if (Number(batch.current_quantity) < 0) {
+          const allocatedQty = Math.min(remaining, Math.abs(Number(batch.current_quantity)))
+
+          allocations.push({
+            batchId: batch.id,
+            batchNumber: batch.batch_number,
+            quantity: allocatedQty,
+            costPerUnit: Number(batch.cost_per_unit),
+            batchDate: batch.production_date || batch.created_at
+          })
+
+          remaining -= allocatedQty
+          continue
+        }
+
+        // ✅ EXISTING: Handle positive batches
         const allocatedQty = Math.min(remaining, Number(batch.current_quantity))
 
         allocations.push({

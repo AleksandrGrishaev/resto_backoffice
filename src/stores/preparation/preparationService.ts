@@ -131,6 +131,7 @@ export class PreparationService {
           outputQuantity: 1000,
           outputUnit: 'gram',
           costPerPortion: 0,
+          lastKnownCost: 0,
           shelfLife: 2, // days
           // ⭐ PHASE 2: Portion type defaults
           portionType: 'weight' as const,
@@ -144,6 +145,7 @@ export class PreparationService {
         outputQuantity: preparation.outputQuantity,
         outputUnit: preparation.outputUnit,
         costPerPortion: preparation.costPerPortion || 0,
+        lastKnownCost: preparation.lastKnownCost || 0,
         shelfLife: preparation.shelfLife || 2, // preparations expire faster
         // ⭐ PHASE 2: Portion type support
         portionType: preparation.portionType || 'weight',
@@ -157,6 +159,7 @@ export class PreparationService {
         outputQuantity: 1000,
         outputUnit: 'gram',
         costPerPortion: 0,
+        lastKnownCost: 0,
         shelfLife: 2,
         // ⭐ PHASE 2: Portion type defaults
         portionType: 'weight' as const,
@@ -553,17 +556,7 @@ export class PreparationService {
         return lastCost
       }
 
-      // Fallback 2: Use estimatedCost from preparation info
-      if (prepInfo.estimatedCost && prepInfo.estimatedCost > 0) {
-        DebugUtils.warn(MODULE_NAME, 'No batches found, using estimated cost', {
-          preparationId,
-          preparationName: prepInfo.name,
-          estimatedCost: prepInfo.estimatedCost
-        })
-        return prepInfo.estimatedCost
-      }
-
-      // Fallback 3: Use lastKnownCost from preparation info
+      // Fallback 2: Use lastKnownCost from preparation info
       if (prepInfo.lastKnownCost && prepInfo.lastKnownCost > 0) {
         DebugUtils.warn(MODULE_NAME, 'Using last known cost from preparation info', {
           preparationId,
@@ -926,7 +919,7 @@ export class PreparationService {
 
         if (item.quantity > 0) {
           // SURPLUS: Create new batch with correction source
-          const costPerUnit = preparationInfo.lastKnownCost || preparationInfo.estimatedCost || 0
+          const costPerUnit = preparationInfo.lastKnownCost || 0
           const batchValue = item.quantity * costPerUnit
 
           const newBatch: PreparationBatch = {
@@ -1331,19 +1324,14 @@ export class PreparationService {
 
         // ⚡ FIX: Prevent zero-cost batches - use fallback if cost is 0
         if (actualCostPerUnit <= 0) {
-          const fallback =
-            preparationInfo.lastKnownCost || preparationInfo.estimatedCost || item.costPerUnit
+          const fallback = preparationInfo.lastKnownCost || item.costPerUnit
           if (fallback > 0) {
             DebugUtils.warn(MODULE_NAME, '⚠️ Zero cost detected, using fallback', {
               preparationId: item.preparationId,
               preparationName: preparationInfo.name,
               originalCost: actualCostPerUnit,
               fallbackCost: fallback,
-              source: preparationInfo.lastKnownCost
-                ? 'lastKnownCost'
-                : preparationInfo.estimatedCost
-                  ? 'estimatedCost'
-                  : 'catalogCost'
+              source: preparationInfo.lastKnownCost ? 'lastKnownCost' : 'catalogCost'
             })
             actualCostPerUnit = fallback
           } else {
