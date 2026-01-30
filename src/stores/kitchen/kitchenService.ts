@@ -390,13 +390,18 @@ export async function markItemAsReadyWithWriteOff(
       return { success: true }
     }
 
-    // 2. Update status to 'ready' immediately (UI update)
+    // 2. OPTIMISTIC UPDATE: Block duplicate clicks immediately (before any async)
+    // This prevents race condition when user double-clicks Ready button
+    item.writeOffStatus = 'processing'
+
+    // 3. Update status to 'ready' immediately (UI update)
     const statusResult = await updateItemStatus(orderId, item.id, 'ready')
     if (!statusResult.success) {
+      item.writeOffStatus = 'pending' // Rollback on failure
       return statusResult
     }
 
-    // 3. Mark write-off as 'processing' to prevent duplicate processing
+    // 4. Mark write-off as 'processing' in DB to prevent duplicate processing
     // Note: Using the already imported supabase client (top of file)
     await supabase
       .from('order_items')
@@ -406,7 +411,7 @@ export async function markItemAsReadyWithWriteOff(
       })
       .eq('id', item.id)
 
-    // 4. Queue background write-off task (fire and forget)
+    // 5. Queue background write-off task (fire and forget)
     const { useBackgroundTasks } = await import('@/core/background')
     const backgroundTasks = useBackgroundTasks()
 
@@ -431,7 +436,10 @@ export async function markItemAsReadyWithWriteOff(
             itemId: item.id,
             error: errorMsg
           })
-          // Reset status to pending so it can be retried
+          // Reset local status for retry (optimistic rollback)
+          item.writeOffStatus = 'pending'
+
+          // Reset status to pending in DB so it can be retried
           try {
             // Use the already imported supabase client
             const { error: resetError } = await supabase

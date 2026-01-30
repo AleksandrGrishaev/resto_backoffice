@@ -46,13 +46,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useKitchenOrders } from '@/stores/kitchen/composables'
 import { useKitchenStatus } from '@/stores/kitchen/composables'
 import type { PosOrder, OrderStatus } from '@/stores/pos/types'
 import StatusButton from './StatusButton.vue'
 
 const MODULE_NAME = 'OrderCard'
+
+// Debounce flag to prevent double-clicks (200ms)
+const isProcessingClick = ref(false)
 
 // =============================================
 // PROPS
@@ -92,6 +95,15 @@ const canUpdateStatus = computed(() => checkCanUpdate(props.order.status))
 // =============================================
 
 const handleStatusUpdate = () => {
+  // Debounce: prevent double-clicks (200ms)
+  if (isProcessingClick.value) {
+    return
+  }
+  isProcessingClick.value = true
+  setTimeout(() => {
+    isProcessingClick.value = false
+  }, 200)
+
   const nextStatus = getNextStatus(props.order.status)
   if (nextStatus) {
     emit('status-update', props.order.id, nextStatus)

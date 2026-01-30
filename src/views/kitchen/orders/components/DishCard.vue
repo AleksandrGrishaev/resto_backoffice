@@ -160,6 +160,9 @@ const { getNextStatus, getStatusColor, getStatusIcon } = useKitchenStatus()
 const elapsedSeconds = ref(0)
 let timerInterval: ReturnType<typeof setInterval> | null = null
 
+// Debounce flag to prevent double-clicks (200ms)
+const isProcessingClick = ref(false)
+
 // =============================================
 // COMPUTED PROPERTIES
 // =============================================
@@ -319,6 +322,15 @@ function getModifierDisplay(mod: GroupedModifier): string {
 // =============================================
 
 const handleStatusUpdate = () => {
+  // Debounce: prevent double-clicks (200ms)
+  if (isProcessingClick.value) {
+    return
+  }
+  isProcessingClick.value = true
+  setTimeout(() => {
+    isProcessingClick.value = false
+  }, 200)
+
   const nextStatus = getNextStatus(props.dish.status, props.dish.department)
   if (nextStatus && ['waiting', 'cooking', 'ready'].includes(nextStatus)) {
     emit('status-update', props.dish, nextStatus as 'waiting' | 'cooking' | 'ready')
