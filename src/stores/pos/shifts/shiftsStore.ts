@@ -1188,6 +1188,7 @@ export const useShiftsStore = defineStore('posShifts', () => {
   /**
    * Create unlinked expense (Scenario B: Offline mode)
    * Creates expense without order link - to be linked later in backoffice
+   * ✅ FIX: Now creates PendingPayment and sets relatedPaymentId for proper linking
    */
   async function createUnlinkedExpense(
     data: CreateUnlinkedExpenseDto
@@ -1227,6 +1228,31 @@ export const useShiftsStore = defineStore('posShifts', () => {
         notes: data.notes,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
+      }
+
+      // ✅ FIX: Create PendingPayment for expense linking in Backoffice
+      // This ensures updateExpenseLinkingStatusByPaymentId can find the expense
+      if (data.counteragentId) {
+        try {
+          const { payment } = await accountStore.createSupplierExpenseWithPayment({
+            accountId: accountId,
+            type: 'expense',
+            amount: data.amount,
+            description: data.description || `Supplier payment (to be linked)`,
+            expenseCategory: { type: 'expense', category: 'supplier' },
+            performedBy: data.performedBy,
+            counteragentId: data.counteragentId,
+            counteragentName: data.counteragentName,
+            source: 'pos'
+          })
+
+          expenseOperation.relatedPaymentId = payment.id
+          console.log('✅ Unlinked expense payment created:', payment.id)
+        } catch (paymentError) {
+          console.error('❌ Failed to create payment for unlinked expense:', paymentError)
+          // Continue - expense will be created without payment link
+          // User can manually create payment in Backoffice if needed
+        }
       }
 
       // Add to shift
