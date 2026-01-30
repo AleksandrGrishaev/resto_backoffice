@@ -119,6 +119,7 @@ export interface CreateOperationDto {
   counteragentName?: string
   relatedOrderIds?: string[]
   relatedPaymentId?: string
+  source?: 'pos' | 'backoffice' // ✅ NEW: Источник создания операции
 }
 
 export interface CreateTransferDto {
@@ -176,6 +177,7 @@ export interface PendingPayment extends BaseEntity {
   lastAmountUpdate?: string // Когда последний раз менялась сумма
   amountHistory?: AmountChange[] // История изменений суммы
   autoSyncEnabled?: boolean // Разрешена ли автосинхронизация суммы
+  source?: 'pos' | 'backoffice' // ✅ NEW: Откуда создан платеж (POS касса или Backoffice)
 
   // Payment completion fields
   paidAmount?: number
@@ -218,6 +220,7 @@ export interface CreatePaymentDto {
   }>
   sourceOrderId?: string
   autoSyncEnabled?: boolean
+  source?: 'pos' | 'backoffice' // ✅ NEW: Откуда создается платеж
 }
 
 export interface ProcessPaymentDto {

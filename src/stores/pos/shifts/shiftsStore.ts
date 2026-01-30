@@ -2,6 +2,7 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { supabase } from '@/supabase'
 import type {
   PosShift,
   ShiftStatus,
@@ -640,13 +641,65 @@ export const useShiftsStore = defineStore('posShifts', () => {
 
           console.log('✅ Supplier expense transaction created:', transaction.id)
 
-          // ❌ REMOVED: PendingPayment creation for direct supplier expenses
-          // REASON: Payment is already completed (paid from cash register)
-          // Creating a pending payment here causes:
-          // 1. Duplicate "unlinked" entries in Payments Management view
-          // 2. Confusion: payment is already completed, no need for pending payment
-          // The expense and transaction are sufficient records of this payment.
-          // If user needs to link this expense to a PO, they can do so via expense linking UI.
+          // ✅ STEP 2: Create PendingPayment for expense linking in Backoffice
+          // This is NOT a duplicate - it's the PRIMARY record for linking to Purchase Orders
+          // Transaction records the accounting entry, PendingPayment enables linking to POs
+          if (data.counteragentId) {
+            try {
+              // ✅ IMPROVED: Check database for duplicate payments (not just memory)
+              // This prevents race conditions when multiple cashiers create payments simultaneously
+              const { data: duplicateCheck, error: duplicateError } = await supabase.rpc(
+                'check_duplicate_payment',
+                {
+                  p_counteragent_id: data.counteragentId,
+                  p_amount: data.amount,
+                  p_date: new Date().toISOString().split('T')[0] // YYYY-MM-DD
+                }
+              )
+
+              if (duplicateError) {
+                console.error('❌ Failed to check for duplicate payment:', duplicateError)
+                // Fallback to in-memory check
+                const existingPayment = accountStore.payments.find(
+                  p =>
+                    p.counteragentId === data.counteragentId &&
+                    p.amount === data.amount &&
+                    Math.abs(new Date(p.createdAt).getTime() - Date.now()) < 5000
+                )
+                if (existingPayment) {
+                  expenseOperation.relatedPaymentId = existingPayment.id
+                  console.log('✅ Linked to existing payment (fallback):', existingPayment.id)
+                }
+              } else if (duplicateCheck && duplicateCheck[0]?.is_duplicate) {
+                // Payment already exists in database
+                expenseOperation.relatedPaymentId = duplicateCheck[0].payment_id
+                console.log(
+                  '✅ Linked to existing payment (database):',
+                  duplicateCheck[0].payment_id
+                )
+              } else {
+                // No duplicate found, create new payment
+                const { payment } = await accountStore.createSupplierExpenseWithPayment({
+                  accountId: data.accountId,
+                  type: 'expense',
+                  amount: data.amount,
+                  description: data.description,
+                  expenseCategory: { type: 'expense', category: 'supplier' },
+                  performedBy: data.performedBy,
+                  counteragentId: data.counteragentId,
+                  counteragentName: data.counteragentName,
+                  source: 'pos' // ✅ Mark payment as created from POS
+                })
+
+                expenseOperation.relatedPaymentId = payment.id
+                console.log('✅ Supplier expense payment created:', payment.id)
+              }
+            } catch (paymentError) {
+              console.error('❌ Failed to create payment for supplier expense:', paymentError)
+              // Continue - expense and transaction created, only payment linking failed
+              // User can manually create payment in Backoffice if needed
+            }
+          }
         } catch (txError) {
           console.error('❌ Failed to create supplier expense transaction:', txError)
           // Continue - expense is saved, transaction will be created at shift close

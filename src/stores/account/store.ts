@@ -1254,6 +1254,27 @@ export const useAccountStore = defineStore('account', () => {
         })
       }
 
+      // ✅ NEW: Update order bill_status after payment link
+      try {
+        const { usePurchaseOrders } = await import(
+          '@/stores/supplier_2/composables/usePurchaseOrders'
+        )
+        const { updateOrderBillStatus } = usePurchaseOrders()
+
+        await updateOrderBillStatus(data.orderId)
+
+        DebugUtils.info(MODULE_NAME, 'Updated order bill_status after payment link', {
+          orderId: data.orderId,
+          paymentId: data.paymentId
+        })
+      } catch (billStatusError) {
+        // Non-critical - bill status update failed but payment is linked
+        DebugUtils.warn(MODULE_NAME, 'Failed to update order bill_status', {
+          orderId: data.orderId,
+          error: billStatusError
+        })
+      }
+
       DebugUtils.info(MODULE_NAME, 'Payment linked to order successfully', {
         paymentId: data.paymentId,
         orderId: data.orderId,
@@ -1375,6 +1396,27 @@ export const useAccountStore = defineStore('account', () => {
         DebugUtils.warn(MODULE_NAME, 'Failed to update expense linkingStatus after unlink', {
           paymentId,
           error: expenseUpdateError
+        })
+      }
+
+      // ✅ NEW: Update order bill_status after unlink
+      try {
+        const { usePurchaseOrders } = await import(
+          '@/stores/supplier_2/composables/usePurchaseOrders'
+        )
+        const { updateOrderBillStatus } = usePurchaseOrders()
+
+        await updateOrderBillStatus(orderId)
+
+        DebugUtils.info(MODULE_NAME, 'Updated order bill_status after unlink', {
+          orderId,
+          paymentId
+        })
+      } catch (billStatusError) {
+        // Non-critical - bill status update failed but payment is unlinked
+        DebugUtils.warn(MODULE_NAME, 'Failed to update bill_status after unlink', {
+          orderId,
+          error: billStatusError
         })
       }
 
@@ -1908,7 +1950,8 @@ export const useAccountStore = defineStore('account', () => {
         priority: 'medium',
         createdBy: data.performedBy,
         // No linkedOrders - this payment needs to be linked to POs
-        usedAmount: 0
+        usedAmount: 0,
+        source: data.source || 'backoffice' // ✅ Use source from data, default to backoffice
       })
 
       // Mark as completed immediately (payment already happened via expense)

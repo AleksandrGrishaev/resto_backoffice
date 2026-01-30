@@ -51,7 +51,7 @@ function mapPaymentToExpenseFormat(payment: PendingPayment): ShiftExpenseOperati
     createdAt: payment.createdAt,
     updatedAt: payment.updatedAt,
     // Source tracking for UI distinction
-    sourceType: 'backoffice'
+    sourceType: payment.source || 'backoffice' // ✅ Use actual source from database
   }
 }
 
@@ -136,19 +136,54 @@ export function useExpenseLinking() {
   // 1. POS shift expenses with 'unlinked' or 'partially_linked' status
   // 2. Backoffice supplier payments that are not fully linked
   const unlinkedExpenses = computed((): ExpenseWithSource[] => {
-    // POS shift expenses
-    const shiftUnlinked = shiftsStore
-      .getExpensesByLinkingStatus('unlinked')
-      .map(e => ({ ...e, sourceType: 'pos' as const }))
-    const shiftPartiallyLinked = shiftsStore
-      .getExpensesByLinkingStatus('partially_linked')
-      .map(e => ({ ...e, sourceType: 'pos' as const }))
-
-    // Backoffice payments
+    // 1. Database payments (PRIMARY source)
+    // These are the source of truth and survive localStorage clear
     const backofficePayments = backofficeUnlinkedPayments.value
 
-    // Combine and sort by date (newest first)
-    const combined = [...shiftUnlinked, ...shiftPartiallyLinked, ...backofficePayments]
+    // 2. localStorage fallback (for unsync'd expenses only)
+    // Deduplication strategy:
+    // - Match by relatedPaymentId (if exists)
+    // - Match by counteragent + amount + date (for old expenses without relatedPaymentId)
+    const knownPaymentIds = new Set(backofficePayments.map(p => p.relatedPaymentId).filter(Boolean))
+
+    // Create deduplication keys: counteragentId|amount|date
+    const backofficeKeys = new Set(
+      backofficePayments.map(p => {
+        const date = new Date(p.createdAt).toISOString().split('T')[0]
+        return `${p.counteragentId}|${p.amount}|${date}`
+      })
+    )
+
+    const isDuplicate = (expense: ShiftExpenseOperation): boolean => {
+      // Check by relatedPaymentId first
+      if (expense.relatedPaymentId && knownPaymentIds.has(expense.relatedPaymentId)) {
+        return true
+      }
+
+      // Check by counteragent + amount + date (for old expenses)
+      if (expense.counteragentId) {
+        const date = new Date(expense.createdAt).toISOString().split('T')[0]
+        const key = `${expense.counteragentId}|${expense.amount}|${date}`
+        if (backofficeKeys.has(key)) {
+          return true
+        }
+      }
+
+      return false
+    }
+
+    const shiftUnlinked = shiftsStore
+      .getExpensesByLinkingStatus('unlinked')
+      .filter(e => !isDuplicate(e))
+      .map(e => ({ ...e, sourceType: 'pos' as const }))
+
+    const shiftPartiallyLinked = shiftsStore
+      .getExpensesByLinkingStatus('partially_linked')
+      .filter(e => !isDuplicate(e))
+      .map(e => ({ ...e, sourceType: 'pos' as const }))
+
+    // Combine: Database first (truth), then localStorage fallback
+    const combined = [...backofficePayments, ...shiftUnlinked, ...shiftPartiallyLinked]
     combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
     return combined
@@ -416,69 +451,37 @@ export function useExpenseLinking() {
       isLoading.value = true
       error.value = null
 
-      // ✅ If expense has relatedPaymentId, use accountStore.linkPaymentToOrder
-      // This ensures both PendingPayment and expense are updated atomically
-      if (expense.relatedPaymentId) {
-        const { useAccountStore } = await import('@/stores/account')
-        const accountStore = useAccountStore()
-
-        await accountStore.linkPaymentToOrder({
-          paymentId: expense.relatedPaymentId,
-          orderId: invoice.id,
-          orderNumber: invoice.orderNumber,
-          linkAmount: linkAmount
-        })
-
-        DebugUtils.info(MODULE_NAME, 'Expense linked via PendingPayment', {
-          expenseId: expense.id,
-          paymentId: expense.relatedPaymentId,
-          invoiceId: invoice.id,
-          amount: linkAmount
-        })
-
-        // linkPaymentToOrder already updates expense via updateExpenseLinkingStatusByPaymentId
-        return { success: true }
+      // ✅ ALWAYS use database linking (no legacy mode)
+      if (!expense.relatedPaymentId) {
+        // ❌ CRITICAL ERROR: Expense without payment ID
+        // This should NEVER happen after fix 1.1 (all expenses get payments)
+        // If it does happen, it means payment creation failed or this is old data
+        throw new Error(
+          'Expense has no payment ID. Cannot link without payment record. ' +
+            'This expense may be from before the database migration. ' +
+            'Please run migration 113 or create manual payment first.'
+        )
       }
 
-      // Fallback for old expenses without relatedPaymentId - update expense directly
-      const shift = shiftsStore.shifts.find(s => s.id === expense.shiftId)
-      if (!shift) {
-        throw new Error('Shift not found')
-      }
+      // Use accountStore.linkPaymentToOrder (updates database)
+      const { useAccountStore } = await import('@/stores/account')
+      const accountStore = useAccountStore()
 
-      const expenseIndex = shift.expenseOperations.findIndex(e => e.id === expense.id)
-      if (expenseIndex === -1) {
-        throw new Error('Expense not found in shift')
-      }
+      await accountStore.linkPaymentToOrder({
+        paymentId: expense.relatedPaymentId,
+        orderId: invoice.id,
+        orderNumber: invoice.orderNumber,
+        linkAmount: linkAmount
+      })
 
-      // Update expense with link info
-      const updatedExpense = {
-        ...shift.expenseOperations[expenseIndex],
-        linkedOrderId: invoice.id,
-        invoiceNumber: invoice.orderNumber,
-        linkingStatus: 'linked' as ExpenseLinkingStatus,
-        linkedAt: new Date().toISOString(),
-        linkedBy: performedBy,
-        updatedAt: new Date().toISOString()
-      }
-
-      shift.expenseOperations[expenseIndex] = updatedExpense
-
-      // Save to localStorage (through service)
-      const storedShifts = localStorage.getItem('pos_shifts')
-      const allShifts = storedShifts ? JSON.parse(storedShifts) : []
-      const shiftIndex = allShifts.findIndex((s: { id: string }) => s.id === shift.id)
-      if (shiftIndex !== -1) {
-        allShifts[shiftIndex] = shift
-        localStorage.setItem('pos_shifts', JSON.stringify(allShifts))
-      }
-
-      DebugUtils.info(MODULE_NAME, 'Expense linked to invoice (legacy mode)', {
+      DebugUtils.info(MODULE_NAME, 'Expense linked via database', {
         expenseId: expense.id,
+        paymentId: expense.relatedPaymentId,
         invoiceId: invoice.id,
         amount: linkAmount
       })
 
+      // linkPaymentToOrder already updates expense via updateExpenseLinkingStatusByPaymentId
       return { success: true }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to link expense'
@@ -504,64 +507,29 @@ export function useExpenseLinking() {
       isLoading.value = true
       error.value = null
 
-      // ✅ If expense has relatedPaymentId and linkedOrderId, use accountStore.unlinkPaymentFromOrder
-      // This ensures both PendingPayment and expense are updated atomically
-      if (expense.relatedPaymentId && expense.linkedOrderId) {
-        const { useAccountStore } = await import('@/stores/account')
-        const accountStore = useAccountStore()
-
-        await accountStore.unlinkPaymentFromOrder(expense.relatedPaymentId, expense.linkedOrderId)
-
-        DebugUtils.info(MODULE_NAME, 'Expense unlinked via PendingPayment', {
-          expenseId: expense.id,
-          paymentId: expense.relatedPaymentId,
-          orderId: expense.linkedOrderId,
-          reason
-        })
-
-        // unlinkPaymentFromOrder already updates expense via updateExpenseLinkingStatusByPaymentId
-        return { success: true }
+      // ✅ ALWAYS require relatedPaymentId for unlinking
+      if (!expense.relatedPaymentId || !expense.linkedOrderId) {
+        throw new Error(
+          'Cannot unlink: Expense has no payment ID or order link. ' +
+            'This expense may be from before migration 113. ' +
+            'Manual database update required.'
+        )
       }
 
-      // Fallback for old expenses without relatedPaymentId - update expense directly
-      const shift = shiftsStore.shifts.find(s => s.id === expense.shiftId)
-      if (!shift) {
-        throw new Error('Shift not found')
-      }
+      // Use accountStore.unlinkPaymentFromOrder (updates database)
+      const { useAccountStore } = await import('@/stores/account')
+      const accountStore = useAccountStore()
 
-      const expenseIndex = shift.expenseOperations.findIndex(e => e.id === expense.id)
-      if (expenseIndex === -1) {
-        throw new Error('Expense not found in shift')
-      }
+      await accountStore.unlinkPaymentFromOrder(expense.relatedPaymentId, expense.linkedOrderId)
 
-      // Update expense - remove link
-      const updatedExpense = {
-        ...shift.expenseOperations[expenseIndex],
-        linkedOrderId: undefined,
-        invoiceNumber: undefined,
-        linkingStatus: 'unlinked' as ExpenseLinkingStatus,
-        unlinkedAt: new Date().toISOString(),
-        unlinkedBy: performedBy,
-        unlinkedReason: reason,
-        updatedAt: new Date().toISOString()
-      }
-
-      shift.expenseOperations[expenseIndex] = updatedExpense
-
-      // Save to localStorage
-      const storedShifts = localStorage.getItem('pos_shifts')
-      const allShifts = storedShifts ? JSON.parse(storedShifts) : []
-      const shiftIndex = allShifts.findIndex((s: { id: string }) => s.id === shift.id)
-      if (shiftIndex !== -1) {
-        allShifts[shiftIndex] = shift
-        localStorage.setItem('pos_shifts', JSON.stringify(allShifts))
-      }
-
-      DebugUtils.info(MODULE_NAME, 'Expense unlinked from invoice (legacy mode)', {
+      DebugUtils.info(MODULE_NAME, 'Expense unlinked via database', {
         expenseId: expense.id,
+        paymentId: expense.relatedPaymentId,
+        orderId: expense.linkedOrderId,
         reason
       })
 
+      // unlinkPaymentFromOrder already updates expense via updateExpenseLinkingStatusByPaymentId
       return { success: true }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to unlink expense'
