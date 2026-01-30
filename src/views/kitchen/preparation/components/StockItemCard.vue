@@ -53,15 +53,31 @@
         </div>
       </div>
 
+      <!-- Batch Status Breakdown by Quantity -->
+      <div class="batch-breakdown">
+        <div v-if="batchQuantities.active > 0" class="batch-qty batch-active">
+          <span class="qty">{{ formatQty(batchQuantities.active) }}</span>
+          <span class="label">ok</span>
+        </div>
+        <div v-if="batchQuantities.expiring > 0" class="batch-qty batch-expiring">
+          <span class="qty">{{ formatQty(batchQuantities.expiring) }}</span>
+          <span class="label">expiring</span>
+        </div>
+        <div v-if="batchQuantities.expired > 0" class="batch-qty batch-expired">
+          <span class="qty">{{ formatQty(batchQuantities.expired) }}</span>
+          <span class="label">expired</span>
+        </div>
+      </div>
+
       <!-- Status Badges -->
       <div class="stock-badges">
-        <v-chip v-if="isOutOfStock" color="error" size="x-small" variant="flat">OUT</v-chip>
-        <v-chip v-else-if="isExpired" color="error" size="x-small" variant="flat">EXPIRED</v-chip>
-        <v-chip v-else-if="isExpiring" color="warning" size="x-small" variant="tonal">
+        <v-chip v-if="isOutOfStock" color="error" size="small" variant="flat">OUT</v-chip>
+        <v-chip v-else-if="isExpired" color="error" size="small" variant="flat">EXPIRED</v-chip>
+        <v-chip v-else-if="isExpiring" color="warning" size="small" variant="tonal">
           Expiring
         </v-chip>
-        <v-chip v-else-if="isLowStock" color="warning" size="x-small" variant="tonal">Low</v-chip>
-        <v-chip v-else color="success" size="x-small" variant="tonal">OK</v-chip>
+        <v-chip v-else-if="isLowStock" color="warning" size="small" variant="tonal">Low</v-chip>
+        <v-chip v-else color="success" size="small" variant="tonal">OK</v-chip>
       </div>
 
       <!-- Quick Actions -->
@@ -129,6 +145,45 @@ const statusClass = computed(() => {
   if (isOutOfStock.value || isExpired.value) return 'status-error'
   if (isLowStock.value || isExpiring.value) return 'status-warning'
   return 'status-success'
+})
+
+/**
+ * Calculate quantity by status (active, expiring, expired) in units (ml/gram)
+ */
+const batchQuantities = computed(() => {
+  const batches = props.balance.batches || []
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const nearExpiryDays = 3 // Days before expiry to consider "expiring"
+
+  let active = 0
+  let expiring = 0
+  let expired = 0
+
+  for (const batch of batches) {
+    if (batch.currentQuantity <= 0) continue // Skip depleted batches
+
+    const qty = batch.currentQuantity
+
+    if (!batch.expiryDate) {
+      active += qty
+      continue
+    }
+
+    const expiryDate = new Date(batch.expiryDate)
+    expiryDate.setHours(0, 0, 0, 0)
+    const diffDays = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+
+    if (diffDays < 0) {
+      expired += qty
+    } else if (diffDays <= nearExpiryDays) {
+      expiring += qty
+    } else {
+      active += qty
+    }
+  }
+
+  return { active, expiring, expired }
 })
 
 const expiryIconColor = computed(() => {
@@ -252,13 +307,24 @@ function formatCost(cost: number): string {
     maximumFractionDigits: 0
   }).format(cost)
 }
+
+/**
+ * Format quantity with unit for batch breakdown
+ */
+function formatQty(value: number): string {
+  const unit = props.balance.unit
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}k`
+  }
+  return `${Math.round(value)}${unit}`
+}
 </script>
 
 <style scoped lang="scss">
 .stock-card {
   overflow: visible;
   transition: all 0.2s;
-  min-height: 64px;
+  min-height: 72px;
   cursor: pointer;
 
   &.stock-out,
@@ -282,14 +348,15 @@ function formatCost(cost: number): string {
 .card-content {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 56px;
+  gap: 16px;
+  min-height: 64px;
+  padding: 12px 16px !important;
 }
 
 .status-indicator {
-  width: 4px;
-  height: 40px;
-  border-radius: 2px;
+  width: 5px;
+  height: 48px;
+  border-radius: 3px;
   flex-shrink: 0;
 
   &.status-error {
@@ -311,20 +378,21 @@ function formatCost(cost: number): string {
 }
 
 .stock-name {
-  font-weight: 500;
-  font-size: 14px;
+  font-weight: 600;
+  font-size: 15px;
   color: var(--v-theme-on-surface);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-bottom: 2px;
 }
 
 .stock-details {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 4px;
-  font-size: 12px;
+  gap: 14px;
+  margin-top: 6px;
+  font-size: 13px;
   color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
@@ -335,6 +403,50 @@ function formatCost(cost: number): string {
 
 .detail-value {
   font-weight: 500;
+}
+
+// Batch breakdown styles - shows quantity by status
+.batch-breakdown {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.batch-qty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 8px;
+  min-width: 56px;
+
+  .qty {
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-top: 2px;
+  }
+
+  &.batch-active {
+    background-color: rgba(var(--v-theme-success), 0.15);
+    color: rgb(var(--v-theme-success));
+  }
+
+  &.batch-expiring {
+    background-color: rgba(var(--v-theme-warning), 0.2);
+    color: rgb(var(--v-theme-warning));
+  }
+
+  &.batch-expired {
+    background-color: rgba(var(--v-theme-error), 0.2);
+    color: rgb(var(--v-theme-error));
+  }
 }
 
 .stock-badges {

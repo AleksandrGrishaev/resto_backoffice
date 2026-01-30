@@ -46,15 +46,18 @@ export async function fetchTodayHistory(
   })
 
   // Fetch all data sources in parallel
-  const [productionTasksResult, preparationOpsResult, storageOpsResult] = await Promise.all([
-    fetchCompletedProductions(startOfDay, endOfDay, department),
-    fetchPreparationWriteOffs(startOfDay, endOfDay, department),
-    fetchProductWriteOffs(startOfDay, endOfDay, department)
-  ])
+  const [productionTasksResult, directProductionsResult, preparationOpsResult, storageOpsResult] =
+    await Promise.all([
+      fetchCompletedProductions(startOfDay, endOfDay, department),
+      fetchDirectProductions(startOfDay, endOfDay, department),
+      fetchPreparationWriteOffs(startOfDay, endOfDay, department),
+      fetchProductWriteOffs(startOfDay, endOfDay, department)
+    ])
 
   // Transform and merge all items
   const items: UnifiedHistoryItem[] = [
     ...transformProductionTasks(productionTasksResult),
+    ...transformDirectProductions(directProductionsResult),
     ...transformPreparationWriteOffs(preparationOpsResult),
     ...transformProductWriteOffs(storageOpsResult)
   ]
@@ -98,6 +101,36 @@ async function fetchCompletedProductions(
 
   if (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to fetch productions', { error })
+    return []
+  }
+
+  return data || []
+}
+
+/**
+ * Fetch direct productions (via "New Production" button)
+ * These are stored in preparation_operations with operation_type='receipt'
+ */
+async function fetchDirectProductions(
+  startOfDay: string,
+  endOfDay: string,
+  department: string
+): Promise<PreparationOperationRow[]> {
+  let query = supabase
+    .from('preparation_operations')
+    .select('*')
+    .eq('operation_type', 'receipt')
+    .gte('operation_date', startOfDay)
+    .lte('operation_date', endOfDay)
+
+  if (department !== 'all') {
+    query = query.eq('department', department)
+  }
+
+  const { data, error } = await query.order('operation_date', { ascending: false })
+
+  if (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to fetch direct productions', { error })
     return []
   }
 
@@ -176,6 +209,39 @@ function transformProductionTasks(rows: ProductionScheduleRow[]): UnifiedHistory
       portionSize: row.portion_size || undefined
     }
   }))
+}
+
+/**
+ * Transform direct productions from preparation_operations (type='receipt')
+ */
+function transformDirectProductions(rows: PreparationOperationRow[]): UnifiedHistoryItem[] {
+  const items: UnifiedHistoryItem[] = []
+
+  for (const row of rows) {
+    const operationItems = row.items || []
+
+    // Create one history item per produced item
+    for (const item of operationItems) {
+      items.push({
+        id: `${row.id}-${item.id || item.preparationId || item.preparation_id}`,
+        type: 'production' as const,
+        timestamp: row.operation_date,
+        displayName: item.preparationName || item.preparation_name || 'Unknown',
+        quantity: item.quantity || 0,
+        unit: item.unit || 'g',
+        totalValue: item.totalCost || item.total_cost || 0,
+        responsiblePerson: row.responsible_person || undefined,
+        department: row.department as 'kitchen' | 'bar',
+        productionDetails: {
+          productionSlot: 'urgent' as const, // Direct productions are typically urgent/ad-hoc
+          portionType: undefined,
+          portionSize: undefined
+        }
+      })
+    }
+  }
+
+  return items
 }
 
 function transformPreparationWriteOffs(rows: PreparationOperationRow[]): UnifiedHistoryItem[] {
