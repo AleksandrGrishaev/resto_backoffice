@@ -54,7 +54,7 @@ import StatusButton from './StatusButton.vue'
 
 const MODULE_NAME = 'OrderCard'
 
-// Debounce flag to prevent double-clicks (200ms)
+// Debounce flag to prevent double-clicks (400ms)
 const isProcessingClick = ref(false)
 
 // =============================================
@@ -95,14 +95,14 @@ const canUpdateStatus = computed(() => checkCanUpdate(props.order.status))
 // =============================================
 
 const handleStatusUpdate = () => {
-  // Debounce: prevent double-clicks (200ms)
+  // Debounce: prevent double-clicks (400ms)
   if (isProcessingClick.value) {
     return
   }
   isProcessingClick.value = true
   setTimeout(() => {
     isProcessingClick.value = false
-  }, 200)
+  }, 400)
 
   const nextStatus = getNextStatus(props.order.status)
   if (nextStatus) {

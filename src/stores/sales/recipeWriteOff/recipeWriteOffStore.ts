@@ -273,7 +273,11 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
           const { data: updatedItems, error } = await supabase
             .from('order_items')
             .update({
-              write_off_operation_id: saveResult.data.storageOperationId
+              write_off_operation_id: saveResult.data.storageOperationId,
+              recipe_writeoff_id: saveResult.data.id,
+              write_off_status: 'completed',
+              write_off_triggered_by: 'payment_fallback',
+              write_off_at: new Date().toISOString()
             })
             .eq('menu_item_id', billItem.menuItemId)
             .is('write_off_operation_id', null)
@@ -285,7 +289,7 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
             console.error(`⚠️ [${MODULE_NAME}] Failed to update order_items:`, error)
           } else {
             console.log(
-              `✅ [${MODULE_NAME}] Updated ${updatedItems?.length || 0} order_items with write_off_operation_id`
+              `✅ [${MODULE_NAME}] Updated ${updatedItems?.length || 0} order_items with recipe_writeoff_id`
             )
           }
         } catch (updateError) {
@@ -461,7 +465,11 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
           const { data: updatedItems, error } = await supabase
             .from('order_items')
             .update({
-              write_off_operation_id: saveResult.data.storageOperationId
+              write_off_operation_id: saveResult.data.storageOperationId,
+              recipe_writeoff_id: saveResult.data.id,
+              write_off_status: 'completed',
+              write_off_triggered_by: 'payment_fallback',
+              write_off_at: new Date().toISOString()
             })
             .eq('menu_item_id', billItem.menuItemId)
             .is('write_off_operation_id', null)
@@ -473,7 +481,7 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
             console.error(`⚠️ [${MODULE_NAME}] Failed to update order_items:`, error)
           } else {
             console.log(
-              `✅ [${MODULE_NAME}] Updated ${updatedItems?.length || 0} order_items with write_off_operation_id`
+              `✅ [${MODULE_NAME}] Updated ${updatedItems?.length || 0} order_items with recipe_writeoff_id`
             )
           }
         } catch (updateError) {
