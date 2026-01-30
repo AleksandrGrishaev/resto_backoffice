@@ -51,5 +51,8 @@ PRODUCTION_CREDENTIALS.md
 # Playwright MCP temporary files
 .playwright-mcp/
 
+# MCP config (contains environment-specific database refs)
+.mcp.json
+
 # Temporary data files
 Temp/
