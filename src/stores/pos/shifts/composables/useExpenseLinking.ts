@@ -1,6 +1,7 @@
 // src/stores/pos/shifts/composables/useExpenseLinking.ts
 // Sprint 4: Expense Linking Composable for Backoffice
 // Sprint 7: Extended to include Backoffice payments
+// Updated: 2026-01-30 - Added tolerance support for linked status
 
 import { ref, computed } from 'vue'
 import { supabase } from '@/supabase'
@@ -8,7 +9,7 @@ import { useShiftsStore } from '../shiftsStore'
 import { useAccountStore } from '@/stores/account'
 import type { ShiftExpenseOperation, ExpenseLinkingStatus } from '../types'
 import type { PendingPayment } from '@/stores/account/types'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, isPaymentComplete, DEFAULT_PAYMENT_TOLERANCE } from '@/utils'
 
 const MODULE_NAME = 'useExpenseLinking'
 
@@ -19,12 +20,13 @@ const MODULE_NAME = 'useExpenseLinking'
 function mapPaymentToExpenseFormat(payment: PendingPayment): ShiftExpenseOperation & {
   sourceType: 'backoffice' | 'pos'
 } {
-  // Calculate linking status based on linkedOrders
+  // Calculate linking status based on linkedOrders (with tolerance)
   const totalLinked =
     payment.linkedOrders?.filter(o => o.isActive).reduce((sum, o) => sum + o.linkedAmount, 0) || 0
 
   let linkingStatus: ExpenseLinkingStatus = 'unlinked'
-  if (totalLinked >= payment.amount) {
+  // Use tolerance: if difference <= 1000 IDR, consider fully linked
+  if (isPaymentComplete(totalLinked, payment.amount, DEFAULT_PAYMENT_TOLERANCE)) {
     linkingStatus = 'linked'
   } else if (totalLinked > 0) {
     linkingStatus = 'partially_linked'
@@ -126,8 +128,9 @@ export function useExpenseLinking() {
         const totalLinked =
           p.linkedOrders?.filter(o => o.isActive).reduce((sum, o) => sum + o.linkedAmount, 0) || 0
 
-        // Include if not fully linked
-        return totalLinked < p.amount
+        // Include if not fully linked (with tolerance)
+        // If difference <= 1000 IDR, consider fully linked and exclude
+        return !isPaymentComplete(totalLinked, p.amount, DEFAULT_PAYMENT_TOLERANCE)
       })
       .map(p => mapPaymentToExpenseFormat(p))
   })
@@ -204,8 +207,10 @@ export function useExpenseLinking() {
         const totalLinked =
           p.linkedOrders?.filter(o => o.isActive).reduce((sum, o) => sum + o.linkedAmount, 0) || 0
 
-        // Include only if fully linked
-        return totalLinked >= p.amount && totalLinked > 0
+        // Include only if fully linked (with tolerance: <= 1000 IDR difference)
+        return (
+          isPaymentComplete(totalLinked, p.amount, DEFAULT_PAYMENT_TOLERANCE) && totalLinked > 0
+        )
       })
       .map(p => mapPaymentToExpenseFormat(p))
   })

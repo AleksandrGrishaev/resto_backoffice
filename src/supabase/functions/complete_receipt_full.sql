@@ -3,6 +3,7 @@
 -- Performance: Replaces 45-60+ sequential API calls with 1 RPC call (20s → 1-2s)
 -- Created: 2026-01-02
 -- Updated: 2026-01-27 (Migration 098 - fix JSON key names)
+-- Updated: 2026-01-30 (Round amounts to whole IDR to avoid tolerance issues)
 
 -- PARAMETERS:
 -- p_receipt_id: Receipt ID to complete
@@ -118,7 +119,7 @@ BEGIN
     responsible_person, items, total_value, status, warehouse_id, created_at, updated_at
   ) VALUES (
     v_operation_id, 'receipt', 'RCV-' || v_receipt_number, p_delivery_date, 'kitchen',
-    'System', v_items_array, v_actual_delivered, 'confirmed', p_warehouse_id, NOW(), NOW()
+    'System', v_items_array, ROUND(v_actual_delivered), 'confirmed', p_warehouse_id, NOW(), NOW()
   );
 
   -- 5. UPDATE RECEIPT STATUS
@@ -128,11 +129,14 @@ BEGIN
       updated_at = NOW()
   WHERE id = p_receipt_id;
 
+  -- Round to whole IDR to avoid tolerance issues (e.g., 366002.70 -> 366003)
+  v_actual_delivered := ROUND(v_actual_delivered);
+
   -- 6. UPDATE ORDER STATUS WITH AMOUNT FIELDS
   UPDATE supplierstore_orders
   SET status = 'delivered',
       receipt_completed_at = NOW(),
-      original_total_amount = v_original_total,
+      original_total_amount = ROUND(v_original_total),
       actual_delivered_amount = v_actual_delivered,
       total_amount = v_actual_delivered,
       updated_at = NOW()

@@ -14,7 +14,7 @@ CREATE OR REPLACE FUNCTION check_duplicate_payment(
 RETURNS TABLE (
   is_duplicate BOOLEAN,
   payment_id TEXT,
-  created_at TIMESTAMPTZ
+  payment_created_at TIMESTAMPTZ
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -23,15 +23,15 @@ BEGIN
   RETURN QUERY
   SELECT
     TRUE as is_duplicate,
-    id as payment_id,
-    created_at
-  FROM pending_payments
-  WHERE counteragent_id = p_counteragent_id
-    AND amount = p_amount
-    AND DATE(created_at) = p_date
-    AND status = 'completed'
-    AND category = 'supplier'
-  ORDER BY created_at DESC
+    pp.id as payment_id,
+    pp.created_at as payment_created_at
+  FROM pending_payments pp
+  WHERE pp.counteragent_id = p_counteragent_id
+    AND pp.amount = p_amount
+    AND DATE(pp.created_at) = p_date
+    AND pp.status = 'completed'
+    AND pp.category = 'supplier'
+  ORDER BY pp.created_at DESC
   LIMIT 1;
 
   -- If no results, return FALSE
