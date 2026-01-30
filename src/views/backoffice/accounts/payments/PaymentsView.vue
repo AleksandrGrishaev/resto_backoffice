@@ -135,6 +135,18 @@ async function handleLinkExpense(expense: ShiftExpenseOperation) {
     expenseAvailableAmount.value = expense.amount
   }
 
+  // ✅ FIX: Validate before opening dialog - prevent linking fully linked payments
+  if (expenseAvailableAmount.value <= 0) {
+    console.warn('Cannot link expense: no available amount remaining', {
+      expenseId: expense.id,
+      paymentId: expense.relatedPaymentId,
+      availableAmount: expenseAvailableAmount.value
+    })
+    // Force refresh to update UI (payment might be fully linked but cache is stale)
+    await accountStore.fetchPayments(true)
+    return
+  }
+
   // Get invoice suggestions for this expense
   invoiceSuggestions.value = await getInvoiceSuggestions(expense)
 

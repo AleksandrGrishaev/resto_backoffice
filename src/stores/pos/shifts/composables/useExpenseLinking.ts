@@ -487,6 +487,11 @@ export function useExpenseLinking() {
       })
 
       // linkPaymentToOrder already updates expense via updateExpenseLinkingStatusByPaymentId
+
+      // ✅ FIX: Refresh payments cache to ensure UI updates correctly
+      // This ensures fully linked payments disappear from Unlinked tab
+      await accountStore.fetchPayments(true)
+
       return { success: true }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to link expense'

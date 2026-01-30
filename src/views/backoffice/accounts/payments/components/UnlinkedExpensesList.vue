@@ -108,6 +108,10 @@ const sourceOptions = [
 const filteredExpenses = computed(() => {
   let result = [...props.expenses]
 
+  // ✅ FIX: Safety filter - exclude payments with no available amount
+  // This ensures fully linked payments don't appear even if cache is stale
+  result = result.filter(exp => getAvailableAmount(exp) > 0)
+
   // Filter by account
   if (accountFilter.value) {
     result = result.filter(exp => exp.relatedAccountId === accountFilter.value)
@@ -295,7 +299,13 @@ function formatDate(dateStr: string): string {
           </div>
 
           <template #append>
-            <v-btn color="primary" variant="flat" size="small" @click="handleLink(expense)">
+            <v-btn
+              color="primary"
+              variant="flat"
+              size="small"
+              :disabled="getAvailableAmount(expense) <= 0"
+              @click="handleLink(expense)"
+            >
               <v-icon start>mdi-link-variant</v-icon>
               Link
             </v-btn>
