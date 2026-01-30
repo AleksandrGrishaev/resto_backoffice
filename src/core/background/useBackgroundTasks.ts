@@ -840,6 +840,23 @@ export function useBackgroundTasks() {
     payload: ReadyWriteOffTaskPayload,
     callbacks?: TaskCallbacks
   ): Promise<string> {
+    // DEDUPLICATION: Check if task for this itemId already exists (queued or processing)
+    const existingTask = tasks.value.find(
+      t =>
+        t.type === 'ready_writeoff' &&
+        (t.status === 'queued' || t.status === 'processing') &&
+        (t.payload as ReadyWriteOffTaskPayload).itemId === payload.itemId
+    )
+
+    if (existingTask) {
+      DebugUtils.warn(MODULE_NAME, 'Duplicate write-off task blocked', {
+        existingTaskId: existingTask.id,
+        itemId: payload.itemId,
+        menuItem: payload.menuItemName
+      })
+      return existingTask.id // Return existing task ID instead of creating duplicate
+    }
+
     const taskId = generateId()
     const description = `Write-off: ${payload.menuItemName} (${payload.quantity}x)`
 

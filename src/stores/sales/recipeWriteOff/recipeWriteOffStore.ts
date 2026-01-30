@@ -538,6 +538,23 @@ export const useRecipeWriteOffStore = defineStore('recipeWriteOff', () => {
     })
 
     try {
+      // 0. IDEMPOTENCY CHECK: Verify item doesn't already have a write-off (DB check)
+      const { supabase } = await import('@/supabase/client')
+      const { data: existingItem } = await supabase
+        .from('order_items')
+        .select('write_off_status, recipe_writeoff_id')
+        .eq('id', params.itemId)
+        .single()
+
+      if (existingItem?.write_off_status === 'completed' || existingItem?.recipe_writeoff_id) {
+        console.log(`⏭️ [${MODULE_NAME}] Item already has write-off (DB check), skipping`, {
+          itemId: params.itemId,
+          status: existingItem?.write_off_status,
+          recipeWriteOffId: existingItem?.recipe_writeoff_id
+        })
+        return null
+      }
+
       // 1. Get menu item details
       const menuItem = menuStore.menuItems.find(item => item.id === params.menuItemId)
       if (!menuItem) {
