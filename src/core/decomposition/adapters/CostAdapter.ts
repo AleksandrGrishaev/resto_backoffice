@@ -184,7 +184,7 @@ export class CostAdapter implements IDecompositionAdapter<ActualCostBreakdown> {
           preparationName: fifoResult.preparationName || node?.preparationName || 'Unknown',
           quantity: fifoResult.allocatedQuantity,
           unit: node?.unit || 'gram',
-          avgCostPerUnit: fifoResult.averageCostPerUnit,
+          averageCostPerUnit: fifoResult.averageCostPerUnit,
           totalCost: fifoResult.totalCost,
           allocations,
           usedNegativeBatch: fifoResult.deficit > 0,
@@ -197,7 +197,7 @@ export class CostAdapter implements IDecompositionAdapter<ActualCostBreakdown> {
           productName: fifoResult.productName || node?.productName || 'Unknown',
           quantity: fifoResult.allocatedQuantity,
           unit: node?.unit || 'gram',
-          avgCostPerUnit: fifoResult.averageCostPerUnit,
+          averageCostPerUnit: fifoResult.averageCostPerUnit,
           totalCost: fifoResult.totalCost,
           allocations,
           source: fifoResult.usedFallback ? 'fallback' : 'fifo'

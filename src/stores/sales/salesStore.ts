@@ -17,6 +17,20 @@ import type { PosPayment, PosBillItem } from '@/stores/pos/types'
 
 const MODULE_NAME = 'SalesStore'
 
+/**
+ * Type guard to validate cachedActualCost structure
+ * Prevents runtime crashes on malformed data
+ */
+function isValidCachedCost(cost: unknown): cost is ActualCostBreakdown {
+  if (!cost || typeof cost !== 'object') return false
+  const c = cost as Record<string, unknown>
+  return (
+    typeof c.totalCost === 'number' &&
+    Array.isArray(c.productCosts) &&
+    Array.isArray(c.preparationCosts)
+  )
+}
+
 export const useSalesStore = defineStore('sales', () => {
   // Dependencies
   const recipeWriteOffStore = useRecipeWriteOffStore()
@@ -320,70 +334,120 @@ export const useSalesStore = defineStore('sales', () => {
           continue
         }
 
-        const menuInput = {
-          menuItemId: billItem.menuItemId,
-          variantId: billItem.variantId || variant.id,
-          quantity: billItem.quantity,
-          selectedModifiers: billItem.selectedModifiers
+        // ✨ FAST PATH CHECK: If item has cached cost from Ready-Triggered Write-off
+        // Use type guard to validate cachedActualCost structure
+        const hasCachedCost =
+          billItem.writeOffStatus === 'completed' &&
+          isValidCachedCost(billItem.cachedActualCost) &&
+          typeof billItem.recipeWriteOffId === 'string' &&
+          billItem.recipeWriteOffId.length > 0
+
+        let actualCost: ActualCostBreakdown
+        let writeOffResult: WriteOffResult | null = null
+        let decompositionSummary: DecompositionSummary
+
+        if (hasCachedCost) {
+          // ⚡ FAST PATH: Use cached cost, skip decomposition entirely
+          console.log(
+            `⚡ [${MODULE_NAME}] FAST PATH: Using cached cost for ${billItem.menuItemName}`
+          )
+
+          // Type guard already validated, safe to use
+          actualCost = billItem.cachedActualCost as ActualCostBreakdown
+
+          // Create minimal decomposition summary from cached data
+          // Note: ActualCostBreakdown uses productCosts/preparationCosts (not products/preparations)
+          decompositionSummary = {
+            totalProducts: actualCost.productCosts?.length || 0,
+            totalPreparations: actualCost.preparationCosts?.length || 0,
+            totalCost: actualCost.totalCost,
+            decomposedItems: [
+              ...(actualCost.productCosts || []).map(p => ({
+                type: 'product' as const,
+                productId: p.productId,
+                productName: p.productName,
+                quantity: p.quantity,
+                unit: p.unit,
+                costPerUnit: p.averageCostPerUnit,
+                totalCost: p.totalCost,
+                path: []
+              })),
+              ...(actualCost.preparationCosts || []).map(p => ({
+                type: 'preparation' as const,
+                preparationId: p.preparationId,
+                preparationName: p.preparationName,
+                quantity: p.quantity,
+                unit: p.unit,
+                costPerUnit: p.averageCostPerUnit,
+                totalCost: p.totalCost,
+                path: []
+              }))
+            ]
+          }
+        } else {
+          // 📦 FALLBACK: Normal decomposition (e.g., takeaway paid before kitchen ready)
+          console.log(`📦 [${MODULE_NAME}] FALLBACK: Decomposing ${billItem.menuItemName}`)
+
+          const menuInput = {
+            menuItemId: billItem.menuItemId,
+            variantId: billItem.variantId || variant.id,
+            quantity: billItem.quantity,
+            selectedModifiers: billItem.selectedModifiers
+          }
+
+          // ⚡ PERFORMANCE FIX: Single traversal for both adapters (same options)
+          const traversalResult = await engine.traverse(
+            menuInput,
+            costAdapter.getTraversalOptions()
+          )
+
+          // Both adapters use the SAME traversal result
+          writeOffResult = await writeOffAdapter.transform(traversalResult, menuInput)
+          const totalCost = writeOffResult.totalBaseCost
+
+          actualCost = await costAdapter.transform(traversalResult, menuInput)
+
+          // Create decomposition summary from WriteOffResult
+          const decomposedItemsForSummary = writeOffResult.items.map(item => ({
+            type: item.type,
+            productId: item.productId,
+            productName: item.productName,
+            preparationId: item.preparationId,
+            preparationName: item.preparationName,
+            quantity: item.quantity,
+            unit: item.unit,
+            costPerUnit: item.costPerUnit,
+            totalCost: item.totalCost,
+            path: item.path
+          }))
+
+          decompositionSummary = {
+            totalProducts: writeOffResult.totalProducts,
+            totalPreparations: writeOffResult.totalPreparations,
+            totalCost,
+            decomposedItems: decomposedItemsForSummary
+          }
         }
-
-        // ⚡ PERFORMANCE FIX: Single traversal for both adapters (same options)
-        const traversalResult = await engine.traverse(menuInput, costAdapter.getTraversalOptions())
-
-        // Both adapters use the SAME traversal result
-        const writeOffResult: WriteOffResult = await writeOffAdapter.transform(
-          traversalResult,
-          menuInput
-        )
-        const totalCost = writeOffResult.totalBaseCost
-
-        const actualCost: ActualCostBreakdown = await costAdapter.transform(
-          traversalResult,
-          menuInput
-        )
 
         // 3. Get allocated bill discount for THIS specific item
         const itemWithDiscount = itemsWithDiscount.find(i => i.id === billItem.id)
         const allocatedDiscount = itemWithDiscount?.allocatedBillDiscount || 0
 
-        // 4. Calculate profit using ACTUAL cost (✅ SPRINT 2: Use actualCost instead of decomposition)
+        // 4. Calculate profit using ACTUAL cost
         const profitCalculation = calculateItemProfit(
           billItem,
-          actualCost.totalCost, // ✅ Use FIFO cost instead of decomposition
+          actualCost.totalCost,
           allocatedDiscount
         )
 
-        // 5. ✅ PHASE 3: Create decomposition summary from WriteOffResult
-        // Convert WriteOffItems to DecomposedItem format for backward compatibility
-        const decomposedItemsForSummary = writeOffResult.items.map(item => ({
-          type: item.type,
-          productId: item.productId,
-          productName: item.productName,
-          preparationId: item.preparationId,
-          preparationName: item.preparationName,
-          quantity: item.quantity,
-          unit: item.unit,
-          costPerUnit: item.costPerUnit,
-          totalCost: item.totalCost,
-          path: item.path
-        }))
-
-        const decompositionSummary: DecompositionSummary = {
-          totalProducts: writeOffResult.totalProducts,
-          totalPreparations: writeOffResult.totalPreparations,
-          totalCost,
-          decomposedItems: decomposedItemsForSummary
-        }
-
-        // 6. Calculate taxes (✅ SPRINT 8: Tax storage)
-        // Taxes are calculated from finalRevenue (after all discounts)
-        const serviceTaxRate = 0.05 // 5% service tax (TODO: Get from config)
-        const governmentTaxRate = 0.1 // 10% government tax (TODO: Get from config)
+        // 5. Calculate taxes (✅ SPRINT 8: Tax storage)
+        const serviceTaxRate = 0.05
+        const governmentTaxRate = 0.1
         const serviceTaxAmount = Math.round(profitCalculation.finalRevenue * serviceTaxRate)
         const governmentTaxAmount = Math.round(profitCalculation.finalRevenue * governmentTaxRate)
         const totalTaxAmount = serviceTaxAmount + governmentTaxAmount
 
-        // 7. Create sales transaction
+        // 6. Create sales transaction
         const transaction: SalesTransaction = {
           id: `st-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           paymentId: payment.id,
@@ -401,17 +465,16 @@ export const useSalesStore = defineStore('sales', () => {
           paymentMethod: payment.method,
           soldAt: payment.processedAt,
           processedBy: payment.processedBy,
-          recipeId: undefined, // Can be set if applicable
-          recipeWriteOffId: undefined, // Will be set after write-off
-          actualCost, // ✅ SPRINT 2: Actual cost from FIFO batches
-          profitCalculation, // ✅ SPRINT 2: Now uses actualCost
-          // ✅ SPRINT 8: Tax storage
+          recipeId: undefined,
+          recipeWriteOffId: hasCachedCost ? billItem.recipeWriteOffId : undefined,
+          actualCost,
+          profitCalculation,
           serviceTaxRate,
           serviceTaxAmount,
           governmentTaxRate,
           governmentTaxAmount,
           totalTaxAmount,
-          decompositionSummary, // DEPRECATED: kept for backward compatibility
+          decompositionSummary,
           syncedToBackoffice: true,
           syncedAt: new Date().toISOString(),
           department: menuItem.department,
@@ -425,33 +488,33 @@ export const useSalesStore = defineStore('sales', () => {
           state.value.transactions.push(saveResult.data)
           console.log(`✅ [${MODULE_NAME}] Transaction saved:`, saveResult.data.id)
 
-          // 8. ⚡ PERFORMANCE FIX: Use existing writeOffResult instead of re-decomposing
-          const writeOff = await recipeWriteOffStore.processItemWriteOffFromResult(
-            billItem,
-            writeOffResult,
-            saveResult.data.id
-          )
+          if (hasCachedCost) {
+            // ⚡ FAST PATH: Link existing write-off to transaction (no new write-off)
+            await recipeWriteOffStore.linkWriteOffToTransaction(
+              billItem.recipeWriteOffId!,
+              saveResult.data.id
+            )
+            console.log(`⚡ [${MODULE_NAME}] Fast path: linked existing write-off to transaction`)
+          } else if (writeOffResult) {
+            // 📦 FALLBACK: Create new write-off
+            const writeOff = await recipeWriteOffStore.processItemWriteOffFromResult(
+              billItem,
+              writeOffResult,
+              saveResult.data.id
+            )
 
-          if (writeOff) {
-            // Update transaction with write-off ID
-            transaction.recipeWriteOffId = writeOff.id
-
-            // ⚡ PERFORMANCE: Skip second decomposition
-            // Negative batches use last_known_cost = fallbackCost (already used in first FIFO)
-            // Cost difference is negligible, saves ~3-4 seconds per item
-            await SalesService.saveSalesTransaction(transaction)
-            console.log(`✅ [${MODULE_NAME}] Transaction updated with write-off ID`)
-          } else {
-            // ✅ FIX: Log error when write-off creation fails
-            console.error(`❌ [${MODULE_NAME}] Write-off creation failed for transaction`, {
-              transactionId: saveResult.data.id,
-              menuItemId: billItem.menuItemId,
-              menuItemName: billItem.menuItemName,
-              quantity: billItem.quantity
-            })
-            // Transaction is saved but without write-off
-            // This can happen when: menu item not found, empty decomposition, or other errors
-            // TODO: Queue for retry or mark transaction as needing manual review
+            if (writeOff) {
+              transaction.recipeWriteOffId = writeOff.id
+              await SalesService.saveSalesTransaction(transaction)
+              console.log(`✅ [${MODULE_NAME}] Transaction updated with write-off ID`)
+            } else {
+              console.error(`❌ [${MODULE_NAME}] Write-off creation failed for transaction`, {
+                transactionId: saveResult.data.id,
+                menuItemId: billItem.menuItemId,
+                menuItemName: billItem.menuItemName,
+                quantity: billItem.quantity
+              })
+            }
           }
         } else {
           throw new Error(saveResult.error || 'Failed to save transaction')

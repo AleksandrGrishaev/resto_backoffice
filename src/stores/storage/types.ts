@@ -19,6 +19,7 @@ export type WriteOffReason =
   | 'test'
   | 'production_consumption' // ✨ NEW: Raw products consumed for preparation production
   | 'sales_consumption' // ✨ NEW: Preparations/products consumed for sales (Sprint 2)
+  | 'cancellation_loss' // ✨ NEW: Items cancelled after kitchen ready (Ready-Triggered Write-off)
 
 export interface Warehouse extends BaseEntity {
   id: string
@@ -354,7 +355,7 @@ export const DEFAULT_WAREHOUSE: Warehouse = {
 
 // ✅ ДОБАВЛЕНЫ: Write-off Helper Functions и Constants
 export const WRITE_OFF_CLASSIFICATION = {
-  KPI_AFFECTING: ['expired', 'spoiled', 'other'] as WriteOffReason[],
+  KPI_AFFECTING: ['expired', 'spoiled', 'other', 'cancellation_loss'] as WriteOffReason[], // ✨ cancellation_loss affects KPI (it's a loss)
   NON_KPI_AFFECTING: [
     'education',
     'test',
@@ -415,6 +416,13 @@ export const WRITE_OFF_REASON_OPTIONS = [
     description: 'Products/preparations consumed for sales',
     affectsKPI: false,
     color: 'secondary'
+  },
+  {
+    value: 'cancellation_loss' as WriteOffReason,
+    title: 'Cancellation Loss',
+    description: 'Items cancelled after kitchen ready (ingredients already used)',
+    affectsKPI: true,
+    color: 'error'
   }
 ] as const
 

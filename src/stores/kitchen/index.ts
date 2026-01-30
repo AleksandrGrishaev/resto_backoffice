@@ -3,7 +3,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
-import { kitchenService } from './kitchenService'
+import { kitchenService, recoverStaleProcessingItems } from './kitchenService'
 import { useKitchenRealtime } from './useKitchenRealtime'
 import {
   fromSupabase as orderFromSupabase,
@@ -58,6 +58,14 @@ export const useKitchenStore = defineStore('kitchen', () => {
         cooking: orders.filter(o => o.status === 'cooking').length,
         ready: orders.filter(o => o.status === 'ready').length
       })
+
+      // ✨ Recovery: Reset any items stuck in 'processing' state (crash recovery)
+      const recoveredCount = await recoverStaleProcessingItems()
+      if (recoveredCount > 0) {
+        DebugUtils.warn(MODULE_NAME, `Recovered ${recoveredCount} stuck processing items`, {
+          recoveredCount
+        })
+      }
 
       // Subscribe to realtime updates (NEW: item-level updates)
       subscribe(

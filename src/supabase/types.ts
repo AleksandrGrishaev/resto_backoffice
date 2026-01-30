@@ -141,6 +141,12 @@ export type Database = {
           cooking_started_at: string | null
           ready_at: string | null
           served_at: string | null
+          write_off_status: string | null
+          write_off_at: string | null
+          write_off_triggered_by: string | null
+          write_off_operation_id: string | null
+          cached_actual_cost: Json | null
+          recipe_writeoff_id: string | null
           created_at: string
           updated_at: string
         }
@@ -169,6 +175,12 @@ export type Database = {
           cooking_started_at?: string | null
           ready_at?: string | null
           served_at?: string | null
+          write_off_status?: string | null
+          write_off_at?: string | null
+          write_off_triggered_by?: string | null
+          write_off_operation_id?: string | null
+          cached_actual_cost?: Json | null
+          recipe_writeoff_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -197,6 +209,12 @@ export type Database = {
           cooking_started_at?: string | null
           ready_at?: string | null
           served_at?: string | null
+          write_off_status?: string | null
+          write_off_at?: string | null
+          write_off_triggered_by?: string | null
+          write_off_operation_id?: string | null
+          cached_actual_cost?: Json | null
+          recipe_writeoff_id?: string | null
           created_at?: string
           updated_at?: string
         }

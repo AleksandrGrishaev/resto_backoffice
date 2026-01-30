@@ -1718,3 +1718,269 @@ Offline → SYNC столбец → Bulk recovery
 15. [ ] Test background queue retry logic
 16. [ ] Deploy to dev
 17. [ ] Monitor metrics (fast path %, fallback %, queue processing time)
+
+---
+
+## Implementation Log
+
+### 2026-01-30: Code Review & Bug Fixes
+
+**Status:** ✅ IMPLEMENTED
+
+После code review были обнаружены и исправлены следующие баги:
+
+#### Критические исправления (P0)
+
+| #   | Проблема                                                                           | Файл                | Решение                                                                                         |
+| --- | ---------------------------------------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------------- |
+| 1   | **Race condition**: items застревали в `write_off_status = 'processing'` при крэше | `kitchenService.ts` | Добавлена функция `recoverStaleProcessingItems()` — сбрасывает items старше 5 минут в `pending` |
+| 2   | **onError не awaited**: сброс статуса мог fail silently                            | `kitchenService.ts` | Добавлен try-catch вокруг reset, логирование ошибок                                             |
+
+#### Важные исправления (P1)
+
+| #   | Проблема                                                            | Файл                              | Решение                                                                         |
+| --- | ------------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------- |
+| 3   | **Weak type check**: `cachedActualCost!` без валидации              | `salesStore.ts`                   | Добавлен type guard `isValidCachedCost()` для проверки структуры                |
+| 4   | **Property names mismatch**: использовались несуществующие свойства | `salesStore.ts`, `CostAdapter.ts` | Исправлено `avgCostPerUnit` → `averageCostPerUnit`, `products` → `productCosts` |
+
+#### Средние исправления (P2)
+
+| #   | Проблема                                                             | Файл                    | Решение                                                                             |
+| --- | -------------------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------- |
+| 5   | **Unbounded backoff**: delay мог расти до 32s+                       | `useBackgroundTasks.ts` | Добавлен `MAX_BACKOFF_DELAY_MS = 60000` и `calculateBackoffDelay()`                 |
+| 6   | **Await missing**: `updateExistingWriteOffReason` не awaited         | `useCancellation.ts`    | Добавлен `await`                                                                    |
+| 7   | **Weak result validation**: write-off result не полностью проверялся | `useBackgroundTasks.ts` | Добавлена проверка `storageOperationId`, `recipeWriteOffId`, `actualCost.totalCost` |
+
+#### Изменённые файлы
+
+```
+src/stores/kitchen/kitchenService.ts
+├── + PROCESSING_TIMEOUT_MS constant
+├── + recoverStaleProcessingItems() function
+└── ~ markItemAsReadyWithWriteOff() - improved error handling
+
+src/stores/sales/salesStore.ts
+├── + isValidCachedCost() type guard
+└── ~ recordSalesTransaction() - fixed property names
+
+src/core/decomposition/adapters/CostAdapter.ts
+└── ~ avgCostPerUnit → averageCostPerUnit (match type definition)
+
+src/core/background/useBackgroundTasks.ts
+├── + MAX_BACKOFF_DELAY_MS constant
+├── + calculateBackoffDelay() function
+└── ~ processReadyWriteOffTask() - improved result validation
+
+src/stores/pos/orders/composables/useCancellation.ts
+└── ~ cancelItem() - await updateExistingWriteOffReason
+```
+
+#### Type Guard Implementation
+
+```typescript
+// salesStore.ts
+function isValidCachedCost(cost: unknown): cost is ActualCostBreakdown {
+  if (!cost || typeof cost !== 'object') return false
+  const c = cost as Record<string, unknown>
+  return (
+    typeof c.totalCost === 'number' &&
+    Array.isArray(c.productCosts) &&
+    Array.isArray(c.preparationCosts)
+  )
+}
+```
+
+#### Recovery Function
+
+```typescript
+// kitchenService.ts
+export async function recoverStaleProcessingItems(): Promise<number> {
+  const cutoffTime = new Date(Date.now() - PROCESSING_TIMEOUT_MS).toISOString()
+
+  const { data: staleItems } = await supabase
+    .from('order_items')
+    .select('id, order_id, menu_item_name')
+    .eq('write_off_status', 'processing')
+    .lt('updated_at', cutoffTime)
+
+  if (staleItems?.length) {
+    await supabase
+      .from('order_items')
+      .update({ write_off_status: 'pending' })
+      .in(
+        'id',
+        staleItems.map(i => i.id)
+      )
+  }
+
+  return staleItems?.length || 0
+}
+```
+
+#### Backoff with Cap
+
+```typescript
+// useBackgroundTasks.ts
+const MAX_BACKOFF_DELAY_MS = 60 * 1000 // 60 seconds
+
+function calculateBackoffDelay(attempt: number): number {
+  const baseDelay = Math.pow(2, attempt) * 1000 // 2s, 4s, 8s, 16s...
+  return Math.min(baseDelay, MAX_BACKOFF_DELAY_MS)
+}
+```
+
+#### Build Status
+
+✅ `pnpm build` — успешно (57.79s)
+
+---
+
+### 2026-01-30: UI Testing & Type Mismatch Fix
+
+**Status:** ✅ FIXED
+
+При UI тестировании был обнаружен баг: 400 Bad Request при обновлении `order_items`.
+
+#### Проблема
+
+Write-off успешно выполнялся:
+
+- ✅ Storage operation создан
+- ✅ Recipe write-off сохранён (id: "rwo-1769748671360-nuibmmmbz")
+- ❌ 400 Bad Request при `order_items.update({ recipe_writeoff_id })`
+
+**Причина:** Несоответствие типов колонок:
+
+- `recipe_write_offs.id` = **TEXT** (хранит "rwo-xxx" формат)
+- `order_items.recipe_writeoff_id` = **UUID** (ожидает UUID формат)
+
+#### Решение
+
+Миграция 117: изменить тип `order_items.recipe_writeoff_id` с UUID на TEXT.
+
+```sql
+-- Migration: 117_fix_recipe_writeoff_id_type
+ALTER TABLE order_items
+ALTER COLUMN recipe_writeoff_id TYPE text;
+```
+
+#### Файлы
+
+```
+src/supabase/migrations/117_fix_recipe_writeoff_id_type.sql  # NEW
+```
+
+#### Верификация
+
+```sql
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = 'order_items' AND column_name = 'recipe_writeoff_id';
+-- Result: data_type = 'text' ✅
+```
+
+---
+
+### 2026-01-30: UI Testing Complete ✅
+
+**Status:** ✅ VERIFIED
+
+После исправления миграции 117, полный Ready-Triggered Write-off flow протестирован и работает:
+
+#### Тестовый заказ
+
+- Order: ORD-20260130-9095
+- Item: Latte (id: 0a3c7ef8-4f4e-4456-9b0c-633441fedaf7)
+- Kitchen нажал "Ready"
+
+#### Flow timeline
+
+```
+04:58:26.059 Kitchen: Click Ready on Latte
+04:58:26.240 Item status → 'ready'
+04:58:26.568 Background task queued (d1f9fe13...)
+04:58:26.572 DecompositionEngine: 3 products
+04:58:26.668 FIFO RPC: totalCost = 11074.52 (93ms)
+04:58:27.223 Storage operation WO-106728 created
+04:58:27.415 Recipe write-off saved (rwo-1769749107334-kkqzzajta)
+04:58:27.496 Task completed ✅
+```
+
+**Total time:** ~1.4 seconds (non-blocking)
+
+#### Database verification
+
+```sql
+SELECT * FROM order_items WHERE id = '0a3c7ef8...';
+```
+
+| Field                  | Value                                             |
+| ---------------------- | ------------------------------------------------- |
+| status                 | ready                                             |
+| write_off_status       | **completed** ✅                                  |
+| write_off_triggered_by | **kitchen_ready** ✅                              |
+| write_off_at           | 2026-01-30T04:58:27 ✅                            |
+| cached_actual_cost     | {totalCost: 11074.52, method: "FIFO_RPC", ...} ✅ |
+| recipe_writeoff_id     | rwo-1769749107334-kkqzzajta ✅                    |
+| write_off_operation_id | b7cb491b-b9eb-4b5d-9184-51d5f4436bfd ✅           |
+
+#### cached_actual_cost structure
+
+```json
+{
+  "totalCost": 11074.52,
+  "method": "FIFO_RPC",
+  "productCosts": [3 items],
+  "preparationCosts": []
+}
+```
+
+#### Next: Test Payment Fast Path
+
+Когда этот заказ будет оплачен, система должна:
+
+1. Обнаружить `writeOffStatus === 'completed'`
+2. Использовать `cachedActualCost` вместо повторной декомпозиции
+3. Быстрый путь (~500ms vs ~3-5s)
+
+---
+
+### 2026-01-30: Payment Fast Path Bug Fix
+
+**Status:** ✅ FIXED
+
+При тестировании оплаты обнаружен ещё один баг с неправильным импортом supabase.
+
+#### Проблема
+
+```
+❌ [RecipeWriteOffStore] Error linking write-off: TypeError: Cannot read properties of undefined (reading 'from')
+```
+
+**Причина:** Неправильный синтаксис импорта в нескольких файлах:
+
+```typescript
+// ❌ Неправильно (supabase - named export, не default)
+const { default: supabase } = await import('@/supabase/client')
+
+// ✅ Правильно
+const { supabase } = await import('@/supabase/client')
+```
+
+#### Исправленные файлы
+
+| Файл                     | Строки        |
+| ------------------------ | ------------- |
+| `recipeWriteOffStore.ts` | 271, 459, 699 |
+| `storageStore.ts`        | 598           |
+
+#### Важно
+
+Несмотря на ошибку, транзакция была записана успешно:
+
+```
+✅ [SalesStore] Transaction saved: st-1769749763192-ebdyf9wsm
+⚡ [SalesStore] FAST PATH: Using cached cost for Latte ← Кэшированная стоимость использована!
+```
+
+Ошибка возникла только при попытке связать write-off с транзакцией (`linkWriteOffToTransaction`), но сама продажа прошла корректно.

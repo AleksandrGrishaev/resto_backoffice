@@ -122,8 +122,29 @@ export function useCancellation() {
         itemId: item.id
       })
 
-      // Queue write-off in BACKGROUND (don't block UI)
+      // Handle write-off based on item's current write-off status
       if (request.shouldWriteOff) {
+        // ✨ CHECK: If item already has completed write-off (Ready-Triggered)
+        if (item.writeOffStatus === 'completed' && item.writeOffOperationId) {
+          // Just update the reason to 'cancellation_loss' (no new write-off needed)
+          DebugUtils.info(
+            MODULE_NAME,
+            'Item already has write-off, updating reason to cancellation_loss',
+            {
+              itemId: item.id,
+              writeOffOperationId: item.writeOffOperationId
+            }
+          )
+          // ✅ FIX: Await the update to ensure it completes before returning
+          await updateExistingWriteOffReason(
+            item.writeOffOperationId,
+            request.reason,
+            request.notes
+          )
+          return { success: true, writeOffPending: false }
+        }
+
+        // Queue new write-off in BACKGROUND (don't block UI)
         queueWriteOffInBackground(
           orderId,
           billId,
@@ -286,7 +307,7 @@ export function useCancellation() {
    */
   function mapCancellationToWriteOffReason(
     reason: CancellationReason
-  ): 'other' | 'spoiled' | 'expired' {
+  ): 'other' | 'spoiled' | 'expired' | 'cancellation_loss' {
     switch (reason) {
       case 'kitchen_mistake':
         return 'other' // Kitchen error - operational loss
@@ -298,6 +319,39 @@ export function useCancellation() {
         return 'other' // Should rarely have write-off
       default:
         return 'other'
+    }
+  }
+
+  /**
+   * ✨ Handle cancellation of item that already had write-off (Ready-Triggered)
+   *
+   * When an item is cancelled AFTER kitchen marked it as ready:
+   * - Write-off already happened (storage_operation exists)
+   * - We just need to update the reason to 'cancellation_loss'
+   * - This ensures it shows up in losses, not in normal sales COGS
+   */
+  async function updateExistingWriteOffReason(
+    writeOffOperationId: string,
+    reason: CancellationReason,
+    notes?: string
+  ): Promise<void> {
+    try {
+      const { useStorageStore } = await import('@/stores/storage/storageStore')
+      const storageStore = useStorageStore()
+
+      await storageStore.updateWriteOffReason(
+        writeOffOperationId,
+        'cancellation_loss',
+        `Cancelled after ready: ${reason}${notes ? ` - ${notes}` : ''}`
+      )
+
+      DebugUtils.info(MODULE_NAME, 'Updated existing write-off reason to cancellation_loss', {
+        writeOffOperationId,
+        originalReason: reason
+      })
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update write-off reason', { error: err })
+      // Non-critical - the cancellation itself succeeded
     }
   }
 

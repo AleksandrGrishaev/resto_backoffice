@@ -291,6 +291,10 @@ export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'b
   /**
    * Обновить статус блюда
    * Обновляет статус через Kitchen Service → Supabase
+   *
+   * ✨ Ready-Triggered Write-off:
+   * При переходе в 'ready' вызывает markItemAsReadyWithWriteOff для запуска
+   * фонового списания ингредиентов
    */
   async function updateDishStatus(
     dish: KitchenDish,
@@ -300,7 +304,28 @@ export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'b
       // Импортируем Kitchen Service динамически для избежания циклических зависимостей
       const { kitchenService } = await import('../kitchenService')
 
-      // Обновляем статус item через Supabase
+      // ✨ Ready status → trigger write-off
+      if (newStatus === 'ready') {
+        // Get full PosBillItem from orders store for write-off
+        const order = posOrdersStore.orders.find(o => o.id === dish.orderId)
+        const bill = order?.bills.find(b => b.id === dish.billId)
+        const item = bill?.items.find(i => i.id === dish.itemId)
+
+        if (item) {
+          // Use markItemAsReadyWithWriteOff which handles status update + background write-off
+          const result = await kitchenService.markItemAsReadyWithWriteOff(dish.orderId, item)
+          return { success: result.success, error: result.error }
+        }
+
+        // Fallback: item not found in store, use regular status update
+        const result = await kitchenService.updateItemStatus(dish.orderId, dish.itemId, newStatus)
+        if (result.success) {
+          await kitchenService.checkAndUpdateOrderStatus(dish.orderId)
+        }
+        return { success: result.success, error: result.error }
+      }
+
+      // Other statuses (waiting, cooking) → regular status update
       const result = await kitchenService.updateItemStatus(dish.orderId, dish.itemId, newStatus)
 
       if (result.success) {

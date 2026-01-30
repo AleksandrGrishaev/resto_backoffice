@@ -167,8 +167,8 @@ class NegativeBatchService {
 
     const now = new Date().toISOString()
 
-    // Generate batch number
-    const batchNumber = `NEG-PREP-${Date.now()}`
+    // Generate batch number (add random suffix to avoid duplicates in same ms)
+    const batchNumber = `NEG-PREP-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
 
     const negativeBatch: Partial<PreparationBatch> = {
       batchNumber,

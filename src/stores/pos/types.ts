@@ -49,6 +49,10 @@ export type CancellationReason =
   | 'out_of_stock'
   | 'other'
 
+// Ready-Triggered Write-off types
+export type WriteOffStatus = 'pending' | 'processing' | 'completed' | 'skipped'
+export type WriteOffTrigger = 'kitchen_ready' | 'payment_fallback' | 'cancellation'
+
 // Cancellation reason options for UI
 export const CANCELLATION_REASON_OPTIONS = [
   { value: 'kitchen_mistake' as CancellationReason, label: 'Kitchen Mistake', color: 'error' },
@@ -239,6 +243,13 @@ export interface PosBillItem extends BaseEntity {
   cancellationReason?: CancellationReason // Reason for cancellation
   cancellationNotes?: string // Additional notes
   writeOffOperationId?: string // Link to write-off if ingredients were written off
+
+  // Ready-Triggered Write-off tracking (Sprint: Ready-Triggered Write-off)
+  writeOffStatus?: WriteOffStatus // Write-off processing status
+  writeOffAt?: string // When write-off was triggered (ISO timestamp)
+  writeOffTriggeredBy?: WriteOffTrigger // What triggered the write-off
+  cachedActualCost?: import('@/core/decomposition').ActualCostBreakdown // Cached cost for fast payment
+  recipeWriteOffId?: string // Link to recipe_write_offs record
 }
 
 export interface PosItemDiscount {

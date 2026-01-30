@@ -34,10 +34,24 @@ import type {
   PrepWriteOffTaskPayload,
   ScheduleCompleteTaskPayload,
   ReceiptPriceUpdateTaskPayload,
-  QuickReceiptStorageTaskPayload
+  QuickReceiptStorageTaskPayload,
+  ReadyWriteOffTaskPayload
 } from './types'
 
 const MODULE_NAME = 'BackgroundTasks'
+
+// Maximum delay for exponential backoff (60 seconds)
+const MAX_BACKOFF_DELAY_MS = 60 * 1000
+
+/**
+ * Calculate exponential backoff delay with max cap
+ * @param attempt - Current attempt number (1-based)
+ * @returns Delay in milliseconds, capped at MAX_BACKOFF_DELAY_MS
+ */
+function calculateBackoffDelay(attempt: number): number {
+  const baseDelay = Math.pow(2, attempt) * 1000 // 2s, 4s, 8s, 16s, 32s...
+  return Math.min(baseDelay, MAX_BACKOFF_DELAY_MS)
+}
 
 // ============================================================
 // Global State (singleton across all components)
@@ -149,7 +163,7 @@ export function useBackgroundTasks() {
 
       if (task.attempts < task.maxAttempts) {
         // Retry with exponential backoff
-        const delay = Math.pow(2, task.attempts) * 1000
+        const delay = calculateBackoffDelay(task.attempts)
         DebugUtils.warn(MODULE_NAME, 'Production task failed, retrying', {
           taskId: task.id,
           attempt: task.attempts,
@@ -285,7 +299,7 @@ export function useBackgroundTasks() {
       task.lastError = error instanceof Error ? error.message : 'Unknown error'
 
       if (task.attempts < task.maxAttempts) {
-        const delay = Math.pow(2, task.attempts) * 1000
+        const delay = calculateBackoffDelay(task.attempts)
         DebugUtils.warn(MODULE_NAME, 'Product write-off task failed, retrying', {
           taskId: task.id,
           attempt: task.attempts
@@ -418,7 +432,7 @@ export function useBackgroundTasks() {
       task.lastError = error instanceof Error ? error.message : 'Unknown error'
 
       if (task.attempts < task.maxAttempts) {
-        const delay = Math.pow(2, task.attempts) * 1000
+        const delay = calculateBackoffDelay(task.attempts)
         DebugUtils.warn(MODULE_NAME, 'Preparation write-off task failed, retrying', {
           taskId: task.id,
           attempt: task.attempts
@@ -538,7 +552,7 @@ export function useBackgroundTasks() {
       task.lastError = error instanceof Error ? error.message : 'Unknown error'
 
       if (task.attempts < task.maxAttempts) {
-        const delay = Math.pow(2, task.attempts) * 1000
+        const delay = calculateBackoffDelay(task.attempts)
         DebugUtils.warn(MODULE_NAME, 'Schedule complete task failed, retrying', {
           taskId: task.id,
           attempt: task.attempts
@@ -645,7 +659,7 @@ export function useBackgroundTasks() {
       task.lastError = error instanceof Error ? error.message : 'Unknown error'
 
       if (task.attempts < task.maxAttempts) {
-        const delay = Math.pow(2, task.attempts) * 1000
+        const delay = calculateBackoffDelay(task.attempts)
         DebugUtils.warn(MODULE_NAME, 'Receipt price update task failed, retrying', {
           taskId: task.id,
           attempt: task.attempts,
@@ -799,7 +813,7 @@ export function useBackgroundTasks() {
       task.lastError = error instanceof Error ? error.message : 'Unknown error'
 
       if (task.attempts < task.maxAttempts) {
-        const delay = Math.pow(2, task.attempts) * 1000
+        const delay = calculateBackoffDelay(task.attempts)
         DebugUtils.warn(MODULE_NAME, 'Quick receipt storage task failed, retrying', {
           taskId: task.id,
           attempt: task.attempts,
@@ -810,6 +824,148 @@ export function useBackgroundTasks() {
         updateTaskStatus(task.id, 'failed')
         const errorMessage = `Storage processing failed: ${task.lastError}`
         DebugUtils.error(MODULE_NAME, 'Quick receipt storage task failed permanently', {
+          taskId: task.id,
+          error: task.lastError
+        })
+        callbacks?.onError?.(errorMessage)
+      }
+    }
+  }
+
+  // ============================================================
+  // Ready Write-Off Task (Kitchen Ready-Triggered)
+  // ============================================================
+
+  async function addReadyWriteOffTask(
+    payload: ReadyWriteOffTaskPayload,
+    callbacks?: TaskCallbacks
+  ): Promise<string> {
+    const taskId = generateId()
+    const description = `Write-off: ${payload.menuItemName} (${payload.quantity}x)`
+
+    const task: BackgroundTask<ReadyWriteOffTaskPayload> = {
+      id: taskId,
+      type: 'ready_writeoff',
+      status: 'queued',
+      description,
+      department: payload.department,
+      createdBy: 'Kitchen',
+      payload,
+      createdAt: new Date().toISOString(),
+      attempts: 0,
+      maxAttempts: 5 // More retries for critical operations
+    }
+
+    tasks.value.push(task)
+    DebugUtils.info(MODULE_NAME, 'Ready write-off task queued', {
+      taskId,
+      orderId: payload.orderId,
+      itemId: payload.itemId,
+      menuItem: payload.menuItemName
+    })
+
+    callbacks?.onQueued?.(`Processing write-off: ${payload.menuItemName}...`)
+
+    // Process immediately in background
+    processReadyWriteOffTask(task, callbacks)
+
+    return taskId
+  }
+
+  async function processReadyWriteOffTask(
+    task: BackgroundTask<ReadyWriteOffTaskPayload>,
+    callbacks?: TaskCallbacks
+  ): Promise<void> {
+    const { payload } = task
+
+    updateTaskStatus(task.id, 'processing')
+    task.startedAt = new Date().toISOString()
+
+    try {
+      DebugUtils.info(MODULE_NAME, 'Processing ready write-off task', {
+        taskId: task.id,
+        itemId: payload.itemId
+      })
+
+      // Dynamic imports to avoid circular dependencies
+      const { useRecipeWriteOffStore } = await import('@/stores/sales/recipeWriteOff')
+      const recipeWriteOffStore = useRecipeWriteOffStore()
+
+      // Execute the ready-triggered write-off
+      const result = await recipeWriteOffStore.executeReadyTriggeredWriteOff({
+        orderId: payload.orderId,
+        itemId: payload.itemId,
+        menuItemId: payload.menuItemId,
+        variantId: payload.variantId,
+        quantity: payload.quantity,
+        selectedModifiers: payload.selectedModifiers
+      })
+
+      // ✅ FIX: Validate write-off result structure thoroughly
+      if (!result) {
+        throw new Error('Write-off returned no result')
+      }
+
+      if (!result.storageOperationId || typeof result.storageOperationId !== 'string') {
+        throw new Error('Write-off result missing storageOperationId')
+      }
+
+      if (!result.recipeWriteOffId || typeof result.recipeWriteOffId !== 'string') {
+        throw new Error('Write-off result missing recipeWriteOffId')
+      }
+
+      if (!result.actualCost || typeof result.actualCost.totalCost !== 'number') {
+        throw new Error('Write-off result missing or invalid actualCost')
+      }
+
+      // Update the order item with write-off data
+      const { supabase } = await import('@/supabase/client')
+      const { error: updateError } = await supabase
+        .from('order_items')
+        .update({
+          write_off_status: 'completed',
+          write_off_at: new Date().toISOString(),
+          write_off_triggered_by: 'kitchen_ready',
+          cached_actual_cost: result.actualCost,
+          recipe_writeoff_id: result.recipeWriteOffId,
+          write_off_operation_id: result.storageOperationId
+        })
+        .eq('id', payload.itemId)
+
+      if (updateError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to update order_items', { error: updateError })
+        // Continue - the write-off itself succeeded
+      }
+
+      // Success
+      updateTaskStatus(task.id, 'completed')
+      task.completedAt = new Date().toISOString()
+
+      const successMessage = `Write-off completed: ${payload.menuItemName}`
+      DebugUtils.info(MODULE_NAME, 'Ready write-off task completed', {
+        taskId: task.id,
+        storageOperationId: result.storageOperationId,
+        recipeWriteOffId: result.recipeWriteOffId
+      })
+      callbacks?.onSuccess?.(successMessage)
+
+      setTimeout(() => removeTask(task.id), 5000)
+    } catch (error) {
+      task.attempts++
+      task.lastError = error instanceof Error ? error.message : 'Unknown error'
+
+      if (task.attempts < task.maxAttempts) {
+        const delay = calculateBackoffDelay(task.attempts)
+        DebugUtils.warn(MODULE_NAME, 'Ready write-off task failed, retrying', {
+          taskId: task.id,
+          attempt: task.attempts,
+          delay
+        })
+        setTimeout(() => processReadyWriteOffTask(task, callbacks), delay)
+      } else {
+        updateTaskStatus(task.id, 'failed')
+        const errorMessage = `Write-off failed: ${task.lastError}`
+        DebugUtils.error(MODULE_NAME, 'Ready write-off task failed permanently', {
           taskId: task.id,
           error: task.lastError
         })
@@ -866,6 +1022,7 @@ export function useBackgroundTasks() {
     addScheduleCompleteTask,
     addReceiptPriceUpdateTask,
     addQuickReceiptStorageTask,
+    addReadyWriteOffTask,
 
     // Getters
     getTaskById,

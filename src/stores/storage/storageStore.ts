@@ -581,6 +581,58 @@ export const useStorageStore = defineStore('storage', () => {
     }
   }
 
+  /**
+   * ✨ Update write-off reason on existing storage_operation
+   *
+   * Used for Ready-Triggered Write-off: when an item is cancelled AFTER
+   * kitchen marked it as ready, the write-off already happened. We just
+   * need to change the reason to 'cancellation_loss' so it shows up in
+   * losses instead of normal sales COGS.
+   */
+  async function updateWriteOffReason(
+    operationId: string,
+    newReason: import('./types').WriteOffReason,
+    notes?: string
+  ): Promise<void> {
+    try {
+      const { supabase } = await import('@/supabase/client')
+
+      // Update the write_off_details JSONB
+      const { error } = await supabase
+        .from('storage_operations')
+        .update({
+          write_off_details: {
+            reason: newReason,
+            affectsKPI: ['expired', 'spoiled', 'other', 'cancellation_loss'].includes(newReason),
+            notes: notes || null
+          },
+          notes: notes || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', operationId)
+
+      if (error) {
+        throw error
+      }
+
+      // Update local state
+      const operation = state.value.operations.find(op => op.id === operationId)
+      if (operation && operation.writeOffDetails) {
+        operation.writeOffDetails.reason = newReason
+        operation.writeOffDetails.notes = notes
+      }
+
+      DebugUtils.info(MODULE_NAME, '✅ Write-off reason updated', {
+        operationId,
+        newReason
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update write-off reason'
+      DebugUtils.error(MODULE_NAME, '❌ Failed to update write-off reason', { error })
+      throw new Error(message)
+    }
+  }
+
   // ===========================
   // INVENTORY OPERATIONS
   // ===========================
@@ -1048,6 +1100,7 @@ export const useStorageStore = defineStore('storage', () => {
     createCorrection,
     createReceipt,
     createWriteOff,
+    updateWriteOffReason, // ✨ Ready-Triggered Write-off: Update reason on cancellation
 
     // Inventory operations
     startInventory,

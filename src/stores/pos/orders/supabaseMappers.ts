@@ -286,6 +286,13 @@ export function toOrderItemInsert(
     ready_at: item.readyAt || null,
     served_at: item.servedAt || null,
 
+    // ✨ Ready-Triggered Write-off tracking
+    write_off_status: item.writeOffStatus || 'pending',
+    write_off_at: item.writeOffAt || null,
+    write_off_triggered_by: item.writeOffTriggeredBy || null,
+    cached_actual_cost: item.cachedActualCost ? (item.cachedActualCost as any) : null,
+    recipe_writeoff_id: item.recipeWriteOffId || null,
+
     // Audit
     created_at: item.createdAt,
     updated_at: item.updatedAt
@@ -325,6 +332,13 @@ export function toOrderItemUpdate(item: PosBillItem): SupabaseOrderItemUpdate {
     cooking_started_at: item.cookingStartedAt || null,
     ready_at: item.readyAt || null,
     served_at: item.servedAt || null,
+
+    // ✨ Ready-Triggered Write-off tracking (can be updated)
+    write_off_status: item.writeOffStatus || 'pending',
+    write_off_at: item.writeOffAt || null,
+    write_off_triggered_by: item.writeOffTriggeredBy || null,
+    cached_actual_cost: item.cachedActualCost ? (item.cachedActualCost as any) : null,
+    recipe_writeoff_id: item.recipeWriteOffId || null,
 
     // Audit
     updated_at: new Date().toISOString()
@@ -376,6 +390,14 @@ export function fromOrderItemRow(row: SupabaseOrderItem): PosBillItem {
 
     // Payment links
     paidByPaymentIds: row.paid_by_payment_ids || [],
+
+    // ✨ Ready-Triggered Write-off tracking
+    writeOffStatus: row.write_off_status || 'pending',
+    writeOffAt: row.write_off_at || undefined,
+    writeOffTriggeredBy: row.write_off_triggered_by || undefined,
+    cachedActualCost: row.cached_actual_cost || undefined,
+    recipeWriteOffId: row.recipe_writeoff_id || undefined,
+    writeOffOperationId: row.write_off_operation_id || undefined,
 
     // Timestamps
     createdAt: row.created_at,

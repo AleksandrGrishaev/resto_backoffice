@@ -166,8 +166,8 @@ class NegativeBatchService {
 
     const now = new Date().toISOString()
 
-    // Generate batch number and ID
-    const batchNumber = `NEG-${Date.now()}`
+    // Generate batch number and ID (add random suffix to avoid duplicates in same ms)
+    const batchNumber = `NEG-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
     const batchId = generateId()
 
     // Map to snake_case for Supabase (database uses snake_case column names)

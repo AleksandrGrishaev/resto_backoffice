@@ -21,5 +21,6 @@ export type {
   ReceiptPriceUpdateTaskPayload,
   ProductWriteOffItem,
   PrepWriteOffItem,
-  TaskResult
+  TaskResult,
+  ReadyWriteOffTaskPayload
 } from './types'

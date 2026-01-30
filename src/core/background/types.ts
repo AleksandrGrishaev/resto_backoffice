@@ -18,6 +18,7 @@ export type BackgroundTaskType =
   | 'schedule_complete'
   | 'receipt_price_update'
   | 'quick_receipt_storage'
+  | 'ready_writeoff' // ✨ NEW: Kitchen ready-triggered write-off
 
 export type BackgroundTaskStatus = 'queued' | 'processing' | 'completed' | 'failed'
 
@@ -218,6 +219,30 @@ export interface QuickReceiptStorageTaskPayload {
 }
 
 export type QuickReceiptStorageTask = BackgroundTask<QuickReceiptStorageTaskPayload>
+
+// ============================================================
+// Ready Write-Off Task (Kitchen Ready-Triggered)
+// ============================================================
+
+export interface ReadyWriteOffTaskPayload {
+  orderId: string
+  itemId: string
+  menuItemId: string
+  menuItemName: string
+  variantId?: string
+  variantName?: string
+  quantity: number
+  department: 'kitchen' | 'bar'
+  selectedModifiers?: Array<{
+    groupId: string
+    groupName: string
+    optionId: string
+    optionName: string
+    priceAdjustment: number
+  }>
+}
+
+export type ReadyWriteOffTask = BackgroundTask<ReadyWriteOffTaskPayload>
 
 // ============================================================
 // Task Result

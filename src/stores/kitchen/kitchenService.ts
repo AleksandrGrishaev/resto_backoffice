@@ -14,6 +14,9 @@ import { executeSupabaseMutation } from '@/utils/supabase'
 
 const MODULE_NAME = 'KitchenService'
 
+// Timeout for 'processing' status - items stuck longer than this are recovered
+const PROCESSING_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+
 /**
  * Get all active kitchen orders (waiting, cooking, ready)
  * Kitchen only sees orders that need preparation
@@ -293,10 +296,192 @@ export async function checkAndUpdateOrderStatus(orderId: string): Promise<void> 
   }
 }
 
+/**
+ * ✨ RECOVERY: Reset stale 'processing' items back to 'pending'
+ *
+ * If the app crashes while an item is in 'processing' status, it will be stuck forever.
+ * This function finds items older than PROCESSING_TIMEOUT_MS in 'processing' state
+ * and resets them to 'pending' so they can be retried.
+ *
+ * Call this on app startup or periodically to recover from crashes.
+ */
+export async function recoverStaleProcessingItems(): Promise<number> {
+  try {
+    const cutoffTime = new Date(Date.now() - PROCESSING_TIMEOUT_MS).toISOString()
+
+    const { data: staleItems, error: selectError } = await supabase
+      .from('order_items')
+      .select('id, order_id, menu_item_name')
+      .eq('write_off_status', 'processing')
+      .lt('updated_at', cutoffTime)
+
+    if (selectError) {
+      DebugUtils.error(MODULE_NAME, 'Failed to find stale processing items', { error: selectError })
+      return 0
+    }
+
+    if (!staleItems || staleItems.length === 0) {
+      return 0
+    }
+
+    DebugUtils.warn(MODULE_NAME, 'Found stale processing items, resetting to pending', {
+      count: staleItems.length,
+      items: staleItems.map(i => ({ id: i.id, name: i.menu_item_name }))
+    })
+
+    const { error: updateError } = await supabase
+      .from('order_items')
+      .update({
+        write_off_status: 'pending',
+        updated_at: new Date().toISOString()
+      })
+      .in(
+        'id',
+        staleItems.map(i => i.id)
+      )
+
+    if (updateError) {
+      DebugUtils.error(MODULE_NAME, 'Failed to reset stale items', { error: updateError })
+      return 0
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Recovered stale processing items', { count: staleItems.length })
+    return staleItems.length
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Exception in recoverStaleProcessingItems', { error })
+    return 0
+  }
+}
+
+/**
+ * ✨ READY-TRIGGERED WRITE-OFF: Mark item as ready WITH background write-off
+ *
+ * This is the main function for the Ready-Triggered Write-off architecture.
+ * When kitchen marks an item as "ready", we:
+ * 1. Update item status to 'ready' immediately (UI stays responsive)
+ * 2. Queue background write-off task (doesn't block UI)
+ *
+ * The write-off will:
+ * - Decompose the menu item to ingredients
+ * - Calculate FIFO cost
+ * - Create storage_operation (write-off)
+ * - Create recipe_writeoff (WITHOUT salesTransactionId)
+ * - Update order_items with cached cost data
+ *
+ * At payment time:
+ * - If cachedActualCost exists → FAST PATH (skip decomposition)
+ * - If not → FALLBACK (normal decomposition)
+ */
+export async function markItemAsReadyWithWriteOff(
+  orderId: string,
+  item: PosBillItem
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // 1. Check if already completed (idempotent)
+    if (item.writeOffStatus === 'completed' || item.writeOffStatus === 'processing') {
+      DebugUtils.info(MODULE_NAME, 'Item write-off already processed/processing, skipping', {
+        itemId: item.id,
+        status: item.writeOffStatus
+      })
+      // Still update status to ready if needed
+      if (item.status !== 'ready') {
+        return await updateItemStatus(orderId, item.id, 'ready')
+      }
+      return { success: true }
+    }
+
+    // 2. Update status to 'ready' immediately (UI update)
+    const statusResult = await updateItemStatus(orderId, item.id, 'ready')
+    if (!statusResult.success) {
+      return statusResult
+    }
+
+    // 3. Mark write-off as 'processing' to prevent duplicate processing
+    // Note: Using the already imported supabase client (top of file)
+    await supabase
+      .from('order_items')
+      .update({
+        write_off_status: 'processing',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', item.id)
+
+    // 4. Queue background write-off task (fire and forget)
+    const { useBackgroundTasks } = await import('@/core/background')
+    const backgroundTasks = useBackgroundTasks()
+
+    backgroundTasks.addReadyWriteOffTask(
+      {
+        orderId,
+        itemId: item.id,
+        menuItemId: item.menuItemId,
+        menuItemName: item.menuItemName,
+        variantId: item.variantId,
+        variantName: item.variantName,
+        quantity: item.quantity,
+        department: item.department || 'kitchen',
+        selectedModifiers: item.selectedModifiers
+      },
+      {
+        onSuccess: msg => {
+          DebugUtils.info(MODULE_NAME, 'Ready write-off completed', { itemId: item.id, msg })
+        },
+        onError: async errorMsg => {
+          DebugUtils.error(MODULE_NAME, 'Ready write-off failed', {
+            itemId: item.id,
+            error: errorMsg
+          })
+          // Reset status to pending so it can be retried
+          try {
+            // Use the already imported supabase client
+            const { error: resetError } = await supabase
+              .from('order_items')
+              .update({
+                write_off_status: 'pending',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', item.id)
+
+            if (resetError) {
+              DebugUtils.error(MODULE_NAME, 'Failed to reset write_off_status after error', {
+                itemId: item.id,
+                error: resetError
+              })
+            } else {
+              DebugUtils.info(MODULE_NAME, 'Reset write_off_status to pending for retry', {
+                itemId: item.id
+              })
+            }
+          } catch (resetException) {
+            DebugUtils.error(MODULE_NAME, 'Exception resetting write_off_status', {
+              itemId: item.id,
+              error: resetException
+            })
+          }
+        }
+      }
+    )
+
+    DebugUtils.info(MODULE_NAME, 'Item marked ready with write-off queued', {
+      orderId,
+      itemId: item.id,
+      menuItemName: item.menuItemName
+    })
+
+    return { success: true }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to mark item as ready'
+    DebugUtils.error(MODULE_NAME, 'markItemAsReadyWithWriteOff failed', { error })
+    return { success: false, error: message }
+  }
+}
+
 export const kitchenService = {
   getActiveKitchenOrders,
   getOrderById,
   updateItemStatus,
   checkAndUpdateOrderStatus,
-  calculateOrderStatus
+  calculateOrderStatus,
+  markItemAsReadyWithWriteOff,
+  recoverStaleProcessingItems // ✨ Recovery for stuck items
 }
