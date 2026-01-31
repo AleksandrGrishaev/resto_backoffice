@@ -16,9 +16,12 @@ export interface PortionConversionResult {
 }
 
 /**
- * Convert portion-type preparation quantity to grams
+ * Convert portion-type preparation quantity to base units (grams or pieces)
  * If the composition unit is 'portion' and preparation has portionType='portion',
- * multiply by portionSize to get grams
+ * multiply by portionSize to get base units.
+ *
+ * For weight-based (output_unit='gram'): 1 portion = portionSize grams
+ * For piece-based (output_unit='pc'): 1 portion = portionSize pieces (usually 1)
  *
  * @param composition - Menu composition entry
  * @param preparation - Preparation data
@@ -39,12 +42,17 @@ export function convertPortionToGrams(
     preparation.portionSize &&
     preparation.portionSize > 0
   ) {
-    // Convert: portions × portionSize = grams
+    // Convert: portions × portionSize = base units
+    // portionSize = base units per ONE portion
+    //   - For gram-based: grams per portion (e.g., 200g for "Beef steak 200g")
+    //   - For piece-based: pieces per portion (e.g., 1 for "Slice bread")
+    // outputQuantity = number of portions per batch (NOT used for conversion)
+    // See: src/About/docs/UNIT_CONVERSION_SPEC.md
     const convertedQuantity = baseQuantity * preparation.portionSize
 
     return {
       quantity: convertedQuantity,
-      unit: 'gram',
+      unit: preparation.outputUnit || 'gram',
       wasConverted: true
     }
   }

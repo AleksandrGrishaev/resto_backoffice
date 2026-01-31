@@ -251,28 +251,19 @@ export async function allocateFromPreparationBatches(
 
   // Handle deficit with fallback to lastKnownCost
   if (deficit > 0) {
-    let fallbackCost = preparation?.lastKnownCost || 0
+    const fallbackCost = preparation?.lastKnownCost || 0
 
-    // ✅ FIX: Normalize per-portion cost to per-gram for portion-type preparations
-    // lastKnownCost is stored as cost PER PORTION, we need cost PER GRAM (base unit)
-    if (
-      fallbackCost > 0 &&
-      preparation?.portionType === 'portion' &&
-      preparation?.portionSize &&
-      preparation.portionSize > 0
-    ) {
-      const normalizedCost = fallbackCost / preparation.portionSize
-      DebugUtils.info(MODULE_NAME, 'Normalizing portion-type lastKnownCost to per-gram', {
-        preparationId,
-        preparationName: preparation.name,
-        originalCostPerPortion: fallbackCost,
-        portionSize: preparation.portionSize,
-        normalizedCostPerGram: normalizedCost
-      })
-      fallbackCost = normalizedCost
-    }
+    // ✅ VERIFIED: lastKnownCost is ALREADY stored per-gram (base unit)
+    // See: src/About/docs/UNIT_CONVERSION_SPEC.md
+    // batch.cost_per_unit and preparation.last_known_cost are both IDR/gram
+    // NO conversion needed - do NOT divide by portionSize
 
     if (fallbackCost > 0) {
+      DebugUtils.debug(MODULE_NAME, 'Using lastKnownCost fallback (already per-gram)', {
+        preparationId,
+        preparationName: preparation?.name,
+        costPerGram: fallbackCost
+      })
       allocations.push({
         batchId: 'fallback-prep-cost',
         batchNumber: 'LAST_KNOWN',
@@ -315,17 +306,10 @@ export async function allocateFromPreparationBatches(
   // ⚡ FIX: Handle zero-cost allocation (batches exist but have costPerUnit = 0)
   // This happens when batches were created without proper cost calculation
   if (totalQty > 0 && avgCost === 0) {
-    let fallbackCost = preparation?.lastKnownCost || 0
+    const fallbackCost = preparation?.lastKnownCost || 0
 
-    // Normalize per-portion cost to per-gram for portion-type preparations
-    if (
-      fallbackCost > 0 &&
-      preparation?.portionType === 'portion' &&
-      preparation?.portionSize &&
-      preparation.portionSize > 0
-    ) {
-      fallbackCost = fallbackCost / preparation.portionSize
-    }
+    // ✅ VERIFIED: lastKnownCost is ALREADY per-gram - NO conversion needed
+    // See: src/About/docs/UNIT_CONVERSION_SPEC.md
 
     if (fallbackCost > 0) {
       DebugUtils.warn(MODULE_NAME, 'Zero-cost allocation detected, using lastKnownCost fallback', {
