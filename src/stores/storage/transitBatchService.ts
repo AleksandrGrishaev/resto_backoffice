@@ -113,10 +113,36 @@ export class TransitBatchService {
     const baseUnit = conversionResult.success ? conversionResult.baseUnit! : item.unit
 
     // Calculate cost in base units
+    // For piece-based products: cost stays per piece (no conversion needed)
+    // For weight/volume: convert cost to per-gram or per-ml
     let costPerUnitInBase = item.estimatedCostPerUnit
     if (conversionResult.success && item.unit !== baseUnit) {
-      const conversionFactor = item.quantity / quantityInBaseUnits
-      costPerUnitInBase = item.estimatedCostPerUnit * conversionFactor
+      // Only convert price for weight/volume units, NOT for piece-based products
+      // Piece-based products: price is already per piece, keep as-is
+      if (baseUnit !== 'piece' && baseUnit !== 'pcs') {
+        // For weight/volume: if we bought 1kg (1000g) for 10000 Rp, cost per gram = 10 Rp
+        // conversionFactor = quantityInBaseUnits / item.quantity (e.g., 1000/1 = 1000)
+        // costPerUnitInBase = estimatedCostPerUnit / conversionFactor (e.g., 10000/1000 = 10)
+        const conversionFactor = quantityInBaseUnits / item.quantity
+        costPerUnitInBase = item.estimatedCostPerUnit / conversionFactor
+
+        DebugUtils.debug(MODULE_NAME, 'Cost converted to base units', {
+          itemId: item.itemId,
+          originalUnit: item.unit,
+          baseUnit,
+          originalQuantity: item.quantity,
+          baseQuantity: quantityInBaseUnits,
+          originalCost: item.estimatedCostPerUnit,
+          baseCost: costPerUnitInBase
+        })
+      } else {
+        // Piece-based: keep cost as-is (already per piece)
+        DebugUtils.debug(MODULE_NAME, 'Piece-based product - keeping cost as-is', {
+          itemId: item.itemId,
+          baseUnit,
+          costPerUnit: costPerUnitInBase
+        })
+      }
     }
 
     const batchId = generateId()

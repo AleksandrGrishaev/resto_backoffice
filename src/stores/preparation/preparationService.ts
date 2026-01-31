@@ -464,6 +464,115 @@ export class PreparationService {
   }
 
   // ===========================
+  // ASYNC DB COST LOOKUP
+  // ===========================
+
+  /**
+   * Get last known cost from database directly (not dependent on store initialization)
+   * Used for inventory corrections and other operations that need cost data
+   * when recipesStore may not be initialized.
+   *
+   * Fallback chain:
+   * 1. Active batches (newest first by production_date)
+   * 2. Depleted batches (newest first)
+   * 3. preparation.last_known_cost from DB
+   * 4. Zero with error logging
+   *
+   * @param preparationId - The preparation ID
+   * @returns Cost per base unit (gram/ml)
+   */
+  async getLastKnownCostFromDB(preparationId: string): Promise<number> {
+    try {
+      // 1. Try active batches (newest first for most recent cost)
+      const { data: activeBatch } = await supabase
+        .from('preparation_batches')
+        .select('cost_per_unit, batch_number')
+        .eq('preparation_id', preparationId)
+        .gt('current_quantity', 0)
+        .eq('status', 'active')
+        .or('is_negative.eq.false,is_negative.is.null')
+        .gt('cost_per_unit', 0)
+        .order('production_date', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (activeBatch?.cost_per_unit && activeBatch.cost_per_unit > 0) {
+        DebugUtils.debug(MODULE_NAME, 'Cost from active batch', {
+          preparationId,
+          cost: activeBatch.cost_per_unit,
+          batchNumber: activeBatch.batch_number
+        })
+        return activeBatch.cost_per_unit
+      }
+
+      // 2. Try depleted batches (historical cost)
+      const { data: depletedBatch } = await supabase
+        .from('preparation_batches')
+        .select('cost_per_unit, batch_number')
+        .eq('preparation_id', preparationId)
+        .eq('status', 'depleted')
+        .or('is_negative.eq.false,is_negative.is.null')
+        .gt('cost_per_unit', 0)
+        .order('production_date', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (depletedBatch?.cost_per_unit && depletedBatch.cost_per_unit > 0) {
+        DebugUtils.debug(MODULE_NAME, 'Cost from depleted batch', {
+          preparationId,
+          cost: depletedBatch.cost_per_unit,
+          batchNumber: depletedBatch.batch_number
+        })
+        return depletedBatch.cost_per_unit
+      }
+
+      // 3. Try preparation.last_known_cost from DB
+      const { data: preparation } = await supabase
+        .from('preparations')
+        .select('last_known_cost, name, portion_type, portion_size')
+        .eq('id', preparationId)
+        .single()
+
+      if (preparation?.last_known_cost && preparation.last_known_cost > 0) {
+        // Normalize for portion-type preparations (last_known_cost might be per portion)
+        let normalizedCost = preparation.last_known_cost
+        if (
+          preparation.portion_type === 'portion' &&
+          preparation.portion_size &&
+          preparation.portion_size > 0
+        ) {
+          normalizedCost = preparation.last_known_cost / preparation.portion_size
+          DebugUtils.debug(MODULE_NAME, 'Normalized cost from preparation (portion-type)', {
+            preparationId,
+            name: preparation.name,
+            rawCost: preparation.last_known_cost,
+            portionSize: preparation.portion_size,
+            normalizedCost
+          })
+        } else {
+          DebugUtils.debug(MODULE_NAME, 'Cost from preparation.last_known_cost', {
+            preparationId,
+            name: preparation.name,
+            cost: normalizedCost
+          })
+        }
+        return normalizedCost
+      }
+
+      // 4. Log error and return 0
+      DebugUtils.error(MODULE_NAME, '❌ No cost data found in DB', {
+        preparationId,
+        preparationName: preparation?.name || 'Unknown',
+        fallbacksAttempted: ['active_batches', 'depleted_batches', 'last_known_cost']
+      })
+      return 0
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error getting cost from DB', { preparationId, error })
+      return 0
+    }
+  }
+
+  // ===========================
   // ⭐ PHASE 2: PORTION CONVERSION HELPERS
   // ===========================
 
@@ -919,8 +1028,17 @@ export class PreparationService {
 
         if (item.quantity > 0) {
           // SURPLUS: Create new batch with correction source
-          const costPerUnit = preparationInfo.lastKnownCost || 0
+          // ✅ FIX: Use async DB lookup instead of sync store data (may not be initialized)
+          const costPerUnit = await this.getLastKnownCostFromDB(item.preparationId)
           const batchValue = item.quantity * costPerUnit
+
+          if (costPerUnit <= 0) {
+            DebugUtils.warn(MODULE_NAME, '⚠️ Creating surplus batch with zero cost', {
+              preparationId: item.preparationId,
+              preparationName: preparationInfo.name,
+              quantity: item.quantity
+            })
+          }
 
           const newBatch: PreparationBatch = {
             id: crypto.randomUUID(),
@@ -1039,32 +1157,41 @@ export class PreparationService {
               shortage: remainingQuantity
             })
 
-            const negativeBatchService = await import('./negativeBatchService')
-            const result = await negativeBatchService.negativeBatchService.createNegativeBatch(
-              item.preparationId,
-              data.department,
-              remainingQuantity,
-              'inventory_shortage'
-            )
+            // ✅ FIX: Get cost from DB before creating negative batch
+            const negativeBatchCost = await this.getLastKnownCostFromDB(item.preparationId)
 
-            if (result.error) {
-              throw new Error(result.error)
-            }
+            const negativeBatchServiceModule = await import('./negativeBatchService')
+            // ✅ FIX: Use correct object signature for createNegativeBatch
+            const negativeBatch =
+              await negativeBatchServiceModule.negativeBatchService.createNegativeBatch({
+                preparationId: item.preparationId,
+                department: data.department,
+                quantity: -remainingQuantity, // Negative value for shortage
+                unit: item.unit,
+                cost: negativeBatchCost,
+                reason: `Inventory shortage during correction: ${data.correctionDetails.reason}`,
+                sourceOperationType: 'manual_writeoff'
+              })
 
             // Add negative batch to allocations
             allocations.push({
-              batchId: result.batchId!,
-              batchNumber: result.batchNumber!,
+              batchId: negativeBatch.id,
+              batchNumber: negativeBatch.batchNumber,
               quantity: remainingQuantity,
-              costPerUnit: result.costPerUnit || 0,
+              costPerUnit: negativeBatch.costPerUnit || 0,
               batchDate: TimeUtils.getCurrentLocalISO()
             })
 
-            totalCost += (result.costPerUnit || 0) * remainingQuantity
+            totalCost += (negativeBatch.costPerUnit || 0) * remainingQuantity
+
+            // Refresh batches cache to include the new negative batch
+            await this.refreshBatches()
 
             DebugUtils.info(MODULE_NAME, '✅ Created negative batch for shortage', {
-              batchId: result.batchId,
-              quantity: remainingQuantity
+              batchId: negativeBatch.id,
+              batchNumber: negativeBatch.batchNumber,
+              quantity: -remainingQuantity,
+              cost: negativeBatch.costPerUnit
             })
           }
 
