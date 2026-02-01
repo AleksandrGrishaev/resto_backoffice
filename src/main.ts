@@ -25,7 +25,29 @@ import { ENV } from '@/config/environment'
 
 const MODULE_NAME = 'Main'
 
-// HMR Test: Force full reload
+// ===== CHUNK LOADING ERROR HANDLER =====
+// Handles stale chunk errors after deployment (when old chunks no longer exist)
+window.addEventListener('vite:preloadError', event => {
+  // Prevent default error handling
+  event.preventDefault()
+
+  console.warn('[Main] Chunk loading failed, reloading page...', event)
+
+  // Check if we haven't already reloaded recently (prevent infinite loops)
+  const lastReload = sessionStorage.getItem('chunk-reload-time')
+  const now = Date.now()
+
+  if (lastReload && now - parseInt(lastReload) < 10000) {
+    // Already reloaded in the last 10 seconds, don't reload again
+    console.error('[Main] Recent reload detected, not reloading again')
+    return
+  }
+
+  // Mark reload time and refresh
+  sessionStorage.setItem('chunk-reload-time', String(now))
+  window.location.reload()
+})
+
 // ===== МИНИМАЛЬНАЯ ИНИЦИАЛИЗАЦИЯ =====
 function initializeApp() {
   try {

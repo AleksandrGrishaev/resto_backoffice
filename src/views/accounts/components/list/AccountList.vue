@@ -78,6 +78,15 @@
               </td>
             </tr>
           </tbody>
+          <tfoot v-if="accounts.length > 0">
+            <tr class="total-row">
+              <td colspan="3" class="total-label">Total:</td>
+              <td class="total-balance" :class="getBalanceClass(totalBalance)">
+                {{ formatIDR(totalBalance) }}
+              </td>
+              <td :colspan="canEdit ? 3 : 2"></td>
+            </tr>
+          </tfoot>
         </v-table>
       </v-card-text>
     </v-card>
@@ -104,6 +113,11 @@ const emit = defineEmits<{
 // Stores
 const authStore = useAuthStore()
 const canEdit = computed(() => authStore.isAdmin)
+
+// Computed total balance
+const totalBalance = computed(() => {
+  return props.accounts.reduce((sum, account) => sum + account.balance, 0)
+})
 
 // Utility functions
 function getAccountTypeIcon(type: Account['type']): string {
@@ -151,8 +165,8 @@ function getBalanceClass(balance: number): string {
 }
 
 .account-description {
-  color: rgb(var(--v-theme-on-surface-variant));
   font-size: 0.875rem;
+  opacity: 0.7;
 }
 
 .account-balance {
@@ -161,7 +175,7 @@ function getBalanceClass(balance: number): string {
 
 .last-transaction {
   font-size: 0.875rem;
-  color: rgb(var(--v-theme-on-surface-variant));
+  opacity: 0.7;
 }
 
 .account-actions {
@@ -170,15 +184,15 @@ function getBalanceClass(balance: number): string {
 }
 
 .text-success {
-  color: rgb(var(--v-theme-success));
+  color: rgb(var(--v-theme-success)) !important;
 }
 
 .text-error {
-  color: rgb(var(--v-theme-error));
+  color: rgb(var(--v-theme-error)) !important;
 }
 
 .text-medium-emphasis {
-  color: rgb(var(--v-theme-on-surface-variant));
+  opacity: 0.6;
 }
 
 tbody tr {
@@ -187,6 +201,26 @@ tbody tr {
 
   &:hover {
     background-color: rgb(var(--v-theme-surface-variant));
+  }
+}
+
+tfoot tr.total-row {
+  border-top: 2px solid rgb(var(--v-theme-outline));
+
+  td {
+    padding-top: 16px;
+    padding-bottom: 16px;
+    color: rgb(var(--v-theme-on-surface)) !important;
+  }
+
+  td.total-label {
+    text-align: right;
+    font-weight: 700;
+  }
+
+  td.total-balance {
+    font-weight: 700;
+    font-size: 1.1rem;
   }
 }
 </style>

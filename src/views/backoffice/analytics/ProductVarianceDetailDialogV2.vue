@@ -96,20 +96,20 @@
               <div class="formula-item clickable" @click="scrollToSection('loss')">
                 <div class="formula-label">Loss</div>
                 <div class="formula-value text-error">
-                  -{{ formatQty(detail.loss.quantity) }} {{ detail.product.unit }}
+                  -{{ formatQty(Math.abs(detail.loss.quantity)) }} {{ detail.product.unit }}
                 </div>
                 <div class="formula-amount text-medium-emphasis">
                   {{ formatIDR(detail.loss.amount) }}
                 </div>
               </div>
 
-              <div class="formula-operator">-</div>
+              <div class="formula-operator text-medium-emphasis">vs</div>
 
-              <!-- Closing -->
+              <!-- Closing (Actual) -->
               <div class="formula-item clickable" @click="scrollToSection('closing')">
-                <div class="formula-label">Closing</div>
+                <div class="formula-label">Actual</div>
                 <div class="formula-value">
-                  -{{ formatQty(detail.closing.total.quantity) }} {{ detail.product.unit }}
+                  {{ formatQty(detail.closing.total.quantity) }} {{ detail.product.unit }}
                 </div>
                 <div class="formula-amount text-medium-emphasis">
                   {{ formatIDR(detail.closing.total.amount) }}
@@ -267,12 +267,22 @@
             </v-expansion-panel-title>
             <v-expansion-panel-text>
               <!-- Sales breakdown chips -->
-              <div class="d-flex gap-2 mb-3">
+              <div class="d-flex flex-wrap gap-2 mb-3">
                 <v-chip size="small" variant="tonal" color="primary">
-                  Direct: {{ formatQty(detail.sales.direct.quantity) }} {{ detail.product.unit }}
+                  Direct: {{ formatQty(detail.sales.direct?.quantity || 0) }}
+                  {{ detail.product.unit }}
+                </v-chip>
+                <v-chip
+                  v-if="detail.sales.viaRecipes?.quantity > 0"
+                  size="small"
+                  variant="tonal"
+                  color="info"
+                >
+                  Via Recipes: {{ formatQty(detail.sales.viaRecipes.quantity) }}
+                  {{ detail.product.unit }}
                 </v-chip>
                 <v-chip size="small" variant="tonal" color="secondary">
-                  Via Preps: {{ formatQty(detail.sales.viaPreparations.quantity) }}
+                  Via Preps: {{ formatQty(detail.sales.viaPreparations?.quantity || 0) }}
                   {{ detail.product.unit }}
                 </v-chip>
               </div>
@@ -376,7 +386,7 @@
                 </div>
                 <div class="text-right">
                   <span class="text-body-2 text-error">
-                    -{{ formatQty(detail.loss.quantity) }} {{ detail.product.unit }}
+                    -{{ formatQty(Math.abs(detail.loss.quantity)) }} {{ detail.product.unit }}
                   </span>
                   <span class="text-caption text-medium-emphasis ml-2">
                     {{ formatIDR(detail.loss.amount) }}
@@ -385,27 +395,32 @@
               </div>
             </v-expansion-panel-title>
             <v-expansion-panel-text>
-              <!-- Loss by Reason -->
-              <div v-if="detail.loss.byReason.length > 0" class="mb-3">
-                <div class="text-subtitle-2 mb-2">By Reason</div>
-                <v-chip-group>
+              <!-- Write-offs Section (expired, spoiled, other) -->
+              <div v-if="writeOffsByReason.length > 0 || writeOffsDetails.length > 0" class="mb-4">
+                <div class="d-flex align-center mb-2">
+                  <v-icon size="small" color="error" class="mr-2">mdi-delete-outline</v-icon>
+                  <span class="text-subtitle-2">Write-offs</span>
+                  <v-chip size="x-small" variant="tonal" color="error" class="ml-2">
+                    {{ formatQty(writeOffsTotals.quantity) }} {{ detail.product.unit }}
+                  </v-chip>
+                </div>
+
+                <!-- Write-offs by Reason -->
+                <v-chip-group v-if="writeOffsByReason.length > 0" class="mb-2">
                   <v-chip
-                    v-for="loss in detail.loss.byReason"
+                    v-for="loss in writeOffsByReason"
                     :key="loss.reason"
                     color="error"
                     variant="tonal"
                     size="small"
                   >
                     {{ formatReason(loss.reason) }}: {{ formatQty(loss.quantity) }}
-                    {{ detail.product.unit }} ({{ loss.percentage }}%)
+                    {{ detail.product.unit }}
                   </v-chip>
                 </v-chip-group>
-              </div>
 
-              <!-- Loss Details -->
-              <div v-if="detail.loss.details.length > 0" class="mb-3">
-                <div class="text-subtitle-2 mb-2">Write-off Details</div>
-                <v-table density="compact" class="elevation-0">
+                <!-- Write-offs Details Table -->
+                <v-table v-if="writeOffsDetails.length > 0" density="compact" class="elevation-0">
                   <thead>
                     <tr>
                       <th>Date</th>
@@ -416,7 +431,7 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(item, idx) in detail.loss.details" :key="idx">
+                    <tr v-for="(item, idx) in writeOffsDetails" :key="idx">
                       <td>{{ formatDate(item.date) }}</td>
                       <td>{{ formatReason(item.reason) }}</td>
                       <td class="text-right text-error">{{ formatQty(item.quantity) }}</td>
@@ -427,13 +442,88 @@
                 </v-table>
               </div>
 
+              <v-divider
+                v-if="
+                  (writeOffsByReason.length > 0 || writeOffsDetails.length > 0) &&
+                  (correctionsByReason.length > 0 || correctionsDetails.length > 0)
+                "
+                class="mb-4"
+              />
+
+              <!-- Inventory Corrections Section -->
+              <div
+                v-if="correctionsByReason.length > 0 || correctionsDetails.length > 0"
+                class="mb-4"
+              >
+                <div class="d-flex align-center mb-2">
+                  <v-icon size="small" color="warning" class="mr-2">mdi-swap-horizontal</v-icon>
+                  <span class="text-subtitle-2">Inventory Corrections</span>
+                  <v-chip size="x-small" variant="tonal" color="warning" class="ml-2">
+                    {{ formatQty(correctionsTotals.quantity) }} {{ detail.product.unit }}
+                  </v-chip>
+                </div>
+
+                <!-- Corrections by Reason -->
+                <v-chip-group v-if="correctionsByReason.length > 0" class="mb-2">
+                  <v-chip
+                    v-for="corr in correctionsByReason"
+                    :key="corr.reason"
+                    :color="corr.quantity < 0 ? 'error' : 'success'"
+                    variant="tonal"
+                    size="small"
+                  >
+                    {{ corr.quantity < 0 ? 'Shortage' : 'Surplus' }}:
+                    {{ formatQty(Math.abs(corr.quantity)) }} {{ detail.product.unit }}
+                  </v-chip>
+                </v-chip-group>
+
+                <!-- Corrections Details Table -->
+                <v-table v-if="correctionsDetails.length > 0" density="compact" class="elevation-0">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Type</th>
+                      <th class="text-right">Qty</th>
+                      <th class="text-right">Amount</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(item, idx) in correctionsDetails" :key="idx">
+                      <td>{{ formatDate(item.date) }}</td>
+                      <td>
+                        <v-chip
+                          size="x-small"
+                          :color="item.quantity < 0 ? 'error' : 'success'"
+                          variant="tonal"
+                        >
+                          {{ item.quantity < 0 ? 'Shortage' : 'Surplus' }}
+                        </v-chip>
+                      </td>
+                      <td
+                        class="text-right"
+                        :class="item.quantity < 0 ? 'text-error' : 'text-success'"
+                      >
+                        {{ formatQty(item.quantity) }}
+                      </td>
+                      <td class="text-right">{{ formatIDR(Math.abs(item.amount)) }}</td>
+                      <td class="text-caption">{{ item.notes || '-' }}</td>
+                    </tr>
+                  </tbody>
+                </v-table>
+              </div>
+
+              <v-divider v-if="detail.loss.tracedFromPreps.quantity > 0" class="mb-4" />
+
               <!-- Traced Losses from Preparations -->
               <div v-if="detail.loss.tracedFromPreps.quantity > 0">
-                <div class="text-subtitle-2 mb-2">Traced from Preparations</div>
-                <v-chip size="small" variant="tonal" color="warning" class="mb-2">
-                  {{ formatQty(detail.loss.tracedFromPreps.quantity) }}
-                  {{ detail.product.unit }} ({{ formatIDR(detail.loss.tracedFromPreps.amount) }})
-                </v-chip>
+                <div class="d-flex align-center mb-2">
+                  <v-icon size="small" color="orange" class="mr-2">mdi-food-variant</v-icon>
+                  <span class="text-subtitle-2">Traced from Preparations</span>
+                  <v-chip size="x-small" variant="tonal" color="orange" class="ml-2">
+                    {{ formatQty(detail.loss.tracedFromPreps.quantity) }} {{ detail.product.unit }}
+                  </v-chip>
+                </div>
                 <v-table
                   v-if="detail.loss.tracedFromPreps.preparations.length > 0"
                   density="compact"
@@ -886,6 +976,62 @@ const totalMenuItemsSold = computed(() => {
     (sum: number, item: { quantitySold: number }) => sum + item.quantitySold,
     0
   )
+})
+
+// Separate write-offs (expired, spoiled, other) from corrections (inventory_adjustment)
+const WRITEOFF_REASONS = ['expired', 'spoiled', 'other', 'expiration']
+const CORRECTION_REASON = 'inventory_adjustment'
+
+const writeOffsByReason = computed(() => {
+  if (!detail.value?.loss?.byReason) return []
+  return detail.value.loss.byReason.filter((item: { reason: string }) =>
+    WRITEOFF_REASONS.includes(item.reason)
+  )
+})
+
+const correctionsByReason = computed(() => {
+  if (!detail.value?.loss?.byReason) return []
+  return detail.value.loss.byReason.filter(
+    (item: { reason: string }) => item.reason === CORRECTION_REASON
+  )
+})
+
+const writeOffsDetails = computed(() => {
+  if (!detail.value?.loss?.details) return []
+  return detail.value.loss.details.filter((item: { reason: string }) =>
+    WRITEOFF_REASONS.includes(item.reason)
+  )
+})
+
+const correctionsDetails = computed(() => {
+  if (!detail.value?.loss?.details) return []
+  return detail.value.loss.details.filter(
+    (item: { reason: string }) => item.reason === CORRECTION_REASON
+  )
+})
+
+const writeOffsTotals = computed(() => {
+  const qty = writeOffsByReason.value.reduce(
+    (sum: number, item: { quantity: number }) => sum + item.quantity,
+    0
+  )
+  const amount = writeOffsByReason.value.reduce(
+    (sum: number, item: { amount: number }) => sum + item.amount,
+    0
+  )
+  return { quantity: qty, amount }
+})
+
+const correctionsTotals = computed(() => {
+  const qty = correctionsByReason.value.reduce(
+    (sum: number, item: { quantity: number }) => sum + item.quantity,
+    0
+  )
+  const amount = correctionsByReason.value.reduce(
+    (sum: number, item: { amount: number }) => sum + item.amount,
+    0
+  )
+  return { quantity: qty, amount }
 })
 
 // Actual write-offs comparison

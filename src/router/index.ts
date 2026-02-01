@@ -623,6 +623,35 @@ const router = createRouter({
   routes
 })
 
+// ===== CHUNK LOADING ERROR HANDLER =====
+// Handle stale chunk errors during navigation (after deployment)
+router.onError((error, to) => {
+  // Check if this is a chunk loading error
+  const isChunkError =
+    error.message.includes('Failed to fetch dynamically imported module') ||
+    error.message.includes('Loading chunk') ||
+    error.message.includes('Loading CSS chunk')
+
+  if (isChunkError) {
+    console.warn('[Router] Chunk loading failed, reloading page...', {
+      error: error.message,
+      route: to.path
+    })
+
+    // Prevent infinite reload loops
+    const lastReload = sessionStorage.getItem('chunk-reload-time')
+    const now = Date.now()
+
+    if (lastReload && now - parseInt(lastReload) < 10000) {
+      console.error('[Router] Recent reload detected, not reloading again')
+      return
+    }
+
+    sessionStorage.setItem('chunk-reload-time', String(now))
+    window.location.reload()
+  }
+})
+
 // ===== NAVIGATION GUARDS =====
 
 /**

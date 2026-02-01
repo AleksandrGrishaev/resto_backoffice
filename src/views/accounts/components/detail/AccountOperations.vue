@@ -180,14 +180,14 @@ function canEditOperation(operation: Transaction): boolean {
 }
 
 .text-success {
-  color: rgb(var(--v-theme-success));
+  color: rgb(var(--v-theme-success)) !important;
 }
 
 .text-error {
-  color: rgb(var(--v-theme-error));
+  color: rgb(var(--v-theme-error)) !important;
 }
 
 .text-warning {
-  color: rgb(var(--v-theme-warning));
+  color: rgb(var(--v-theme-warning)) !important;
 }
 </style>

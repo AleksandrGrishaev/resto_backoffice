@@ -711,12 +711,12 @@ function formatTransactionAmount(transaction: Transaction): string {
   align-items: center;
   gap: 4px;
   font-size: 0.875rem;
-  color: rgb(var(--v-theme-on-surface-variant));
+  opacity: 0.7;
 }
 
 .transaction-date {
   font-size: 0.875rem;
-  color: rgb(var(--v-theme-on-surface-variant));
+  opacity: 0.7;
 }
 
 .transaction-amount {
@@ -725,23 +725,23 @@ function formatTransactionAmount(transaction: Transaction): string {
 
 .balance-after {
   font-size: 0.875rem;
-  color: rgb(var(--v-theme-on-surface-variant));
+  opacity: 0.7;
 }
 
 .text-success {
-  color: rgb(var(--v-theme-success));
+  color: rgb(var(--v-theme-success)) !important;
 }
 
 .text-error {
-  color: rgb(var(--v-theme-error));
+  color: rgb(var(--v-theme-error)) !important;
 }
 
 .text-warning {
-  color: rgb(var(--v-theme-warning));
+  color: rgb(var(--v-theme-warning)) !important;
 }
 
 .text-grey {
-  color: rgb(var(--v-theme-on-surface-variant));
+  opacity: 0.6;
   font-style: italic;
 }
 
