@@ -210,8 +210,14 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
             // Stock movement
             opening: item.opening || { quantity: 0, amount: 0 },
             received: item.received || { quantity: 0, amount: 0 },
-            // V4: Sales from theoretical calculation
-            sales: item.sales || { quantity: 0, amount: 0 },
+            // V4: Sales from theoretical calculation with breakdown
+            sales: {
+              quantity: item.sales?.quantity ?? 0,
+              amount: item.sales?.amount ?? 0,
+              direct: item.sales?.direct || { quantity: 0 },
+              viaRecipes: item.sales?.viaRecipes || { quantity: 0 },
+              viaPreparations: item.sales?.viaPreparations || { quantity: 0 }
+            },
             // V4: Actual write-offs (production_consumption)
             writeoffs: item.writeoffs || { quantity: 0, amount: 0 },
             // V4: Difference between theoretical sales and actual write-offs

@@ -319,6 +319,36 @@
                     <div class="text-caption text-medium-emphasis">
                       {{ formatIDR(item.sales.amount) }}
                     </div>
+                    <!-- Sales breakdown -->
+                    <div
+                      v-if="
+                        (item.sales.viaRecipes?.quantity ?? 0) > 0 ||
+                        (item.sales.viaPreparations?.quantity ?? 0) > 0
+                      "
+                      class="sales-breakdown"
+                    >
+                      <span
+                        v-if="(item.sales.direct?.quantity ?? 0) > 0"
+                        class="text-caption text-primary"
+                        title="Direct sales"
+                      >
+                        D:{{ formatQty(item.sales.direct.quantity, item.unit) }}
+                      </span>
+                      <span
+                        v-if="(item.sales.viaRecipes?.quantity ?? 0) > 0"
+                        class="text-caption text-info"
+                        title="Via Recipes"
+                      >
+                        R:{{ formatQty(item.sales.viaRecipes.quantity, item.unit) }}
+                      </span>
+                      <span
+                        v-if="(item.sales.viaPreparations?.quantity ?? 0) > 0"
+                        class="text-caption text-secondary"
+                        title="Via Preparations"
+                      >
+                        P:{{ formatQty(item.sales.viaPreparations.quantity, item.unit) }}
+                      </span>
+                    </div>
                   </div>
                   <span v-else class="text-medium-emphasis">—</span>
                 </template>
@@ -618,6 +648,14 @@ onMounted(() => {
   .stacked-cell {
     line-height: 1.3;
     padding: 4px 0;
+  }
+
+  .sales-breakdown {
+    display: flex;
+    gap: 4px;
+    font-size: 0.65rem;
+    opacity: 0.85;
+    margin-top: 2px;
   }
 
   // Sticky header table - header stays fixed when scrolling inside table

@@ -475,7 +475,12 @@ export interface ProductVarianceRowV2 {
   received: StockAmount // Purchases during period
 
   // THEORETICAL SALES (from orders decomposition - main metric)
-  sales: StockAmount // Theoretical: decomposed from orders through recipes
+  sales: StockAmount & {
+    // Sales breakdown by source
+    direct?: { quantity: number } // Menu → Product
+    viaRecipes?: { quantity: number } // Menu → Recipe → Product
+    viaPreparations?: { quantity: number } // Menu → Prep → Product
+  }
 
   // ACTUAL WRITE-OFFS (production_consumption)
   writeoffs?: StockAmount // Write-offs for production
