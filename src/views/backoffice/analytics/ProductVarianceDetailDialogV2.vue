@@ -802,6 +802,42 @@
                 </v-chip>
               </div>
 
+              <!-- Sales Consumption Details -->
+              <div
+                v-if="
+                  detail.actualWriteOffs.salesConsumption.details &&
+                  detail.actualWriteOffs.salesConsumption.details.length > 0
+                "
+                class="mb-3"
+              >
+                <div class="text-subtitle-2 mb-2">Sales Write-offs</div>
+                <v-table density="compact" class="elevation-0">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th class="text-right">Qty</th>
+                      <th class="text-right">Amount</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="(item, idx) in detail.actualWriteOffs.salesConsumption.details"
+                      :key="idx"
+                    >
+                      <td>{{ formatDate(item.date) }}</td>
+                      <td class="text-right">
+                        {{ formatQty(item.quantity) }} {{ detail.product.unit }}
+                      </td>
+                      <td class="text-right">{{ formatIDR(item.amount) }}</td>
+                      <td class="text-caption text-truncate" style="max-width: 200px">
+                        {{ formatSalesNotes(item.notes) }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </v-table>
+              </div>
+
               <!-- Production Consumption Details -->
               <div
                 v-if="
@@ -1129,6 +1165,13 @@ function formatSourceLabel(source: string): string {
     manual: 'Manual Entry'
   }
   return sourceMap[source] || source
+}
+
+function formatSalesNotes(notes: string): string {
+  if (!notes) return '-'
+  // Extract order info from auto write-off notes
+  const match = notes.match(/Order #(\d+)/)
+  return match ? `Order #${match[1]}` : notes.substring(0, 50)
 }
 
 function formatProductionNotes(notes: string): string {

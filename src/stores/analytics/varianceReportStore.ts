@@ -539,45 +539,50 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
         throw new Error('No data returned from RPC function')
       }
 
+      // Cast data to any since Supabase RPC returns unknown type
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rpcData = data as any
+
       // Transform the response to match TypeScript types
       const detail: ProductVarianceDetailV2 = {
         product: {
-          id: data.product?.id || productId,
-          name: data.product?.name || 'Unknown Product',
-          code: data.product?.code || null,
-          unit: data.product?.unit || 'unit',
-          department: data.product?.department || 'kitchen'
+          id: rpcData.product?.id || productId,
+          name: rpcData.product?.name || 'Unknown Product',
+          code: rpcData.product?.code || null,
+          unit: rpcData.product?.unit || 'unit',
+          department: rpcData.product?.department || 'kitchen'
         },
         period: {
-          dateFrom: data.period?.dateFrom || dateFrom,
-          dateTo: data.period?.dateTo || dateTo
+          dateFrom: rpcData.period?.dateFrom || dateFrom,
+          dateTo: rpcData.period?.dateTo || dateTo
         },
         opening: {
-          quantity: data.opening?.quantity ?? 0,
-          amount: data.opening?.amount ?? 0,
-          snapshot: data.opening?.snapshot || null
+          quantity: rpcData.opening?.quantity ?? 0,
+          amount: rpcData.opening?.amount ?? 0,
+          snapshot: rpcData.opening?.snapshot || null
         },
         received: {
-          quantity: data.received?.quantity ?? 0,
-          amount: data.received?.amount ?? 0,
-          receipts: data.received?.receipts || [],
-          totalReceiptsCount: data.received?.totalReceiptsCount ?? 0
+          quantity: rpcData.received?.quantity ?? 0,
+          amount: rpcData.received?.amount ?? 0,
+          receipts: rpcData.received?.receipts || [],
+          totalReceiptsCount: rpcData.received?.totalReceiptsCount ?? 0
         },
         sales: {
-          quantity: data.sales?.quantity ?? 0,
-          amount: data.sales?.amount ?? 0,
-          direct: data.sales?.direct || { quantity: 0, amount: 0 },
-          viaPreparations: data.sales?.viaPreparations || { quantity: 0, amount: 0 },
-          topMenuItems: data.sales?.topMenuItems || [],
-          totalMenuItemsCount: data.sales?.totalMenuItemsCount ?? 0,
-          preparations: data.sales?.preparations || []
+          quantity: rpcData.sales?.quantity ?? 0,
+          amount: rpcData.sales?.amount ?? 0,
+          direct: rpcData.sales?.direct || { quantity: 0, amount: 0 },
+          viaRecipes: rpcData.sales?.viaRecipes || { quantity: 0, amount: 0 },
+          viaPreparations: rpcData.sales?.viaPreparations || { quantity: 0, amount: 0 },
+          topMenuItems: rpcData.sales?.topMenuItems || [],
+          totalMenuItemsCount: rpcData.sales?.totalMenuItemsCount ?? 0,
+          preparations: rpcData.sales?.preparations || []
         },
         loss: {
-          quantity: data.loss?.quantity ?? 0,
-          amount: data.loss?.amount ?? 0,
-          byReason: data.loss?.byReason || [],
-          details: data.loss?.details || [],
-          tracedFromPreps: data.loss?.tracedFromPreps || {
+          quantity: rpcData.loss?.quantity ?? 0,
+          amount: rpcData.loss?.amount ?? 0,
+          byReason: rpcData.loss?.byReason || [],
+          details: rpcData.loss?.details || [],
+          tracedFromPreps: rpcData.loss?.tracedFromPreps || {
             quantity: 0,
             amount: 0,
             preparations: []
@@ -585,56 +590,58 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
         },
         closing: {
           rawStock: {
-            quantity: data.closing?.rawStock?.quantity ?? 0,
-            amount: data.closing?.rawStock?.amount ?? 0,
-            batches: data.closing?.rawStock?.batches || []
+            quantity: rpcData.closing?.rawStock?.quantity ?? 0,
+            amount: rpcData.closing?.rawStock?.amount ?? 0,
+            batches: rpcData.closing?.rawStock?.batches || []
           },
           inPreparations: {
-            quantity: data.closing?.inPreparations?.quantity ?? 0,
-            amount: data.closing?.inPreparations?.amount ?? 0,
-            preparations: data.closing?.inPreparations?.preparations || []
+            quantity: rpcData.closing?.inPreparations?.quantity ?? 0,
+            amount: rpcData.closing?.inPreparations?.amount ?? 0,
+            preparations: rpcData.closing?.inPreparations?.preparations || []
           },
-          total: data.closing?.total || { quantity: 0, amount: 0 }
+          total: rpcData.closing?.total || { quantity: 0, amount: 0 }
         },
         variance: {
-          quantity: data.variance?.quantity ?? 0,
-          amount: data.variance?.amount ?? 0,
-          interpretation: data.variance?.interpretation || 'balanced',
-          possibleReasons: data.variance?.possibleReasons || []
+          quantity: rpcData.variance?.quantity ?? 0,
+          amount: rpcData.variance?.amount ?? 0,
+          interpretation: rpcData.variance?.interpretation || 'balanced',
+          possibleReasons: rpcData.variance?.possibleReasons || []
         },
         // Analysis section - actual write-offs vs theoretical
-        actualWriteOffs: data.actualWriteOffs
+        actualWriteOffs: rpcData.actualWriteOffs
           ? {
               salesConsumption: {
-                quantity: data.actualWriteOffs.salesConsumption?.quantity ?? 0,
-                amount: data.actualWriteOffs.salesConsumption?.amount ?? 0,
-                operationsCount: data.actualWriteOffs.salesConsumption?.operationsCount ?? 0
+                quantity: rpcData.actualWriteOffs.salesConsumption?.quantity ?? 0,
+                amount: rpcData.actualWriteOffs.salesConsumption?.amount ?? 0,
+                operationsCount: rpcData.actualWriteOffs.salesConsumption?.operationsCount ?? 0,
+                details: rpcData.actualWriteOffs.salesConsumption?.details || []
               },
               productionConsumption: {
-                quantity: data.actualWriteOffs.productionConsumption?.quantity ?? 0,
-                amount: data.actualWriteOffs.productionConsumption?.amount ?? 0,
-                operationsCount: data.actualWriteOffs.productionConsumption?.operationsCount ?? 0,
-                details: data.actualWriteOffs.productionConsumption?.details || []
+                quantity: rpcData.actualWriteOffs.productionConsumption?.quantity ?? 0,
+                amount: rpcData.actualWriteOffs.productionConsumption?.amount ?? 0,
+                operationsCount:
+                  rpcData.actualWriteOffs.productionConsumption?.operationsCount ?? 0,
+                details: rpcData.actualWriteOffs.productionConsumption?.details || []
               },
               corrections: {
-                quantity: data.actualWriteOffs.corrections?.quantity ?? 0,
-                amount: data.actualWriteOffs.corrections?.amount ?? 0,
-                operationsCount: data.actualWriteOffs.corrections?.operationsCount ?? 0,
-                details: data.actualWriteOffs.corrections?.details || []
+                quantity: rpcData.actualWriteOffs.corrections?.quantity ?? 0,
+                amount: rpcData.actualWriteOffs.corrections?.amount ?? 0,
+                operationsCount: rpcData.actualWriteOffs.corrections?.operationsCount ?? 0,
+                details: rpcData.actualWriteOffs.corrections?.details || []
               },
               total: {
-                quantity: data.actualWriteOffs.total?.quantity ?? 0,
-                amount: data.actualWriteOffs.total?.amount ?? 0
+                quantity: rpcData.actualWriteOffs.total?.quantity ?? 0,
+                amount: rpcData.actualWriteOffs.total?.amount ?? 0
               },
               differenceFromTheoretical: {
-                quantity: data.actualWriteOffs.differenceFromTheoretical?.quantity ?? 0,
-                amount: data.actualWriteOffs.differenceFromTheoretical?.amount ?? 0,
+                quantity: rpcData.actualWriteOffs.differenceFromTheoretical?.quantity ?? 0,
+                amount: rpcData.actualWriteOffs.differenceFromTheoretical?.amount ?? 0,
                 interpretation:
-                  data.actualWriteOffs.differenceFromTheoretical?.interpretation || 'matched'
+                  rpcData.actualWriteOffs.differenceFromTheoretical?.interpretation || 'matched'
               }
             }
           : undefined,
-        generatedAt: data.generatedAt || new Date().toISOString()
+        generatedAt: rpcData.generatedAt || new Date().toISOString()
       }
 
       currentDetailV2.value = detail

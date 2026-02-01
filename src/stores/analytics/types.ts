@@ -700,7 +700,8 @@ export interface SalesDetail {
   quantity: number
   amount: number
   direct: StockAmount
-  viaPreparations: StockAmount
+  viaRecipes: StockAmount // Sales via recipes (Menu → Recipe → Product)
+  viaPreparations: StockAmount // Sales via preparations (Menu → Prep → Product)
   topMenuItems: MenuItemSalesDetail[]
   totalMenuItemsCount: number
   preparations: PreparationConsumptionDetail[]
@@ -806,6 +807,12 @@ export interface ActualWriteOffsDetail {
     quantity: number
     amount: number
     operationsCount: number
+    details: Array<{
+      date: string
+      quantity: number
+      amount: number
+      notes: string
+    }>
   }
   productionConsumption: {
     quantity: number
