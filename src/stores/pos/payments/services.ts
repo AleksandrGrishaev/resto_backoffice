@@ -415,6 +415,44 @@ export class PaymentsService {
   }
 
   /**
+   * Delete payment (for rollback on error)
+   * Used when payment was created but subsequent operations failed
+   */
+  async deletePayment(paymentId: string): Promise<ServiceResponse<void>> {
+    try {
+      // Delete from Supabase
+      if (this.isSupabaseAvailable()) {
+        try {
+          await executeSupabaseMutation(async () => {
+            const { error } = await supabase.from('payments').delete().eq('id', paymentId)
+            if (error) throw error
+          }, 'PaymentsService.deletePayment')
+          console.log('✅ Payment deleted from Supabase:', paymentId)
+        } catch (error) {
+          console.error('❌ Supabase delete failed:', extractErrorDetails(error))
+          throw error // Re-throw - this is critical for rollback
+        }
+      }
+
+      // Delete from localStorage
+      const cachedData = localStorage.getItem(this.STORAGE_KEY)
+      if (cachedData) {
+        const payments: PosPayment[] = JSON.parse(cachedData)
+        const filtered = payments.filter(p => p.id !== paymentId)
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(filtered))
+        console.log('💾 Payment deleted from localStorage')
+      }
+
+      return { success: true }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to delete payment'
+      }
+    }
+  }
+
+  /**
    * Generate payment number
    */
   private generatePaymentNumber(): string {

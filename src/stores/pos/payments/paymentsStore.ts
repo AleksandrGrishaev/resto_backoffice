@@ -153,6 +153,25 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       const ordersStore = usePosOrdersStore()
       const order = ordersStore.orders.find(o => o.id === orderId)
 
+      // ✅ PRE-CHECK: Verify items are not already paid (prevent double payment)
+      if (order) {
+        const alreadyPaidItems = order.bills
+          .flatMap(b => b.items)
+          .filter(item => itemIds.includes(item.id) && item.paymentStatus === 'paid')
+
+        if (alreadyPaidItems.length > 0) {
+          console.error('❌ [paymentsStore] Attempted to pay already paid items:', {
+            orderId,
+            alreadyPaidItemIds: alreadyPaidItems.map(i => i.id),
+            alreadyPaidItemNames: alreadyPaidItems.map(i => i.menuItemName)
+          })
+          return {
+            success: false,
+            error: `Some items are already paid: ${alreadyPaidItems.map(i => i.menuItemName).join(', ')}`
+          }
+        }
+      }
+
       // 1. Create payment with shiftId
       const paymentData = {
         orderId,
@@ -177,20 +196,50 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       // 2. Add to in-memory store
       payments.value.push(payment)
 
-      // 3. Link payment to order and items (updates UI immediately)
-      await linkPaymentToOrder(orderId, payment.id, itemIds)
+      // ===== CRITICAL SECTION WITH ROLLBACK =====
+      // If any step fails after payment creation, we MUST delete the payment
+      try {
+        // 3. Link payment to order and items (updates UI immediately)
+        await linkPaymentToOrder(orderId, payment.id, itemIds)
 
-      // 4. Add transaction to shift with correct accountId
-      await shiftsStore.addShiftTransaction(
-        orderId,
-        payment.id,
-        accountId,
-        amount,
-        `Payment ${payment.paymentNumber} - ${method}`
-      )
+        // 4. Add transaction to shift with correct accountId
+        await shiftsStore.addShiftTransaction(
+          orderId,
+          payment.id,
+          accountId,
+          amount,
+          `Payment ${payment.paymentNumber} - ${method}`
+        )
 
-      // 5. Update payment methods in shift (for shift totals)
-      await shiftsStore.updatePaymentMethods(payment.method, amount)
+        // 5. Update payment methods in shift (for shift totals)
+        await shiftsStore.updatePaymentMethods(payment.method, amount)
+      } catch (linkError) {
+        // ❌ ROLLBACK: Delete payment from DB and memory if linking fails
+        console.error('❌ [paymentsStore] Error after payment creation, rolling back:', linkError)
+
+        // Remove from memory
+        const paymentIndex = payments.value.findIndex(p => p.id === payment.id)
+        if (paymentIndex !== -1) {
+          payments.value.splice(paymentIndex, 1)
+        }
+
+        // Delete from database
+        try {
+          await paymentsService.deletePayment(payment.id)
+          console.log('🔄 [paymentsStore] Payment rolled back successfully:', payment.paymentNumber)
+        } catch (deleteError) {
+          console.error('❌ [paymentsStore] Failed to rollback payment:', deleteError)
+          // Log for manual cleanup
+          console.error('⚠️ ORPHANED PAYMENT:', {
+            paymentId: payment.id,
+            paymentNumber: payment.paymentNumber,
+            amount: payment.amount,
+            orderId
+          })
+        }
+
+        throw linkError // Re-throw to return error to caller
+      }
 
       console.log('💳 Payment processed (critical operations):', payment.paymentNumber, {
         shiftId: payment.shiftId,

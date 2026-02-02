@@ -291,13 +291,21 @@ async function processPayment() {
     const billIds = billsToPay.value.map(bill => bill.id)
 
     // 🆕 Collect all item IDs from bills being paid
+    // ✅ FIX: Only include items that are NOT already paid (prevent double payment)
     const itemIds: string[] = []
     for (const bill of billsToPay.value) {
       for (const item of bill.items) {
-        if (item.status !== 'cancelled') {
+        if (item.status !== 'cancelled' && item.paymentStatus !== 'paid') {
           itemIds.push(item.id)
         }
       }
+    }
+
+    // ✅ SAFETY CHECK: Prevent payment if no unpaid items
+    if (itemIds.length === 0) {
+      console.error('❌ No unpaid items to pay - all items already paid')
+      // TODO: Show error message to user
+      return
     }
 
     let result
