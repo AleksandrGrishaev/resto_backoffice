@@ -238,8 +238,8 @@ export const usePLReportStore = defineStore('plReport', () => {
       DebugUtils.info(MODULE_NAME, 'Calculating Tax Collected from sales')
 
       const taxCollected = {
-        serviceTax: salesTransactions.reduce((sum, t) => sum + (t.service_tax_amount || 0), 0),
-        localTax: salesTransactions.reduce((sum, t) => sum + (t.government_tax_amount || 0), 0),
+        serviceTax: salesTransactions.reduce((sum, t) => sum + (t.serviceTaxAmount || 0), 0),
+        localTax: salesTransactions.reduce((sum, t) => sum + (t.governmentTaxAmount || 0), 0),
         total: 0
       }
       taxCollected.total = taxCollected.serviceTax + taxCollected.localTax
@@ -286,6 +286,22 @@ export const usePLReportStore = defineStore('plReport', () => {
       })
 
       // ============================================
+      // 7b. Calculate Cash Corrections (balance adjustments)
+      // ============================================
+      DebugUtils.info(MODULE_NAME, 'Calculating cash corrections')
+
+      // Cash corrections are balance adjustments (type: 'correction')
+      // Negative = shortage (loss), Positive = surplus (gain)
+      const cashCorrections = allTransactions
+        .filter(t => t.type === 'correction')
+        .reduce((sum, t) => sum + t.amount, 0)
+
+      DebugUtils.info(MODULE_NAME, 'Cash corrections calculated', {
+        cashCorrections,
+        interpretation: cashCorrections >= 0 ? 'Net surplus' : 'Net shortage'
+      })
+
+      // ============================================
       // 8. Recalculate Gross and Net Profit using selected COGS method
       // ============================================
       const selectedCOGS = cogsCalculation.total
@@ -320,9 +336,11 @@ export const usePLReportStore = defineStore('plReport', () => {
         margin: netProfit.margin
       })
 
-      // Calculate Final Profit (Net Profit - Tax - Investments, without shareholders)
+      // Calculate Final Profit (Net Profit - Tax - Investments + Cash Corrections)
       // Shareholders payout is shown separately in Cash Flow section
-      const finalProfitAmount = netProfit.amount - taxExpenses - investmentExpenses
+      // Cash corrections: positive = surplus (adds to profit), negative = shortage (reduces profit)
+      const finalProfitAmount =
+        netProfit.amount - taxExpenses - investmentExpenses + cashCorrections
       const finalProfit = {
         amount: finalProfitAmount,
         margin: revenue.total > 0 ? (finalProfitAmount / revenue.total) * 100 : 0
@@ -332,7 +350,8 @@ export const usePLReportStore = defineStore('plReport', () => {
         netProfit: netProfit.amount,
         taxExpenses,
         investmentExpenses,
-        calculation: `${netProfit.amount} - ${taxExpenses} - ${investmentExpenses}`,
+        cashCorrections,
+        calculation: `${netProfit.amount} - ${taxExpenses} - ${investmentExpenses} + ${cashCorrections}`,
         amount: finalProfit.amount,
         margin: finalProfit.margin,
         shareholdersPayout, // tracked separately for cash flow
@@ -355,6 +374,7 @@ export const usePLReportStore = defineStore('plReport', () => {
         taxExpenses,
         investmentExpenses,
         shareholdersPayout,
+        cashCorrections,
         finalProfit,
         generatedAt: TimeUtils.getCurrentLocalISO()
       }
@@ -375,6 +395,7 @@ export const usePLReportStore = defineStore('plReport', () => {
         taxExpenses,
         investmentExpenses,
         shareholdersPayout,
+        cashCorrections,
         finalProfit: finalProfit.amount
       })
 

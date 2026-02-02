@@ -1,7 +1,9 @@
 // src/stores/analytics/varianceReportStore.ts
 // ✅ Product Variance Report Store
 // Analyzes discrepancies between purchases and usage
-// V3: Theoretical sales from orders + actual write-offs for comparison
+// V4: Uses refactored SQL functions with helper functions for guaranteed sync
+// - get_product_variance_report_v4 for main report
+// - get_product_variance_details_v3 for product details (uses same helpers)
 
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
@@ -128,11 +130,12 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
   }
 
   /**
-   * Generate Product Variance Report V2 (V3 backend) with theoretical sales from orders
+   * Generate Product Variance Report V2 (V4 backend) with theoretical sales from orders
    * Shows:
    * - Theoretical Sales (from orders decomposition) - MAIN metric
    * - Actual Write-offs (from storage_operations) - for comparison
-   * Formula: Variance = Opening + Received - Sales - Loss - Closing
+   * - Writeoffs/Loss decomposed from preparations
+   * Formula: Expected = Opening + Received - Sales - Loss + Gain; Variance = Actual - Expected
    */
   async function generateReportV2(
     dateFrom: string,
@@ -143,14 +146,14 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
       loading.value = true
       error.value = null
 
-      DebugUtils.info(MODULE_NAME, 'Generating variance report V3', {
+      DebugUtils.info(MODULE_NAME, 'Generating variance report V4', {
         dateFrom,
         dateTo,
         department
       })
 
-      // Call the V3 RPC function (theoretical sales from orders)
-      const { data, error: rpcError } = await supabase.rpc('get_product_variance_report_v3', {
+      // Call the V4 RPC function (refactored with helper functions)
+      const { data, error: rpcError } = await supabase.rpc('get_product_variance_report_v4', {
         p_start_date: dateFrom,
         p_end_date: dateTo,
         p_department: department
@@ -173,30 +176,68 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
         summary: {
           totalProducts: data.summary.totalProducts,
           productsWithActivity: data.summary.productsWithActivity,
-          // V3: Use theoretical sales as main sales amount
-          totalSalesAmount: data.summary.totalTheoreticalSalesAmount || 0,
+          // V4: Uses totalSalesAmount directly (was totalTheoreticalSalesAmount in V3)
+          totalSalesAmount:
+            data.summary.totalSalesAmount || data.summary.totalTheoreticalSalesAmount || 0,
           totalLossAmount: data.summary.totalLossAmount,
           totalInPrepsAmount: data.summary.totalInPrepsAmount || 0,
           totalVarianceAmount: data.summary.totalVarianceAmount || 0,
-          overallLossPercent: data.summary.overallLossPercent
+          overallLossPercent: data.summary.overallLossPercent || 0
         },
+        // V4: Calculate byDepartment from products (V4 doesn't return pre-calculated department breakdown)
         byDepartment: {
           kitchen: {
-            count: data.byDepartment?.kitchen?.productsCount || 0,
-            // V3: Use theoretical sales
-            salesAmount: data.byDepartment?.kitchen?.theoreticalSalesAmount || 0,
-            lossAmount: data.byDepartment?.kitchen?.lossAmount || 0,
-            inPrepsAmount: data.byDepartment?.kitchen?.inPrepsAmount || 0,
-            varianceAmount: data.byDepartment?.kitchen?.varianceAmount || 0,
+            count:
+              data.byDepartment?.kitchen?.productsCount ||
+              (data.products || []).filter((p: any) => p.department === 'kitchen').length,
+            salesAmount:
+              data.byDepartment?.kitchen?.theoreticalSalesAmount ||
+              data.byDepartment?.kitchen?.salesAmount ||
+              (data.products || [])
+                .filter((p: any) => p.department === 'kitchen')
+                .reduce((sum: number, p: any) => sum + (p.sales?.amount || 0), 0),
+            lossAmount:
+              data.byDepartment?.kitchen?.lossAmount ||
+              (data.products || [])
+                .filter((p: any) => p.department === 'kitchen')
+                .reduce((sum: number, p: any) => sum + (p.loss?.amount || 0), 0),
+            inPrepsAmount:
+              data.byDepartment?.kitchen?.inPrepsAmount ||
+              (data.products || [])
+                .filter((p: any) => p.department === 'kitchen')
+                .reduce((sum: number, p: any) => sum + (p.inPreps?.amount || 0), 0),
+            varianceAmount:
+              data.byDepartment?.kitchen?.varianceAmount ||
+              (data.products || [])
+                .filter((p: any) => p.department === 'kitchen')
+                .reduce((sum: number, p: any) => sum + (p.variance?.amount || 0), 0),
             lossPercent: data.byDepartment?.kitchen?.lossPercent || 0
           },
           bar: {
-            count: data.byDepartment?.bar?.productsCount || 0,
-            // V3: Use theoretical sales
-            salesAmount: data.byDepartment?.bar?.theoreticalSalesAmount || 0,
-            lossAmount: data.byDepartment?.bar?.lossAmount || 0,
-            inPrepsAmount: data.byDepartment?.bar?.inPrepsAmount || 0,
-            varianceAmount: data.byDepartment?.bar?.varianceAmount || 0,
+            count:
+              data.byDepartment?.bar?.productsCount ||
+              (data.products || []).filter((p: any) => p.department === 'bar').length,
+            salesAmount:
+              data.byDepartment?.bar?.theoreticalSalesAmount ||
+              data.byDepartment?.bar?.salesAmount ||
+              (data.products || [])
+                .filter((p: any) => p.department === 'bar')
+                .reduce((sum: number, p: any) => sum + (p.sales?.amount || 0), 0),
+            lossAmount:
+              data.byDepartment?.bar?.lossAmount ||
+              (data.products || [])
+                .filter((p: any) => p.department === 'bar')
+                .reduce((sum: number, p: any) => sum + (p.loss?.amount || 0), 0),
+            inPrepsAmount:
+              data.byDepartment?.bar?.inPrepsAmount ||
+              (data.products || [])
+                .filter((p: any) => p.department === 'bar')
+                .reduce((sum: number, p: any) => sum + (p.inPreps?.amount || 0), 0),
+            varianceAmount:
+              data.byDepartment?.bar?.varianceAmount ||
+              (data.products || [])
+                .filter((p: any) => p.department === 'bar')
+                .reduce((sum: number, p: any) => sum + (p.variance?.amount || 0), 0),
             lossPercent: data.byDepartment?.bar?.lossPercent || 0
           }
         },
@@ -251,11 +292,11 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
 
       currentReportV2.value = report
 
-      DebugUtils.info(MODULE_NAME, 'Variance report V3 generated', {
+      DebugUtils.info(MODULE_NAME, 'Variance report V4 generated', {
         totalProducts: report.summary.totalProducts,
         productsWithActivity: report.summary.productsWithActivity,
         totalSalesAmount: report.summary.totalSalesAmount,
-        overallLossPercent: report.summary.overallLossPercent
+        totalVarianceAmount: report.summary.totalVarianceAmount
       })
 
       return report
@@ -515,6 +556,7 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
   /**
    * Get detailed variance breakdown V2 for a single product
    * Enhanced version with complete drill-down into source documents
+   * V3: Uses helper functions for GUARANTEED sync with main report
    */
   async function getProductDetailV2(
     productId: string,
@@ -524,14 +566,14 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
     try {
       loadingDetailV2.value = true
 
-      DebugUtils.info(MODULE_NAME, 'Getting product variance detail V2', {
+      DebugUtils.info(MODULE_NAME, 'Getting product variance detail V3', {
         productId,
         dateFrom,
         dateTo
       })
 
-      // Call the V2 detail RPC function
-      const { data, error: rpcError } = await supabase.rpc('get_product_variance_details_v2', {
+      // Call the V3 detail RPC function (uses helper functions for sync)
+      const { data, error: rpcError } = await supabase.rpc('get_product_variance_details_v3', {
         p_product_id: productId,
         p_start_date: dateFrom,
         p_end_date: dateTo
@@ -583,9 +625,22 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
           totalMenuItemsCount: rpcData.sales?.totalMenuItemsCount ?? 0,
           preparations: rpcData.sales?.preparations || []
         },
+        // V3: Writeoffs with decomposition from preparations
+        writeoffs: rpcData.writeoffs
+          ? {
+              quantity: rpcData.writeoffs.quantity ?? 0,
+              amount: rpcData.writeoffs.amount ?? 0,
+              direct: rpcData.writeoffs.direct || { quantity: 0 },
+              fromPreparations: rpcData.writeoffs.fromPreparations || { quantity: 0 }
+            }
+          : undefined,
         loss: {
           quantity: rpcData.loss?.quantity ?? 0,
           amount: rpcData.loss?.amount ?? 0,
+          // V3: Decomposition breakdown
+          direct: rpcData.loss?.direct || { quantity: 0 },
+          fromPreparations: rpcData.loss?.fromPreparations || { quantity: 0 },
+          corrections: rpcData.loss?.corrections || { quantity: 0 },
           byReason: rpcData.loss?.byReason || [],
           details: rpcData.loss?.details || [],
           tracedFromPreps: rpcData.loss?.tracedFromPreps || {
@@ -594,6 +649,13 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
             preparations: []
           }
         },
+        // V3: Gain (positive corrections)
+        gain: rpcData.gain
+          ? {
+              quantity: rpcData.gain.quantity ?? 0,
+              amount: rpcData.gain.amount ?? 0
+            }
+          : undefined,
         closing: {
           rawStock: {
             quantity: rpcData.closing?.rawStock?.quantity ?? 0,
@@ -652,15 +714,17 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
 
       currentDetailV2.value = detail
 
-      DebugUtils.info(MODULE_NAME, 'Product variance detail V2 retrieved', {
+      DebugUtils.info(MODULE_NAME, 'Product variance detail V3 retrieved', {
         productName: detail.product.name,
-        variance: detail.variance.interpretation
+        variance: detail.variance.interpretation,
+        hasWriteoffsDecomposition: !!detail.writeoffs,
+        hasGain: !!detail.gain
       })
 
       return detail
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : 'Failed to get product variance detail V2'
+        err instanceof Error ? err.message : 'Failed to get product variance detail V3'
       DebugUtils.error(MODULE_NAME, message, { err })
       throw err
     } finally {

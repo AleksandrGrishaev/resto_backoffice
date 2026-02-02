@@ -481,6 +481,32 @@
 
                   <tr><td colspan="3" class="py-2"></td></tr>
 
+                  <!-- Cash Corrections Section -->
+                  <tr class="section-header">
+                    <td colspan="3" class="font-weight-bold text-orange">CASH CORRECTIONS</td>
+                  </tr>
+                  <tr>
+                    <td class="pl-8">
+                      {{ (report.cashCorrections || 0) >= 0 ? 'Net Surplus' : 'Net Shortage' }}
+                    </td>
+                    <td
+                      class="text-right"
+                      :class="(report.cashCorrections || 0) >= 0 ? 'text-success' : 'text-error'"
+                    >
+                      {{ (report.cashCorrections || 0) >= 0 ? '+' : ''
+                      }}{{ formatIDR(report.cashCorrections || 0) }}
+                    </td>
+                    <td
+                      class="text-right"
+                      :class="(report.cashCorrections || 0) >= 0 ? 'text-success' : 'text-error'"
+                    >
+                      {{ (report.cashCorrections || 0) >= 0 ? '+' : ''
+                      }}{{ calculatePercentage(report.cashCorrections || 0, report.revenue.total) }}
+                    </td>
+                  </tr>
+
+                  <tr><td colspan="3" class="py-2"></td></tr>
+
                   <!-- Final Profit -->
                   <tr class="font-weight-bold">
                     <td class="text-h6">FINAL PROFIT</td>

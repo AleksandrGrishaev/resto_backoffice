@@ -74,7 +74,9 @@
       "Bash(node test-inventory-correction.mjs:*)",
       "Bash(node scripts/restore-database.mjs:*)",
       "Bash(mcp__supabase__list_tables schemas:[\"public\"])",
-      "Bash(jq:*)"
+      "Bash(jq:*)",
+      "Bash(pnpm tsc:*)",
+      "Bash(pnpm vue-tsc:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

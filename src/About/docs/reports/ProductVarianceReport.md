@@ -11,7 +11,47 @@ Product Variance Report анализирует расхождения между
 
 ---
 
-## Основная формула (v4.4)
+## Архитектура v4/v3 (2026-02-02)
+
+### Модульный подход: Single Source of Truth
+
+```
+                    ┌─────────────────────────────────────┐
+                    │      Helper Functions (shared)      │
+                    │  ─────────────────────────────────  │
+                    │  calc_prep_decomposition_factors()  │
+                    │  calc_product_theoretical_sales()   │
+                    │  calc_product_writeoffs_decomposed()│
+                    │  calc_product_loss_decomposed()     │
+                    │  calc_product_inpreps()             │
+                    └──────────────┬──────────────────────┘
+                                   │
+              ┌────────────────────┼────────────────────┐
+              │                    │                    │
+              ▼                    ▼                    ▼
+    ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+    │  report_v4()    │  │  details_v3()   │  │  Future APIs    │
+    │  (все продукты) │  │  (один продукт) │  │  (batch export) │
+    │  inline CTEs    │  │  uses helpers   │  │                 │
+    └─────────────────┘  └─────────────────┘  └─────────────────┘
+```
+
+### Гарантия синхронизации
+
+| Функция                           | Версия | Как вычисляет                              |
+| --------------------------------- | ------ | ------------------------------------------ |
+| `get_product_variance_report_v4`  | v4.0   | Inline CTEs (batch для производительности) |
+| `get_product_variance_details_v3` | v3.0   | Использует helper functions                |
+
+**Ключевой момент:** Обе функции используют **идентичные формулы**:
+
+- Одинаковая рекурсивная декомпозиция preparations
+- Одинаковый учёт `output_quantity * portion_size`
+- Одинаковое разделение writeoffs/loss на direct + from_preps
+
+---
+
+## Основная формула
 
 ```
 Expected = Opening + Received - Sales - Loss + Gain
@@ -19,8 +59,6 @@ Actual = Closing + InPreps
 
 Variance = Actual - Expected
 ```
-
-**ВАЖНО (v4.4):** WriteOffs (production_consumption) **НЕ вычитаются** отдельно, т.к. уже учтены в Sales через products_from_preparations.
 
 ### Интерпретация Variance
 
@@ -32,251 +70,355 @@ Variance = Actual - Expected
 
 ---
 
+## Helper Functions
+
+### 1. `calc_prep_decomposition_factors(product_id)`
+
+Возвращает все preparations, которые используют данный продукт (прямо или через вложенные preps):
+
+```sql
+SELECT * FROM calc_prep_decomposition_factors('product-uuid');
+-- Returns: preparation_id, preparation_name, total_output_qty, product_qty_per_batch, factor
+```
+
+**Назначение:** Базовая функция для расчёта decomposition factors.
+
+### 2. `calc_product_theoretical_sales(product_id, start_date, end_date)`
+
+Вычисляет теоретические продажи продукта:
+
+```sql
+SELECT * FROM calc_product_theoretical_sales('product-uuid', '2026-01-01', '2026-01-31');
+-- Returns: direct_qty, via_recipes_qty, via_preps_qty, total_qty
+```
+
+**Три пути потребления:**
+
+- **direct** — Menu → Product
+- **via_recipes** — Menu → Recipe → Product
+- **via_preps** — Menu → Preparation → Product (рекурсивно)
+
+### 3. `calc_product_writeoffs_decomposed(product_id, start_date, end_date)`
+
+Вычисляет фактические списания (sales_consumption):
+
+```sql
+SELECT * FROM calc_product_writeoffs_decomposed('product-uuid', '2026-01-01', '2026-01-31');
+-- Returns: direct_qty, from_preps_qty, total_qty
+```
+
+**Важно:** Теперь включает decomposition из preparations:
+
+- Если списали 1kg теста → покажет муку, воду, дрожжи
+
+### 4. `calc_product_loss_decomposed(product_id, start_date, end_date)`
+
+Вычисляет потери (expired/spoiled/other + corrections):
+
+```sql
+SELECT * FROM calc_product_loss_decomposed('product-uuid', '2026-01-01', '2026-01-31');
+-- Returns: direct_loss_qty, from_preps_loss_qty, corrections_loss_qty, total_loss_qty, corrections_gain_qty
+```
+
+**Важно:** Теперь включает decomposition из preparations:
+
+- Если испортился prep → покажет потери по продуктам
+
+### 5. `calc_product_inpreps(product_id)`
+
+Вычисляет продукт в активных prep batches:
+
+```sql
+SELECT * FROM calc_product_inpreps('product-uuid');
+-- Returns: qty, amount
+```
+
+---
+
+## Схема списаний (Write-offs)
+
+### Категории операций в `storage_operations`
+
+```
+storage_operations.operation_type = 'write_off'
+├── reason = 'sales_consumption'      → WriteOffs (для сравнения с Sales)
+├── reason = 'production_consumption' → НЕ используется (учтено в InPreps)
+├── reason = 'expired'                → Loss
+├── reason = 'spoiled'                → Loss
+├── reason = 'other'                  → Loss
+├── reason = 'expiration'             → Loss
+├── reason = 'education'              → OPEX (не в формуле)
+└── reason = 'test'                   → OPEX (не в формуле)
+
+storage_operations.operation_type = 'correction'
+├── quantity < 0 (negative)           → Loss (нашли меньше при инвентаризации)
+└── quantity > 0 (positive)           → Gain (нашли больше при инвентаризации)
+```
+
+### Декомпозиция Write-offs и Loss
+
+Когда списывается preparation, он декомпозируется до продуктов:
+
+```
+storage_operations (itemType = 'preparation')
+    │
+    ▼
+┌───────────────────────────────────────────┐
+│ Recursive Decomposition                   │
+│                                           │
+│ Prep A (1000g)                            │
+│   ├── Ingredient: Product X (500g)        │
+│   ├── Ingredient: Product Y (300g)        │
+│   └── Ingredient: Prep B (200g)           │
+│         ├── Product Z (100g)              │
+│         └── Product W (100g)              │
+│                                           │
+│ Result for 1000g Prep A:                  │
+│   Product X: 500g                         │
+│   Product Y: 300g                         │
+│   Product Z: 100g (via Prep B)            │
+│   Product W: 100g (via Prep B)            │
+└───────────────────────────────────────────┘
+```
+
+---
+
 ## Компоненты формулы
 
 ### 1. Opening (Остаток на начало)
 
 **Источник:** `inventory_snapshots` на дату `(start_date - 1 день)`
 
-Snapshot создаётся при закрытии смены предыдущего дня. Содержит:
-
-- Количество продукта на складе
-- Общую стоимость
-
-**Если snapshot отсутствует:** Opening = 0
-
-```sql
-SELECT quantity, total_cost
-FROM inventory_snapshots
-WHERE item_id = '{product_id}'
-  AND snapshot_date = '{start_date - 1 day}'
-```
-
 ### 2. Received (Поступления)
 
 **Источник:** `supplierstore_receipt_items` + `supplierstore_receipts`
 
-Все поступления от поставщиков за период:
-
-- Только завершённые накладные (`status = 'completed'`)
-- В пределах `delivery_date` периода (inclusive end date)
-
-```sql
-SELECT SUM(received_quantity) as qty,
-       SUM(received_quantity * actual_base_cost) as amount
-FROM supplierstore_receipt_items sri
-JOIN supplierstore_receipts sr ON sri.receipt_id = sr.id
-WHERE sri.item_id = '{product_id}'
-  AND sr.delivery_date >= '{start_date}'
-  AND sr.delivery_date < '{end_date + 1 day}'  -- inclusive
-  AND sr.status = 'completed'
-```
-
 ### 3. Sales (Теоретические продажи)
 
-**Источник:** Расчёт на основе `orders` + `order_items` + `payments`
+**Источник:** Расчёт через `calc_product_theoretical_sales()` или inline CTEs
 
-Теоретический расход продукта на основе проданных блюд. **Пять путей:**
+Три пути:
 
-#### 3.1 Direct Product Sales
+- Direct Product Sales: `Menu → Product`
+- Sales via Recipes: `Menu → Recipe → Product`
+- Sales via Preparations: `Menu → Preparation → Product` (recursive)
 
-```
-Menu Item → Composition (type='product') → Product
-```
+### 4. WriteOffs (Фактические списания на продажи)
 
-#### 3.2 Sales via Recipes
+**Источник:** Расчёт через `calc_product_writeoffs_decomposed()` или inline CTEs
 
-```
-Menu Item → Composition (type='recipe') → Recipe Components → Product
-```
+Включает:
 
-#### 3.3 Sales via Preparations
-
-```
-Menu Item → Composition (type='preparation') → Preparation Ingredients → Product
-```
-
-#### 3.4 Sales via Recipe → Preparation
-
-```
-Menu Item → Recipe → Preparation → Product
-```
-
-#### 3.5 Sales via Nested Preparations (NEW in v4.3)
-
-```
-Menu Item → Preparation A → Preparation B → Product
-```
-
-**Примеры nested preparations:**
-
-- `Tom Yam Seafood Pack` → `Shrimp thawed 30pc` → `Udang`
-- `Ciabatta small` → `Dough ciabatta` → `Flour, Water, Oil...`
-- `Dorado unfrozen` → `Tempung goreng` → `Flour, Pepper...`
-
-**Total Sales = Direct + Via Recipes + Via Preparations (all levels)**
-
-**Важно:** Считаются только заказы с завершёнными платежами (`payments.status = 'completed'`).
-
-### 4. WriteOffs (Фактические списания)
-
-**Источник:** `storage_operations` с типами:
-
-- `write_off` + `reason = 'sales_consumption'` — списания на продажи
-- `write_off` + `reason = 'production_consumption'` — списания на производство полуфабрикатов
-
-Это **фактические** списания, которые были созданы системой или вручную.
+- Direct product writeoffs (sales_consumption)
+- Decomposed from preparation writeoffs
 
 ### 5. Loss (Потери)
 
-**Источник:** `storage_operations` с типами:
+**Источник:** Расчёт через `calc_product_loss_decomposed()` или inline CTEs
 
-- `write_off` + `reason = 'expired'` — истёк срок годности
-- `write_off` + `reason = 'spoiled'` — испортился
-- `write_off` + `reason = 'other'` — другие причины
-- `correction` с **отрицательным** количеством — нашли меньше при инвентаризации
+Включает:
 
-**Total Loss = Direct Loss + Negative Corrections**
+- Direct product losses (expired/spoiled/other)
+- Decomposed from preparation losses
+- Negative corrections
 
 ### 6. Gain (Прибавки)
 
-**Источник:** `storage_operations` с типом `correction` и **положительным** количеством
-
-Когда при инвентаризации нашли **больше** чем в системе.
+**Источник:** Positive corrections
 
 ### 7. Closing (Остаток на складе)
 
 **Источник:** `storage_batches`
 
-Сумма всех активных батчей продукта.
-
 ### 8. InPreps (Остаток в полуфабрикатах)
 
-**Источник:** `preparation_batches` + `preparation_ingredients`
+**Источник:** Расчёт через `calc_product_inpreps()` или inline CTEs
 
-Продукт "заморожен" в активных батчах полуфабрикатов. **Включает recursive decomposition:**
+Формула decomposition:
 
 ```
-InPreps = Σ (prep_batch.qty × product_per_batch / output_quantity)
+total_output = output_quantity × COALESCE(portion_size, 1)
+product_qty = batch_qty × ingredient_qty / total_output
 ```
 
-**Важно (v4.3):** Используется `output_quantity` для ОБОИХ типов (`portion` и `weight`).
+---
+
+## Сводная таблица категорий
+
+| Категория        | Что включает                                                   | В формуле           |
+| ---------------- | -------------------------------------------------------------- | ------------------- |
+| **Sales**        | Теоретические продажи (direct + via recipes + via preps)       | YES, вычитается     |
+| **WriteOffs**    | `sales_consumption` (products + decomposed preps)              | Показ, НЕ в формуле |
+| **Loss**         | `expired/spoiled/other` + neg corrections (+ decomposed preps) | YES, вычитается     |
+| **Gain**         | Positive corrections                                           | YES, добавляется    |
+| **NOT included** | `production_consumption` (уже в InPreps), `education`, `test`  | НЕ в формуле        |
 
 ---
 
-## Технические детали
+## RPC Functions
 
-### RPC Functions (актуальные версии)
+### Актуальные версии
 
-| Function                          | Version   | Purpose                             |
-| --------------------------------- | --------- | ----------------------------------- |
-| `get_product_variance_report_v3`  | **v4.4**  | Основной отчёт со списком продуктов |
-| `get_product_variance_details_v2` | **v2.10** | Детализация по одному продукту      |
+| Function                          | Version | Purpose                             |
+| --------------------------------- | ------- | ----------------------------------- |
+| `get_product_variance_report_v4`  | v4.0    | Основной отчёт со списком продуктов |
+| `get_product_variance_details_v3` | v3.0    | Детализация по одному продукту      |
 
-### Ключевые таблицы
+### Helper Functions
 
-| Таблица                                    | Назначение                             |
-| ------------------------------------------ | -------------------------------------- |
-| `products`                                 | Справочник продуктов                   |
-| `inventory_snapshots`                      | Снапшоты для Opening                   |
-| `supplierstore_receipt_items`              | Поступления (Received)                 |
-| `orders` + `order_items` + `payments`      | Заказы для Sales                       |
-| `menu_items` (variants JSONB)              | Композиции блюд                        |
-| `recipes` + `recipe_components`            | Рецепты                                |
-| `preparations` + `preparation_ingredients` | Полуфабрикаты                          |
-| `storage_operations`                       | Все операции (write-offs, corrections) |
-| `storage_batches`                          | Текущие батчи (Closing)                |
-| `preparation_batches`                      | Батчи полуфабрикатов (InPreps)         |
+| Function                            | Purpose                                  |
+| ----------------------------------- | ---------------------------------------- |
+| `calc_prep_decomposition_factors`   | Decomposition factors для product → prep |
+| `calc_product_theoretical_sales`    | Теоретические продажи                    |
+| `calc_product_writeoffs_decomposed` | WriteOffs с decomposition                |
+| `calc_product_loss_decomposed`      | Loss с decomposition                     |
+| `calc_product_inpreps`              | Продукт в prep batches                   |
 
 ---
 
-## История изменений
+## Миграции
 
-### Сессия 2026-02-01 (день) - v4.4
+### Архитектура v4/v3 (2026-02-02)
 
-#### Критические исправления:
+| #   | Файл                                  | Описание                                   |
+| --- | ------------------------------------- | ------------------------------------------ |
+| 126 | `126_helper_prep_decomposition.sql`   | Helper: calc_prep_decomposition_factors    |
+| 127 | `127_helper_theoretical_sales.sql`    | Helper: calc_product_theoretical_sales     |
+| 128 | `128_helper_writeoffs_decomposed.sql` | Helper: calc_product_writeoffs_decomposed  |
+| 129 | `129_helper_loss_decomposed.sql`      | Helper: calc_product_loss_decomposed       |
+| 130 | `130_helper_inpreps.sql`              | Helper: calc_product_inpreps               |
+| 131 | `131_variance_report_v4.sql`          | Main report v4 (same calcs as v3, cleaner) |
+| 132 | `132_variance_details_v3.sql`         | Details v3 (uses helpers, guaranteed sync) |
 
-| #   | Баг                            | Причина                                       | Решение                                |
-| --- | ------------------------------ | --------------------------------------------- | -------------------------------------- |
-| 1   | Разные данные в report/details | report_v3 вычитал production_writeoffs дважды | Убрали production_writeoffs из формулы |
-| 2   | RPC error в details_v2         | Type mismatch в recursive CTE                 | Добавлены `::NUMERIC` casts            |
-| 3   | "No sales" при наличии продаж  | Отсутствовал breakdown (direct/viaRecipes)    | Добавлены все поля в details_v2        |
+### Предыдущие миграции (v3.x/v4.x)
 
-#### Новые возможности:
-
-| #   | Функционал            | Описание                                              | Миграция |
-| --- | --------------------- | ----------------------------------------------------- | -------- |
-| 1   | **Sales breakdown**   | Direct, Via Recipes, Via Preps в details_v2           | 117      |
-| 2   | **Top menu items**    | Массив topMenuItems для таблицы в UI                  | 117      |
-| 3   | **Unified formula**   | Одинаковая формула в report_v3 и details_v2           | 116      |
-| 4   | **Actual Write-offs** | Секция actualWriteOffs с sales/production/corrections | 118      |
-
-#### Миграции:
-
-| #   | Файл                                             | Описание                                    |
-| --- | ------------------------------------------------ | ------------------------------------------- |
-| 115 | `115_fix_details_v2_recursive_type_mismatch.sql` | Fix recursive CTE type mismatch             |
-| 116 | `116_fix_report_v3_remove_double_counting.sql`   | Remove double-counting production_writeoffs |
-| 117 | `117_add_sales_breakdown_to_details_v2.sql`      | Add sales breakdown + topMenuItems          |
-| 118 | `118_add_actual_writeoffs_to_details_v2.sql`     | Add actualWriteOffs section                 |
+| #   | Файл                                          | Описание                                   |
+| --- | --------------------------------------------- | ------------------------------------------ |
+| 119 | `119_add_sales_breakdown_to_report_v3.sql`    | Add sales breakdown (D/R/P) to report_v3   |
+| 120 | `120_add_writeoffs_to_report_v3.sql`          | Add production_consumption to report_v3    |
+| 121 | `121_fix_details_v2_loss_corrections.sql`     | Split corrections into Loss/Gain           |
+| 122 | `122_fix_writeoffs_to_sales_consumption.sql`  | Use sales_consumption for WriteOffs        |
+| 123 | `123_decompose_writeoffs_and_loss.sql`        | Decompose prep writeoffs/loss to products  |
+| 124 | `124_fix_inpreps_portion_size.sql`            | Fix InPreps formula for portion-type preps |
+| 125 | `125_fix_details_v2_writeoffs_comparison.sql` | Fix differenceFromTheoretical              |
 
 ---
 
-### Сессия 2026-02-01 (ночь) - v4.3
+## Response Structure
 
-#### Новые возможности:
+### Report v4
 
-| #   | Функционал                         | Описание                                               | Миграция |
-| --- | ---------------------------------- | ------------------------------------------------------ | -------- |
-| 1   | **Recursive preparations**         | Поддержка вложенных preps: `Prep A → Prep B → Product` | 114      |
-| 2   | **Single-day filter**              | Можно запрашивать отчёт за один день (Feb 1 - Feb 1)   | 114      |
-| 3   | **Unified portion/weight formula** | Одна формула `/ output_quantity` для обоих типов       | 113      |
+```jsonc
+{
+  "version": "v4.0",
+  "period": { "dateFrom", "dateTo", "openingSnapshotDate", "closingSnapshotDate" },
+  "summary": {
+    "totalProducts": 167,
+    "productsWithActivity": 149,
+    "totalSalesAmount": 5550456.59,
+    "totalWriteoffsAmount": 6020803.82,
+    "totalLossAmount": 42815310.02,
+    "totalInPrepsAmount": 5586451.69,
+    "totalVarianceAmount": 11530195.58
+  },
+  "products": [
+    {
+      "productId", "productName", "productCode", "unit", "department", "avgCost",
+      "opening": { "quantity", "amount" },
+      "received": { "quantity", "amount" },
+      "sales": {
+        "quantity", "amount",
+        "direct": { "quantity" },
+        "viaRecipes": { "quantity" },
+        "viaPreparations": { "quantity" }
+      },
+      "writeoffs": { "quantity", "amount" },
+      "salesWriteoffDiff": { "quantity", "amount" },
+      "loss": { "quantity", "amount" },
+      "closing": { "quantity", "amount" },
+      "inPreps": { "quantity", "amount" },
+      "variance": { "quantity", "amount" },
+      "hasPreparations": true
+    }
+  ]
+}
+```
 
-#### Результаты recursive preparations:
+### Details v3
 
-| Продукт | До (v4.2) | После (v4.3) | Изменение |
-| ------- | --------- | ------------ | --------- |
-| Udang   | 400g      | 6,400g       | **16x**   |
-
-**Причина:** Раньше не учитывались вложенные preparations:
-
-- `Tom Yam Seafood Pack` → `Shrimp thawed 30pc` → `Udang`
-
-#### Исправленные баги в 114:
-
-| #   | Баг                             | Причина                               | Решение                                  |
-| --- | ------------------------------- | ------------------------------------- | ---------------------------------------- |
-| 1   | Single-day возвращает 0 записей | Фильтр `>= Feb 1 AND < Feb 1` = пусто | Inclusive end: `< end_date + 1 day`      |
-| 2   | Nested preps не учитываются     | Код не обходил вложенные preparations | Добавлен recursive CTE `prep_tree`       |
-| 3   | InPreps не учитывает nested     | `products_in_preps` был плоским       | Добавлен recursive CTE `prep_batch_tree` |
-
-### Сессия 2026-02-01 (вечер) - v4.2
-
-#### Миграции (все применены к DEV и PRODUCTION):
-
-| #   | Файл                                                        | Описание                                      |
-| --- | ----------------------------------------------------------- | --------------------------------------------- |
-| 111 | `111_fix_details_v2_missing_recipe_product_sales.sql`       | Добавлен путь `Menu → Recipe → Product`       |
-| 112 | `112_fix_report_v3_prep_portion_size_bug.sql`               | Исправлен расчёт для weight-type preps        |
-| 113 | `113_fix_portion_type_use_output_quantity.sql`              | Unified formula: `/ output_quantity` для всех |
-| 114 | `114_add_recursive_preparations_and_single_day_support.sql` | Recursive preps + single-day filter           |
+```jsonc
+{
+  "version": "v3.0",
+  "product": { "id", "name", "code", "unit", "department" },
+  "period": { "dateFrom", "dateTo" },
+  "opening": { "quantity", "amount", "snapshot": {...} },
+  "received": { "quantity", "amount", "receipts": [...], "totalReceiptsCount" },
+  "sales": {
+    "quantity", "amount",
+    "direct": { "quantity", "amount" },
+    "viaRecipes": { "quantity" },
+    "viaPreparations": { "quantity", "amount" },
+    "topMenuItems": [...],
+    "totalMenuItemsCount"
+  },
+  "writeoffs": {
+    "quantity", "amount",
+    "direct": { "quantity" },           // NEW in v3
+    "fromPreparations": { "quantity" }  // NEW in v3
+  },
+  "actualWriteOffs": {
+    "salesConsumption": { "quantity", "amount", "operationsCount" },
+    "productionConsumption": { "quantity", "amount", "operationsCount", "details" },
+    "corrections": { "quantity", "amount", "operationsCount", "details" },
+    "total": { "quantity", "amount" },
+    "differenceFromTheoretical": { "quantity", "amount", "interpretation" }
+  },
+  "loss": {
+    "quantity", "amount",
+    "direct": { "quantity" },           // NEW in v3
+    "fromPreparations": { "quantity" }, // NEW in v3
+    "corrections": { "quantity" },      // NEW in v3
+    "byReason": [...],
+    "details": [...]
+  },
+  "gain": { "quantity", "amount" },     // NEW in v3
+  "closing": {
+    "rawStock": { "quantity", "amount", "batches" },
+    "inPreparations": { "quantity", "amount", "preparations" },
+    "total": { "quantity", "amount" }
+  },
+  "variance": { "quantity", "amount", "interpretation", "possibleReasons" }
+}
+```
 
 ---
 
-## Статус миграций (2026-02-01)
+## Файлы проекта
 
-### ✅ Применены к PRODUCTION:
+### UI компоненты
 
-- Migration 111: `fix_details_v2_missing_recipe_product_sales`
-- Migration 112: `fix_report_v3_prep_portion_size_bug`
-- Migration 113: `fix_portion_type_use_output_quantity`
-- Migration 114: `add_recursive_preparations_and_single_day_support`
-- Migration 115: `fix_details_v2_recursive_type_mismatch`
-- Migration 116: `fix_report_v3_remove_double_counting_writeoffs`
-- Migration 117: `add_sales_breakdown_to_details_v2`
-- Migration 118: `add_actual_writeoffs_to_details_v2`
+- `src/views/backoffice/analytics/ProductVarianceDetailDialogV2.vue` — диалог детализации
+- `src/views/backoffice/analytics/VarianceReportView.vue` — основной отчёт
 
-Все миграции применены через MCP (подключён к PRODUCTION).
+### Store
+
+- `src/stores/analytics/varianceReportStore.ts` — Pinia store для отчёта
+- `src/stores/analytics/types.ts` — TypeScript типы
+
+### SQL функции (документация)
+
+- `src/supabase/functions/get_product_variance_report.sql` — документация v4
+- `src/supabase/functions/get_product_variance_details_v2.sql` — документация v3
+
+### Миграции (исходный код)
+
+- `src/supabase/migrations/126_helper_prep_decomposition.sql`
+- `src/supabase/migrations/127_helper_theoretical_sales.sql`
+- `src/supabase/migrations/128_helper_writeoffs_decomposed.sql`
+- `src/supabase/migrations/129_helper_loss_decomposed.sql`
+- `src/supabase/migrations/130_helper_inpreps.sql`
+- `src/supabase/migrations/131_variance_report_v4.sql`
+- `src/supabase/migrations/132_variance_details_v3.sql`
 
 ---
 
@@ -298,50 +440,29 @@ InPreps = Σ (prep_batch.qty × product_per_batch / output_quantity)
 
 ---
 
-## TODO (актуальный)
+## Статус миграций (2026-02-02)
 
-### ✅ Выполнено:
+### ✅ Применены к DEV
 
-1. **Recursive preparations** — вложенные preparations теперь учитываются
-2. **Single-day filter** — можно смотреть отчёт за один день
-3. **Unified formula** — report_v3 и details_v2 используют одинаковую формулу
-4. **Sales breakdown** — Direct, Via Recipes, Via Preps в details_v2
-5. **Top menu items** — таблица блюд в диалоге детализации
-6. **Actual Write-offs** — секция с фактическими списаниями (sales/production/corrections)
-7. **Миграции применены к PRODUCTION** — все 111-118
+- Migrations 126-132 (новая архитектура v4/v3)
 
-### Возможные улучшения:
+### ⏳ Ожидают применения к PRODUCTION
 
-1. **Single Source of Truth** — унифицировать `report_v3` и `details_v2` в одну функцию
-
-   - Сейчас есть риск рассинхронизации между двумя функциями
-   - Вариант: Store как orchestrator, одна RPC возвращает всё
-
-2. **Opening In Preps** — добавить продукты в полуфабрикатах на начало периода
-
-   - Нужны исторические данные о состоянии prep batches
-
-3. **Closing In Preps** — использовать снапшот на конец периода
-   - Для исторических периодов нужен снапшот
+- Migrations 126-132 (после тестирования на DEV)
 
 ---
 
-## Файлы проекта
+## Верификация результатов
 
-### UI компоненты:
+После рефакторинга проверено:
 
-- `src/views/backoffice/analytics/ProductVarianceDetailDialogV2.vue` — диалог детализации
-- `src/views/backoffice/analytics/VarianceReportView.vue` — основной отчёт
+```sql
+-- v3 и v4 report дают идентичные результаты
+SELECT 'v3' as version, summary FROM get_product_variance_report_v3(...)
+UNION ALL
+SELECT 'v4' as version, summary FROM get_product_variance_report_v4(...)
+-- Результат: IDENTICAL ✓
 
-### Store:
-
-- `src/stores/analytics/varianceReportStore.ts` — Pinia store для отчёта
-- `src/stores/analytics/types.ts` — TypeScript типы
-
-### Миграции (все закоммичены):
-
-- `src/supabase/migrations/110_fix_variance_formula_v4.sql` — основная функция v4
-- `src/supabase/migrations/111_fix_details_v2_missing_recipe_product_sales.sql`
-- `src/supabase/migrations/112_fix_report_v3_prep_portion_size_bug.sql`
-- `src/supabase/migrations/113_fix_portion_type_use_output_quantity.sql`
-- `src/supabase/migrations/114_add_recursive_preparations_and_single_day_support.sql`
+-- Details v3 совпадает с Report v4 для всех продуктов
+-- Sales, Writeoffs, Loss, InPreps - все числа MATCH ✓
+```

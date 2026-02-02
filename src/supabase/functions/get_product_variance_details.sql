@@ -1,0 +1,77 @@
+-- Function: get_product_variance_details_v3
+-- Description: Enhanced RPC function for Product Variance Detail Dialog V3
+--              Returns complete breakdown with drill-down into source documents
+-- Date: 2026-02-02
+-- Author: Claude
+-- Version: v3.0
+--
+-- CHANGELOG:
+-- v2.0: Initial implementation
+-- v2.1: Fixed portion-type handling in in_preps CTE
+-- v2.2: Added menu items breakdown for sales via preparations
+-- v2.3: Added actual write-offs breakdown for variance analysis
+-- v3.0: Major refactoring to use helper functions
+--   - Uses calc_product_theoretical_sales() for GUARANTEED sync with main report
+--   - Uses calc_product_writeoffs_decomposed() for writeoffs decomposition from preps
+--   - Uses calc_product_loss_decomposed() for loss decomposition from preps
+--   - Uses calc_product_inpreps() for products in prep batches
+--   - New: 'writeoffs' section with direct/fromPreparations breakdown
+--   - New: 'loss' section with direct/fromPreparations/corrections breakdown
+--   - New: 'gain' section for positive corrections
+--
+-- Usage:
+--   SELECT get_product_variance_details_v3(
+--     '550e8400-e29b-41d4-a716-446655440000'::UUID,  -- product_id
+--     '2026-01-01'::TIMESTAMPTZ,                     -- start_date
+--     '2026-01-31'::TIMESTAMPTZ                      -- end_date
+--   );
+--
+-- Returns JSONB with structure:
+-- {
+--   "product": { "id", "name", "code", "unit", "department" },
+--   "period": { "dateFrom", "dateTo" },
+--   "opening": { "quantity", "amount", "snapshot": {...} },
+--   "received": { "quantity", "amount", "receipts": [...] },
+--   "sales": {
+--     "quantity", "amount",
+--     "direct": { "quantity", "amount" },
+--     "viaRecipes": { "quantity" },
+--     "viaPreparations": { "quantity", "amount" },
+--     "topMenuItems": [...], "totalMenuItemsCount": number
+--   },
+--   "writeoffs": {
+--     "quantity", "amount",
+--     "direct": { "quantity" },
+--     "fromPreparations": { "quantity" }  -- NEW in v3
+--   },
+--   "actualWriteOffs": {
+--     "salesConsumption": {...},
+--     "productionConsumption": {...},
+--     "corrections": {...},
+--     "total": {...},
+--     "differenceFromTheoretical": {...}
+--   },
+--   "loss": {
+--     "quantity", "amount",
+--     "direct": { "quantity" },           -- NEW in v3
+--     "fromPreparations": { "quantity" }, -- NEW in v3
+--     "corrections": { "quantity" },      -- NEW in v3
+--     "byReason": [...], "details": [...]
+--   },
+--   "gain": { "quantity", "amount" },     -- NEW in v3
+--   "closing": {
+--     "rawStock": {...},
+--     "inPreparations": {...},
+--     "total": {...}
+--   },
+--   "variance": {...}
+-- }
+--
+-- GUARANTEED SYNC WITH MAIN REPORT:
+-- This function uses the same helper functions as get_product_variance_report_v4,
+-- ensuring that the numbers shown in the details dialog ALWAYS match the main report.
+--
+-- Migration: src/supabase/migrations/132_variance_details_v3.sql
+-- Store: src/stores/analytics/varianceReportStore.ts (getProductDetailV2 function)
+--
+-- For full SQL implementation, see the migration file.

@@ -114,7 +114,11 @@ export interface PLReport {
   // Shareholders Payout (profit distribution to investors)
   shareholdersPayout: number
 
-  // Final Profit (Net Profit - Tax Expenses - Investments - Shareholders)
+  // Cash Corrections (balance adjustments - shortages/surpluses)
+  // Negative = net shortage (loss), Positive = net surplus (gain)
+  cashCorrections: number
+
+  // Final Profit (Net Profit - Tax Expenses - Investments + Cash Corrections)
   finalProfit: {
     amount: number
     margin: number // Percentage
@@ -738,11 +742,26 @@ export interface TracedLossDetail {
 }
 
 /**
+ * WriteOffs breakdown detail (V3)
+ * Shows decomposition from preparations
+ */
+export interface WriteOffsDetail {
+  quantity: number
+  amount: number
+  direct: { quantity: number }
+  fromPreparations: { quantity: number }
+}
+
+/**
  * Loss breakdown detail
  */
 export interface LossDetail {
   quantity: number
   amount: number
+  // V3: Decomposition breakdown
+  direct?: { quantity: number }
+  fromPreparations?: { quantity: number }
+  corrections?: { quantity: number }
   byReason: Array<{
     reason: string
     quantity: number
@@ -751,6 +770,15 @@ export interface LossDetail {
   }>
   details: LossDetailItem[]
   tracedFromPreps: TracedLossDetail
+}
+
+/**
+ * Gain detail (V3)
+ * Positive corrections from inventory
+ */
+export interface GainDetail {
+  quantity: number
+  amount: number
 }
 
 /**
@@ -874,7 +902,15 @@ export interface ProductVarianceDetailV2 {
   opening: OpeningStockDetail
   received: ReceivedDetail
   sales: SalesDetail
+
+  // V3: Writeoffs with decomposition from preparations
+  writeoffs?: WriteOffsDetail
+
   loss: LossDetail
+
+  // V3: Gain (positive corrections)
+  gain?: GainDetail
+
   closing: ClosingStockDetail
   variance: VarianceDetail
 

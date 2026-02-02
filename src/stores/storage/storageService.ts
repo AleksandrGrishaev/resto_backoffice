@@ -1718,7 +1718,9 @@ export class StorageService {
   }
 
   /**
-   * Finalizes inventory and creates correction operations for discrepancies
+   * Finalizes inventory and creates correction operations for discrepancies.
+   * Uses optimistic locking to prevent duplicate corrections from race conditions
+   * (e.g., multiple button clicks).
    */
   async finalizeInventory(inventoryId: string): Promise<StorageOperation[]> {
     if (!this.initialized) {
@@ -1728,21 +1730,37 @@ export class StorageService {
     try {
       DebugUtils.info(MODULE_NAME, 'Finalizing inventory', { inventoryId })
 
-      // 1. Fetch inventory document
-      const { data: inventoryData, error: fetchError } = await supabase
+      // 1. OPTIMISTIC LOCK: Atomically set status to 'processing' ONLY if currently 'draft'
+      // This prevents race conditions from multiple button clicks
+      const { data: lockedData, error: lockError } = await supabase
         .from('inventory_documents')
-        .select('*')
+        .update({
+          status: 'processing',
+          updated_at: TimeUtils.getCurrentLocalISO()
+        })
         .eq('id', inventoryId)
+        .eq('status', 'draft') // ← Only succeeds if status is still 'draft'
+        .select()
         .single()
 
-      if (fetchError) throw fetchError
-      if (!inventoryData) throw new Error(`Inventory ${inventoryId} not found`)
+      if (lockError || !lockedData) {
+        // Check if already confirmed or processing
+        const { data: currentData } = await supabase
+          .from('inventory_documents')
+          .select('status')
+          .eq('id', inventoryId)
+          .single()
 
-      const inventory = mapInventoryFromDB(inventoryData)
-
-      if (inventory.status === 'confirmed') {
-        throw new Error('Inventory already finalized')
+        if (currentData?.status === 'confirmed') {
+          throw new Error('Inventory already finalized')
+        } else if (currentData?.status === 'processing') {
+          throw new Error('Inventory is currently being processed. Please wait.')
+        } else {
+          throw new Error(`Inventory ${inventoryId} not found or cannot be finalized`)
+        }
       }
+
+      const inventory = mapInventoryFromDB(lockedData)
 
       // 2. Find items with discrepancies
       const itemsWithDiscrepancies = inventory.items.filter(
@@ -1786,7 +1804,7 @@ export class StorageService {
         correctionOperations.push(response.data)
       }
 
-      // 4. Mark inventory as confirmed
+      // 4. Mark inventory as confirmed (from 'processing' state)
       const { data: confirmedData, error: confirmError } = await supabase
         .from('inventory_documents')
         .update({
