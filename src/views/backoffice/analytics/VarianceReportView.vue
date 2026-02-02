@@ -286,7 +286,8 @@
 
                 <!-- Opening Stock Column -->
                 <template #[`item.opening.amount`]="{ item }">
-                  <div v-if="item.opening.quantity > 0" class="stacked-cell">
+                  <!-- FIXED: Show opening for both positive AND negative values (was: > 0, now: !== 0) -->
+                  <div v-if="item.opening.quantity !== 0" class="stacked-cell">
                     <div class="text-body-2">
                       {{ formatQty(item.opening.quantity, item.unit) }} {{ item.unit }}
                     </div>

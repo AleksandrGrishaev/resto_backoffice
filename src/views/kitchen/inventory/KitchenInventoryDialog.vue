@@ -9,112 +9,161 @@
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-card class="kitchen-inventory-dialog">
-      <!-- Header -->
-      <v-card-title class="dialog-header pa-4">
-        <div class="d-flex align-center justify-space-between w-100">
-          <div>
-            <h3 class="text-h6 font-weight-bold">
-              {{ existingInventory ? 'Continue' : 'New' }} Inventory
-            </h3>
-            <v-chip
-              :color="department === 'kitchen' ? 'success' : 'info'"
-              size="small"
-              class="mt-1"
-            >
-              <v-icon start size="14">
-                {{ department === 'kitchen' ? 'mdi-chef-hat' : 'mdi-glass-cocktail' }}
-              </v-icon>
-              {{ department === 'kitchen' ? 'Kitchen' : 'Bar' }}
-            </v-chip>
-          </div>
-          <v-btn icon="mdi-close" variant="text" size="large" @click="handleClose" />
-        </div>
-      </v-card-title>
-
-      <v-divider />
-
-      <!-- Progress Section -->
-      <div class="progress-section pa-4">
-        <div class="d-flex align-center justify-space-between mb-2">
-          <span class="text-body-1">
+      <!-- Compact Header (when collapsed) -->
+      <div v-if="isHeaderCollapsed" class="compact-header">
+        <div class="d-flex align-center gap-2">
+          <v-chip :color="department === 'kitchen' ? 'success' : 'info'" size="x-small">
+            {{ department === 'kitchen' ? 'Kitchen' : 'Bar' }}
+          </v-chip>
+          <span class="text-body-2">
             <strong>{{ countedItems }}</strong>
-            / {{ totalItems }} counted
+            /{{ totalItems }}
           </span>
-          <span class="text-body-2 text-medium-emphasis">{{ progressPercentage.toFixed(0) }}%</span>
-        </div>
-        <v-progress-linear :model-value="progressPercentage" height="10" rounded color="primary" />
-      </div>
-
-      <!-- Filter Section -->
-      <div class="filter-section px-4 pb-2">
-        <!-- Row 1: Search + Category + Days Filter -->
-        <div class="d-flex align-center flex-wrap gap-2 mb-3">
-          <!-- Search by name -->
-          <v-text-field
-            v-model="searchQuery"
-            placeholder="Search..."
-            density="compact"
-            hide-details
-            variant="outlined"
-            prepend-inner-icon="mdi-magnify"
-            clearable
-            class="search-field"
-          />
-
-          <!-- Category filter -->
-          <v-select
-            v-model="selectedCategory"
-            :items="categoryOptions"
-            density="compact"
-            hide-details
-            variant="outlined"
-            placeholder="Category"
-            clearable
-            class="category-select"
-          />
-
-          <!-- Days filter -->
-          <v-select
-            v-model="daysFilter"
-            :items="daysFilterOptions"
-            density="compact"
-            hide-details
-            variant="outlined"
-            class="days-select"
-          />
-
-          <v-spacer />
-
-          <!-- Sort selector -->
-          <v-select
-            v-model="sortBy"
-            :items="sortOptions"
-            density="compact"
-            hide-details
-            variant="outlined"
-            class="sort-select"
+          <v-progress-linear
+            :model-value="progressPercentage"
+            height="6"
+            rounded
+            color="primary"
+            class="compact-progress"
           />
         </div>
-
-        <!-- Row 2: Status Chips -->
-        <v-chip-group v-model="filterType" mandatory selected-class="text-primary">
-          <v-chip value="all" filter variant="outlined">All ({{ totalItems }})</v-chip>
-          <v-chip value="uncounted" filter variant="outlined">
-            Uncounted ({{ uncountedCount }})
-          </v-chip>
-          <v-chip value="discrepancy" filter variant="outlined" color="warning">
-            Diff ({{ discrepancyCount }})
-          </v-chip>
-          <v-chip value="stale" filter variant="outlined" color="info">
-            Stale ({{ staleCount }})
-          </v-chip>
-        </v-chip-group>
+        <v-spacer />
+        <div class="d-flex align-center gap-1">
+          <v-btn
+            icon="mdi-chevron-down"
+            variant="text"
+            size="small"
+            density="compact"
+            @click="isHeaderCollapsed = false"
+          />
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            size="small"
+            density="compact"
+            @click="handleClose"
+          />
+        </div>
       </div>
 
-      <v-divider />
+      <!-- Full Header (when not collapsed) -->
+      <template v-if="!isHeaderCollapsed">
+        <v-card-title class="dialog-header pa-4">
+          <div class="d-flex align-center justify-space-between w-100">
+            <div>
+              <h3 class="text-h6 font-weight-bold">
+                {{ existingInventory ? 'Continue' : 'New' }} Inventory
+              </h3>
+              <v-chip
+                :color="department === 'kitchen' ? 'success' : 'info'"
+                size="small"
+                class="mt-1"
+              >
+                <v-icon start size="14">
+                  {{ department === 'kitchen' ? 'mdi-chef-hat' : 'mdi-glass-cocktail' }}
+                </v-icon>
+                {{ department === 'kitchen' ? 'Kitchen' : 'Bar' }}
+              </v-chip>
+            </div>
+            <v-btn icon="mdi-close" variant="text" size="large" @click="handleClose" />
+          </div>
+        </v-card-title>
+
+        <v-divider />
+
+        <!-- Progress Section -->
+        <div class="progress-section pa-4">
+          <div class="d-flex align-center justify-space-between mb-2">
+            <span class="text-body-1">
+              <strong>{{ countedItems }}</strong>
+              / {{ totalItems }} counted
+            </span>
+            <span class="text-body-2 text-medium-emphasis">
+              {{ progressPercentage.toFixed(0) }}%
+            </span>
+          </div>
+          <v-progress-linear
+            :model-value="progressPercentage"
+            height="10"
+            rounded
+            color="primary"
+          />
+        </div>
+
+        <!-- Filter Section -->
+        <div class="filter-section px-4 pb-2">
+          <!-- Row 1: Search + Category + Days Filter -->
+          <div class="d-flex align-center flex-wrap gap-2 mb-3">
+            <!-- Search by name -->
+            <v-text-field
+              v-model="searchQuery"
+              placeholder="Search..."
+              density="compact"
+              hide-details
+              variant="outlined"
+              prepend-inner-icon="mdi-magnify"
+              clearable
+              class="search-field"
+            />
+
+            <!-- Category filter -->
+            <v-select
+              v-model="selectedCategory"
+              :items="categoryOptions"
+              density="compact"
+              hide-details
+              variant="outlined"
+              placeholder="Category"
+              clearable
+              class="category-select"
+            />
+
+            <!-- Days filter -->
+            <v-select
+              v-model="daysFilter"
+              :items="daysFilterOptions"
+              density="compact"
+              hide-details
+              variant="outlined"
+              class="days-select"
+            />
+
+            <v-spacer />
+
+            <!-- Sort selector -->
+            <v-select
+              v-model="sortBy"
+              :items="sortOptions"
+              density="compact"
+              hide-details
+              variant="outlined"
+              class="sort-select"
+            />
+          </div>
+
+          <!-- Row 2: Status Chips -->
+          <v-chip-group v-model="filterType" mandatory selected-class="text-primary">
+            <v-chip value="all" filter variant="outlined">All ({{ totalItems }})</v-chip>
+            <v-chip value="uncounted" filter variant="outlined">
+              Uncounted ({{ uncountedCount }})
+            </v-chip>
+            <v-chip value="discrepancy" filter variant="outlined" color="warning">
+              Diff ({{ discrepancyCount }})
+            </v-chip>
+            <v-chip value="negative" filter variant="outlined" color="error">
+              Negative ({{ negativeCount }})
+            </v-chip>
+            <v-chip value="stale" filter variant="outlined" color="info">
+              Stale ({{ staleCount }})
+            </v-chip>
+          </v-chip-group>
+        </div>
+
+        <v-divider />
+      </template>
 
       <!-- Items List -->
-      <v-card-text class="items-section pa-0">
+      <v-card-text ref="itemsListRef" class="items-section pa-0" @scroll="handleScroll">
         <div v-if="isLoading" class="text-center py-12">
           <v-progress-circular indeterminate size="48" color="primary" />
           <p class="mt-4 text-medium-emphasis">Loading products...</p>
@@ -124,6 +173,7 @@
           <v-icon size="48" color="grey" class="mb-4">mdi-clipboard-check</v-icon>
           <p v-if="filterType === 'uncounted'" class="text-h6">All items counted!</p>
           <p v-else-if="filterType === 'discrepancy'" class="text-h6">No discrepancies</p>
+          <p v-else-if="filterType === 'negative'" class="text-h6">No negative stock</p>
           <p v-else class="text-h6">No products available</p>
           <v-btn
             v-if="filterType !== 'all'"
@@ -212,7 +262,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useDisplay } from 'vuetify'
 import { useStorageStore } from '@/stores/storage'
 import { useProductsStore } from '@/stores/productsStore'
@@ -265,13 +315,23 @@ const inventory = useInventory()
 
 const isLoading = ref(false)
 const isSaving = ref(false)
-const filterType = ref<'all' | 'uncounted' | 'discrepancy' | 'stale'>('all')
+const filterType = ref<'all' | 'uncounted' | 'discrepancy' | 'stale' | 'negative'>('all')
 const sortBy = ref<'name' | 'last_counted'>('name')
 const searchQuery = ref('')
 const selectedCategory = ref<string | null>(null)
 const daysFilter = ref<number | null>(null) // null = all, number = max days since count
 const inventoryItems = ref<InventoryItem[]>([])
 const currentInventory = ref<InventoryDocument | null>(null)
+
+// Scroll behavior - collapsible header
+const isHeaderCollapsed = ref(false)
+const itemsListRef = ref<HTMLElement | null>(null)
+
+// Auto-save
+const autoSaveInterval = ref<ReturnType<typeof setInterval> | null>(null)
+const lastAutoSave = ref<Date | null>(null)
+const AUTO_SAVE_KEY = 'kitchen_inventory_draft'
+const AUTO_SAVE_INTERVAL_MS = 30000 // Auto-save every 30 seconds
 
 // Constants
 const STALE_DAYS_THRESHOLD = 7
@@ -292,11 +352,12 @@ const daysFilterOptions = [
 ]
 
 // Category options - computed from products
+// NOTE: Product.category is a UUID (foreign key), so we use cat.id, not cat.key
 const categoryOptions = computed(() => {
   const categories = productsStore.categories || []
   return categories.map(cat => ({
     title: cat.name,
-    value: cat.key
+    value: cat.id
   }))
 })
 
@@ -356,6 +417,13 @@ const staleCount = computed(() => {
     const daysSince = Math.floor((now.getTime() - lastCounted.getTime()) / (1000 * 60 * 60 * 24))
     return daysSince > STALE_DAYS_THRESHOLD
   }).length
+})
+
+/**
+ * Negative stock items count
+ */
+const negativeCount = computed(() => {
+  return inventoryItems.value.filter(item => item.systemQuantity < 0).length
 })
 
 /**
@@ -436,6 +504,9 @@ const filteredItems = computed(() => {
         if (days === null) return true
         return days > STALE_DAYS_THRESHOLD
       })
+      break
+    case 'negative':
+      items = items.filter(item => item.systemQuantity < 0)
       break
     default:
       break
@@ -519,14 +590,16 @@ function initializeItems() {
   inventoryItems.value = balances.map(balance => {
     // Get product info from productsStore
     const product = productsStore.products.find(p => p.id === balance.itemId)
+    // Round quantities - gram, ml, piece are base units, no decimals needed
+    const roundedQuantity = Math.round(balance.totalQuantity)
     return {
       id: `inv-${balance.itemId}-${Date.now()}`,
       itemId: balance.itemId,
       itemType: balance.itemType,
       itemName: balance.itemName,
-      category: product?.category?.key || product?.category, // Support both object and string format
-      systemQuantity: balance.totalQuantity,
-      actualQuantity: balance.totalQuantity,
+      category: product?.category, // UUID foreign key to product_categories
+      systemQuantity: roundedQuantity,
+      actualQuantity: roundedQuantity,
       difference: 0,
       unit: balance.unit,
       averageCost: balance.averageCost,
@@ -600,6 +673,9 @@ async function handleSaveDraft() {
     // Update items
     await inventory.updateInventory(currentInventory.value.id, inventoryItems.value)
 
+    // Clear local draft after successful API save
+    clearLocalDraft()
+
     emit('success', `Draft saved. ${countedItems.value}/${totalItems.value} items counted.`)
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to save draft', { error })
@@ -655,6 +731,8 @@ async function handleComplete() {
  * Handle close
  */
 function handleClose() {
+  stopAutoSave()
+  clearLocalDraft()
   inventoryItems.value = []
   currentInventory.value = null
   // Reset all filters
@@ -663,7 +741,130 @@ function handleClose() {
   selectedCategory.value = null
   daysFilter.value = null
   sortBy.value = 'name'
+  isHeaderCollapsed.value = false
   emit('update:modelValue', false)
+}
+
+/**
+ * Handle scroll - collapse header when scrolling down
+ */
+function handleScroll(event: Event) {
+  const target = event.target as HTMLElement
+  if (!target) return
+  isHeaderCollapsed.value = target.scrollTop > 50
+}
+
+/**
+ * Save draft to localStorage for recovery
+ */
+function saveLocalDraft() {
+  if (!hasChanges.value || inventoryItems.value.length === 0) return
+
+  const draft = {
+    department: props.department,
+    items: inventoryItems.value,
+    savedAt: new Date().toISOString(),
+    filters: {
+      filterType: filterType.value,
+      sortBy: sortBy.value,
+      searchQuery: searchQuery.value,
+      selectedCategory: selectedCategory.value,
+      daysFilter: daysFilter.value
+    }
+  }
+
+  try {
+    localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(draft))
+    lastAutoSave.value = new Date()
+    DebugUtils.info(MODULE_NAME, 'Draft auto-saved to localStorage', {
+      itemsCount: inventoryItems.value.length,
+      countedItems: countedItems.value
+    })
+  } catch (error) {
+    DebugUtils.warn(MODULE_NAME, 'Failed to auto-save draft', { error })
+  }
+}
+
+/**
+ * Load draft from localStorage
+ */
+function loadLocalDraft(): boolean {
+  try {
+    const saved = localStorage.getItem(AUTO_SAVE_KEY)
+    if (!saved) return false
+
+    const draft = JSON.parse(saved)
+
+    // Check if draft is for the same department
+    if (draft.department !== props.department) {
+      DebugUtils.info(MODULE_NAME, 'Draft is for different department, ignoring', {
+        draftDepartment: draft.department,
+        currentDepartment: props.department
+      })
+      return false
+    }
+
+    // Check if draft is not too old (24 hours max)
+    const savedAt = new Date(draft.savedAt)
+    const hoursSincesSave = (Date.now() - savedAt.getTime()) / (1000 * 60 * 60)
+    if (hoursSincesSave > 24) {
+      DebugUtils.info(MODULE_NAME, 'Draft is too old, clearing', { hoursSincesSave })
+      clearLocalDraft()
+      return false
+    }
+
+    // Restore items
+    if (draft.items?.length > 0) {
+      inventoryItems.value = draft.items
+      DebugUtils.info(MODULE_NAME, 'Loaded draft from localStorage', {
+        itemsCount: draft.items.length,
+        savedAt: draft.savedAt
+      })
+      return true
+    }
+
+    return false
+  } catch (error) {
+    DebugUtils.warn(MODULE_NAME, 'Failed to load draft from localStorage', { error })
+    return false
+  }
+}
+
+/**
+ * Clear local draft
+ */
+function clearLocalDraft() {
+  try {
+    localStorage.removeItem(AUTO_SAVE_KEY)
+  } catch (error) {
+    DebugUtils.warn(MODULE_NAME, 'Failed to clear draft', { error })
+  }
+}
+
+/**
+ * Start auto-save interval
+ */
+function startAutoSave() {
+  if (autoSaveInterval.value) return
+
+  autoSaveInterval.value = setInterval(() => {
+    if (hasChanges.value) {
+      saveLocalDraft()
+    }
+  }, AUTO_SAVE_INTERVAL_MS)
+
+  DebugUtils.info(MODULE_NAME, 'Auto-save started', { intervalMs: AUTO_SAVE_INTERVAL_MS })
+}
+
+/**
+ * Stop auto-save interval
+ */
+function stopAutoSave() {
+  if (autoSaveInterval.value) {
+    clearInterval(autoSaveInterval.value)
+    autoSaveInterval.value = null
+    DebugUtils.info(MODULE_NAME, 'Auto-save stopped')
+  }
 }
 
 // =============================================
@@ -675,15 +876,26 @@ watch(
   isOpen => {
     if (isOpen) {
       isLoading.value = true
+      isHeaderCollapsed.value = false
 
       setTimeout(() => {
         if (props.existingInventory) {
           loadExistingInventory()
         } else {
-          initializeItems()
+          // Try to load local draft first (for recovery)
+          const draftLoaded = loadLocalDraft()
+          if (!draftLoaded) {
+            initializeItems()
+          }
         }
         isLoading.value = false
+
+        // Start auto-save after loading
+        startAutoSave()
       }, 100)
+    } else {
+      // Stop auto-save when dialog closes
+      stopAutoSave()
     }
   }
 )
@@ -696,6 +908,11 @@ watch(
     }
   }
 )
+
+// Cleanup on unmount
+onUnmounted(() => {
+  stopAutoSave()
+})
 </script>
 
 <style scoped lang="scss">
@@ -707,6 +924,24 @@ watch(
 
 .dialog-header {
   background-color: var(--v-theme-surface);
+}
+
+.compact-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  background-color: var(--v-theme-surface);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.compact-progress {
+  width: 120px;
+  flex-shrink: 0;
 }
 
 .progress-section {
@@ -740,7 +975,7 @@ watch(
 .items-section {
   flex: 1;
   overflow-y: auto;
-  max-height: 400px;
+  min-height: 200px;
   background-color: var(--v-theme-background);
 }
 
@@ -765,6 +1000,10 @@ watch(
   .items-section {
     max-height: none;
     flex: 1;
+  }
+
+  .compact-progress {
+    width: 60px;
   }
 }
 </style>

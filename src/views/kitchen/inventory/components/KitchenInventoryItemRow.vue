@@ -16,7 +16,7 @@
               </div>
               <div class="text-caption text-medium-emphasis">
                 System:
-                <strong>{{ modelValue.systemQuantity }}</strong>
+                <strong>{{ formatQuantity(modelValue.systemQuantity) }}</strong>
                 {{ modelValue.unit }}
                 <span v-if="modelValue.systemQuantity < 0" class="text-error ml-1">(Neg)</span>
                 <span v-else-if="modelValue.systemQuantity === 0" class="text-warning ml-1">
@@ -58,8 +58,8 @@
               hide-details
               class="quantity-input mx-2"
               :suffix="modelValue.unit"
-              :allow-decimal="true"
-              :decimal-places="3"
+              :allow-decimal="false"
+              :decimal-places="0"
               :min="0"
               force-tablet-mode
               @update:model-value="handleQuantityChange"
@@ -167,7 +167,7 @@ const emit = defineEmits<{
 // =============================================
 
 const showNotes = ref(false)
-const localQuantity = ref(props.modelValue.actualQuantity)
+const localQuantity = ref(Math.round(props.modelValue.actualQuantity))
 const localNotes = ref(props.modelValue.notes || '')
 const hasUserInteracted = ref(props.modelValue.userInteracted || false)
 
@@ -241,7 +241,7 @@ const differenceColor = computed(() => {
  * Formatted difference
  */
 const formattedDifference = computed(() => {
-  const diff = props.modelValue.difference
+  const diff = Math.round(props.modelValue.difference)
   const prefix = diff > 0 ? '+' : ''
   return `${prefix}${diff} ${props.modelValue.unit}`
 })
@@ -267,6 +267,13 @@ const formattedValueDiff = computed(() => {
 // =============================================
 // METHODS
 // =============================================
+
+/**
+ * Format quantity to integer (gram, ml, piece are base units - no decimals needed)
+ */
+function formatQuantity(value: number): string {
+  return Math.round(value).toLocaleString('id-ID')
+}
 
 /**
  * Increment quantity
@@ -360,8 +367,9 @@ function emitUpdate() {
 watch(
   () => props.modelValue.actualQuantity,
   newVal => {
-    if (newVal !== localQuantity.value) {
-      localQuantity.value = newVal
+    const rounded = Math.round(newVal)
+    if (rounded !== localQuantity.value) {
+      localQuantity.value = rounded
     }
   }
 )

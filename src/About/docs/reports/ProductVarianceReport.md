@@ -187,7 +187,105 @@ storage_operations (itemType = 'preparation')
 
 ### 1. Opening (Остаток на начало)
 
-**Источник:** `inventory_snapshots` на дату `(start_date - 1 день)`
+**Источник:** `calc_product_opening()` helper function
+
+#### Почему не просто snapshot?
+
+Snapshot создаётся в момент закрытия смены (например, в 22:00). Но между закрытием смены и полуночью могут быть операции:
+
+- Поступления (receipts)
+- Списания (write-offs)
+- Корректировки (corrections)
+
+Эти операции должны быть учтены в Opening.
+
+#### Timezone: Bali (UTC+8)
+
+Система работает по времени Bali. При расчёте Opening нужно учитывать:
+
+```
+Feb 1 00:00 Bali = Jan 31 16:00 UTC
+```
+
+#### Формула расчёта Opening
+
+```
+Opening = Snapshot.quantity
+        + Receipts (после snapshot, до Bali midnight)
+        - Write-offs (после snapshot, до Bali midnight)
+        + Corrections (после snapshot, до Bali midnight)
+```
+
+#### Алгоритм
+
+1. **Определить "полночь Bali" для start_date**
+
+   ```sql
+   v_bali_midnight := (p_start_date::TIMESTAMP AT TIME ZONE 'Asia/Makassar') AT TIME ZONE 'UTC';
+   -- Feb 1 00:00 Bali = Jan 31 16:00 UTC
+   ```
+
+2. **Найти последний snapshot ПЕРЕД полночью Bali**
+
+   ```sql
+   SELECT * FROM inventory_snapshots
+   WHERE item_id = p_product_id
+     AND created_at < v_bali_midnight
+   ORDER BY created_at DESC
+   LIMIT 1;
+   ```
+
+3. **Посчитать adjustments между snapshot и полночью**
+
+   ```sql
+   -- Временной диапазон: [snapshot.created_at, v_bali_midnight)
+
+   -- Receipts
+   + SUM(received_quantity) WHERE delivery_date IN range
+
+   -- Write-offs
+   - SUM(quantity) WHERE operation_date IN range AND type = 'write_off'
+
+   -- Corrections
+   + SUM(quantity) WHERE operation_date IN range AND type = 'correction'
+   ```
+
+4. **Финальный Opening**
+   ```
+   Opening = Snapshot + Receipts - WriteOffs + Corrections
+   ```
+
+#### Пример
+
+```
+Период: Feb 1-3, 2026
+Product: Papaya (V-42)
+
+Timeline (UTC):
+├─ Jan 31 14:17 → Snapshot: -222.67 gram (shift_close)
+├─ Jan 31 15:00 → (hypothetical receipt: +100 gram)
+├─ Jan 31 15:30 → (hypothetical write-off: -50 gram)
+└─ Jan 31 16:00 → Bali midnight (Feb 1 00:00 Bali)
+
+Расчёт:
+- Snapshot: -222.67 gram
+- Adjustments: +100 - 50 = +50 gram
+- Opening: -222.67 + 50 = -172.67 gram
+```
+
+#### Helper Function
+
+```sql
+SELECT * FROM calc_product_opening('product-uuid', '2026-02-01');
+-- Returns:
+--   opening_qty: -222.67
+--   opening_amount: -3027.61
+--   snapshot_date: 2026-01-31
+--   snapshot_created_at: 2026-01-31 14:17:37 UTC
+--   snapshot_source: shift_close
+--   adjustments_qty: 0.00
+--   adjustments_amount: 0.00
+```
 
 ### 2. Received (Поступления)
 
@@ -259,20 +357,21 @@ product_qty = batch_qty × ingredient_qty / total_output
 
 ### Актуальные версии
 
-| Function                          | Version | Purpose                             |
-| --------------------------------- | ------- | ----------------------------------- |
-| `get_product_variance_report_v4`  | v4.0    | Основной отчёт со списком продуктов |
-| `get_product_variance_details_v3` | v3.0    | Детализация по одному продукту      |
+| Function                          | Version | Purpose                                         |
+| --------------------------------- | ------- | ----------------------------------------------- |
+| `get_product_variance_report_v4`  | v4.0    | Основной отчёт со списком продуктов             |
+| `get_product_variance_details_v3` | v3.2    | Детализация по одному продукту (timezone-aware) |
 
 ### Helper Functions
 
-| Function                            | Purpose                                  |
-| ----------------------------------- | ---------------------------------------- |
-| `calc_prep_decomposition_factors`   | Decomposition factors для product → prep |
-| `calc_product_theoretical_sales`    | Теоретические продажи                    |
-| `calc_product_writeoffs_decomposed` | WriteOffs с decomposition                |
-| `calc_product_loss_decomposed`      | Loss с decomposition                     |
-| `calc_product_inpreps`              | Продукт в prep batches                   |
+| Function                            | Purpose                                       |
+| ----------------------------------- | --------------------------------------------- |
+| `calc_product_opening`              | Opening с timezone (Bali UTC+8) и adjustments |
+| `calc_prep_decomposition_factors`   | Decomposition factors для product → prep      |
+| `calc_product_theoretical_sales`    | Теоретические продажи                         |
+| `calc_product_writeoffs_decomposed` | WriteOffs с decomposition                     |
+| `calc_product_loss_decomposed`      | Loss с decomposition                          |
+| `calc_product_inpreps`              | Продукт в prep batches                        |
 
 ---
 
@@ -280,15 +379,17 @@ product_qty = batch_qty × ingredient_qty / total_output
 
 ### Архитектура v4/v3 (2026-02-02)
 
-| #   | Файл                                  | Описание                                   |
-| --- | ------------------------------------- | ------------------------------------------ |
-| 126 | `126_helper_prep_decomposition.sql`   | Helper: calc_prep_decomposition_factors    |
-| 127 | `127_helper_theoretical_sales.sql`    | Helper: calc_product_theoretical_sales     |
-| 128 | `128_helper_writeoffs_decomposed.sql` | Helper: calc_product_writeoffs_decomposed  |
-| 129 | `129_helper_loss_decomposed.sql`      | Helper: calc_product_loss_decomposed       |
-| 130 | `130_helper_inpreps.sql`              | Helper: calc_product_inpreps               |
-| 131 | `131_variance_report_v4.sql`          | Main report v4 (same calcs as v3, cleaner) |
-| 132 | `132_variance_details_v3.sql`         | Details v3 (uses helpers, guaranteed sync) |
+| #   | Файл                                       | Описание                                      |
+| --- | ------------------------------------------ | --------------------------------------------- |
+| 126 | `126_helper_prep_decomposition.sql`        | Helper: calc_prep_decomposition_factors       |
+| 127 | `127_helper_theoretical_sales.sql`         | Helper: calc_product_theoretical_sales        |
+| 128 | `128_helper_writeoffs_decomposed.sql`      | Helper: calc_product_writeoffs_decomposed     |
+| 129 | `129_helper_loss_decomposed.sql`           | Helper: calc_product_loss_decomposed          |
+| 130 | `130_helper_inpreps.sql`                   | Helper: calc_product_inpreps                  |
+| 131 | `131_variance_report_v4.sql`               | Main report v4 (same calcs as v3, cleaner)    |
+| 132 | `132_variance_details_v3.sql`              | Details v3 (uses helpers, guaranteed sync)    |
+| 133 | `133_fix_variance_details_formula.sql`     | Fix variance sign (Actual - Expected)         |
+| 134 | `134_fix_opening_calculation_timezone.sql` | Helper: calc_product_opening (timezone-aware) |
 
 ### Предыдущие миграции (v3.x/v4.x)
 

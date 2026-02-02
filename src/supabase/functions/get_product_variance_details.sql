@@ -3,7 +3,7 @@
 --              Returns complete breakdown with drill-down into source documents
 -- Date: 2026-02-02
 -- Author: Claude
--- Version: v3.0
+-- Version: v3.1
 --
 -- CHANGELOG:
 -- v2.0: Initial implementation
@@ -18,6 +18,10 @@
 --   - New: 'writeoffs' section with direct/fromPreparations breakdown
 --   - New: 'loss' section with direct/fromPreparations/corrections breakdown
 --   - New: 'gain' section for positive corrections
+-- v3.1: CRITICAL FIX - Variance formula was OPPOSITE to main report!
+--   - Old: Expected - Actual (showed +44,711 in main, -44,711 in details)
+--   - New: Actual - Expected (matches main report V4)
+--   - Fixed interpretation: positive = surplus, negative = shortage
 --
 -- Usage:
 --   SELECT get_product_variance_details_v3(
@@ -71,7 +75,15 @@
 -- This function uses the same helper functions as get_product_variance_report_v4,
 -- ensuring that the numbers shown in the details dialog ALWAYS match the main report.
 --
--- Migration: src/supabase/migrations/132_variance_details_v3.sql
+-- VARIANCE FORMULA (same as main report V4):
+--   Expected = Opening + Received - Sales - Loss + Gain
+--   Actual = Closing (raw stock) + InPreps
+--   Variance = Actual - Expected
+--
+-- Positive variance = surplus (more product than expected)
+-- Negative variance = shortage (less product than expected)
+--
+-- Migration: src/supabase/migrations/133_fix_variance_details_formula.sql
 -- Store: src/stores/analytics/varianceReportStore.ts (getProductDetailV2 function)
 --
 -- For full SQL implementation, see the migration file.

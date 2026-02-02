@@ -1,5 +1,146 @@
 # NextTodo - Current Sprint
 
+## 🔥 PRIORITY: Verify Stock Balances & Snapshots After Negative Batch Cleanup
+
+> **Status:** Ready for next session
+> **Date:** 2026-02-02
+> **Context:** После исправления 58 "зависших" reconciled negative batches
+
+### Background
+
+В сессии 2026-02-02 были исправлены:
+
+1. **Variance formula** — теперь `Actual - Expected` (одинаково везде)
+2. **Opening calculation** — timezone-aware (Bali UTC+8)
+3. **58 negative batches** — были `status='active'` + `reconciled_at IS NOT NULL`, теперь `status='consumed'`
+
+### Problem
+
+После cleanup негативных батчей нужно проверить:
+
+1. **Правильные ли остатки?** — UI показывает корректные значения?
+2. **Нужно ли пересоздать snapshots?** — старые snapshots включали негативные батчи
+
+### Investigation Tasks
+
+#### Task 1: Verify Current Stock Balances
+
+```sql
+-- Найти продукты где UI stock ≠ SUM(active batches)
+SELECT
+  p.id, p.name, p.code,
+  (SELECT SUM(current_quantity) FROM storage_batches sb
+   WHERE sb.item_id = p.id::TEXT AND sb.status = 'active') as batch_sum,
+  -- Compare with what UI shows (from storageStore.balances)
+  'Check in UI' as ui_stock
+FROM products p
+WHERE p.is_active = true
+ORDER BY p.name
+LIMIT 20;
+```
+
+**Questions to answer:**
+
+- [ ] Stock в UI = SUM(active batches)?
+- [ ] Если да → остатки корректны
+- [ ] Если нет → найти источник расхождения
+
+#### Task 2: Analyze Historical Snapshots
+
+```sql
+-- Проверить snapshots которые могли включать негативные батчи
+SELECT
+  snapshot_date,
+  COUNT(*) as items_count,
+  SUM(quantity) as total_qty,
+  source
+FROM inventory_snapshots
+WHERE snapshot_date >= '2026-01-01'
+GROUP BY snapshot_date, source
+ORDER BY snapshot_date DESC;
+```
+
+**Questions:**
+
+- [ ] Snapshots создавались из SUM(active batches)?
+- [ ] Если да и негативные батчи были active → snapshots неверны
+- [ ] Нужно ли пересчитать исторические snapshots?
+
+#### Task 3: Understand Snapshot Creation Logic
+
+**Files to review:**
+
+- `src/stores/storage/storageService.ts` — как создаются snapshots?
+- `src/core/shifts/shiftCloseService.ts` — shift_close создаёт snapshots?
+- Database functions — есть ли RPC для snapshot creation?
+
+**Key questions:**
+
+- [ ] Snapshot = SUM of ALL active batches или только positive?
+- [ ] Если ALL → старые snapshots включают reconciled negative batches (неверно!)
+- [ ] Если only positive → snapshots должны быть корректны
+
+#### Task 4: Decision Matrix
+
+| Scenario                                | Snapshots  | Action                                |
+| --------------------------------------- | ---------- | ------------------------------------- |
+| Snapshots include only positive batches | ✅ Correct | No action needed                      |
+| Snapshots included ALL active batches   | ❌ Wrong   | Recalculate snapshots OR live with it |
+| Only recent snapshots wrong             | ⚠️ Partial | Recalculate affected period           |
+
+### Potential Fix: Recalculate Snapshots
+
+**Option A: Live with historical inaccuracy**
+
+- Variance reports для старых периодов будут неточными
+- Новые периоды будут корректными
+- Pros: Simple, no data migration
+- Cons: Historical reports inaccurate
+
+**Option B: Recalculate affected snapshots**
+
+```sql
+-- Пример пересчёта snapshot на определённую дату
+UPDATE inventory_snapshots
+SET quantity = (
+  SELECT SUM(sb.current_quantity)
+  FROM storage_batches sb
+  WHERE sb.item_id = inventory_snapshots.item_id
+    AND sb.status = 'active'
+    AND sb.current_quantity > 0  -- Only positive!
+    AND sb.created_at <= inventory_snapshots.created_at
+),
+updated_at = NOW()
+WHERE snapshot_date = '2026-01-31';
+```
+
+- Pros: Historical accuracy restored
+- Cons: Complex, need to recalculate batch states at each snapshot time
+
+**Option C: Mark old snapshots as deprecated, start fresh**
+
+- Add `is_valid` flag to snapshots
+- Mark old ones as `is_valid = false`
+- Reports use only valid snapshots
+- Pros: Clean separation
+- Cons: Loses historical data
+
+### Deliverables
+
+1. [ ] Investigation report: What's the current state?
+2. [ ] Decision: Which option to pursue?
+3. [ ] Implementation (if needed)
+4. [ ] Verification: Variance report shows correct data
+
+### Related Files
+
+- `src/supabase/migrations/134_fix_opening_calculation_timezone.sql`
+- `src/stores/storage/storageService.ts`
+- `src/core/shifts/shiftCloseService.ts`
+- `src/About/docs/storage/inventory-system.md`
+
+---
+
 ## Refactor Preparation Costs - Split into Unit and Portion
 
 ### Problem
