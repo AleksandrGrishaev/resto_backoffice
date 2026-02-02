@@ -9,100 +9,146 @@
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-card class="kitchen-preparation-inventory-dialog">
-      <!-- Header -->
-      <v-card-title class="dialog-header pa-4">
-        <div class="d-flex align-center justify-space-between w-100">
-          <div>
-            <h3 class="text-h6 font-weight-bold">
-              {{ existingInventory ? 'Continue' : 'New' }} Preparation Inventory
-            </h3>
-            <v-chip
-              :color="department === 'kitchen' ? 'success' : 'info'"
-              size="small"
-              class="mt-1"
-            >
-              <v-icon start size="14">
-                {{ department === 'kitchen' ? 'mdi-chef-hat' : 'mdi-glass-cocktail' }}
-              </v-icon>
-              {{ department === 'kitchen' ? 'Kitchen' : 'Bar' }}
-            </v-chip>
-          </div>
-          <v-btn icon="mdi-close" variant="text" size="large" @click="handleClose" />
-        </div>
-      </v-card-title>
-
-      <v-divider />
-
-      <!-- Progress Section -->
-      <div class="progress-section pa-4">
-        <div class="d-flex align-center justify-space-between mb-2">
-          <span class="text-body-1">
+      <!-- Compact Header (when collapsed) -->
+      <div v-if="isHeaderCollapsed" class="compact-header">
+        <div class="d-flex align-center gap-2">
+          <v-chip :color="department === 'kitchen' ? 'success' : 'info'" size="x-small">
+            {{ department === 'kitchen' ? 'Kitchen' : 'Bar' }}
+          </v-chip>
+          <span class="text-body-2">
             <strong>{{ countedItems }}</strong>
-            / {{ totalItems }} counted
+            /{{ totalItems }}
           </span>
-          <span class="text-body-2 text-medium-emphasis">{{ progressPercentage.toFixed(0) }}%</span>
-        </div>
-        <v-progress-linear :model-value="progressPercentage" height="10" rounded color="primary" />
-      </div>
-
-      <!-- Filter Section -->
-      <div class="filter-section px-4 pb-2">
-        <!-- Row 1: Search + Days Filter -->
-        <div class="d-flex align-center flex-wrap gap-2 mb-3">
-          <!-- Search by name -->
-          <v-text-field
-            v-model="searchQuery"
-            placeholder="Search..."
-            density="compact"
-            hide-details
-            variant="outlined"
-            prepend-inner-icon="mdi-magnify"
-            clearable
-            class="search-field"
-          />
-
-          <!-- Days filter -->
-          <v-select
-            v-model="daysFilter"
-            :items="daysFilterOptions"
-            density="compact"
-            hide-details
-            variant="outlined"
-            class="days-select"
-          />
-
-          <v-spacer />
-
-          <!-- Sort selector -->
-          <v-select
-            v-model="sortBy"
-            :items="sortOptions"
-            density="compact"
-            hide-details
-            variant="outlined"
-            class="sort-select"
+          <v-progress-linear
+            :model-value="progressPercentage"
+            height="6"
+            rounded
+            color="primary"
+            class="compact-progress"
           />
         </div>
-
-        <!-- Row 2: Status Chips -->
-        <v-chip-group v-model="filterType" mandatory selected-class="text-primary">
-          <v-chip value="all" filter variant="outlined">All ({{ totalItems }})</v-chip>
-          <v-chip value="uncounted" filter variant="outlined">
-            Uncounted ({{ uncountedCount }})
-          </v-chip>
-          <v-chip value="discrepancy" filter variant="outlined" color="warning">
-            Diff ({{ discrepancyCount }})
-          </v-chip>
-          <v-chip value="stale" filter variant="outlined" color="info">
-            Stale ({{ staleCount }})
-          </v-chip>
-        </v-chip-group>
+        <v-spacer />
+        <div class="d-flex align-center gap-1">
+          <v-btn
+            icon="mdi-chevron-down"
+            variant="text"
+            size="small"
+            density="compact"
+            @click="isHeaderCollapsed = false"
+          />
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            size="small"
+            density="compact"
+            @click="handleClose"
+          />
+        </div>
       </div>
 
-      <v-divider />
+      <!-- Full Header (when not collapsed) -->
+      <template v-if="!isHeaderCollapsed">
+        <v-card-title class="dialog-header pa-4">
+          <div class="d-flex align-center justify-space-between w-100">
+            <div>
+              <h3 class="text-h6 font-weight-bold">
+                {{ existingInventory ? 'Continue' : 'New' }} Preparation Inventory
+              </h3>
+              <v-chip
+                :color="department === 'kitchen' ? 'success' : 'info'"
+                size="small"
+                class="mt-1"
+              >
+                <v-icon start size="14">
+                  {{ department === 'kitchen' ? 'mdi-chef-hat' : 'mdi-glass-cocktail' }}
+                </v-icon>
+                {{ department === 'kitchen' ? 'Kitchen' : 'Bar' }}
+              </v-chip>
+            </div>
+            <v-btn icon="mdi-close" variant="text" size="large" @click="handleClose" />
+          </div>
+        </v-card-title>
+
+        <v-divider />
+
+        <!-- Progress Section -->
+        <div class="progress-section pa-4">
+          <div class="d-flex align-center justify-space-between mb-2">
+            <span class="text-body-1">
+              <strong>{{ countedItems }}</strong>
+              / {{ totalItems }} counted
+            </span>
+            <span class="text-body-2 text-medium-emphasis">
+              {{ progressPercentage.toFixed(0) }}%
+            </span>
+          </div>
+          <v-progress-linear
+            :model-value="progressPercentage"
+            height="10"
+            rounded
+            color="primary"
+          />
+        </div>
+
+        <!-- Filter Section -->
+        <div class="filter-section px-4 pb-2">
+          <!-- Row 1: Search + Days Filter -->
+          <div class="d-flex align-center flex-wrap gap-2 mb-3">
+            <!-- Search by name -->
+            <v-text-field
+              v-model="searchQuery"
+              placeholder="Search..."
+              density="compact"
+              hide-details
+              variant="outlined"
+              prepend-inner-icon="mdi-magnify"
+              clearable
+              class="search-field"
+            />
+
+            <!-- Days filter -->
+            <v-select
+              v-model="daysFilter"
+              :items="daysFilterOptions"
+              density="compact"
+              hide-details
+              variant="outlined"
+              class="days-select"
+            />
+
+            <v-spacer />
+
+            <!-- Sort selector -->
+            <v-select
+              v-model="sortBy"
+              :items="sortOptions"
+              density="compact"
+              hide-details
+              variant="outlined"
+              class="sort-select"
+            />
+          </div>
+
+          <!-- Row 2: Status Chips -->
+          <v-chip-group v-model="filterType" mandatory selected-class="text-primary">
+            <v-chip value="all" filter variant="outlined">All ({{ totalItems }})</v-chip>
+            <v-chip value="uncounted" filter variant="outlined">
+              Uncounted ({{ uncountedCount }})
+            </v-chip>
+            <v-chip value="discrepancy" filter variant="outlined" color="warning">
+              Diff ({{ discrepancyCount }})
+            </v-chip>
+            <v-chip value="stale" filter variant="outlined" color="info">
+              Stale ({{ staleCount }})
+            </v-chip>
+          </v-chip-group>
+        </div>
+
+        <v-divider />
+      </template>
 
       <!-- Items List -->
-      <v-card-text class="items-section pa-0">
+      <v-card-text ref="itemsListRef" class="items-section pa-0" @scroll="handleScroll">
         <div v-if="isLoading" class="text-center py-12">
           <v-progress-circular indeterminate size="48" color="primary" />
           <p class="mt-4 text-medium-emphasis">Loading preparations...</p>
@@ -195,12 +241,36 @@
           Complete
         </v-btn>
       </v-card-actions>
+
+      <!-- Draft Recovery Dialog -->
+      <v-dialog v-model="showDraftRecoveryDialog" max-width="400" persistent>
+        <v-card>
+          <v-card-title class="text-h6">
+            <v-icon start color="info">mdi-file-restore</v-icon>
+            Recover Draft?
+          </v-card-title>
+          <v-card-text>
+            <p>
+              Found unsaved draft from
+              {{ pendingDraft ? formatDraftTime(pendingDraft.savedAt) : '' }}.
+            </p>
+            <p class="text-medium-emphasis mt-2">Do you want to continue where you left off?</p>
+          </v-card-text>
+          <v-card-actions>
+            <v-btn variant="outlined" @click="handleDiscardDraft">Start Fresh</v-btn>
+            <v-spacer />
+            <v-btn color="primary" variant="flat" @click="handleContinueDraft">
+              Continue Draft
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
     </v-card>
   </v-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useDisplay } from 'vuetify'
 import { usePreparationStore } from '@/stores/preparation'
 import { useAuthStore } from '@/stores/auth'
@@ -259,6 +329,20 @@ const searchQuery = ref('')
 const daysFilter = ref<number | null>(null) // null = all, number = max days since count
 const inventoryItems = ref<PreparationInventoryItem[]>([])
 const currentInventory = ref<PreparationInventoryDocument | null>(null)
+
+// Scroll behavior - collapsible header
+const isHeaderCollapsed = ref(false)
+const itemsListRef = ref<HTMLElement | null>(null)
+
+// Auto-save
+const autoSaveInterval = ref<ReturnType<typeof setInterval> | null>(null)
+const lastAutoSave = ref<Date | null>(null)
+const AUTO_SAVE_KEY = 'kitchen_preparation_inventory_draft'
+const AUTO_SAVE_INTERVAL_MS = 30000 // Auto-save every 30 seconds
+
+// Draft recovery dialog
+const showDraftRecoveryDialog = ref(false)
+const pendingDraft = ref<{ items: PreparationInventoryItem[]; savedAt: string } | null>(null)
 
 // Constants - preparations have shorter shelf life
 const STALE_DAYS_THRESHOLD = 1
@@ -447,6 +531,200 @@ function hasItemBeenCounted(item: PreparationInventoryItem): boolean {
 }
 
 /**
+ * Handle scroll - collapse header when scrolling down
+ */
+function handleScroll(event: Event) {
+  const target = event.target as HTMLElement
+  if (!target) return
+  isHeaderCollapsed.value = target.scrollTop > 50
+}
+
+/**
+ * Save draft to localStorage for recovery
+ */
+function saveLocalDraft() {
+  if (!hasChanges.value || inventoryItems.value.length === 0) return
+
+  const draft = {
+    department: props.department,
+    items: inventoryItems.value,
+    savedAt: new Date().toISOString(),
+    filters: {
+      filterType: filterType.value,
+      sortBy: sortBy.value,
+      searchQuery: searchQuery.value,
+      daysFilter: daysFilter.value
+    }
+  }
+
+  try {
+    localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(draft))
+    lastAutoSave.value = new Date()
+    DebugUtils.info(MODULE_NAME, 'Preparation draft auto-saved to localStorage', {
+      itemsCount: inventoryItems.value.length,
+      countedItems: countedItems.value
+    })
+  } catch (error) {
+    DebugUtils.warn(MODULE_NAME, 'Failed to auto-save preparation draft', { error })
+  }
+}
+
+/**
+ * Check if local draft exists and is valid
+ */
+function checkLocalDraft(): { items: PreparationInventoryItem[]; savedAt: string } | null {
+  try {
+    const saved = localStorage.getItem(AUTO_SAVE_KEY)
+    if (!saved) return null
+
+    const draft = JSON.parse(saved)
+
+    // Check if draft is for the same department
+    if (draft.department !== props.department) {
+      DebugUtils.info(MODULE_NAME, 'Draft is for different department, ignoring', {
+        draftDepartment: draft.department,
+        currentDepartment: props.department
+      })
+      return null
+    }
+
+    // Check if draft is not too old (24 hours max)
+    const savedAt = new Date(draft.savedAt)
+    const hoursSinceSave = (Date.now() - savedAt.getTime()) / (1000 * 60 * 60)
+    if (hoursSinceSave > 24) {
+      DebugUtils.info(MODULE_NAME, 'Draft is too old, clearing', { hoursSinceSave })
+      clearLocalDraft()
+      return null
+    }
+
+    // Return draft if valid
+    if (draft.items?.length > 0) {
+      return { items: draft.items, savedAt: draft.savedAt }
+    }
+
+    return null
+  } catch (error) {
+    DebugUtils.warn(MODULE_NAME, 'Failed to check preparation draft', { error })
+    return null
+  }
+}
+
+/**
+ * Handle user choosing to continue from draft
+ * Merges draft user data with current items (either from API or fresh)
+ */
+function handleContinueDraft() {
+  if (pendingDraft.value) {
+    // If we don't have items yet (new inventory), initialize first
+    if (inventoryItems.value.length === 0) {
+      initializeItems()
+    }
+
+    // Create a map of draft items by preparationId for quick lookup
+    const draftMap = new Map(pendingDraft.value.items.map(item => [item.preparationId, item]))
+
+    // Merge draft user data with current items
+    inventoryItems.value = inventoryItems.value.map(currentItem => {
+      const draftItem = draftMap.get(currentItem.preparationId)
+      if (draftItem) {
+        // Keep user's counted data from localStorage
+        const difference = draftItem.actualQuantity - currentItem.systemQuantity
+        return {
+          ...currentItem,
+          actualQuantity: draftItem.actualQuantity,
+          difference,
+          valueDifference: difference * currentItem.averageCost,
+          notes: draftItem.notes,
+          countedBy: draftItem.countedBy,
+          confirmed: draftItem.confirmed,
+          userInteracted: draftItem.userInteracted
+        }
+      }
+      return currentItem
+    })
+
+    DebugUtils.info(MODULE_NAME, 'Restored preparation draft from localStorage', {
+      itemsCount: inventoryItems.value.length,
+      countedItems: inventoryItems.value.filter(i => i.userInteracted || i.confirmed).length
+    })
+  }
+  showDraftRecoveryDialog.value = false
+  pendingDraft.value = null
+  startAutoSave()
+}
+
+/**
+ * Handle user choosing to start fresh (discard draft)
+ */
+function handleDiscardDraft() {
+  clearLocalDraft()
+  initializeItems()
+  showDraftRecoveryDialog.value = false
+  pendingDraft.value = null
+  startAutoSave()
+}
+
+/**
+ * Clear local draft
+ */
+function clearLocalDraft() {
+  try {
+    localStorage.removeItem(AUTO_SAVE_KEY)
+  } catch (error) {
+    DebugUtils.warn(MODULE_NAME, 'Failed to clear preparation draft', { error })
+  }
+}
+
+/**
+ * Start auto-save interval
+ */
+function startAutoSave() {
+  if (autoSaveInterval.value) return
+
+  autoSaveInterval.value = setInterval(() => {
+    if (hasChanges.value) {
+      saveLocalDraft()
+    }
+  }, AUTO_SAVE_INTERVAL_MS)
+
+  DebugUtils.info(MODULE_NAME, 'Preparation auto-save started', {
+    intervalMs: AUTO_SAVE_INTERVAL_MS
+  })
+}
+
+/**
+ * Stop auto-save interval
+ */
+function stopAutoSave() {
+  if (autoSaveInterval.value) {
+    clearInterval(autoSaveInterval.value)
+    autoSaveInterval.value = null
+    DebugUtils.info(MODULE_NAME, 'Preparation auto-save stopped')
+  }
+}
+
+/**
+ * Format draft saved time for display
+ */
+function formatDraftTime(isoString: string): string {
+  const date = new Date(isoString)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / (1000 * 60))
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins} min ago`
+  if (diffHours < 24) return `${diffHours} hours ago`
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+/**
  * Format currency
  */
 function formatCurrency(amount: number): string {
@@ -561,6 +839,9 @@ async function handleSaveDraft() {
     // Update items
     await preparationStore.updateInventory(currentInventory.value.id, inventoryItems.value)
 
+    // Clear local draft after successful API save
+    clearLocalDraft()
+
     emit('success', `Draft saved. ${countedItems.value}/${totalItems.value} items counted.`)
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to save preparation draft', { error })
@@ -613,9 +894,14 @@ async function handleComplete() {
 }
 
 /**
- * Handle close
+ * Handle close - DON'T clear local draft so user can recover later
  */
 function handleClose() {
+  stopAutoSave()
+  // Save current state before closing (if there are changes)
+  if (hasChanges.value) {
+    saveLocalDraft()
+  }
   inventoryItems.value = []
   currentInventory.value = null
   // Reset all filters
@@ -623,6 +909,9 @@ function handleClose() {
   searchQuery.value = ''
   daysFilter.value = null
   sortBy.value = 'name'
+  isHeaderCollapsed.value = false
+  showDraftRecoveryDialog.value = false
+  pendingDraft.value = null
   emit('update:modelValue', false)
 }
 
@@ -635,15 +924,52 @@ watch(
   isOpen => {
     if (isOpen) {
       isLoading.value = true
+      isHeaderCollapsed.value = false
 
       setTimeout(() => {
+        // Always check for local draft first (might have unsaved changes)
+        const localDraft = checkLocalDraft()
+
         if (props.existingInventory) {
-          loadExistingInventory()
+          // Loading existing API draft
+          if (localDraft) {
+            // Compare timestamps - prefer newer version
+            const apiUpdatedAt = new Date(
+              props.existingInventory.updatedAt || props.existingInventory.createdAt
+            )
+            const localSavedAt = new Date(localDraft.savedAt)
+
+            if (localSavedAt > apiUpdatedAt) {
+              // Local draft is newer - ask user
+              pendingDraft.value = localDraft
+              showDraftRecoveryDialog.value = true
+              // Load API draft in background so user can choose
+              loadExistingInventory()
+            } else {
+              // API draft is newer or same - use it
+              loadExistingInventory()
+              clearLocalDraft()
+              startAutoSave()
+            }
+          } else {
+            loadExistingInventory()
+            startAutoSave()
+          }
         } else {
-          initializeItems()
+          // New inventory - check for local draft
+          if (localDraft) {
+            pendingDraft.value = localDraft
+            showDraftRecoveryDialog.value = true
+          } else {
+            initializeItems()
+            startAutoSave()
+          }
         }
         isLoading.value = false
       }, 100)
+    } else {
+      // Stop auto-save when dialog closes
+      stopAutoSave()
     }
   }
 )
@@ -656,6 +982,11 @@ watch(
     }
   }
 )
+
+// Cleanup on unmount
+onUnmounted(() => {
+  stopAutoSave()
+})
 </script>
 
 <style scoped lang="scss">
@@ -667,6 +998,24 @@ watch(
 
 .dialog-header {
   background-color: var(--v-theme-surface);
+}
+
+.compact-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  background-color: var(--v-theme-surface);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.compact-progress {
+  width: 120px;
+  flex-shrink: 0;
 }
 
 .progress-section {
@@ -695,7 +1044,7 @@ watch(
 .items-section {
   flex: 1;
   overflow-y: auto;
-  max-height: 400px;
+  min-height: 200px;
   background-color: var(--v-theme-background);
 }
 
@@ -720,6 +1069,10 @@ watch(
   .items-section {
     max-height: none;
     flex: 1;
+  }
+
+  .compact-progress {
+    width: 60px;
   }
 }
 </style>

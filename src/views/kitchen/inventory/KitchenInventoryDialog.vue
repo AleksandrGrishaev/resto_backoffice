@@ -257,6 +257,30 @@
           Complete
         </v-btn>
       </v-card-actions>
+
+      <!-- Draft Recovery Dialog -->
+      <v-dialog v-model="showDraftRecoveryDialog" max-width="400" persistent>
+        <v-card>
+          <v-card-title class="text-h6">
+            <v-icon start color="info">mdi-file-restore</v-icon>
+            Recover Draft?
+          </v-card-title>
+          <v-card-text>
+            <p>
+              Found unsaved draft from
+              {{ pendingDraft ? formatDraftTime(pendingDraft.savedAt) : '' }}.
+            </p>
+            <p class="text-medium-emphasis mt-2">Do you want to continue where you left off?</p>
+          </v-card-text>
+          <v-card-actions>
+            <v-btn variant="outlined" @click="handleDiscardDraft">Start Fresh</v-btn>
+            <v-spacer />
+            <v-btn color="primary" variant="flat" @click="handleContinueDraft">
+              Continue Draft
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
     </v-card>
   </v-dialog>
 </template>
@@ -332,6 +356,10 @@ const autoSaveInterval = ref<ReturnType<typeof setInterval> | null>(null)
 const lastAutoSave = ref<Date | null>(null)
 const AUTO_SAVE_KEY = 'kitchen_inventory_draft'
 const AUTO_SAVE_INTERVAL_MS = 30000 // Auto-save every 30 seconds
+
+// Draft recovery dialog
+const showDraftRecoveryDialog = ref(false)
+const pendingDraft = ref<{ items: InventoryItem[]; savedAt: string } | null>(null)
 
 // Constants
 const STALE_DAYS_THRESHOLD = 7
@@ -728,11 +756,14 @@ async function handleComplete() {
 }
 
 /**
- * Handle close
+ * Handle close - DON'T clear local draft so user can recover later
  */
 function handleClose() {
   stopAutoSave()
-  clearLocalDraft()
+  // Save current state before closing (if there are changes)
+  if (hasChanges.value) {
+    saveLocalDraft()
+  }
   inventoryItems.value = []
   currentInventory.value = null
   // Reset all filters
@@ -742,6 +773,8 @@ function handleClose() {
   daysFilter.value = null
   sortBy.value = 'name'
   isHeaderCollapsed.value = false
+  showDraftRecoveryDialog.value = false
+  pendingDraft.value = null
   emit('update:modelValue', false)
 }
 
@@ -786,12 +819,12 @@ function saveLocalDraft() {
 }
 
 /**
- * Load draft from localStorage
+ * Check if local draft exists and is valid
  */
-function loadLocalDraft(): boolean {
+function checkLocalDraft(): { items: InventoryItem[]; savedAt: string } | null {
   try {
     const saved = localStorage.getItem(AUTO_SAVE_KEY)
-    if (!saved) return false
+    if (!saved) return null
 
     const draft = JSON.parse(saved)
 
@@ -801,33 +834,104 @@ function loadLocalDraft(): boolean {
         draftDepartment: draft.department,
         currentDepartment: props.department
       })
-      return false
+      return null
     }
 
     // Check if draft is not too old (24 hours max)
     const savedAt = new Date(draft.savedAt)
-    const hoursSincesSave = (Date.now() - savedAt.getTime()) / (1000 * 60 * 60)
-    if (hoursSincesSave > 24) {
-      DebugUtils.info(MODULE_NAME, 'Draft is too old, clearing', { hoursSincesSave })
+    const hoursSinceSave = (Date.now() - savedAt.getTime()) / (1000 * 60 * 60)
+    if (hoursSinceSave > 24) {
+      DebugUtils.info(MODULE_NAME, 'Draft is too old, clearing', { hoursSinceSave })
       clearLocalDraft()
-      return false
+      return null
     }
 
-    // Restore items
+    // Return draft if valid
     if (draft.items?.length > 0) {
-      inventoryItems.value = draft.items
-      DebugUtils.info(MODULE_NAME, 'Loaded draft from localStorage', {
-        itemsCount: draft.items.length,
-        savedAt: draft.savedAt
-      })
-      return true
+      return { items: draft.items, savedAt: draft.savedAt }
     }
 
-    return false
+    return null
   } catch (error) {
-    DebugUtils.warn(MODULE_NAME, 'Failed to load draft from localStorage', { error })
-    return false
+    DebugUtils.warn(MODULE_NAME, 'Failed to check draft', { error })
+    return null
   }
+}
+
+/**
+ * Format draft saved time for display
+ */
+function formatDraftTime(isoString: string): string {
+  const date = new Date(isoString)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / (1000 * 60))
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins} min ago`
+  if (diffHours < 24) return `${diffHours} hours ago`
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+/**
+ * Handle user choosing to continue from draft
+ * Merges draft user data with current items (either from API or fresh)
+ */
+function handleContinueDraft() {
+  if (pendingDraft.value) {
+    // If we don't have items yet (new inventory), initialize first
+    if (inventoryItems.value.length === 0) {
+      initializeItems()
+    }
+
+    // Create a map of draft items by itemId for quick lookup
+    const draftMap = new Map(pendingDraft.value.items.map(item => [item.itemId, item]))
+
+    // Merge draft user data with current items
+    inventoryItems.value = inventoryItems.value.map(currentItem => {
+      const draftItem = draftMap.get(currentItem.itemId)
+      if (draftItem) {
+        // Keep user's counted data from localStorage
+        const difference = draftItem.actualQuantity - currentItem.systemQuantity
+        return {
+          ...currentItem,
+          actualQuantity: draftItem.actualQuantity,
+          difference,
+          valueDifference: difference * currentItem.averageCost,
+          notes: draftItem.notes,
+          countedBy: draftItem.countedBy,
+          confirmed: draftItem.confirmed,
+          userInteracted: draftItem.userInteracted
+        }
+      }
+      return currentItem
+    })
+
+    DebugUtils.info(MODULE_NAME, 'Restored draft from localStorage', {
+      itemsCount: inventoryItems.value.length,
+      countedItems: inventoryItems.value.filter(i => i.userInteracted || i.confirmed).length
+    })
+  }
+  showDraftRecoveryDialog.value = false
+  pendingDraft.value = null
+  startAutoSave()
+}
+
+/**
+ * Handle user choosing to start fresh (discard draft)
+ */
+function handleDiscardDraft() {
+  clearLocalDraft()
+  initializeItems()
+  showDraftRecoveryDialog.value = false
+  pendingDraft.value = null
+  startAutoSave()
 }
 
 /**
@@ -879,19 +983,45 @@ watch(
       isHeaderCollapsed.value = false
 
       setTimeout(() => {
+        // Always check for local draft first (might have unsaved changes)
+        const localDraft = checkLocalDraft()
+
         if (props.existingInventory) {
-          loadExistingInventory()
+          // Loading existing API draft
+          if (localDraft) {
+            // Compare timestamps - prefer newer version
+            const apiUpdatedAt = new Date(
+              props.existingInventory.updatedAt || props.existingInventory.createdAt
+            )
+            const localSavedAt = new Date(localDraft.savedAt)
+
+            if (localSavedAt > apiUpdatedAt) {
+              // Local draft is newer - ask user
+              pendingDraft.value = localDraft
+              showDraftRecoveryDialog.value = true
+              // Load API draft in background so user can choose
+              loadExistingInventory()
+            } else {
+              // API draft is newer or same - use it
+              loadExistingInventory()
+              clearLocalDraft()
+              startAutoSave()
+            }
+          } else {
+            loadExistingInventory()
+            startAutoSave()
+          }
         } else {
-          // Try to load local draft first (for recovery)
-          const draftLoaded = loadLocalDraft()
-          if (!draftLoaded) {
+          // New inventory - check for local draft
+          if (localDraft) {
+            pendingDraft.value = localDraft
+            showDraftRecoveryDialog.value = true
+          } else {
             initializeItems()
+            startAutoSave()
           }
         }
         isLoading.value = false
-
-        // Start auto-save after loading
-        startAutoSave()
       }, 100)
     } else {
       // Stop auto-save when dialog closes

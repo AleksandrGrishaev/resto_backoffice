@@ -2,167 +2,210 @@
 <template>
   <v-dialog
     :model-value="modelValue"
+    :fullscreen="isMobile"
     max-width="900px"
     persistent
     @update:model-value="$emit('update:modelValue', $event)"
   >
-    <v-card>
-      <v-card-title class="d-flex align-center justify-space-between">
-        <div>
-          <h3>
-            {{ currentInventory ? 'Edit' : 'Start' }} Preparation Inventory -
+    <v-card class="preparation-inventory-dialog">
+      <!-- Compact Header (when collapsed) -->
+      <div v-if="isHeaderCollapsed" class="compact-header">
+        <div class="d-flex align-center gap-2">
+          <v-chip :color="department === 'kitchen' ? 'success' : 'info'" size="x-small">
             {{ formatDepartment(department) }}
-          </h3>
-          <div class="text-caption text-medium-emphasis">
-            {{
-              currentInventory
-                ? `Editing ${currentInventory.documentNumber}`
-                : 'Count all preparations and enter actual quantities'
-            }}
+          </v-chip>
+          <span class="text-body-2">
+            <strong>{{ countedItems }}</strong>
+            /{{ totalItems }}
+          </span>
+          <v-progress-linear
+            :model-value="progressPercentage"
+            height="6"
+            rounded
+            color="primary"
+            class="compact-progress"
+          />
+        </div>
+        <v-spacer />
+        <div class="d-flex align-center gap-1">
+          <v-btn
+            icon="mdi-chevron-down"
+            variant="text"
+            size="small"
+            density="compact"
+            @click="isHeaderCollapsed = false"
+          />
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            size="small"
+            density="compact"
+            @click="handleClose"
+          />
+        </div>
+      </div>
+
+      <!-- Full Header (when not collapsed) -->
+      <template v-if="!isHeaderCollapsed">
+        <v-card-title class="d-flex align-center justify-space-between">
+          <div>
+            <h3>
+              {{ currentInventory ? 'Edit' : 'Start' }} Preparation Inventory -
+              {{ formatDepartment(department) }}
+            </h3>
+            <div class="text-caption text-medium-emphasis">
+              {{
+                currentInventory
+                  ? `Editing ${currentInventory.documentNumber}`
+                  : 'Count all preparations and enter actual quantities'
+              }}
+            </div>
+          </div>
+          <v-btn icon="mdi-close" variant="text" @click="handleClose" />
+        </v-card-title>
+
+        <v-divider />
+
+        <div class="header-content pa-4">
+          <v-form ref="form" v-model="isFormValid">
+            <!-- Responsible Person -->
+            <v-text-field
+              v-model="responsiblePerson"
+              label="Responsible Person"
+              :rules="[v => !!v || 'Required field']"
+              prepend-inner-icon="mdi-account"
+              variant="outlined"
+              density="compact"
+              class="mb-3"
+            />
+
+            <!-- Progress and Filters -->
+            <div class="mb-3">
+              <div class="d-flex align-center justify-space-between mb-2">
+                <div>
+                  <div class="text-subtitle-2">
+                    Progress: {{ countedItems }}/{{ totalItems }} preparations counted
+                    <span v-if="filterType !== 'all'" class="text-caption text-medium-emphasis">
+                      (filtered)
+                    </span>
+                  </div>
+                  <v-progress-linear
+                    :model-value="progressPercentage"
+                    height="6"
+                    rounded
+                    color="primary"
+                    class="mt-1"
+                  />
+                </div>
+
+                <div class="d-flex gap-2">
+                  <v-btn-toggle v-model="filterType" density="compact">
+                    <v-btn value="all" size="small">All</v-btn>
+                    <v-btn value="discrepancy" size="small">Diff</v-btn>
+                    <v-btn value="uncounted" size="small">Uncounted</v-btn>
+                  </v-btn-toggle>
+                </div>
+              </div>
+            </div>
+
+            <!-- Critical Shelf Life Warning -->
+            <v-alert v-if="hasExpiringItems" type="warning" variant="tonal" density="compact">
+              <v-icon icon="mdi-clock-alert-outline" size="small" class="mr-1" />
+              <strong>Urgent:</strong>
+              Some preparations expire within 24 hours!
+            </v-alert>
+          </v-form>
+        </div>
+
+        <v-divider />
+      </template>
+
+      <!-- Items List -->
+      <v-card-text ref="itemsListRef" class="items-section pa-0" @scroll="handleScroll">
+        <div v-if="filteredItems.length === 0" class="text-center py-8 text-medium-emphasis">
+          <v-icon icon="mdi-clipboard-list" size="48" class="mb-2" />
+          <div v-if="filterType !== 'all'">
+            <div>No preparations match current filter</div>
+            <div class="text-caption">Try selecting "All" to see all preparations</div>
+            <v-btn size="small" variant="outlined" class="mt-2" @click="filterType = 'all'">
+              Show All
+            </v-btn>
+          </div>
+          <div v-else>
+            <div>No preparations to count</div>
+            <div class="text-caption">All preparations have been counted</div>
           </div>
         </div>
-        <v-btn icon="mdi-close" variant="text" @click="handleClose" />
-      </v-card-title>
 
-      <v-divider />
-
-      <v-card-text class="pa-6">
-        <v-form ref="form" v-model="isFormValid">
-          <!-- Responsible Person -->
-          <v-text-field
-            v-model="responsiblePerson"
-            label="Responsible Person"
-            :rules="[v => !!v || 'Required field']"
-            prepend-inner-icon="mdi-account"
-            variant="outlined"
-            class="mb-4"
-          />
-
-          <!-- Progress and Filters -->
-          <div class="mb-4">
-            <div class="d-flex align-center justify-space-between mb-2">
-              <div>
-                <div class="text-subtitle-1">
-                  Progress: {{ countedItems }}/{{ totalItems }} preparations counted
-                  <span v-if="filterType !== 'all'" class="text-caption text-medium-emphasis">
-                    (filtered)
-                  </span>
-                </div>
-                <v-progress-linear
-                  :model-value="progressPercentage"
-                  height="6"
-                  rounded
-                  color="primary"
-                  class="mt-1"
-                />
-              </div>
-
-              <div class="d-flex gap-2">
-                <v-btn-toggle v-model="filterType" density="compact">
-                  <v-btn value="all" size="small">All</v-btn>
-                  <v-btn value="discrepancy" size="small">Discrepancies</v-btn>
-                  <v-btn value="uncounted" size="small">Uncounted</v-btn>
-                </v-btn-toggle>
-              </div>
-            </div>
-          </div>
-
-          <!-- Critical Shelf Life Warning -->
-          <v-alert v-if="hasExpiringItems" type="warning" variant="tonal" class="mb-4">
-            <v-icon icon="mdi-clock-alert-outline" class="mr-2" />
-            <strong>Urgent:</strong>
-            Some preparations expire within 24 hours - count these first!
-          </v-alert>
-
-          <!-- Items List -->
-          <div class="inventory-items">
-            <div v-if="filteredItems.length === 0" class="text-center py-8 text-medium-emphasis">
-              <v-icon icon="mdi-clipboard-list" size="48" class="mb-2" />
-              <div v-if="filterType !== 'all'">
-                <div>No preparations match current filter</div>
-                <div class="text-caption">Try selecting "All" to see all preparations</div>
-                <v-btn size="small" variant="outlined" class="mt-2" @click="filterType = 'all'">
-                  Show All Preparations
-                </v-btn>
-              </div>
-              <div v-else>
-                <div>No preparations to count</div>
-                <div class="text-caption">All preparations have been counted</div>
-              </div>
-            </div>
-
-            <div v-else>
-              <!-- Filtering info -->
-              <div v-if="filterType !== 'all'" class="text-center mb-3">
-                <v-chip size="small" color="primary" variant="tonal">
-                  <v-icon icon="mdi-filter" size="14" class="mr-1" />
-                  Showing {{ filteredItems.length }} of {{ totalItems }} preparations
-                  <v-btn
-                    icon="mdi-close"
-                    size="x-small"
-                    variant="text"
-                    class="ml-1"
-                    @click="filterType = 'all'"
-                  />
-                </v-chip>
-              </div>
-
-              <preparation-inventory-item-row
-                v-for="item in filteredItems"
-                :key="item.id"
-                v-model="inventoryItems[getItemIndex(item.id)]"
-                :responsible-person="responsiblePerson"
-                class="mb-2"
-                @update:model-value="updateInventoryItem"
+        <div v-else class="items-list">
+          <!-- Filtering info -->
+          <div v-if="filterType !== 'all'" class="text-center mb-2">
+            <v-chip size="small" color="primary" variant="tonal">
+              <v-icon icon="mdi-filter" size="14" class="mr-1" />
+              {{ filteredItems.length }} of {{ totalItems }}
+              <v-btn
+                icon="mdi-close"
+                size="x-small"
+                variant="text"
+                class="ml-1"
+                @click="filterType = 'all'"
               />
-            </div>
+            </v-chip>
           </div>
 
-          <!-- Summary -->
-          <v-card v-if="hasSummary" variant="tonal" color="info" class="mt-4">
-            <v-card-text>
-              <div class="text-subtitle-1 font-weight-medium mb-2">Inventory Summary</div>
-              <v-row>
-                <v-col cols="12" md="3">
-                  <div class="text-caption text-medium-emphasis">Total Preparations</div>
-                  <div class="text-h6">{{ totalItems }}</div>
-                </v-col>
-                <v-col cols="12" md="3">
-                  <div class="text-caption text-medium-emphasis">Discrepancies</div>
-                  <div
-                    class="text-h6"
-                    :class="discrepancyCount > 0 ? 'text-warning' : 'text-success'"
-                  >
-                    {{ discrepancyCount }}
-                  </div>
-                </v-col>
-                <v-col cols="12" md="3">
-                  <div class="text-caption text-medium-emphasis">Value Difference</div>
-                  <div
-                    class="text-h6"
-                    :class="valueDifference !== 0 ? 'text-warning' : 'text-success'"
-                  >
-                    {{ formatCurrency(valueDifference) }}
-                  </div>
-                </v-col>
-                <v-col cols="12" md="3">
-                  <div class="text-caption text-medium-emphasis">Status</div>
-                  <v-chip :color="isComplete ? 'success' : 'warning'" size="small" variant="flat">
-                    {{ isComplete ? 'Complete' : 'In Progress' }}
-                  </v-chip>
-                </v-col>
-              </v-row>
-            </v-card-text>
-          </v-card>
-        </v-form>
+          <preparation-inventory-item-row
+            v-for="item in filteredItems"
+            :key="item.id"
+            v-model="inventoryItems[getItemIndex(item.id)]"
+            :responsible-person="responsiblePerson"
+            class="mb-2"
+            @update:model-value="updateInventoryItem"
+          />
+        </div>
       </v-card-text>
 
       <v-divider />
 
-      <v-card-actions class="pa-4">
-        <v-spacer />
+      <!-- Summary -->
+      <div v-if="hasSummary" class="summary-section pa-3">
+        <v-row dense>
+          <v-col cols="3" class="text-center">
+            <div class="text-caption text-medium-emphasis">Total</div>
+            <div class="text-subtitle-1">{{ totalItems }}</div>
+          </v-col>
+          <v-col cols="3" class="text-center">
+            <div class="text-caption text-medium-emphasis">Diff</div>
+            <div
+              class="text-subtitle-1"
+              :class="discrepancyCount > 0 ? 'text-warning' : 'text-success'"
+            >
+              {{ discrepancyCount }}
+            </div>
+          </v-col>
+          <v-col cols="3" class="text-center">
+            <div class="text-caption text-medium-emphasis">Value</div>
+            <div
+              class="text-subtitle-1"
+              :class="valueDifference !== 0 ? 'text-warning' : 'text-success'"
+            >
+              {{ formatCurrency(valueDifference) }}
+            </div>
+          </v-col>
+          <v-col cols="3" class="text-center">
+            <div class="text-caption text-medium-emphasis">Status</div>
+            <v-chip :color="isComplete ? 'success' : 'warning'" size="x-small" variant="flat">
+              {{ isComplete ? 'Done' : 'In Progress' }}
+            </v-chip>
+          </v-col>
+        </v-row>
+      </div>
 
+      <v-divider />
+
+      <v-card-actions class="actions-section pa-4">
         <v-btn variant="outlined" @click="handleClose">Cancel</v-btn>
+
+        <v-spacer />
 
         <!-- Save Draft Button -->
         <v-btn
@@ -198,7 +241,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useDisplay } from 'vuetify'
 import { usePreparationStore } from '@/stores/preparation'
 import { useAuthStore } from '@/stores/auth'
 import type {
@@ -232,7 +276,8 @@ const emit = defineEmits<{
   error: [message: string]
 }>()
 
-// Stores
+// Composables
+const { mobile: isMobile } = useDisplay()
 const preparationStore = usePreparationStore()
 const authStore = useAuthStore()
 
@@ -244,6 +289,10 @@ const responsiblePerson = ref('')
 const filterType = ref('all')
 const inventoryItems = ref<PreparationInventoryItem[]>([])
 const currentInventory = ref<PreparationInventoryDocument | null>(null)
+
+// Scroll behavior - collapsible header
+const isHeaderCollapsed = ref(false)
+const itemsListRef = ref<HTMLElement | null>(null)
 
 // Initialize with current user's name
 onMounted(() => {
@@ -329,6 +378,21 @@ function formatCurrency(amount: number): string {
     currency: 'IDR',
     maximumFractionDigits: 0
   }).format(amount)
+}
+
+/**
+ * Handle scroll - collapse header when scrolling down
+ */
+function handleScroll(event: Event) {
+  console.log('🔄 handleScroll called', event)
+  const target = event.target as HTMLElement
+  if (!target) {
+    console.log('❌ No target')
+    return
+  }
+  console.log('📏 scrollTop:', target.scrollTop, 'isHeaderCollapsed:', isHeaderCollapsed.value)
+  isHeaderCollapsed.value = target.scrollTop > 50
+  console.log('✅ isHeaderCollapsed set to:', isHeaderCollapsed.value)
 }
 
 function getItemIndex(itemId: string): number {
@@ -538,6 +602,7 @@ function resetForm() {
   filterType.value = 'all'
   inventoryItems.value = []
   currentInventory.value = null
+  isHeaderCollapsed.value = false
 
   if (form.value) {
     form.value.resetValidation()
@@ -548,12 +613,19 @@ function resetForm() {
 watch(
   () => props.modelValue,
   async isOpen => {
+    console.log('🔔 Dialog open:', isOpen)
     if (isOpen) {
+      isHeaderCollapsed.value = false
       if (props.existingInventory) {
         loadExistingInventory()
       } else {
         await initializeInventoryItems() // ✅ await async call
       }
+      // Debug: check ref after dialog opens
+      setTimeout(() => {
+        console.log('📦 itemsListRef:', itemsListRef.value)
+        console.log('📦 itemsListRef.$el:', (itemsListRef.value as any)?.$el)
+      }, 500)
     }
   }
 )
@@ -570,11 +642,66 @@ watch(
 </script>
 
 <style lang="scss" scoped>
-.inventory-items {
-  max-height: 500px;
+.preparation-inventory-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+
+.compact-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  background-color: var(--v-theme-surface);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.compact-progress {
+  width: 120px;
+  flex-shrink: 0;
+}
+
+.header-content {
+  background-color: var(--v-theme-surface);
+}
+
+.items-section {
+  flex: 1;
   overflow-y: auto;
-  border: 1px solid rgba(var(--v-theme-outline), 0.2);
-  border-radius: 8px;
-  padding: 8px;
+  min-height: 200px;
+  background-color: var(--v-theme-background);
+}
+
+.items-list {
+  padding: var(--spacing-sm);
+}
+
+.summary-section {
+  background-color: rgba(var(--v-theme-info), 0.04);
+}
+
+.actions-section {
+  background-color: var(--v-theme-surface);
+}
+
+/* Mobile fullscreen adjustments */
+@media (max-width: 600px) {
+  .preparation-inventory-dialog {
+    max-height: 100vh;
+  }
+
+  .items-section {
+    max-height: none;
+    flex: 1;
+  }
+
+  .compact-progress {
+    width: 60px;
+  }
 }
 </style>
