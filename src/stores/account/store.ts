@@ -527,20 +527,27 @@ export const useAccountStore = defineStore('account', () => {
 
       const transaction = await transactionService.createTransaction(data)
 
-      // ✅ НЕ добавляем в state - будет загружено при следующем fetchTransactions
-      // Только обновляем баланс аккаунта для немедленного отображения
+      // ✅ Transaction is persisted in DB at this point - update local state
       const account = state.value.accounts.find(a => a.id === data.accountId)
       if (account) {
         account.balance = transaction.balanceAfter
         account.lastTransactionDate = transaction.createdAt
       }
 
-      // ✅ Принудительно перезагружаем транзакции аккаунта
-      await fetchTransactions(data.accountId)
-
       // Инвалидируем общий кеш
       state.value.allTransactionsCache = undefined
       state.value.cacheTimestamp = undefined
+
+      // Non-critical: refresh transactions list (don't fail if this errors)
+      try {
+        await fetchTransactions(data.accountId)
+      } catch (e) {
+        DebugUtils.warn(
+          MODULE_NAME,
+          'fetchTransactions failed after createOperation, will retry on next load',
+          e
+        )
+      }
 
       return transaction
     } catch (error) {
@@ -1979,19 +1986,27 @@ export const useAccountStore = defineStore('account', () => {
 
       const transaction = await transactionService.createTransaction(transactionData)
 
-      // Update account balance
+      // ✅ Transaction is persisted in DB at this point - update local state
       const account = state.value.accounts.find(a => a.id === data.accountId)
       if (account) {
         account.balance = transaction.balanceAfter
         account.lastTransactionDate = transaction.createdAt
       }
 
-      // Refresh transactions
-      await fetchTransactions(data.accountId)
-
       // Invalidate cache
       state.value.allTransactionsCache = undefined
       state.value.cacheTimestamp = undefined
+
+      // Non-critical: refresh transactions list (don't fail if this errors)
+      try {
+        await fetchTransactions(data.accountId)
+      } catch (e) {
+        DebugUtils.warn(
+          MODULE_NAME,
+          'fetchTransactions failed after createSupplierExpense, will retry on next load',
+          e
+        )
+      }
 
       DebugUtils.info(MODULE_NAME, 'Supplier expense with payment created successfully', {
         transactionId: transaction.id,

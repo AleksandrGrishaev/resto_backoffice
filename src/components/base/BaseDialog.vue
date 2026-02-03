@@ -48,7 +48,7 @@
               class="text-uppercase action-button"
               height="44"
               :loading="loading"
-              :disabled="disabled"
+              :disabled="disabled || loading"
               @click="handleConfirm"
             >
               {{ confirmText }}

@@ -39,6 +39,7 @@ export function useDialogForm<T extends Record<string, unknown>>(options: UseDia
   }
 
   async function handleSubmit() {
+    if (loading.value) return
     if (!isFormValid.value) return
     try {
       loading.value = true
