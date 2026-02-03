@@ -472,8 +472,18 @@ export class AccountSupabaseService {
         throw error
       }
 
-      // Update account balance
-      await this.updateAccountBalance(data.accountId, newBalance)
+      // Transaction is persisted in DB at this point.
+      // Balance update is non-critical: if it fails, balance will be
+      // recalculated on next transaction (uses account.balance as base).
+      try {
+        await this.updateAccountBalance(data.accountId, newBalance)
+      } catch (balanceError) {
+        DebugUtils.warn(
+          MODULE_NAME,
+          'updateAccountBalance failed after transaction INSERT - balance may be stale until next operation',
+          extractErrorDetails(balanceError)
+        )
+      }
 
       const createdTransaction = result ? transactionFromSupabase(result) : transaction
 
