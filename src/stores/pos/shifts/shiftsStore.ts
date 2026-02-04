@@ -623,37 +623,18 @@ export const useShiftsStore = defineStore('posShifts', () => {
       // Other expenses: Will be created during shift sync (ShiftSyncAdapter)
       if (isSupplierExpense) {
         try {
-          const transaction = await accountStore.createOperation({
-            accountId: data.accountId,
-            type: 'expense',
-            amount: data.amount,
-            description: data.description,
-            expenseCategory: { type: 'expense', category: 'supplier' },
-            performedBy: data.performedBy,
-            counteragentId: data.counteragentId,
-            counteragentName: data.counteragentName
-          })
-
-          // Update expense with transaction reference
-          expenseOperation.relatedTransactionId = transaction.id
-          expenseOperation.syncStatus = 'synced'
-          expenseOperation.lastSyncAt = new Date().toISOString()
-
-          console.log('✅ Supplier expense transaction created:', transaction.id)
-
-          // ✅ STEP 2: Create PendingPayment for expense linking in Backoffice
-          // This is NOT a duplicate - it's the PRIMARY record for linking to Purchase Orders
-          // Transaction records the accounting entry, PendingPayment enables linking to POs
           if (data.counteragentId) {
+            // Supplier expense WITH counteragent: use single-path approach
+            // Check for duplicate payment first, then create transaction+payment in one call
+            let duplicatePaymentId: string | undefined
+
             try {
-              // ✅ IMPROVED: Check database for duplicate payments (not just memory)
-              // This prevents race conditions when multiple cashiers create payments simultaneously
               const { data: duplicateCheck, error: duplicateError } = await supabase.rpc(
                 'check_duplicate_payment',
                 {
                   p_counteragent_id: data.counteragentId,
                   p_amount: data.amount,
-                  p_date: new Date().toISOString().split('T')[0] // YYYY-MM-DD
+                  p_date: new Date().toISOString().split('T')[0]
                 }
               )
 
@@ -667,42 +648,73 @@ export const useShiftsStore = defineStore('posShifts', () => {
                     Math.abs(new Date(p.createdAt).getTime() - Date.now()) < 5000
                 )
                 if (existingPayment) {
-                  expenseOperation.relatedPaymentId = existingPayment.id
-                  console.log('✅ Linked to existing payment (fallback):', existingPayment.id)
+                  duplicatePaymentId = existingPayment.id
                 }
               } else if (duplicateCheck && duplicateCheck[0]?.is_duplicate) {
-                // Payment already exists in database
-                expenseOperation.relatedPaymentId = duplicateCheck[0].payment_id
-                console.log(
-                  '✅ Linked to existing payment (database):',
-                  duplicateCheck[0].payment_id
-                )
-              } else {
-                // No duplicate found, create new payment
-                const { payment } = await accountStore.createSupplierExpenseWithPayment({
-                  accountId: data.accountId,
-                  type: 'expense',
-                  amount: data.amount,
-                  description: data.description,
-                  expenseCategory: { type: 'expense', category: 'supplier' },
-                  performedBy: data.performedBy,
-                  counteragentId: data.counteragentId,
-                  counteragentName: data.counteragentName,
-                  source: 'pos' // ✅ Mark payment as created from POS
-                })
-
-                expenseOperation.relatedPaymentId = payment.id
-                console.log('✅ Supplier expense payment created:', payment.id)
+                duplicatePaymentId = duplicateCheck[0].payment_id
               }
-            } catch (paymentError) {
-              console.error('❌ Failed to create payment for supplier expense:', paymentError)
-              // Continue - expense and transaction created, only payment linking failed
-              // User can manually create payment in Backoffice if needed
+            } catch (checkError) {
+              console.error('❌ Duplicate payment check failed:', checkError)
             }
+
+            if (duplicatePaymentId) {
+              // Duplicate payment exists — create only the transaction (no payment)
+              const transaction = await accountStore.createOperation({
+                accountId: data.accountId,
+                type: 'expense',
+                amount: data.amount,
+                description: data.description,
+                expenseCategory: { type: 'expense', category: 'supplier' },
+                performedBy: data.performedBy,
+                counteragentId: data.counteragentId,
+                counteragentName: data.counteragentName,
+                relatedPaymentId: duplicatePaymentId
+              })
+
+              expenseOperation.relatedTransactionId = transaction.id
+              expenseOperation.relatedPaymentId = duplicatePaymentId
+              console.log('✅ Linked to existing payment:', duplicatePaymentId)
+            } else {
+              // No duplicate — createSupplierExpenseWithPayment creates 1 transaction + 1 payment
+              const { transaction, payment } = await accountStore.createSupplierExpenseWithPayment({
+                accountId: data.accountId,
+                type: 'expense',
+                amount: data.amount,
+                description: data.description,
+                expenseCategory: { type: 'expense', category: 'supplier' },
+                performedBy: data.performedBy,
+                counteragentId: data.counteragentId,
+                counteragentName: data.counteragentName,
+                source: 'pos'
+              })
+
+              expenseOperation.relatedTransactionId = transaction.id
+              expenseOperation.relatedPaymentId = payment.id
+              console.log('✅ Supplier expense created:', transaction.id, 'payment:', payment.id)
+            }
+          } else {
+            // Supplier expense WITHOUT counteragent (edge case) — transaction only
+            const transaction = await accountStore.createOperation({
+              accountId: data.accountId,
+              type: 'expense',
+              amount: data.amount,
+              description: data.description,
+              expenseCategory: { type: 'expense', category: 'supplier' },
+              performedBy: data.performedBy
+            })
+
+            expenseOperation.relatedTransactionId = transaction.id
+            console.log(
+              '✅ Supplier expense transaction created (no counteragent):',
+              transaction.id
+            )
           }
+
+          expenseOperation.syncStatus = 'synced'
+          expenseOperation.lastSyncAt = new Date().toISOString()
         } catch (txError) {
           console.error('❌ Failed to create supplier expense transaction:', txError)
-          // Continue - expense is saved, transaction will be created at shift close
+          // Continue - expense is saved in shift, transaction will be created at shift close
         }
       }
 
