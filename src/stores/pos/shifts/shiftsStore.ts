@@ -218,10 +218,11 @@ export const useShiftsStore = defineStore('posShifts', () => {
         maxAttempts: 10
       })
 
-      // 3. Попытка немедленной синхронизации (не блокируем UI)
-      syncService.processQueue().catch(err => {
-        console.warn('⚠️ Immediate sync failed, will retry later:', err)
-      })
+      // 3. Await sync (UI shows progress via EndShiftDialog)
+      const syncReport = await syncService.processQueue()
+      if (syncReport.failed > 0) {
+        console.warn(`⚠️ Sync completed with ${syncReport.failed} failures, will retry later`)
+      }
 
       // 4. ВСЕГДА обновляем store и возвращаем success
       const index = shifts.value.findIndex(s => s.id === closedShift.id)

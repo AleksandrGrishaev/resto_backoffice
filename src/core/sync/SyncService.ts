@@ -125,6 +125,32 @@ export class SyncService {
 
   // ===== PROCESSING =====
 
+  /**
+   * Recover items stuck in 'processing' state (e.g., app was backgrounded/closed mid-sync).
+   * Resets them to 'pending' so they can be retried.
+   */
+  async recoverStuckItems(): Promise<number> {
+    const queue = await this.storage.getQueue()
+    let recovered = 0
+
+    for (const item of queue) {
+      if (item.status === 'processing') {
+        item.status = 'pending'
+        recovered++
+        console.warn(
+          `🔄 Recovered stuck sync item: ${item.entityType} ${item.entityId} (was processing, attempt ${item.attempts})`
+        )
+      }
+    }
+
+    if (recovered > 0) {
+      await this.storage.saveQueue(queue)
+      console.log(`✅ Recovered ${recovered} stuck sync items`)
+    }
+
+    return recovered
+  }
+
   async processQueue(): Promise<SyncReport> {
     const startTime = Date.now()
     const report: SyncReport = {
@@ -135,6 +161,9 @@ export class SyncService {
       duration: 0,
       errors: []
     }
+
+    // Recover items stuck in 'processing' state (app was closed mid-sync)
+    await this.recoverStuckItems()
 
     // Get pending items, sorted by priority
     const queue = await this.getQueue({ status: 'pending' })

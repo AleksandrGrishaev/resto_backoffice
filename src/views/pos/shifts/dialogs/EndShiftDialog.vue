@@ -21,6 +21,23 @@
 
       <v-divider />
 
+      <!-- Sync Progress Overlay -->
+      <v-overlay
+        :model-value="syncPhase === 'syncing'"
+        contained
+        class="align-center justify-center"
+        persistent
+      >
+        <div class="text-center pa-6">
+          <v-icon icon="mdi-cloud-sync" size="48" color="info" class="mb-4" />
+          <div class="text-h6 mb-2">Syncing Transactions...</div>
+          <div class="text-body-2 text-medium-emphasis mb-4">
+            Please wait while shift data is being synced
+          </div>
+          <v-progress-linear indeterminate color="info" class="mx-auto" style="max-width: 300px" />
+        </div>
+      </v-overlay>
+
       <!-- Content -->
       <v-card-text v-if="currentShift && shiftReport" class="pa-4">
         <!-- ✅ NEW: Account Store Warning -->
@@ -234,14 +251,14 @@
         <v-spacer />
 
         <v-btn
-          color="warning"
+          :color="endButtonColor"
           size="large"
-          :loading="loading"
-          :disabled="!canEndShift"
+          :loading="syncPhase === 'closing' || syncPhase === 'syncing'"
+          :disabled="!canEndShift && syncPhase === 'idle'"
           @click="endShift"
         >
-          <v-icon start>mdi-stop</v-icon>
-          End Shift
+          <v-icon start>{{ endButtonIcon }}</v-icon>
+          {{ endButtonText }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -336,6 +353,7 @@ const dialog = ref(props.modelValue)
 const loading = ref(false)
 const showAddCorrection = ref(false)
 const accountStoreError = ref('')
+const syncPhase = ref<'idle' | 'closing' | 'syncing' | 'done' | 'error'>('idle')
 
 const form = ref<Omit<EndShiftDto, 'shiftId' | 'performedBy'>>({
   endingCash: 0,
@@ -468,6 +486,44 @@ const discrepancyHint = computed(() => {
   return `${formatCurrency(Math.abs(cashDiscrepancy.value))} ${type}`
 })
 
+// Phase-aware button computed properties
+const endButtonText = computed(() => {
+  switch (syncPhase.value) {
+    case 'closing':
+      return 'Closing Shift...'
+    case 'syncing':
+      return 'Syncing Transactions...'
+    case 'done':
+      return 'Done!'
+    case 'error':
+      return 'Sync Failed'
+    default:
+      return 'End Shift'
+  }
+})
+
+const endButtonIcon = computed(() => {
+  switch (syncPhase.value) {
+    case 'done':
+      return 'mdi-check-circle'
+    case 'error':
+      return 'mdi-alert'
+    default:
+      return 'mdi-stop'
+  }
+})
+
+const endButtonColor = computed(() => {
+  switch (syncPhase.value) {
+    case 'done':
+      return 'success'
+    case 'error':
+      return 'error'
+    default:
+      return 'warning'
+  }
+})
+
 // ✅ FIX: Calculate payment methods summary from real payments (dynamic)
 const topPaymentMethods = computed(() => {
   // ✅ Force reactive dependency on activePaymentMethods.length
@@ -545,6 +601,8 @@ watch(dialog, newVal => {
 // Methods
 function initializeForm() {
   if (!currentShift.value) return
+
+  syncPhase.value = 'idle'
 
   // Set expected ending cash as default
   form.value.endingCash = expectedCash.value
@@ -632,6 +690,7 @@ async function endShift() {
   if (!canEndShift.value) return
 
   loading.value = true
+  syncPhase.value = 'closing'
 
   try {
     // ✅ DEBUG: Log source data
@@ -677,9 +736,13 @@ async function endShift() {
       paymentMethods: currentShift.value.paymentMethods
     }
 
+    // endShift now awaits sync internally
+    syncPhase.value = 'syncing'
     const result = await shiftsStore.endShift(dto)
 
     if (result.success && result.data) {
+      syncPhase.value = 'done'
+
       const shiftData = {
         shift: result.data,
         endTime: new Date().toISOString(),
@@ -687,20 +750,22 @@ async function endShift() {
       }
 
       emit('shift-ended', shiftData)
-      closeDialog()
       console.log('✅ Shift ended successfully:', result.data.shiftNumber)
 
-      // Show success message
-      // TODO: Add toast notification
+      // Brief delay so user sees "Done!" before dialog closes
+      setTimeout(() => {
+        closeDialog()
+        syncPhase.value = 'idle'
+      }, 1000)
     } else {
+      syncPhase.value = 'error'
       console.error('❌ Failed to end shift:', result.error)
       accountStoreError.value = result.error || 'Failed to end shift'
-      throw new Error(result.error || 'Failed to end shift')
     }
   } catch (error) {
+    syncPhase.value = 'error'
     console.error('❌ Error ending shift:', error)
     accountStoreError.value = error instanceof Error ? error.message : 'Failed to end shift'
-    // TODO: Show error dialog or toast
   } finally {
     loading.value = false
   }

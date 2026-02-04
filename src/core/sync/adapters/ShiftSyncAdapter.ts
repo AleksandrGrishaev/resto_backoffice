@@ -91,6 +91,30 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
         - Direct expenses: ${directExpensesCount} operations (will be synced individually)
         - Corrections: ${totalCorrections}`)
 
+      // ===== CHECK FOR EXISTING TRANSACTIONS (idempotency) =====
+      // If sync was interrupted mid-way (app backgrounded), some transactions may already exist.
+      // Build a description prefix to check against.
+      const shiftDescPrefix = `POS Shift ${shift.shiftNumber}`
+      let existingDescriptions: Set<string> = new Set()
+
+      try {
+        const { data: existingTxns } = await supabase
+          .from('transactions')
+          .select('description')
+          .like('description', `${shiftDescPrefix}%`)
+
+        if (existingTxns) {
+          existingDescriptions = new Set(existingTxns.map(t => t.description))
+          if (existingDescriptions.size > 0) {
+            console.warn(
+              `⚠️ Found ${existingDescriptions.size} existing transactions for ${shiftDescPrefix} (partial sync recovery)`
+            )
+          }
+        }
+      } catch {
+        console.warn('⚠️ Could not check for existing transactions, proceeding with creation')
+      }
+
       // ===== CREATE TRANSACTIONS FOR ALL PAYMENT METHODS =====
 
       for (const pmSummary of shift.paymentMethods) {
@@ -133,36 +157,20 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
         )
 
         // 1. Create REVENUE transaction (pure sales without taxes)
-        const revenueTransaction = await accountStore.createOperation({
-          accountId: paymentMethod.accountId,
-          type: 'income',
-          amount: taxBreakdown.pureRevenue,
-          description: `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} Revenue`,
-          expenseCategory: {
-            type: 'income',
-            category: 'sales'
-          },
-          performedBy: {
-            type: 'user',
-            id: shift.cashierId,
-            name: shift.cashierName
-          }
-        })
-        transactionIds.push(revenueTransaction.id)
-        console.log(
-          `✅ Revenue transaction created: ${revenueTransaction.id} (${taxBreakdown.pureRevenue} → sales)`
-        )
-
-        // 2. Create SERVICE TAX transaction
-        if (taxBreakdown.serviceTaxAmount > 0) {
-          const serviceTaxTransaction = await accountStore.createOperation({
+        const revenueDesc = `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} Revenue`
+        if (existingDescriptions.has(revenueDesc)) {
+          console.log(
+            `  ⏭️ Revenue already exists for ${pmSummary.methodName}, skipping (partial sync recovery)`
+          )
+        } else {
+          const revenueTransaction = await accountStore.createOperation({
             accountId: paymentMethod.accountId,
             type: 'income',
-            amount: taxBreakdown.serviceTaxAmount,
-            description: `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} Service Tax (${TAX_RATES.SERVICE_TAX}%)`,
+            amount: taxBreakdown.pureRevenue,
+            description: revenueDesc,
             expenseCategory: {
               type: 'income',
-              category: 'service_tax'
+              category: 'sales'
             },
             performedBy: {
               type: 'user',
@@ -170,33 +178,66 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
               name: shift.cashierName
             }
           })
-          transactionIds.push(serviceTaxTransaction.id)
+          transactionIds.push(revenueTransaction.id)
           console.log(
-            `✅ Service tax transaction created: ${serviceTaxTransaction.id} (${taxBreakdown.serviceTaxAmount} → service_tax)`
+            `✅ Revenue transaction created: ${revenueTransaction.id} (${taxBreakdown.pureRevenue} → sales)`
           )
         }
 
-        // 3. Create LOCAL TAX transaction
-        if (taxBreakdown.localTaxAmount > 0) {
-          const localTaxTransaction = await accountStore.createOperation({
-            accountId: paymentMethod.accountId,
-            type: 'income',
-            amount: taxBreakdown.localTaxAmount,
-            description: `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} Local Tax (${TAX_RATES.LOCAL_TAX}%)`,
-            expenseCategory: {
+        // 2. Create SERVICE TAX transaction
+        const serviceTaxDesc = `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} Service Tax (${TAX_RATES.SERVICE_TAX}%)`
+        if (taxBreakdown.serviceTaxAmount > 0) {
+          if (existingDescriptions.has(serviceTaxDesc)) {
+            console.log(`  ⏭️ Service tax already exists for ${pmSummary.methodName}, skipping`)
+          } else {
+            const serviceTaxTransaction = await accountStore.createOperation({
+              accountId: paymentMethod.accountId,
               type: 'income',
-              category: 'local_tax'
-            },
-            performedBy: {
-              type: 'user',
-              id: shift.cashierId,
-              name: shift.cashierName
-            }
-          })
-          transactionIds.push(localTaxTransaction.id)
-          console.log(
-            `✅ Local tax transaction created: ${localTaxTransaction.id} (${taxBreakdown.localTaxAmount} → local_tax)`
-          )
+              amount: taxBreakdown.serviceTaxAmount,
+              description: serviceTaxDesc,
+              expenseCategory: {
+                type: 'income',
+                category: 'service_tax'
+              },
+              performedBy: {
+                type: 'user',
+                id: shift.cashierId,
+                name: shift.cashierName
+              }
+            })
+            transactionIds.push(serviceTaxTransaction.id)
+            console.log(
+              `✅ Service tax transaction created: ${serviceTaxTransaction.id} (${taxBreakdown.serviceTaxAmount} → service_tax)`
+            )
+          }
+        }
+
+        // 3. Create LOCAL TAX transaction
+        const localTaxDesc = `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} Local Tax (${TAX_RATES.LOCAL_TAX}%)`
+        if (taxBreakdown.localTaxAmount > 0) {
+          if (existingDescriptions.has(localTaxDesc)) {
+            console.log(`  ⏭️ Local tax already exists for ${pmSummary.methodName}, skipping`)
+          } else {
+            const localTaxTransaction = await accountStore.createOperation({
+              accountId: paymentMethod.accountId,
+              type: 'income',
+              amount: taxBreakdown.localTaxAmount,
+              description: localTaxDesc,
+              expenseCategory: {
+                type: 'income',
+                category: 'local_tax'
+              },
+              performedBy: {
+                type: 'user',
+                id: shift.cashierId,
+                name: shift.cashierName
+              }
+            })
+            transactionIds.push(localTaxTransaction.id)
+            console.log(
+              `✅ Local tax transaction created: ${localTaxTransaction.id} (${taxBreakdown.localTaxAmount} → local_tax)`
+            )
+          }
         }
       }
 
