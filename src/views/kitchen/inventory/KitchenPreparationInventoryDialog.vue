@@ -3,7 +3,7 @@
 <template>
   <v-dialog
     :model-value="modelValue"
-    :fullscreen="isMobile"
+    :fullscreen="isFullscreen"
     max-width="900px"
     persistent
     @update:model-value="$emit('update:modelValue', $event)"
@@ -65,7 +65,15 @@
                 {{ department === 'kitchen' ? 'Kitchen' : 'Bar' }}
               </v-chip>
             </div>
-            <v-btn icon="mdi-close" variant="text" size="large" @click="handleClose" />
+            <div class="d-flex align-center gap-1">
+              <v-btn
+                icon="mdi-chevron-up"
+                variant="text"
+                size="small"
+                @click="isHeaderCollapsed = true"
+              />
+              <v-btn icon="mdi-close" variant="text" size="large" @click="handleClose" />
+            </div>
           </div>
         </v-card-title>
 
@@ -313,7 +321,8 @@ const emit = defineEmits<{
 // COMPOSABLES
 // =============================================
 
-const { mobile: isMobile } = useDisplay()
+const { mobile: isMobile, width: displayWidth } = useDisplay()
+const isFullscreen = computed(() => isMobile.value || displayWidth.value < 1024)
 const preparationStore = usePreparationStore()
 const authStore = useAuthStore()
 
@@ -1044,6 +1053,7 @@ onUnmounted(() => {
 .items-section {
   flex: 1;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   min-height: 200px;
   background-color: var(--v-theme-background);
 }
@@ -1060,8 +1070,8 @@ onUnmounted(() => {
   background-color: var(--v-theme-surface);
 }
 
-/* Mobile fullscreen adjustments */
-@media (max-width: 600px) {
+/* Tablet & mobile fullscreen adjustments */
+@media (max-width: 1024px) {
   .kitchen-preparation-inventory-dialog {
     max-height: 100vh;
   }

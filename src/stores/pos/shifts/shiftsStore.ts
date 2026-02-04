@@ -39,8 +39,13 @@ const MODULE_NAME = 'ShiftsStore'
 const SYNC_QUEUE_KEY = 'pos_sync_queue'
 const MAX_SYNC_ATTEMPTS = 10 // Максимальное количество попыток
 
+// Heartbeat: periodic sync of active shift data
+const HEARTBEAT_INTERVAL = 2 * 60 * 1000 // 2 minutes
+
 export const useShiftsStore = defineStore('posShifts', () => {
   // ===== STATE =====
+  let _heartbeatInterval: ReturnType<typeof setInterval> | null = null
+  let _isDirty = false
   const shifts = ref<PosShift[]>([])
   const currentShift = ref<PosShift | null>(null)
   const transactions = ref<ShiftTransaction[]>([])
@@ -55,6 +60,31 @@ export const useShiftsStore = defineStore('posShifts', () => {
   // ===== SERVICES =====
   const shiftsService = new ShiftsService()
   const accountStore = useAccountStore()
+
+  // ===== HEARTBEAT =====
+
+  function markDirty(): void {
+    _isDirty = true
+  }
+
+  function startHeartbeat(): void {
+    stopHeartbeat()
+    _heartbeatInterval = setInterval(async () => {
+      if (_isDirty && currentShift.value) {
+        await shiftsService.updateShift(currentShift.value.id, currentShift.value)
+        _isDirty = false
+        DebugUtils.debug(MODULE_NAME, 'Heartbeat: shift persisted')
+      }
+    }, HEARTBEAT_INTERVAL)
+  }
+
+  function stopHeartbeat(): void {
+    if (_heartbeatInterval) {
+      clearInterval(_heartbeatInterval)
+      _heartbeatInterval = null
+    }
+    _isDirty = false
+  }
 
   // ===== COMPUTED =====
   const isShiftActive = computed(() => currentShift.value?.status === 'active')
@@ -130,6 +160,7 @@ export const useShiftsStore = defineStore('posShifts', () => {
           currentShift.value = activeShift
           // Загрузить транзакции активной смены
           await loadShiftTransactions(activeShift.id)
+          startHeartbeat()
         }
 
         console.log(`Loaded ${shifts.value.length} shifts`)
@@ -167,6 +198,7 @@ export const useShiftsStore = defineStore('posShifts', () => {
 
         // Создать начальные балансы счетов
         await initializeShiftAccountBalances(newShift)
+        startHeartbeat()
 
         console.log('✅ Смена начата:', newShift.shiftNumber)
       }
@@ -225,6 +257,8 @@ export const useShiftsStore = defineStore('posShifts', () => {
       }
 
       // 4. ВСЕГДА обновляем store и возвращаем success
+      stopHeartbeat()
+
       const index = shifts.value.findIndex(s => s.id === closedShift.id)
       if (index !== -1) {
         shifts.value[index] = closedShift
@@ -279,6 +313,9 @@ export const useShiftsStore = defineStore('posShifts', () => {
       }
 
       transactions.value.push(transaction)
+
+      // Persist transaction to localStorage
+      await shiftsService.saveTransaction(transaction)
 
       // Обновить статистику смены
       await updateShiftStats()
@@ -393,6 +430,9 @@ export const useShiftsStore = defineStore('posShifts', () => {
       }
 
       currentShift.value.corrections.push(correction)
+
+      // Persist correction immediately to survive browser/tablet crashes
+      await shiftsService.updateShift(currentShift.value.id, currentShift.value)
 
       console.log('✅ Коррекция добавлена:', correction.id)
 
@@ -537,6 +577,8 @@ export const useShiftsStore = defineStore('posShifts', () => {
     const allSynced = shiftTransactions.every(t => t.syncStatus === 'synced')
     currentShift.value.syncStatus = allSynced ? 'synced' : 'pending'
     currentShift.value.pendingSync = !allSynced
+
+    markDirty()
   }
 
   // ============ SPRINT 3: EXPENSE OPERATIONS ============
@@ -1869,6 +1911,9 @@ export const useShiftsStore = defineStore('posShifts', () => {
     removeFromSyncQueue,
     getSyncQueue,
     processSyncQueue,
+
+    // Heartbeat
+    stopHeartbeat,
 
     // Composables
     formatShiftDuration,

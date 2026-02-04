@@ -2190,9 +2190,10 @@ export class PreparationService {
       // This prevents showing all catalog preparations as zero-stock balances
 
       // Add preparations that have consumed batches but aren't in catalog
+      // ✅ FIX: Only include active preparations (skip inactive/archived)
       const allBatchPreparations = new Set<string>()
       this.batches
-        .filter(b => b.department === department)
+        .filter(b => b.department === department && departmentPreparationIds.has(b.preparationId))
         .forEach(batch => {
           allBatchPreparations.add(batch.preparationId)
         })
