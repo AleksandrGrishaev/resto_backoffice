@@ -93,21 +93,20 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
 
       // ===== CHECK FOR EXISTING TRANSACTIONS (idempotency) =====
       // If sync was interrupted mid-way (app backgrounded), some transactions may already exist.
-      // Build a description prefix to check against.
-      const shiftDescPrefix = `POS Shift ${shift.shiftNumber}`
+      // Use shift.id (unique per shift) instead of shiftNumber (can be shared between shifts).
       let existingDescriptions: Set<string> = new Set()
 
       try {
         const { data: existingTxns } = await supabase
           .from('transactions')
           .select('description')
-          .like('description', `${shiftDescPrefix}%`)
+          .eq('related_payment_id', shift.id)
 
         if (existingTxns) {
           existingDescriptions = new Set(existingTxns.map(t => t.description))
           if (existingDescriptions.size > 0) {
             console.warn(
-              `⚠️ Found ${existingDescriptions.size} existing transactions for ${shiftDescPrefix} (partial sync recovery)`
+              `⚠️ Found ${existingDescriptions.size} existing transactions for shift ${shift.id} (partial sync recovery)`
             )
           }
         }
@@ -176,7 +175,8 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
               type: 'user',
               id: shift.cashierId,
               name: shift.cashierName
-            }
+            },
+            relatedPaymentId: shift.id
           })
           transactionIds.push(revenueTransaction.id)
           console.log(
@@ -203,7 +203,8 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
                 type: 'user',
                 id: shift.cashierId,
                 name: shift.cashierName
-              }
+              },
+              relatedPaymentId: shift.id
             })
             transactionIds.push(serviceTaxTransaction.id)
             console.log(
@@ -231,7 +232,8 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
                 type: 'user',
                 id: shift.cashierId,
                 name: shift.cashierName
-              }
+              },
+              relatedPaymentId: shift.id
             })
             transactionIds.push(localTaxTransaction.id)
             console.log(

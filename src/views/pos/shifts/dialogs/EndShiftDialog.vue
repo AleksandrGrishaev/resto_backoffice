@@ -538,6 +538,7 @@ const topPaymentMethods = computed(() => {
     string,
     {
       methodId: string
+      methodCode: string
       methodName: string
       methodType: string
       count: number
@@ -550,6 +551,7 @@ const topPaymentMethods = computed(() => {
   paymentSettingsStore.activePaymentMethods.forEach(pm => {
     methodsMap.set(pm.code, {
       methodId: pm.id,
+      methodCode: pm.code,
       methodName: pm.name,
       methodType: pm.type,
       count: 0,
@@ -576,11 +578,10 @@ const topPaymentMethods = computed(() => {
     method.percentage = totalAmount > 0 ? (method.amount / totalAmount) * 100 : 0
   })
 
-  // Return top 4 methods by amount
+  // Return all methods with payments, sorted by amount
   return Array.from(methodsMap.values())
     .filter(m => m.count > 0)
     .sort((a, b) => b.amount - a.amount)
-    .slice(0, 4)
 })
 
 // Watchers
@@ -705,10 +706,12 @@ async function endShift() {
     // Convert topPaymentMethods (computed from real payments) to PaymentMethodSummary[]
     currentShift.value.paymentMethods = topPaymentMethods.value.map(pm => ({
       methodId: pm.methodId,
+      methodCode: pm.methodCode,
       methodName: pm.methodName,
-      methodType: pm.methodType as any, // Will be 'cash' | 'card' | 'qr'
+      methodType: pm.methodType as any,
       count: pm.count,
-      amount: pm.amount
+      amount: pm.amount,
+      percentage: pm.percentage
     }))
 
     // ✅ NEW: Log state before closing
