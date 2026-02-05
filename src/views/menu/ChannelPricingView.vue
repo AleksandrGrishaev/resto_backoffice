@@ -251,7 +251,11 @@ async function copyPrices() {
               <th v-for="channel in activeChannels" :key="channel.id" class="price-col">
                 {{ channel.name }}
                 <div class="text-caption text-medium-emphasis">
-                  {{ channel.taxPercent > 0 ? `${channel.taxPercent}% tax` : 'No tax' }}
+                  {{
+                    channel.taxPercent > 0
+                      ? `${channel.taxPercent}% tax (${channel.taxMode === 'inclusive' ? 'incl.' : 'excl.'})`
+                      : 'No tax'
+                  }}
                 </div>
               </th>
             </tr>

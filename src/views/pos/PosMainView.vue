@@ -133,6 +133,7 @@ import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePosStore } from '@/stores/pos'
 import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
 import { useAuthStore } from '@/stores/auth' // 🆕 ДОБАВЛЕН
+import { useChannelsStore } from '@/stores/channels'
 import { useWakeLock } from '@/core/pwa'
 import { DebugUtils } from '@/utils'
 import type { MenuItem, MenuItemVariant } from '@/stores/menu/types'
@@ -154,6 +155,7 @@ const ordersStore = usePosOrdersStore()
 const posStore = usePosStore()
 const shiftsStore = useShiftsStore()
 const authStore = useAuthStore() // 🆕 ДОБАВЛЕН
+const channelsStore = useChannelsStore()
 
 // PWA: Wake Lock to keep screen on
 const wakeLock = useWakeLock()
@@ -492,13 +494,25 @@ const handleAddItemToOrder = async (
 
     console.log('🎯 Target bill ID:', targetBillId)
 
+    // Channel-aware pricing: use channel price if order has a channel
+    let effectivePrice = variant.price
+    if (currentOrder.value?.channelId) {
+      const cp = channelsStore.getChannelPrice(
+        currentOrder.value.channelId,
+        item.id,
+        variant.id,
+        variant.price
+      )
+      effectivePrice = cp.netPrice
+    }
+
     // Создаем объект PosMenuItem из MenuItem
     const posMenuItem = {
       id: item.id,
       name: item.name,
       categoryId: item.categoryId,
       categoryName: item.categoryName || '',
-      price: variant.price,
+      price: effectivePrice,
       isAvailable: item.isActive,
       stockQuantity: undefined,
       preparationTime: undefined,
@@ -516,12 +530,16 @@ const handleAddItemToOrder = async (
 
     console.log('📦 Adding POS menu item:', posMenuItem)
 
+    // Create a variant with effective price for the service layer
+    const effectiveVariant =
+      effectivePrice !== variant.price ? { ...variant, price: effectivePrice } : variant
+
     // ИСПРАВЛЕННЫЙ ВЫЗОВ: используем правильную сигнатуру метода с поддержкой модификаторов
     const addResult = await ordersStore.addItemToBill(
       currentOrder.value.id, // orderId
       targetBillId, // billId
       posMenuItem,
-      variant, // menuItem: PosMenuItem
+      effectiveVariant, // variant with channel price
       1, // quantity
       [], // modifications (deprecated)
       selectedModifiers // ✨ NEW: selectedModifiers

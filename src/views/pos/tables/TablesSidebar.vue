@@ -80,6 +80,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { useChannelsStore } from '@/stores/channels'
 import { DebugUtils } from '@/utils'
 import type { PosTable, PosOrder, OrderType } from '@/stores/pos/types'
 
@@ -108,6 +109,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const tablesStore = usePosTablesStore()
 const ordersStore = usePosOrdersStore()
+const channelsStore = useChannelsStore()
 
 // =============================================
 // EMITS
@@ -253,7 +255,7 @@ const handleCreateOrder = async (type: OrderType, data?: any): Promise<void> => 
       DebugUtils.debug(MODULE_NAME, 'Dine-in order - user should select table')
       return
     } else {
-      // Создаем заказ на доставку или самовывоз (с каналом если указан)
+      // Dialog now always provides channelId/channelCode from DB
       result = await ordersStore.createOrder({
         type,
         customerName: data?.customerName,
@@ -331,8 +333,14 @@ const performTableSelect = async (table: PosTable): Promise<void> => {
     })
 
     if (table.status === 'free') {
-      // Создаем новый заказ для стола
-      const result = await ordersStore.createOrder('dine_in', table.id)
+      // Создаем новый заказ для стола с auto-assigned channel
+      const dineInChannel = channelsStore.getChannelByCode('dine_in')
+      const result = await ordersStore.createOrder({
+        type: 'dine_in',
+        tableId: table.id,
+        channelId: dineInChannel?.id,
+        channelCode: 'dine_in'
+      })
 
       if (result.success && result.data) {
         DebugUtils.debug(MODULE_NAME, 'New table order created', {

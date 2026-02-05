@@ -138,8 +138,8 @@ export const STORE_CATEGORIES: Record<StoreName, StoreCategory> = {
   accounts: 'backoffice',
   discounts: 'backoffice',
 
-  // Channels
-  channels: 'backoffice',
+  // Channels — needed by both POS (order creation) and backoffice
+  channels: 'pos',
 
   // GoBiz integration
   gobiz: 'backoffice',
@@ -222,6 +222,7 @@ export function getStoresForContext(context: AppContext, userRoles: UserRole[]):
       stores.add('counteragents') // нужен для некоторых операций
       stores.add('storage') // для write-off при продажах
       stores.add('paymentSettings') // методы оплаты для PaymentDialog
+      stores.add('channels') // для order type/channel assignment
       stores.add('pos')
       stores.add('sales')
       stores.add('writeOff')

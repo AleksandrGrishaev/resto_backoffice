@@ -158,11 +158,12 @@ export interface SalesTransaction extends BaseEntity {
   // Profit data
   profitCalculation: ProfitCalculation
 
-  // ✅ SPRINT 8: Tax storage fields
-  serviceTaxRate?: number // Service tax rate (e.g., 0.05 = 5%)
-  serviceTaxAmount?: number // Service tax amount in IDR
-  governmentTaxRate?: number // Government tax rate (e.g., 0.10 = 10%)
-  governmentTaxAmount?: number // Government tax amount in IDR
+  // Tax storage fields (positional slots — actual names come from channel/paymentSettings)
+  // DB columns: service_tax_rate, service_tax_amount, government_tax_rate, government_tax_amount
+  serviceTaxRate?: number // First tax slot rate (e.g., 0.05 = 5%)
+  serviceTaxAmount?: number // First tax slot amount in IDR
+  governmentTaxRate?: number // Second tax slot rate (e.g., 0.10 = 10%)
+  governmentTaxAmount?: number // Second tax slot amount in IDR
   totalTaxAmount?: number // Total tax amount (sum of all taxes)
 
   // Decomposition summary (DEPRECATED: will be replaced by actualCost)

@@ -60,8 +60,6 @@
             :has-selection="calculations.hasSelection.value"
             :selected-items-count="calculations.selectedItemsCount.value"
             :show-taxes="true"
-            :service-tax-rate="5"
-            :government-tax-rate="10"
           />
 
           <!-- Order Actions -->
@@ -122,11 +120,10 @@
       v-model="showPaymentDialog"
       :amount="paymentDialogData.amount"
       :discount="paymentDialogData.discount"
-      :service-tax="paymentDialogData.serviceTax"
-      :government-tax="paymentDialogData.governmentTax"
       :bill-ids="paymentDialogData.billIds"
       :order-id="paymentDialogData.orderId"
       :items="paymentDialogData.items"
+      :channel-id="paymentDialogData.channelId"
       @confirm="handlePaymentConfirm"
       @cancel="handlePaymentCancel"
       @pre-bill-printed="handlePreBillPrinted"
@@ -211,6 +208,8 @@ import { useMenuStore } from '@/stores/menu'
 import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
 import { useAuthStore } from '@/stores/auth'
 import { useAlertsStore } from '@/stores/alerts'
+import { useChannelsStore } from '@/stores/channels'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import { useOrderCalculations } from '@/stores/pos/orders/composables/useOrderCalculations'
 import type { PosOrder, PosBill, PosBillItem, OrderType, PreBillSnapshot } from '@/stores/pos/types'
 import type { MenuItem, MenuItemVariant } from '@/stores/menu/types'
@@ -251,19 +250,16 @@ const menuStore = useMenuStore()
 const shiftsStore = useShiftsStore()
 const authStore = useAuthStore()
 const alertsStore = useAlertsStore()
+const channelsStore = useChannelsStore()
 
 // Props
 interface Props {
   showTaxes?: boolean
-  serviceTaxRate?: number
-  governmentTaxRate?: number
   debugMode?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   showTaxes: true,
-  serviceTaxRate: 5,
-  governmentTaxRate: 10,
   debugMode: false
 })
 
@@ -293,12 +289,11 @@ const showPaymentDialog = ref(false)
 const paymentDialogData = ref({
   amount: 0,
   discount: 0,
-  serviceTax: 0,
-  governmentTax: 0,
   billIds: [] as string[],
   orderId: '',
   itemIds: [] as string[],
-  items: [] as PosBillItem[]
+  items: [] as PosBillItem[],
+  channelId: ''
 })
 
 // Print Receipt Dialog State
@@ -405,10 +400,8 @@ const tableNumber = computed((): string | null => {
 
 // Order Calculations - using composable
 const calculations = useOrderCalculations(() => currentOrder.value?.bills || [], {
-  serviceTaxRate: 5,
-  governmentTaxRate: 10,
-  includeServiceTax: true,
-  includeGovernmentTax: true,
+  channelId: () => currentOrder.value?.channelId,
+  includeTaxes: true,
   selectedItemIds: () => ordersStore.selectedItemIds,
   activeBillId: () => ordersStore.activeBillId
 })
@@ -417,8 +410,7 @@ const calculations = useOrderCalculations(() => currentOrder.value?.bills || [],
 const orderTotals = computed(() => ({
   subtotal: calculations.subtotal.value,
   totalDiscounts: calculations.totalDiscounts.value,
-  serviceTax: calculations.serviceTax.value,
-  governmentTax: calculations.governmentTax.value,
+  totalTaxes: calculations.totalTaxes.value,
   finalTotal: calculations.finalTotal.value
 }))
 
@@ -1270,8 +1262,13 @@ const handleCheckout = async (itemIds: string[], billId: string): Promise<void> 
     }
 
     const discountedAmount = checkoutSubtotal - checkoutDiscount
-    const checkoutServiceTax = discountedAmount * 0.05
-    const checkoutGovernmentTax = discountedAmount * 0.1
+
+    // Channel-aware tax calculation
+    const orderChannelId = currentOrder.value.channelId || ''
+    const channel = orderChannelId ? channelsStore.getChannelById(orderChannelId) : null
+    const isInclusive = channel?.taxMode === 'inclusive'
+    const channelTaxRate = channel?.taxes?.reduce((sum, t) => sum + t.taxPercentage, 0) ?? 15
+    const checkoutTaxes = isInclusive ? 0 : discountedAmount * (channelTaxRate / 100)
 
     console.log('💳 [OrderSection] Checkout amounts recalculated for unpaid items only:', {
       itemsCount: itemsToShow.length,
@@ -1279,21 +1276,22 @@ const handleCheckout = async (itemIds: string[], billId: string): Promise<void> 
       billIds: billIds,
       subtotal: checkoutSubtotal,
       discount: checkoutDiscount,
-      serviceTax: checkoutServiceTax,
-      governmentTax: checkoutGovernmentTax,
-      total: discountedAmount + checkoutServiceTax + checkoutGovernmentTax
+      channelId: orderChannelId,
+      taxRate: channelTaxRate,
+      taxMode: channel?.taxMode || 'exclusive',
+      taxes: checkoutTaxes,
+      total: discountedAmount + checkoutTaxes
     })
 
     // Открыть Payment Dialog с правильными данными
     paymentDialogData.value = {
       amount: checkoutSubtotal,
       discount: checkoutDiscount,
-      serviceTax: checkoutServiceTax,
-      governmentTax: checkoutGovernmentTax,
       billIds,
       orderId: currentOrder.value.id,
       itemIds,
-      items: itemsToShow
+      items: itemsToShow,
+      channelId: orderChannelId
     }
 
     showPaymentDialog.value = true
@@ -1536,12 +1534,34 @@ function buildPaymentReceiptData(
     notes: item.kitchenNotes
   }))
 
-  // Calculate totals
+  // Calculate totals — channel-aware
   const subtotal = paymentDialogData.value.amount
   const discount = paymentDialogData.value.discount
-  const serviceTax = paymentDialogData.value.serviceTax
-  const governmentTax = paymentDialogData.value.governmentTax
-  const total = subtotal - discount + serviceTax + governmentTax
+  const chId = paymentDialogData.value.channelId
+  const channel = chId ? channelsStore.getChannelById(chId) : null
+  const isInclusive = channel?.taxMode === 'inclusive'
+  const discountedAmount = subtotal - discount
+
+  const taxes = (channel?.taxes?.length ? channel.taxes : []).map(t => ({
+    name: t.taxName,
+    percentage: t.taxPercentage,
+    amount: isInclusive ? 0 : discountedAmount * (t.taxPercentage / 100)
+  }))
+
+  // Fallback to global taxes if no channel
+  if (taxes.length === 0) {
+    const paymentSettingsStore = usePaymentSettingsStore()
+    for (const t of paymentSettingsStore.activeTaxes) {
+      taxes.push({
+        name: t.name,
+        percentage: t.percentage,
+        amount: discountedAmount * (t.percentage / 100)
+      })
+    }
+  }
+
+  const totalTax = taxes.reduce((sum, t) => sum + t.amount, 0)
+  const total = discountedAmount + totalTax
 
   // Generate receipt number with timestamp (YYYYMMDDHHmmss format)
   const now = new Date()
@@ -1563,8 +1583,8 @@ function buildPaymentReceiptData(
     subtotal,
     discount,
     discountReason: undefined,
-    serviceTax,
-    governmentTax,
+    taxes,
+    taxInclusive: isInclusive,
     total,
     paymentMethod: paymentMethod as 'cash' | 'card' | 'qr',
     receivedAmount: paymentMethod === 'cash' ? receivedAmount : undefined,

@@ -1,57 +1,95 @@
-// src/services/tax.service.ts - Simple in-memory service
-import { ref } from 'vue'
+// src/services/tax.service.ts - Supabase-backed tax service
 import type { Tax } from '@/types/tax'
+import { supabase } from '@/supabase/client'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'TaxService'
 
+function mapTaxFromDb(row: any): Tax {
+  return {
+    id: row.id,
+    name: row.name,
+    percentage: Number(row.percentage),
+    isActive: row.is_active,
+    sortOrder: row.sort_order ?? 0,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
 /**
- * TaxService - Simple in-memory service for taxes
- * No Firebase dependency
+ * TaxService - Supabase-backed CRUD for taxes table
  */
 export class TaxService {
-  private taxes = ref<Tax[]>([])
-
   async getAll(): Promise<Tax[]> {
-    return [...this.taxes.value]
+    const { data, error } = await supabase.from('taxes').select('*').order('sort_order')
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load taxes', { error })
+      throw error
+    }
+
+    return (data || []).map(mapTaxFromDb)
   }
 
   async getById(id: string): Promise<Tax | null> {
-    return this.taxes.value.find(t => t.id === id) || null
+    const { data, error } = await supabase.from('taxes').select('*').eq('id', id).single()
+
+    if (error) {
+      if (error.code === 'PGRST116') return null
+      DebugUtils.error(MODULE_NAME, 'Failed to get tax', { error })
+      throw error
+    }
+
+    return data ? mapTaxFromDb(data) : null
   }
 
   async create(data: Omit<Tax, 'id'>): Promise<Tax> {
-    const now = new Date().toISOString()
-    const newTax: Tax = {
-      ...data,
-      id: `tax_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      createdAt: now,
-      updatedAt: now
+    const { data: row, error } = await supabase
+      .from('taxes')
+      .insert({
+        name: data.name,
+        percentage: data.percentage,
+        is_active: data.isActive,
+        sort_order: data.sortOrder ?? 0
+      })
+      .select()
+      .single()
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create tax', { error })
+      throw error
     }
 
-    this.taxes.value.push(newTax)
-    DebugUtils.info(MODULE_NAME, 'Tax created', { id: newTax.id })
-
-    return newTax
+    DebugUtils.info(MODULE_NAME, 'Tax created', { id: row.id })
+    return mapTaxFromDb(row)
   }
 
   async update(id: string, data: Partial<Tax>): Promise<void> {
-    const index = this.taxes.value.findIndex(t => t.id === id)
-    if (index === -1) {
-      throw new Error(`Tax not found: ${id}`)
-    }
+    const updates: Record<string, any> = {}
+    if (data.name !== undefined) updates.name = data.name
+    if (data.percentage !== undefined) updates.percentage = data.percentage
+    if (data.isActive !== undefined) updates.is_active = data.isActive
+    if (data.sortOrder !== undefined) updates.sort_order = data.sortOrder
 
-    this.taxes.value[index] = {
-      ...this.taxes.value[index],
-      ...data,
-      updatedAt: new Date().toISOString()
+    const { error } = await supabase.from('taxes').update(updates).eq('id', id)
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update tax', { error })
+      throw error
     }
 
     DebugUtils.info(MODULE_NAME, 'Tax updated', { id })
   }
 
   async delete(id: string): Promise<void> {
-    this.taxes.value = this.taxes.value.filter(t => t.id !== id)
+    const { error } = await supabase.from('taxes').delete().eq('id', id)
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to delete tax', { error })
+      throw error
+    }
+
     DebugUtils.info(MODULE_NAME, 'Tax deleted', { id })
   }
 

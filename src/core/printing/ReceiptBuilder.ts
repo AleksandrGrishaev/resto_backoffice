@@ -304,13 +304,27 @@ export class ReceiptBuilder {
   }
 
   private buildTaxes(cmd: EscPosCommandBuilder, data: ReceiptData): void {
-    // Service tax
+    // Dynamic taxes from channel (preferred)
+    if (data.taxes && data.taxes.length > 0) {
+      if (data.taxInclusive) {
+        cmd.leftRight('Tax:', 'Included')
+      } else {
+        for (const tax of data.taxes) {
+          if (tax.amount > 0) {
+            const label = `${tax.name} (${tax.percentage}%):`
+            cmd.leftRight(label, cmd.formatIDR(tax.amount))
+          }
+        }
+      }
+      return
+    }
+
+    // @deprecated Legacy fallback: old serviceTax/governmentTax fields (for receipts created before channel-aware taxes)
     if (data.serviceTax && data.serviceTax > 0) {
       const label = data.serviceTaxPercent ? `Service (${data.serviceTaxPercent}%):` : 'Service:'
       cmd.leftRight(label, cmd.formatIDR(data.serviceTax))
     }
 
-    // Government tax (PPN)
     if (data.governmentTax && data.governmentTax > 0) {
       const label = data.governmentTaxPercent ? `Tax (${data.governmentTaxPercent}%):` : 'Tax:'
       cmd.leftRight(label, cmd.formatIDR(data.governmentTax))

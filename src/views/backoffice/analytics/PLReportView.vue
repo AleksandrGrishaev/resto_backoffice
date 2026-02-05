@@ -233,7 +233,7 @@
                     <td colspan="3" class="font-weight-bold text-info">TAX COLLECTED</td>
                   </tr>
                   <tr>
-                    <td class="pl-8">Service Tax (5%)</td>
+                    <td class="pl-8">{{ taxLabels.service }}</td>
                     <td class="text-right">
                       {{ formatIDR(report.taxCollected?.serviceTax || 0) }}
                     </td>
@@ -247,7 +247,7 @@
                     </td>
                   </tr>
                   <tr>
-                    <td class="pl-8">Local Tax (10%)</td>
+                    <td class="pl-8">{{ taxLabels.local }}</td>
                     <td class="text-right">{{ formatIDR(report.taxCollected?.localTax || 0) }}</td>
                     <td class="text-right">
                       {{
@@ -584,6 +584,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePLReportStore } from '@/stores/analytics/plReportStore'
 import { useAccountStore, COGS_CATEGORY_LABELS } from '@/stores/account'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import { formatIDR } from '@/utils/currency'
 import { TimeUtils } from '@/utils'
 import type { PLReport, COGSMethod } from '@/stores/analytics/types'
@@ -594,6 +595,16 @@ const router = useRouter()
 // Store
 const plReportStore = usePLReportStore()
 const accountStore = useAccountStore()
+const paymentSettingsStore = usePaymentSettingsStore()
+
+// Dynamic tax labels from configured taxes
+const taxLabels = computed(() => {
+  const taxes = paymentSettingsStore.activeTaxes
+  return {
+    service: taxes[0] ? `${taxes[0].name} (${taxes[0].percentage}%)` : 'Service Tax',
+    local: taxes[1] ? `${taxes[1].name} (${taxes[1].percentage}%)` : 'Local Tax'
+  }
+})
 
 // State
 const dateFrom = ref('')

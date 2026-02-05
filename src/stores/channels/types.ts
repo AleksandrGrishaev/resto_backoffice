@@ -2,6 +2,23 @@
 
 export type ChannelType = 'internal' | 'delivery_platform' | 'pickup'
 
+export type TaxMode = 'exclusive' | 'inclusive'
+
+export interface ChannelTaxLink {
+  taxId: string
+  taxName: string
+  taxPercentage: number
+}
+
+export interface ChannelPaymentMethodLink {
+  paymentMethodId: string
+  paymentMethodName: string
+  paymentMethodCode: string
+  paymentMethodType: string
+  paymentMethodIcon?: string
+  paymentMethodIconColor?: string
+}
+
 export type ChannelCode = 'dine_in' | 'takeaway' | 'gobiz' | 'grab' | string
 
 export interface SalesChannel {
@@ -12,6 +29,9 @@ export interface SalesChannel {
   isActive: boolean
   commissionPercent: number
   taxPercent: number
+  taxMode: TaxMode
+  taxes: ChannelTaxLink[]
+  paymentMethods: ChannelPaymentMethodLink[]
   settings: ChannelSettings
   sortOrder: number
   createdAt: string
@@ -62,6 +82,7 @@ export interface ChannelVariantPrice {
   variantId: string
   netPrice: number
   taxPercent: number
+  taxMode: TaxMode
   grossPrice: number
   isAvailable: boolean
   hasExplicitPrice: boolean

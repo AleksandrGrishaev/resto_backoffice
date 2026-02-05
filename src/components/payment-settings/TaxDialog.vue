@@ -59,6 +59,7 @@ const initialData = computed(() => ({
   name: '',
   percentage: 0,
   isActive: true,
+  sortOrder: 0,
   ...props.tax
 }))
 

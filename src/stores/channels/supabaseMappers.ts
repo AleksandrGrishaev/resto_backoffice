@@ -1,12 +1,43 @@
 // src/stores/channels/supabaseMappers.ts - DB row <-> domain mappers
 
-import type { SalesChannel, ChannelPrice, ChannelMenuItem } from './types'
+import type {
+  SalesChannel,
+  ChannelPrice,
+  ChannelMenuItem,
+  ChannelTaxLink,
+  ChannelPaymentMethodLink
+} from './types'
 
 // =====================================================
 // SALES CHANNEL MAPPERS
 // =====================================================
 
 export function mapChannelFromDb(row: any): SalesChannel {
+  // Map linked taxes from joined channel_taxes data
+  const taxes: ChannelTaxLink[] = Array.isArray(row.channel_taxes)
+    ? row.channel_taxes
+        .filter((ct: any) => ct.taxes)
+        .map((ct: any) => ({
+          taxId: ct.taxes.id,
+          taxName: ct.taxes.name,
+          taxPercentage: Number(ct.taxes.percentage)
+        }))
+    : []
+
+  // Map linked payment methods from joined channel_payment_methods data
+  const paymentMethods: ChannelPaymentMethodLink[] = Array.isArray(row.channel_payment_methods)
+    ? row.channel_payment_methods
+        .filter((cpm: any) => cpm.payment_methods)
+        .map((cpm: any) => ({
+          paymentMethodId: cpm.payment_methods.id,
+          paymentMethodName: cpm.payment_methods.name,
+          paymentMethodCode: cpm.payment_methods.code,
+          paymentMethodType: cpm.payment_methods.type,
+          paymentMethodIcon: cpm.payment_methods.icon,
+          paymentMethodIconColor: cpm.payment_methods.icon_color
+        }))
+    : []
+
   return {
     id: row.id,
     code: row.code,
@@ -15,6 +46,9 @@ export function mapChannelFromDb(row: any): SalesChannel {
     isActive: row.is_active,
     commissionPercent: Number(row.commission_percent) || 0,
     taxPercent: Number(row.tax_percent) || 0,
+    taxMode: row.tax_mode || 'exclusive',
+    taxes,
+    paymentMethods,
     settings: row.settings || {},
     sortOrder: row.sort_order || 0,
     createdAt: row.created_at,
@@ -30,6 +64,7 @@ export function mapChannelToDb(channel: Partial<SalesChannel>): Record<string, a
   if (channel.isActive !== undefined) result.is_active = channel.isActive
   if (channel.commissionPercent !== undefined) result.commission_percent = channel.commissionPercent
   if (channel.taxPercent !== undefined) result.tax_percent = channel.taxPercent
+  if (channel.taxMode !== undefined) result.tax_mode = channel.taxMode
   if (channel.settings !== undefined) result.settings = channel.settings
   if (channel.sortOrder !== undefined) result.sort_order = channel.sortOrder
   return result

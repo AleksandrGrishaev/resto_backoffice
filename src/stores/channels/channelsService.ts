@@ -2,6 +2,7 @@
 
 import { supabase } from '@/supabase/client'
 import type { SalesChannel, ChannelPrice, ChannelMenuItem } from './types'
+import type { Tax } from '@/types/tax'
 import {
   mapChannelFromDb,
   mapChannelToDb,
@@ -18,7 +19,12 @@ export class ChannelsService {
   // =====================================================
 
   async loadChannels(): Promise<SalesChannel[]> {
-    const { data, error } = await supabase.from('sales_channels').select('*').order('sort_order')
+    const { data, error } = await supabase
+      .from('sales_channels')
+      .select(
+        '*, channel_taxes(tax_id, taxes(id, name, percentage)), channel_payment_methods(payment_method_id, payment_methods(id, name, code, type, icon, icon_color))'
+      )
+      .order('sort_order')
 
     if (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to load channels', { error })
@@ -127,6 +133,100 @@ export class ChannelsService {
     }
 
     return (data || []).map(mapChannelMenuItemFromDb)
+  }
+
+  // =====================================================
+  // CHANNEL TAXES
+  // =====================================================
+
+  async loadTaxes(): Promise<Tax[]> {
+    const { data, error } = await supabase.from('taxes').select('*').order('sort_order')
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load taxes', { error })
+      throw error
+    }
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      percentage: Number(row.percentage),
+      isActive: row.is_active,
+      sortOrder: row.sort_order ?? 0,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }))
+  }
+
+  async setChannelTaxes(channelId: string, taxIds: string[]): Promise<void> {
+    // Delete old links
+    const { error: deleteError } = await supabase
+      .from('channel_taxes')
+      .delete()
+      .eq('channel_id', channelId)
+
+    if (deleteError) {
+      DebugUtils.error(MODULE_NAME, 'Failed to delete channel taxes', { error: deleteError })
+      throw deleteError
+    }
+
+    // Insert new links
+    if (taxIds.length > 0) {
+      const rows = taxIds.map(taxId => ({ channel_id: channelId, tax_id: taxId }))
+      const { error: insertError } = await supabase.from('channel_taxes').insert(rows)
+
+      if (insertError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to insert channel taxes', { error: insertError })
+        throw insertError
+      }
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Channel taxes updated', { channelId, taxIds })
+  }
+
+  async setChannelPaymentMethods(channelId: string, paymentMethodIds: string[]): Promise<void> {
+    // Delete old links
+    const { error: deleteError } = await supabase
+      .from('channel_payment_methods')
+      .delete()
+      .eq('channel_id', channelId)
+
+    if (deleteError) {
+      DebugUtils.error(MODULE_NAME, 'Failed to delete channel payment methods', {
+        error: deleteError
+      })
+      throw deleteError
+    }
+
+    // Insert new links
+    if (paymentMethodIds.length > 0) {
+      const rows = paymentMethodIds.map(pmId => ({
+        channel_id: channelId,
+        payment_method_id: pmId
+      }))
+      const { error: insertError } = await supabase.from('channel_payment_methods').insert(rows)
+
+      if (insertError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to insert channel payment methods', {
+          error: insertError
+        })
+        throw insertError
+      }
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Channel payment methods updated', { channelId, paymentMethodIds })
+  }
+
+  async recalculateChannelTaxPercent(channelId: string, totalPercent: number): Promise<void> {
+    const { error } = await supabase
+      .from('sales_channels')
+      .update({ tax_percent: totalPercent })
+      .eq('id', channelId)
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to recalculate tax_percent', { error })
+      throw error
+    }
   }
 
   async upsertChannelMenuItem(

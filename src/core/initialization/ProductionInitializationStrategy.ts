@@ -634,8 +634,12 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
 
     const results: StoreInitResult[] = []
 
-    // ✅ Load payment settings FIRST (before POS, so dialogs have data available)
-    results.push(await this.loadPaymentSettingsFromAPI())
+    // ✅ Load payment settings + channels FIRST (before POS, so dialogs have data available)
+    const [paymentResult, channelsResult] = await Promise.all([
+      this.loadPaymentSettingsFromAPI(),
+      this.loadChannelsFromAPI()
+    ])
+    results.push(paymentResult, channelsResult)
 
     // POS system
     results.push(await this.loadPOSFromAPI())

@@ -56,10 +56,10 @@ export interface PLReport {
     byCategory: Record<string, number> // Group by menu category
   }
 
-  // Tax Collected section (from sales - service tax + local tax)
+  // Tax Collected section (from sales — dynamic rates from channel/global config)
   taxCollected: {
-    serviceTax: number // 5% service tax from sales
-    localTax: number // 10% local/government tax from sales
+    serviceTax: number // First configured tax (e.g. Service Tax)
+    localTax: number // Second configured tax (e.g. Government/Local Tax)
     total: number
   }
 

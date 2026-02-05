@@ -14,6 +14,9 @@ import {
 } from '@/core/decomposition'
 import { useMenuStore } from '@/stores/menu/menuStore'
 import type { PosPayment, PosBillItem } from '@/stores/pos/types'
+import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { useChannelsStore } from '@/stores/channels'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 
 const MODULE_NAME = 'SalesStore'
 
@@ -440,11 +443,61 @@ export const useSalesStore = defineStore('sales', () => {
           allocatedDiscount
         )
 
-        // 5. Calculate taxes (✅ SPRINT 8: Tax storage)
-        const serviceTaxRate = 0.05
-        const governmentTaxRate = 0.1
-        const serviceTaxAmount = Math.round(profitCalculation.finalRevenue * serviceTaxRate)
-        const governmentTaxAmount = Math.round(profitCalculation.finalRevenue * governmentTaxRate)
+        // 5. Calculate taxes — channel-aware
+        let serviceTaxRate = 0
+        let governmentTaxRate = 0
+        let serviceTaxAmount = 0
+        let governmentTaxAmount = 0
+
+        try {
+          const ordersStore = usePosOrdersStore()
+          const order = ordersStore.orders.find(o => o.id === payment.orderId)
+          const chId = order?.channelId
+
+          if (chId) {
+            const channelsStore = useChannelsStore()
+            const channel = channelsStore.getChannelById(chId)
+            if (channel?.taxes?.length) {
+              const taxes = channel.taxes
+              // Map first tax to "service", second to "government" for backward compat
+              if (taxes[0]) {
+                serviceTaxRate = taxes[0].taxPercentage / 100
+                serviceTaxAmount =
+                  channel.taxMode === 'inclusive'
+                    ? Math.round(
+                        (profitCalculation.finalRevenue /
+                          (1 + taxes.reduce((s, t) => s + t.taxPercentage / 100, 0))) *
+                          serviceTaxRate
+                      )
+                    : Math.round(profitCalculation.finalRevenue * serviceTaxRate)
+              }
+              if (taxes[1]) {
+                governmentTaxRate = taxes[1].taxPercentage / 100
+                governmentTaxAmount =
+                  channel.taxMode === 'inclusive'
+                    ? Math.round(
+                        (profitCalculation.finalRevenue /
+                          (1 + taxes.reduce((s, t) => s + t.taxPercentage / 100, 0))) *
+                          governmentTaxRate
+                      )
+                    : Math.round(profitCalculation.finalRevenue * governmentTaxRate)
+              }
+            }
+          }
+        } catch {
+          // Fallback: use global taxes
+          const pmStore = usePaymentSettingsStore()
+          const activeTaxes = pmStore.activeTaxes
+          if (activeTaxes[0]) {
+            serviceTaxRate = activeTaxes[0].percentage / 100
+            serviceTaxAmount = Math.round(profitCalculation.finalRevenue * serviceTaxRate)
+          }
+          if (activeTaxes[1]) {
+            governmentTaxRate = activeTaxes[1].percentage / 100
+            governmentTaxAmount = Math.round(profitCalculation.finalRevenue * governmentTaxRate)
+          }
+        }
+
         const totalTaxAmount = serviceTaxAmount + governmentTaxAmount
 
         // 6. Create sales transaction

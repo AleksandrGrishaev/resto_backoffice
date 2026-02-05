@@ -93,10 +93,18 @@ export interface ReceiptData {
   // Taxes
   subtotal: number
   subtotalAfterDiscounts?: number
+  /** @deprecated Use `taxes[]` array instead. Kept for backward compatibility with old receipts. */
   serviceTax?: number
+  /** @deprecated Use `taxes[]` array instead. */
   serviceTaxPercent?: number
+  /** @deprecated Use `taxes[]` array instead. Kept for backward compatibility with old receipts. */
   governmentTax?: number
+  /** @deprecated Use `taxes[]` array instead. */
   governmentTaxPercent?: number
+  /** Dynamic tax breakdown from channel — preferred over legacy serviceTax/governmentTax */
+  taxes?: { name: string; percentage: number; amount: number }[]
+  /** If true, taxes are included in the price (shown as info, not added) */
+  taxInclusive?: boolean
   totalTax?: number
 
   // Total

@@ -1,21 +1,33 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useChannelsStore } from '@/stores/channels'
-import type { SalesChannel, ChannelType } from '@/stores/channels/types'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
+import type { SalesChannel, ChannelType, TaxMode } from '@/stores/channels/types'
 
 const channelsStore = useChannelsStore()
+const paymentSettingsStore = usePaymentSettingsStore()
 
 const showDialog = ref(false)
 const editingChannel = ref<Partial<SalesChannel> | null>(null)
+const selectedTaxIds = ref<string[]>([])
+const selectedPaymentMethodIds = ref<string[]>([])
 
 const channels = computed(() => channelsStore.channels)
 const isLoading = computed(() => channelsStore.isLoading)
+const availableTaxes = computed(() => channelsStore.availableTaxes)
+const availablePaymentMethods = computed(() => paymentSettingsStore.activePaymentMethods)
+
+const computedTotalTax = computed(() => {
+  return availableTaxes.value
+    .filter(t => selectedTaxIds.value.includes(t.id))
+    .reduce((sum, t) => sum + t.percentage, 0)
+})
 
 const headers = [
   { title: 'Channel', key: 'name', sortable: true },
   { title: 'Code', key: 'code' },
   { title: 'Type', key: 'type' },
-  { title: 'Tax %', key: 'taxPercent', align: 'end' as const },
+  { title: 'Tax', key: 'taxPercent', align: 'end' as const },
   { title: 'Commission %', key: 'commissionPercent', align: 'end' as const },
   { title: 'Status', key: 'isActive', align: 'center' as const },
   { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const }
@@ -54,22 +66,48 @@ function getChannelIcon(type: string) {
   return icons[type] || 'mdi-help'
 }
 
-function openEditDialog(channel: SalesChannel) {
+function getTaxModeLabel(mode: TaxMode) {
+  return mode === 'inclusive' ? 'incl.' : 'excl.'
+}
+
+function getTaxModeColor(mode: TaxMode) {
+  return mode === 'inclusive' ? 'info' : 'default'
+}
+
+async function ensureDataLoaded() {
+  if (channelsStore.availableTaxes.length === 0) {
+    await channelsStore.loadAvailableTaxes()
+  }
+  if (paymentSettingsStore.paymentMethods.length === 0) {
+    await paymentSettingsStore.fetchPaymentMethods()
+  }
+}
+
+async function openEditDialog(channel: SalesChannel) {
+  await ensureDataLoaded()
   editingChannel.value = { ...channel }
+  selectedTaxIds.value = channel.taxes.map(t => t.taxId)
+  selectedPaymentMethodIds.value = channel.paymentMethods.map(pm => pm.paymentMethodId)
   showDialog.value = true
 }
 
-function openCreateDialog() {
+async function openCreateDialog() {
+  await ensureDataLoaded()
   editingChannel.value = {
     code: '',
     name: '',
     type: 'internal' as ChannelType,
     isActive: true,
     commissionPercent: 0,
-    taxPercent: 11,
+    taxPercent: 0,
+    taxMode: 'exclusive' as TaxMode,
+    taxes: [],
+    paymentMethods: [],
     settings: {},
     sortOrder: channels.value.length + 1
   }
+  selectedTaxIds.value = []
+  selectedPaymentMethodIds.value = availablePaymentMethods.value.map(pm => pm.id)
   showDialog.value = true
 }
 
@@ -77,10 +115,20 @@ async function saveChannel() {
   if (!editingChannel.value) return
 
   try {
+    // Update taxPercent from selected taxes
+    editingChannel.value.taxPercent = computedTotalTax.value
+
     if ('id' in editingChannel.value && editingChannel.value.id) {
       await channelsStore.updateChannel(editingChannel.value.id, editingChannel.value)
+      await channelsStore.setChannelTaxes(editingChannel.value.id, selectedTaxIds.value)
+      await channelsStore.setChannelPaymentMethods(
+        editingChannel.value.id,
+        selectedPaymentMethodIds.value
+      )
     } else {
-      await channelsStore.createChannel(editingChannel.value as any)
+      const created = await channelsStore.createChannel(editingChannel.value as any)
+      await channelsStore.setChannelTaxes(created.id, selectedTaxIds.value)
+      await channelsStore.setChannelPaymentMethods(created.id, selectedPaymentMethodIds.value)
     }
     showDialog.value = false
   } catch (error) {
@@ -126,6 +174,14 @@ async function toggleChannelActive(channel: SalesChannel) {
               <span :class="item.taxPercent === 0 ? 'text-success' : ''">
                 {{ item.taxPercent }}%
               </span>
+              <v-chip
+                v-if="item.taxPercent > 0"
+                :color="getTaxModeColor(item.taxMode)"
+                size="x-small"
+                class="ml-1"
+              >
+                {{ getTaxModeLabel(item.taxMode) }}
+              </v-chip>
             </template>
 
             <template #[`item.commissionPercent`]="{ item }">
@@ -178,15 +234,56 @@ async function toggleChannelActive(channel: SalesChannel) {
             label="Channel Type"
             class="mb-3"
           />
-          <v-text-field
-            v-model.number="editingChannel.taxPercent"
-            label="Tax %"
-            type="number"
-            min="0"
-            max="100"
-            step="0.01"
-            class="mb-3"
+
+          <!-- Tax Mode Toggle -->
+          <div class="mb-3">
+            <div class="text-subtitle-2 mb-2">Tax Mode</div>
+            <v-btn-toggle
+              v-model="editingChannel.taxMode"
+              mandatory
+              density="compact"
+              color="primary"
+            >
+              <v-btn value="exclusive">Exclusive (added on top)</v-btn>
+              <v-btn value="inclusive">Inclusive (in price)</v-btn>
+            </v-btn-toggle>
+          </div>
+
+          <!-- Tax Multi-Select -->
+          <v-select
+            v-model="selectedTaxIds"
+            :items="
+              availableTaxes.map(t => ({ title: `${t.name} (${t.percentage}%)`, value: t.id }))
+            "
+            label="Applied Taxes"
+            multiple
+            chips
+            closable-chips
+            class="mb-1"
           />
+
+          <!-- Computed Total -->
+          <div class="text-body-2 text-medium-emphasis mb-3">
+            Total Tax:
+            <strong>{{ computedTotalTax }}%</strong>
+            <span v-if="computedTotalTax > 0">
+              ({{ editingChannel.taxMode === 'inclusive' ? 'inclusive' : 'exclusive' }})
+            </span>
+          </div>
+
+          <!-- Payment Methods Multi-Select -->
+          <v-select
+            v-model="selectedPaymentMethodIds"
+            :items="availablePaymentMethods.map(pm => ({ title: pm.name, value: pm.id }))"
+            label="Payment Methods"
+            multiple
+            chips
+            closable-chips
+            class="mb-3"
+            hint="Which payment methods are available for this channel"
+            persistent-hint
+          />
+
           <v-text-field
             v-model.number="editingChannel.commissionPercent"
             label="Commission %"

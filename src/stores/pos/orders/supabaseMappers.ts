@@ -117,6 +117,7 @@ export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
 
     // Channel tracking
     channel_id: order.channelId || null,
+    channel_code: order.channelCode || null,
     external_order_id: order.externalOrderId || null,
     external_status: order.externalStatus || null,
 
@@ -231,7 +232,7 @@ export function fromSupabase(supabaseOrder: SupabaseOrder, items?: PosBillItem[]
 
     // Channel tracking
     channelId: (supabaseOrder as any).channel_id || undefined,
-    channelCode: undefined, // Resolved via channels store lookup
+    channelCode: (supabaseOrder as any).channel_code || undefined,
     externalOrderId: (supabaseOrder as any).external_order_id || undefined,
     externalStatus: (supabaseOrder as any).external_status || undefined,
 

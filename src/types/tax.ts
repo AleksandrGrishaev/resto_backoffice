@@ -5,4 +5,5 @@ export interface Tax extends BaseEntity {
   name: string
   percentage: number
   isActive: boolean
+  sortOrder: number
 }

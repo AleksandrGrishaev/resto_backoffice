@@ -318,6 +318,24 @@ src/views/pos/
 7. [x] POS интеграция: channel_id/channelCode в PosOrder, OrderTypeDialog с выбором канала
 8. [x] Store initialization: channels в StoreName, dependencies, обе стратегии инициализации
 
+### Phase 1.5: POS Channel-Aware Orders & Pricing ✅ COMPLETED
+
+**Цель:** Каждый POS-заказ автоматически получает канал продаж, цены берутся из channel_prices
+
+1. [x] Auto-assign channel: dine_in заказы (клик по столу) → channelId + channelCode='dine_in'
+2. [x] Auto-assign channel: takeaway заказы → channelId + channelCode='takeaway'
+3. [x] Delivery (GoJek/Grab) — уже работало через OrderTypeDialog step 2
+4. [x] Channel-aware pricing: при добавлении товара в заказ — lookup `channelsStore.getChannelPrice()`, используется net price канала вместо base price
+5. [x] Persist channel_code: `supabaseMappers.ts` — write/read `channel_code` в/из Supabase
+6. [x] DB migration `140_add_channel_code_to_orders.sql` — колонка `channel_code TEXT` в orders
+
+**Файлы:**
+
+- `src/views/pos/tables/TablesSidebar.vue` — import channelsStore, auto-assign для dine_in + takeaway
+- `src/views/pos/PosMainView.vue` — channel price lookup в handleAddItemToOrder
+- `src/stores/pos/orders/supabaseMappers.ts` — persist/read channel_code
+- `src/supabase/migrations/140_add_channel_code_to_orders.sql`
+
 ### Phase 2: GoBiz Integration Core
 
 **Цель:** Базовая интеграция с GoBiz API

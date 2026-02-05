@@ -28,9 +28,13 @@ const TOTAL_TAX_RATE = SERVICE_TAX_RATE + LOCAL_TAX_RATE // 15%
  * Reverse: pureRevenue = totalAmount / (1 + TOTAL_TAX_RATE)
  *
  * @param totalAmount - Total collected amount (including taxes)
+ * @param taxRates - Optional custom tax rates (defaults to 5% service + 10% local)
  * @returns Tax breakdown with pure revenue and tax amounts
  */
-export function calculateTaxBreakdown(totalAmount: number): TaxBreakdownResult {
+export function calculateTaxBreakdown(
+  totalAmount: number,
+  taxRates?: { serviceTaxRate: number; localTaxRate: number }
+): TaxBreakdownResult {
   if (totalAmount <= 0) {
     return {
       pureRevenue: 0,
@@ -40,12 +44,16 @@ export function calculateTaxBreakdown(totalAmount: number): TaxBreakdownResult {
     }
   }
 
+  const sRate = taxRates?.serviceTaxRate ?? SERVICE_TAX_RATE
+  const lRate = taxRates?.localTaxRate ?? LOCAL_TAX_RATE
+  const totalRate = sRate + lRate
+
   // Reverse calculation to get pure revenue
-  const pureRevenue = totalAmount / (1 + TOTAL_TAX_RATE)
+  const pureRevenue = totalAmount / (1 + totalRate)
 
   // Calculate tax amounts
-  const serviceTaxAmount = pureRevenue * SERVICE_TAX_RATE
-  const localTaxAmount = pureRevenue * LOCAL_TAX_RATE
+  const serviceTaxAmount = pureRevenue * sRate
+  const localTaxAmount = pureRevenue * lRate
 
   return {
     pureRevenue: Math.round(pureRevenue),

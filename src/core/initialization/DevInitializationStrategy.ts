@@ -480,10 +480,14 @@ export class DevInitializationStrategy implements InitializationStrategy {
 
     const results: StoreInitResult[] = []
 
-    // ✅ Load payment settings FIRST (before POS, so dialogs have data available)
-    const paymentResult = await this.loadPaymentSettings()
-    results.push(paymentResult)
+    // ✅ Load payment settings + channels FIRST (before POS, so dialogs have data available)
+    const [paymentResult, channelsResult] = await Promise.all([
+      this.loadPaymentSettings(),
+      this.loadChannels()
+    ])
+    results.push(paymentResult, channelsResult)
     if (paymentResult.success) this.loadedStores.add('paymentSettings')
+    if (channelsResult.success) this.loadedStores.add('channels')
 
     // POS system
     const posResult = await this.loadPOS()

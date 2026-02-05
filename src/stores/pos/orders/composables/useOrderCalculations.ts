@@ -11,6 +11,7 @@ import type {
 } from '@/stores/pos/types'
 import type { RevenueBreakdown, TaxBreakdown } from '@/stores/discounts/types'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
+import { useChannelsStore } from '@/stores/channels'
 
 /**
  * Composable for order calculations with selection support
@@ -19,22 +20,19 @@ import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store
 export function useOrderCalculations(
   bills: PosBill[] | (() => PosBill[]),
   options: {
-    serviceTaxRate?: number
-    governmentTaxRate?: number
-    includeServiceTax?: boolean
-    includeGovernmentTax?: boolean
+    channelId?: Ref<string | undefined> | (() => string | undefined)
+    includeTaxes?: boolean
     selectedItemIds?: Ref<string[]> | (() => string[])
     activeBillId?: Ref<string | null> | (() => string | null)
   } = {}
 ) {
-  const {
-    serviceTaxRate = 5,
-    governmentTaxRate = 10,
-    includeServiceTax = true,
-    includeGovernmentTax = true,
-    selectedItemIds,
-    activeBillId
-  } = options
+  const { channelId, includeTaxes = true, selectedItemIds, activeBillId } = options
+
+  const getChannelId = channelId
+    ? typeof channelId === 'function'
+      ? channelId
+      : () => channelId.value
+    : () => undefined
 
   // Normalize inputs to reactive getters
   const getBills = typeof bills === 'function' ? bills : () => bills
@@ -122,30 +120,71 @@ export function useOrderCalculations(
   })
 
   // =============================================
-  // TAX CALCULATIONS
+  // TAX CALCULATIONS — channel-aware
   // =============================================
 
   /**
-   * Calculate service tax
+   * Dynamic tax breakdown from channel or global settings
    */
-  const serviceTax = computed((): number => {
-    if (!includeServiceTax) return 0
-    return discountedSubtotal.value * (serviceTaxRate / 100)
+  const taxBreakdown = computed((): { name: string; percentage: number; amount: number }[] => {
+    if (!includeTaxes) return []
+
+    const chId = getChannelId()
+    if (chId) {
+      try {
+        const channelsStore = useChannelsStore()
+        const channel = channelsStore.getChannelById(chId)
+        if (channel?.taxes?.length) {
+          if (channel.taxMode === 'inclusive') {
+            // Inclusive: taxes already in price — show as info only, don't add
+            return channel.taxes.map(t => ({
+              name: t.taxName,
+              percentage: t.taxPercentage,
+              amount: 0 // Zero because already included
+            }))
+          }
+          return channel.taxes.map(t => ({
+            name: t.taxName,
+            percentage: t.taxPercentage,
+            amount: discountedSubtotal.value * (t.taxPercentage / 100)
+          }))
+        }
+      } catch {
+        // Channel store not available
+      }
+    }
+
+    // Fallback: global taxes from payment settings
+    const paymentSettingsStore = usePaymentSettingsStore()
+    return paymentSettingsStore.activeTaxes.map(t => ({
+      name: t.name,
+      percentage: t.percentage,
+      amount: discountedSubtotal.value * (t.percentage / 100)
+    }))
   })
 
   /**
-   * Calculate government tax
+   * Whether current channel uses inclusive tax mode
    */
-  const governmentTax = computed((): number => {
-    if (!includeGovernmentTax) return 0
-    return discountedSubtotal.value * (governmentTaxRate / 100)
+  const taxInclusive = computed((): boolean => {
+    const chId = getChannelId()
+    if (chId) {
+      try {
+        const channelsStore = useChannelsStore()
+        const channel = channelsStore.getChannelById(chId)
+        return channel?.taxMode === 'inclusive'
+      } catch {
+        // ignore
+      }
+    }
+    return false
   })
 
   /**
-   * Calculate total taxes
+   * Calculate total taxes (0 for inclusive channels)
    */
   const totalTaxes = computed((): number => {
-    return serviceTax.value + governmentTax.value
+    return taxBreakdown.value.reduce((sum, t) => sum + t.amount, 0)
   })
 
   /**
@@ -309,8 +348,8 @@ export function useOrderCalculations(
         billDiscounts: billDiscounts.value,
         totalDiscounts: totalDiscounts.value,
         discountedSubtotal: discountedSubtotal.value,
-        serviceTax: serviceTax.value,
-        governmentTax: governmentTax.value,
+        taxBreakdown: taxBreakdown.value,
+        taxInclusive: taxInclusive.value,
         totalTaxes: totalTaxes.value,
         finalTotal: finalTotal.value
       },
@@ -331,8 +370,8 @@ export function useOrderCalculations(
     discountedSubtotal,
 
     // Tax calculations
-    serviceTax,
-    governmentTax,
+    taxBreakdown,
+    taxInclusive,
     totalTaxes,
     finalTotal,
 
@@ -675,28 +714,57 @@ export function calculateRevenueBreakdown(order: PosOrder): RevenueBreakdown {
   const actualRevenue = Math.max(0, plannedRevenue - totalDiscounts)
 
   // =============================================
-  // 5. CALCULATE TAXES FROM PAYMENT SETTINGS
+  // 5. CALCULATE TAXES — channel-aware
   // =============================================
-  const paymentSettingsStore = usePaymentSettingsStore()
-  const activeTaxes = paymentSettingsStore.activeTaxes
-
   let totalTaxes = 0
-  const taxBreakdown: TaxBreakdown[] = activeTaxes.map(tax => {
-    const amount = actualRevenue * (tax.percentage / 100)
-    totalTaxes += amount
+  let taxBreakdown: TaxBreakdown[] = []
+  let taxAdjustedRevenue = actualRevenue
 
-    return {
-      taxId: tax.id,
-      name: tax.name,
-      percentage: tax.percentage,
-      amount
+  if (order.channelId) {
+    try {
+      const channelsStore = useChannelsStore()
+      const channel = channelsStore.getChannelById(order.channelId)
+      if (channel?.taxes?.length) {
+        if (channel.taxMode === 'inclusive') {
+          // Inclusive: taxes are embedded in the price — extract them
+          const totalRate = channel.taxes.reduce((s, t) => s + t.taxPercentage, 0)
+          const revenueWithoutTax = actualRevenue / (1 + totalRate / 100)
+          taxBreakdown = channel.taxes.map(tax => {
+            const amount = revenueWithoutTax * (tax.taxPercentage / 100)
+            totalTaxes += amount
+            return { taxId: tax.taxId, name: tax.taxName, percentage: tax.taxPercentage, amount }
+          })
+          // Adjust revenue to be net (without tax)
+          taxAdjustedRevenue = revenueWithoutTax
+        } else {
+          // Exclusive: taxes added on top
+          taxBreakdown = channel.taxes.map(tax => {
+            const amount = actualRevenue * (tax.taxPercentage / 100)
+            totalTaxes += amount
+            return { taxId: tax.taxId, name: tax.taxName, percentage: tax.taxPercentage, amount }
+          })
+        }
+      }
+    } catch {
+      // Channel store not available — fall through to global taxes
     }
-  })
+  }
+
+  // Fallback: global taxes (for orders without channel)
+  if (taxBreakdown.length === 0) {
+    const paymentSettingsStore = usePaymentSettingsStore()
+    const activeTaxes = paymentSettingsStore.activeTaxes
+    taxBreakdown = activeTaxes.map(tax => {
+      const amount = actualRevenue * (tax.percentage / 100)
+      totalTaxes += amount
+      return { taxId: tax.id, name: tax.name, percentage: tax.percentage, amount }
+    })
+  }
 
   // =============================================
   // 6. CALCULATE TOTAL COLLECTED
   // =============================================
-  const totalCollected = actualRevenue + totalTaxes
+  const totalCollected = taxAdjustedRevenue + totalTaxes
 
   // =============================================
   // 7. RETURN REVENUE BREAKDOWN
@@ -706,7 +774,7 @@ export function calculateRevenueBreakdown(order: PosOrder): RevenueBreakdown {
     itemDiscounts,
     billDiscounts,
     totalDiscounts,
-    actualRevenue,
+    actualRevenue: taxAdjustedRevenue,
     taxes: taxBreakdown,
     totalTaxes,
     totalCollected

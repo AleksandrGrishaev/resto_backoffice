@@ -54,15 +54,21 @@
                 <span class="text-body-2 text-success">-{{ formatPrice(localDiscount) }}</span>
               </div>
 
-              <div v-if="recalculatedServiceTax > 0" class="summary-row-compact">
-                <span class="text-body-2">Service Tax (5%):</span>
-                <span class="text-body-2">{{ formatPrice(recalculatedServiceTax) }}</span>
-              </div>
-
-              <div v-if="recalculatedGovernmentTax > 0" class="summary-row-compact">
-                <span class="text-body-2">Government Tax (10%):</span>
-                <span class="text-body-2">{{ formatPrice(recalculatedGovernmentTax) }}</span>
-              </div>
+              <!-- Tax Breakdown (dynamic from channel) -->
+              <template v-if="taxMode === 'inclusive'">
+                <div class="summary-row-compact">
+                  <span class="text-body-2 text-medium-emphasis">
+                    <v-icon size="12" class="mr-1">mdi-information</v-icon>
+                    Taxes included in price
+                  </span>
+                </div>
+              </template>
+              <template v-else>
+                <div v-for="tax in taxBreakdown" :key="tax.name" class="summary-row-compact">
+                  <span class="text-body-2">{{ tax.name }} ({{ tax.percentage }}%):</span>
+                  <span class="text-body-2">{{ formatPrice(tax.amount) }}</span>
+                </div>
+              </template>
 
               <v-divider class="my-2" />
 
@@ -235,6 +241,7 @@ import type { PosBillItem, PosBill, PreBillSnapshot } from '@/stores/pos/types'
 import type { ReceiptData, ReceiptItem } from '@/core/printing/types'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
+import { useChannelsStore } from '@/stores/channels'
 import { DISCOUNT_REASON_LABELS } from '@/stores/discounts/constants'
 import { DebugUtils, TimeUtils } from '@/utils'
 import { usePrinter } from '@/core/printing'
@@ -252,6 +259,7 @@ interface Props {
   billIds?: string[]
   orderId?: string
   items?: PosBillItem[]
+  channelId?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -260,12 +268,14 @@ const props = withDefaults(defineProps<Props>(), {
   governmentTax: 0,
   billIds: () => [],
   orderId: '',
-  items: () => []
+  items: () => [],
+  channelId: ''
 })
 
 // Stores
 const ordersStore = usePosOrdersStore()
 const paymentSettingsStore = usePaymentSettingsStore()
+const channelsStore = useChannelsStore()
 
 // Printer
 const { isConnected: isPrinterConnected, settings: printerSettings, printPreBill } = usePrinter()
@@ -306,11 +316,25 @@ const localDiscountReason = ref<string>('') // Reason for bill discount
 const showBillDiscountDialog = ref(false)
 const preBillPrinted = ref(false) // Track if pre-bill was printed in this session
 
-// Payment Methods (already sorted by displayOrder from the store)
+// Payment Methods — filtered by channel if available
 const availablePaymentMethods = computed(() => {
+  // If channelId provided, filter by channel's linked payment methods
+  if (props.channelId) {
+    const channelMethods = channelsStore.getPaymentMethodsForChannel(props.channelId)
+    if (channelMethods.length > 0) {
+      return channelMethods.map(cm => ({
+        code: cm.paymentMethodCode,
+        name: cm.paymentMethodName,
+        icon: cm.paymentMethodIcon,
+        iconColor: cm.paymentMethodIconColor,
+        type: cm.paymentMethodType
+      }))
+    }
+  }
+
+  // Fallback: all active methods from global store
   const methods = paymentSettingsStore.activePaymentMethods
   if (methods.length === 0) {
-    // Fallback to cash if no methods loaded yet
     return [{ code: 'cash', name: 'Cash', icon: 'mdi-cash', iconColor: 'success', type: 'cash' }]
   }
   return methods.map(method => ({
@@ -389,16 +413,43 @@ const amountAfterDiscount = computed(() => {
   return Math.max(0, amountAfterItemDiscounts.value - localDiscount.value)
 })
 
-const recalculatedServiceTax = computed(() => {
-  return amountAfterDiscount.value * 0.05 // 5%
+// Dynamic taxes — channel-aware
+const channelTaxes = computed(() => {
+  if (props.channelId) {
+    const channel = channelsStore.getChannelById(props.channelId)
+    if (channel?.taxes?.length) return channel.taxes
+  }
+  // Fallback: global active taxes
+  return paymentSettingsStore.activeTaxes.map(t => ({
+    taxId: t.id,
+    taxName: t.name,
+    taxPercentage: t.percentage
+  }))
 })
 
-const recalculatedGovernmentTax = computed(() => {
-  return amountAfterDiscount.value * 0.1 // 10%
+const taxMode = computed(() => {
+  if (props.channelId) {
+    const channel = channelsStore.getChannelById(props.channelId)
+    return channel?.taxMode || 'exclusive'
+  }
+  return 'exclusive'
+})
+
+const taxBreakdown = computed(() => {
+  return channelTaxes.value.map(tax => ({
+    name: tax.taxName,
+    percentage: tax.taxPercentage,
+    amount: amountAfterDiscount.value * (tax.taxPercentage / 100)
+  }))
+})
+
+const totalTaxAmount = computed(() => {
+  if (taxMode.value === 'inclusive') return 0 // Tax already in price
+  return taxBreakdown.value.reduce((sum, t) => sum + t.amount, 0)
 })
 
 const totalAmount = computed(() => {
-  return amountAfterDiscount.value + recalculatedServiceTax.value + recalculatedGovernmentTax.value
+  return amountAfterDiscount.value + totalTaxAmount.value
 })
 
 const change = computed(() => {
@@ -561,10 +612,8 @@ const buildReceiptData = (): ReceiptData => {
     billDiscount: localDiscount.value,
     billDiscountReason: localDiscountReason.value,
     subtotalAfterDiscounts: amountAfterDiscount.value,
-    serviceTax: recalculatedServiceTax.value,
-    serviceTaxPercent: 5,
-    governmentTax: recalculatedGovernmentTax.value,
-    governmentTaxPercent: 10,
+    taxes: taxBreakdown.value,
+    taxInclusive: taxMode.value === 'inclusive',
     totalAmount: totalAmount.value,
     footerMessage: printerSettings.value.footerMessage
   }

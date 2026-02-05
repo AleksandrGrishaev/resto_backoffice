@@ -1,6 +1,7 @@
 // src/stores/discounts/composables/useDiscountAnalytics.ts
 import { useDiscountsStore } from '../discountsStore'
 import { useSalesStore } from '@/stores/sales'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import type {
   DailyRevenueReport,
   DiscountSummary,
@@ -131,33 +132,40 @@ export function useDiscountAnalytics() {
     const uniqueOrdersWithDiscounts = new Set(discountEvents.map(event => event.orderId))
     const ordersWithDiscountCount = uniqueOrdersWithDiscounts.size
 
-    // 7. Calculate tax breakdown
+    // 7. Calculate tax breakdown — use dynamic tax names from paymentSettingsStore
+    const paymentSettingsStore = usePaymentSettingsStore()
+    const activeTaxes = paymentSettingsStore.activeTaxes
+    const firstTaxName = activeTaxes[0]?.name ?? 'Service Tax'
+    const firstTaxId = activeTaxes[0]?.id ?? 'service_tax'
+    const secondTaxName = activeTaxes[1]?.name ?? 'Government Tax'
+    const secondTaxId = activeTaxes[1]?.id ?? 'government_tax'
+
     const taxBreakdown = transactions.reduce((acc, tx) => {
-      // Service tax
+      // First tax slot (serviceTaxRate/Amount in DB)
       if (tx.serviceTaxAmount && tx.serviceTaxRate) {
-        const serviceTax = acc.find(t => t.name === 'Service Tax')
-        if (serviceTax) {
-          serviceTax.amount += tx.serviceTaxAmount
+        const existing = acc.find(t => t.taxId === firstTaxId)
+        if (existing) {
+          existing.amount += tx.serviceTaxAmount
         } else {
           acc.push({
-            taxId: 'service_tax',
-            name: 'Service Tax',
-            percentage: tx.serviceTaxRate * 100, // Convert to percentage
+            taxId: firstTaxId,
+            name: firstTaxName,
+            percentage: tx.serviceTaxRate * 100,
             amount: tx.serviceTaxAmount
           })
         }
       }
 
-      // Government tax
+      // Second tax slot (governmentTaxRate/Amount in DB)
       if (tx.governmentTaxAmount && tx.governmentTaxRate) {
-        const govTax = acc.find(t => t.name === 'Government Tax')
-        if (govTax) {
-          govTax.amount += tx.governmentTaxAmount
+        const existing = acc.find(t => t.taxId === secondTaxId)
+        if (existing) {
+          existing.amount += tx.governmentTaxAmount
         } else {
           acc.push({
-            taxId: 'government_tax',
-            name: 'Government Tax',
-            percentage: tx.governmentTaxRate * 100, // Convert to percentage
+            taxId: secondTaxId,
+            name: secondTaxName,
+            percentage: tx.governmentTaxRate * 100,
             amount: tx.governmentTaxAmount
           })
         }

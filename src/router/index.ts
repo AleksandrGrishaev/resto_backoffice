@@ -400,6 +400,16 @@ const routes: RouteRecordRaw[] = [
         },
         beforeEnter: createLazyStoreGuard('gobiz', lazyLoadGobiz, false)
       },
+      {
+        path: 'integrations/gobiz/menu-sync',
+        name: 'gobiz-menu-sync',
+        component: () => import('@/views/integrations/GobizMenuSyncView.vue'),
+        meta: {
+          title: 'GoBiz Menu Sync',
+          allowedRoles: ['admin']
+        },
+        beforeEnter: createLazyStoreGuard('gobiz', lazyLoadGobiz, false)
+      },
       // === KPI Settings ===
       {
         path: 'kpi-settings',

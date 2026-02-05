@@ -2,7 +2,15 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { SalesChannel, ChannelPrice, ChannelMenuItem, ChannelVariantPrice } from './types'
+import type {
+  SalesChannel,
+  ChannelPrice,
+  ChannelMenuItem,
+  ChannelVariantPrice,
+  TaxMode,
+  ChannelPaymentMethodLink
+} from './types'
+import type { Tax } from '@/types/tax'
 import { channelsService } from './channelsService'
 import { DebugUtils } from '@/utils'
 
@@ -13,6 +21,7 @@ export const useChannelsStore = defineStore('channels', () => {
   const channels = ref<SalesChannel[]>([])
   const channelPrices = ref<ChannelPrice[]>([])
   const channelMenuItems = ref<ChannelMenuItem[]>([])
+  const availableTaxes = ref<Tax[]>([])
   const isLoading = ref(false)
   const initialized = ref(false)
 
@@ -34,6 +43,11 @@ export const useChannelsStore = defineStore('channels', () => {
     return channels.value.find(c => c.id === id)
   }
 
+  function getPaymentMethodsForChannel(channelId: string): ChannelPaymentMethodLink[] {
+    const channel = getChannelById(channelId)
+    return channel?.paymentMethods ?? []
+  }
+
   // Get price for a variant in a channel
   function getChannelPrice(
     channelId: string,
@@ -50,6 +64,7 @@ export const useChannelsStore = defineStore('channels', () => {
         variantId,
         netPrice: baseNetPrice,
         taxPercent: 0,
+        taxMode: 'exclusive' as TaxMode,
         grossPrice: baseNetPrice,
         isAvailable: false,
         hasExplicitPrice: false
@@ -76,6 +91,7 @@ export const useChannelsStore = defineStore('channels', () => {
       variantId,
       netPrice,
       taxPercent,
+      taxMode: channel.taxMode,
       grossPrice,
       isAvailable,
       hasExplicitPrice: !!explicitPrice
@@ -106,10 +122,18 @@ export const useChannelsStore = defineStore('channels', () => {
       channelMenuItems.value = loadedItems
       initialized.value = true
 
+      // Load taxes non-blocking — new table may not be in PostgREST cache yet
+      try {
+        availableTaxes.value = await channelsService.loadTaxes()
+      } catch (taxError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to load taxes (non-critical)', { taxError })
+      }
+
       DebugUtils.store(MODULE_NAME, 'Initialized', {
         channels: loadedChannels.length,
         prices: loadedPrices.length,
-        menuItems: loadedItems.length
+        menuItems: loadedItems.length,
+        taxes: availableTaxes.value.length
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Initialization failed', { error })
@@ -170,6 +194,48 @@ export const useChannelsStore = defineStore('channels', () => {
     }
   }
 
+  async function loadAvailableTaxes(): Promise<void> {
+    try {
+      availableTaxes.value = await channelsService.loadTaxes()
+      DebugUtils.store(MODULE_NAME, 'Taxes loaded', { count: availableTaxes.value.length })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load taxes', { error })
+    }
+  }
+
+  async function setChannelTaxes(channelId: string, taxIds: string[]): Promise<void> {
+    await channelsService.setChannelTaxes(channelId, taxIds)
+
+    // Recalculate total tax_percent from selected taxes
+    const totalPercent = availableTaxes.value
+      .filter(t => taxIds.includes(t.id))
+      .reduce((sum, t) => sum + t.percentage, 0)
+
+    await channelsService.recalculateChannelTaxPercent(channelId, totalPercent)
+
+    // Reload channels to get fresh data with joined taxes
+    const loadedChannels = await channelsService.loadChannels()
+    channels.value = loadedChannels
+
+    DebugUtils.store(MODULE_NAME, 'Channel taxes updated', { channelId, taxIds, totalPercent })
+  }
+
+  async function setChannelPaymentMethods(
+    channelId: string,
+    paymentMethodIds: string[]
+  ): Promise<void> {
+    await channelsService.setChannelPaymentMethods(channelId, paymentMethodIds)
+
+    // Reload channels to get fresh data with joined payment methods
+    const loadedChannels = await channelsService.loadChannels()
+    channels.value = loadedChannels
+
+    DebugUtils.store(MODULE_NAME, 'Channel payment methods updated', {
+      channelId,
+      paymentMethodIds
+    })
+  }
+
   async function setMenuItemAvailability(
     channelId: string,
     menuItemId: string,
@@ -193,6 +259,7 @@ export const useChannelsStore = defineStore('channels', () => {
     channels,
     channelPrices,
     channelMenuItems,
+    availableTaxes,
     isLoading,
     initialized,
 
@@ -201,13 +268,17 @@ export const useChannelsStore = defineStore('channels', () => {
     deliveryChannels,
     getChannelByCode,
     getChannelById,
+    getPaymentMethodsForChannel,
     getChannelPrice,
     isMenuItemAvailable,
 
     // Actions
     initialize,
+    loadAvailableTaxes,
     createChannel,
     updateChannel,
+    setChannelTaxes,
+    setChannelPaymentMethods,
     setChannelPrice,
     removeChannelPrice,
     setMenuItemAvailability

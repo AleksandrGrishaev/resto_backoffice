@@ -14,7 +14,8 @@ import { supabase } from '@/supabase'
 import { getSupabaseErrorMessage } from '@/supabase/config'
 import { toSupabaseUpdate } from '@/stores/pos/shifts/supabaseMappers'
 import { ENV } from '@/config/environment'
-import { calculateTaxBreakdown, TAX_RATES } from '../helpers/taxCalculationHelper'
+import { calculateTaxBreakdown } from '../helpers/taxCalculationHelper'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 
 export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
   entityType = 'shift' as const
@@ -147,12 +148,32 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
 
         if (netAmount <= 0) continue // Skip if no income after adjustments
 
-        // ===== SPRINT 9: TAX BREAKDOWN =====
-        // Split income into: revenue (sales) + service_tax + local_tax
-        const taxBreakdown = calculateTaxBreakdown(netAmount)
+        // ===== SPRINT 9: TAX BREAKDOWN (channel-aware) =====
+        // Get dynamic tax rates from configured taxes
+        let serviceTaxRate = 0.05
+        let localTaxRate = 0.1
+        let serviceTaxName = 'Service Tax'
+        let localTaxName = 'Local Tax'
+
+        try {
+          const pmStore = usePaymentSettingsStore()
+          const activeTaxes = pmStore.activeTaxes
+          if (activeTaxes.length >= 1) {
+            serviceTaxRate = activeTaxes[0].percentage / 100
+            serviceTaxName = activeTaxes[0].name
+          }
+          if (activeTaxes.length >= 2) {
+            localTaxRate = activeTaxes[1].percentage / 100
+            localTaxName = activeTaxes[1].name
+          }
+        } catch {
+          // Use defaults if store unavailable
+        }
+
+        const taxBreakdown = calculateTaxBreakdown(netAmount, { serviceTaxRate, localTaxRate })
 
         console.log(
-          `  📊 Tax breakdown for ${pmSummary.methodName}: revenue=${taxBreakdown.pureRevenue}, service_tax=${taxBreakdown.serviceTaxAmount}, local_tax=${taxBreakdown.localTaxAmount}`
+          `  📊 Tax breakdown for ${pmSummary.methodName}: revenue=${taxBreakdown.pureRevenue}, ${serviceTaxName}=${taxBreakdown.serviceTaxAmount}, ${localTaxName}=${taxBreakdown.localTaxAmount}`
         )
 
         // 1. Create REVENUE transaction (pure sales without taxes)
@@ -185,7 +206,7 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
         }
 
         // 2. Create SERVICE TAX transaction
-        const serviceTaxDesc = `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} Service Tax (${TAX_RATES.SERVICE_TAX}%)`
+        const serviceTaxDesc = `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} ${serviceTaxName} (${Math.round(serviceTaxRate * 100)}%)`
         if (taxBreakdown.serviceTaxAmount > 0) {
           if (existingDescriptions.has(serviceTaxDesc)) {
             console.log(`  ⏭️ Service tax already exists for ${pmSummary.methodName}, skipping`)
@@ -214,7 +235,7 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
         }
 
         // 3. Create LOCAL TAX transaction
-        const localTaxDesc = `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} Local Tax (${TAX_RATES.LOCAL_TAX}%)`
+        const localTaxDesc = `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} ${localTaxName} (${Math.round(localTaxRate * 100)}%)`
         if (taxBreakdown.localTaxAmount > 0) {
           if (existingDescriptions.has(localTaxDesc)) {
             console.log(`  ⏭️ Local tax already exists for ${pmSummary.methodName}, skipping`)

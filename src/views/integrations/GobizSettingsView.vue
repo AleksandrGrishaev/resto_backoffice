@@ -319,6 +319,10 @@ async function toggleActive(config: GobizConfigPublic) {
               <v-icon start>mdi-refresh</v-icon>
               Refresh Token
             </v-btn>
+            <v-btn variant="tonal" color="secondary" to="/integrations/gobiz/menu-sync">
+              <v-icon start>mdi-sync</v-icon>
+              Menu Sync
+            </v-btn>
             <v-spacer />
             <v-btn icon="mdi-pencil" variant="text" @click="openEditDialog(config)" />
             <v-btn icon="mdi-delete" variant="text" color="error" @click="handleDelete(config)" />

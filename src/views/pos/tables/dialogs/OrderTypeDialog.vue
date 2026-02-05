@@ -2,77 +2,38 @@
 <template>
   <v-dialog
     :model-value="modelValue"
-    max-width="400"
+    max-width="500"
     persistent
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-card class="order-type-dialog">
       <v-card-text class="dialog-content">
-        <!-- Step 1: Order Type Selection -->
-        <div v-if="step === 'type'" class="order-types-grid">
-          <!-- Delivery Button -->
-          <v-btn
-            class="order-type-btn delivery-btn"
-            variant="outlined"
-            size="x-large"
-            :disabled="loading"
-            @click="handleOrderType('delivery')"
-          >
-            <template #prepend>
-              <v-icon icon="mdi-bike-fast" size="32" />
-            </template>
-            <div class="btn-content">
-              <div class="btn-title">Delivery</div>
-              <div class="btn-subtitle">Door to door</div>
-            </div>
-          </v-btn>
-
-          <!-- Takeaway Button -->
-          <v-btn
-            class="order-type-btn takeaway-btn"
-            variant="outlined"
-            size="x-large"
-            :loading="loading && selectedType === 'takeaway'"
-            :disabled="loading"
-            @click="handleOrderType('takeaway')"
-          >
-            <template #prepend>
-              <v-icon icon="mdi-shopping" size="32" />
-            </template>
-            <div class="btn-content">
-              <div class="btn-title">Takeaway</div>
-              <div class="btn-subtitle">Pick up</div>
-            </div>
-          </v-btn>
+        <div v-if="isLoadingChannels" class="d-flex justify-center pa-8">
+          <v-progress-circular indeterminate />
         </div>
 
-        <!-- Step 2: Delivery Channel Selection -->
-        <div v-else-if="step === 'channel'" class="order-types-grid">
-          <v-btn
-            v-for="channel in deliveryChannelOptions"
-            :key="channel.code"
+        <div v-else class="order-types-grid">
+          <button
+            v-for="option in channelOptions"
+            :key="option.code"
             class="order-type-btn"
-            variant="outlined"
-            size="x-large"
-            :loading="loading && selectedChannelCode === channel.code"
+            :class="{ 'is-loading': loading && selectedCode === option.code }"
             :disabled="loading"
-            @click="handleChannelSelect(channel.code, channel.id)"
+            @click="handleSelect(option)"
           >
-            <template #prepend>
-              <v-icon :icon="channel.icon" size="32" />
-            </template>
-            <div class="btn-content">
-              <div class="btn-title">{{ channel.name }}</div>
-              <div class="btn-subtitle">{{ channel.subtitle }}</div>
-            </div>
-          </v-btn>
+            <v-progress-circular
+              v-if="loading && selectedCode === option.code"
+              indeterminate
+              size="32"
+            />
+            <v-icon v-else :icon="option.icon" size="36" />
+            <div class="btn-title">{{ option.name }}</div>
+            <div class="btn-subtitle">{{ option.subtitle }}</div>
+          </button>
         </div>
       </v-card-text>
 
       <v-card-actions class="dialog-actions">
-        <v-btn v-if="step === 'channel'" variant="text" :disabled="loading" @click="step = 'type'">
-          Back
-        </v-btn>
         <v-spacer />
         <v-btn variant="text" :disabled="loading" @click="handleCancel">Cancel</v-btn>
       </v-card-actions>
@@ -81,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { OrderType } from '@/stores/pos/types'
 import { useChannelsStore } from '@/stores/channels'
 
@@ -89,11 +50,9 @@ import { useChannelsStore } from '@/stores/channels'
 // PROPS & EMITS
 // =============================================
 
-interface Props {
+defineProps<{
   modelValue: boolean
-}
-
-const props = defineProps<Props>()
+}>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -105,89 +64,93 @@ const emit = defineEmits<{
 // =============================================
 
 const channelsStore = useChannelsStore()
-const step = ref<'type' | 'channel'>('type')
-const selectedType = ref<OrderType | null>(null)
-const selectedChannelCode = ref<string | null>(null)
+const selectedCode = ref<string | null>(null)
 const loading = ref(false)
+const isLoadingChannels = ref(false)
+
+// =============================================
+// ICONS / SUBTITLES
+// =============================================
+
+const CHANNEL_META: Record<string, { icon: string; subtitle: string }> = {
+  takeaway: { icon: 'mdi-shopping', subtitle: 'Pick up' },
+  gobiz: { icon: 'mdi-food', subtitle: 'GoFood / GoBiz' },
+  grab: { icon: 'mdi-car', subtitle: 'GrabFood' }
+}
+
+const DEFAULT_META = { icon: 'mdi-truck-delivery', subtitle: 'Delivery' }
 
 // =============================================
 // COMPUTED
 // =============================================
 
-const deliveryChannelOptions = computed(() => {
-  return channelsStore.deliveryChannels.map(ch => ({
-    id: ch.id,
-    code: ch.code,
-    name: ch.name,
-    icon: ch.code === 'gobiz' ? 'mdi-food' : ch.code === 'grab' ? 'mdi-car' : 'mdi-truck-delivery',
-    subtitle: ch.code === 'gobiz' ? 'GoFood / GoBiz' : ch.code === 'grab' ? 'GrabFood' : ch.name
-  }))
+const channelOptions = computed(() => {
+  return channelsStore.activeChannels
+    .filter(ch => ch.code !== 'dine_in')
+    .map(ch => {
+      const meta = CHANNEL_META[ch.code] || DEFAULT_META
+      return {
+        id: ch.id,
+        code: ch.code,
+        name: ch.name,
+        type: ch.type,
+        icon: meta.icon,
+        subtitle: meta.subtitle
+      }
+    })
 })
+
+// =============================================
+// ENSURE CHANNELS LOADED
+// =============================================
+
+watch(
+  () => channelsStore.initialized,
+  async initialized => {
+    if (!initialized) {
+      isLoadingChannels.value = true
+      try {
+        await channelsStore.initialize()
+      } finally {
+        isLoadingChannels.value = false
+      }
+    }
+  },
+  { immediate: true }
+)
 
 // =============================================
 // METHODS
 // =============================================
 
-/**
- * Handle order type selection
- */
-function handleOrderType(type: OrderType): void {
-  selectedType.value = type
-
-  if (type === 'delivery' && deliveryChannelOptions.value.length > 0) {
-    // Show channel selection step for delivery
-    step.value = 'channel'
-    return
-  }
-
-  // For takeaway or delivery without channels, emit directly
-  emitCreate(type)
+function getOrderType(channel: { code: string; type: string }): OrderType {
+  if (channel.code === 'takeaway') return 'takeaway'
+  return 'delivery'
 }
 
-/**
- * Handle delivery channel selection
- */
-function handleChannelSelect(channelCode: string, channelId: string): void {
-  selectedChannelCode.value = channelCode
-  emitCreate('delivery', { channelId, channelCode })
-}
-
-/**
- * Emit create and close
- */
-function emitCreate(type: OrderType, data?: { channelId?: string; channelCode?: string }): void {
+function handleSelect(option: { id: string; code: string; type: string }): void {
+  selectedCode.value = option.code
+  const orderType = getOrderType(option)
   loading.value = true
-  emit('create', type, data)
+  emit('create', orderType, { channelId: option.id, channelCode: option.code })
   handleClose()
 }
 
-/**
- * Cancel order creation
- */
 function handleCancel(): void {
   handleClose()
 }
 
-/**
- * Close dialog and reset state
- */
 function handleClose(): void {
   emit('update:modelValue', false)
 
   setTimeout(() => {
-    step.value = 'type'
-    selectedType.value = null
-    selectedChannelCode.value = null
+    selectedCode.value = null
     loading.value = false
   }, 300)
 }
 </script>
 
 <style scoped>
-/* =============================================
-   DIALOG STRUCTURE
-   ============================================= */
-
 .order-type-dialog {
   border-radius: 16px;
   overflow: hidden;
@@ -201,72 +164,65 @@ function handleClose(): void {
   padding: 0 24px 24px 24px;
 }
 
-/* =============================================
-   ORDER TYPE BUTTONS
-   ============================================= */
-
 .order-types-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
 .order-type-btn {
-  height: 140px !important;
-  border-radius: 16px;
-  border-width: 2px;
-  transition: all 0.2s ease;
-  text-transform: none;
-  font-size: inherit;
-}
-
-.order-type-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  border-color: rgb(var(--v-theme-primary));
-}
-
-.delivery-btn:hover {
-  background-color: rgba(var(--v-theme-primary), 0.05);
-}
-
-.takeaway-btn:hover {
-  background-color: rgba(var(--v-theme-success), 0.05);
-  border-color: rgb(var(--v-theme-success));
-}
-
-.btn-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  margin-left: 8px;
+  justify-content: center;
+  gap: 10px;
+  width: 140px;
+  height: 140px;
+  border-radius: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.24);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 16px 8px;
+}
+
+.order-type-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  border-color: rgb(var(--v-theme-primary));
+  background-color: rgba(var(--v-theme-primary), 0.08);
+}
+
+.order-type-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.order-type-btn:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
 }
 
 .btn-title {
-  font-size: 1.125rem;
+  font-size: 1rem;
   font-weight: 600;
   line-height: 1.2;
+  text-align: center;
 }
 
 .btn-subtitle {
-  font-size: 0.9375rem;
-  opacity: 0.7;
+  font-size: 0.8125rem;
+  opacity: 0.6;
   line-height: 1;
+  text-align: center;
 }
 
-/* =============================================
-   RESPONSIVE DESIGN
-   ============================================= */
-
 @media (max-width: 480px) {
-  .order-types-grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-
   .order-type-btn {
-    height: 120px !important;
+    width: 120px;
+    height: 120px;
   }
 
   .dialog-content {
@@ -276,30 +232,5 @@ function handleClose(): void {
   .dialog-actions {
     padding: 0 16px 16px 16px;
   }
-
-  .btn-title {
-    font-size: 1rem;
-  }
-
-  .btn-subtitle {
-    font-size: 0.875rem;
-  }
-}
-
-/* =============================================
-   LOADING STATE
-   ============================================= */
-
-.order-type-btn:disabled {
-  opacity: 0.6;
-}
-
-/* =============================================
-   FOCUS STATES
-   ============================================= */
-
-.order-type-btn:focus-visible {
-  outline: 2px solid rgb(var(--v-theme-primary));
-  outline-offset: 2px;
 }
 </style>

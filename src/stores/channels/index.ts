@@ -10,5 +10,8 @@ export type {
   ChannelPrice,
   ChannelMenuItem,
   ChannelVariantPrice,
-  VariantPricingRow
+  VariantPricingRow,
+  TaxMode,
+  ChannelTaxLink,
+  ChannelPaymentMethodLink
 } from './types'

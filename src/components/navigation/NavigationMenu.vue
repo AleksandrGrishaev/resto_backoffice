@@ -394,6 +394,18 @@
             <span>GoBiz / GoFood</span>
           </template>
         </v-list-item>
+
+        <!-- GoBiz Menu Sync -->
+        <v-list-item
+          to="/integrations/gobiz/menu-sync"
+          prepend-icon="mdi-sync"
+          color="primary"
+          class="ps-8"
+        >
+          <template #title>
+            <span>Menu Sync</span>
+          </template>
+        </v-list-item>
       </v-list-group>
 
       <!-- ✅ НОВЫЙ: Developer Tools Section (только в dev режиме) -->

@@ -121,8 +121,7 @@ const formatPrice = formatIDR
 interface OrderTotals {
   subtotal: number
   totalDiscounts: number
-  serviceTax: number
-  governmentTax: number
+  totalTaxes: number
   finalTotal: number
 }
 
@@ -131,8 +130,6 @@ interface Props {
   totals: OrderTotals
   revenueBreakdown?: RevenueBreakdown | null
   showTaxes?: boolean
-  serviceTaxRate?: number
-  governmentTaxRate?: number
   loading?: boolean
   hasSelection?: boolean
   selectedItemsCount?: number
@@ -142,14 +139,11 @@ const props = withDefaults(defineProps<Props>(), {
   totals: () => ({
     subtotal: 0,
     totalDiscounts: 0,
-    serviceTax: 0,
-    governmentTax: 0,
+    totalTaxes: 0,
     finalTotal: 0
   }),
   revenueBreakdown: null,
   showTaxes: true,
-  serviceTaxRate: 5,
-  governmentTaxRate: 10,
   loading: false,
   hasSelection: false,
   selectedItemsCount: 0

@@ -1,2 +1,5 @@
 export * from './types'
+export * from './catalogTypes'
 export { GobizService, gobizService } from './gobizService'
+export { buildCatalogPayload, buildStockUpdates } from './catalogMapper'
+export { gobizMenuSyncService } from './gobizMenuSyncService'
