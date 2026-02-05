@@ -8,12 +8,41 @@
   >
     <v-card>
       <v-card-title class="text-h6">
-        {{ showTableSelection ? 'Select Table' : 'Change Order Type' }}
+        {{
+          showChannelSelection
+            ? 'Select Delivery Channel'
+            : showTableSelection
+              ? 'Select Table'
+              : 'Change Order Type'
+        }}
       </v-card-title>
 
       <v-card-text>
+        <!-- Step 3: Delivery Channel Selection -->
+        <div v-if="showChannelSelection">
+          <p class="mb-4">Select delivery channel:</p>
+          <div class="channel-grid">
+            <v-btn
+              v-for="channel in deliveryChannelOptions"
+              :key="channel.code"
+              class="channel-btn"
+              variant="outlined"
+              size="large"
+              @click="handleChannelConfirm(channel.code, channel.id)"
+            >
+              <template #prepend>
+                <v-icon :icon="channel.icon" size="28" />
+              </template>
+              <div class="d-flex flex-column align-start ml-2">
+                <div class="font-weight-bold">{{ channel.name }}</div>
+                <div class="text-caption text-medium-emphasis">{{ channel.subtitle }}</div>
+              </div>
+            </v-btn>
+          </div>
+        </div>
+
         <!-- Step 1: Order Type Selection -->
-        <div v-if="!showTableSelection">
+        <div v-else-if="!showTableSelection">
           <p class="mb-4">Select new order type:</p>
 
           <v-radio-group v-model="selectedType">
@@ -136,9 +165,16 @@
 
       <v-card-actions>
         <v-spacer />
-        <v-btn v-if="showTableSelection" variant="text" @click="goBack">Back</v-btn>
+        <v-btn v-if="showTableSelection || showChannelSelection" variant="text" @click="goBack">
+          Back
+        </v-btn>
         <v-btn variant="text" @click="handleCancel">Cancel</v-btn>
-        <v-btn color="primary" :disabled="isConfirmDisabled" @click="handleConfirm">
+        <v-btn
+          v-if="!showChannelSelection"
+          color="primary"
+          :disabled="isConfirmDisabled"
+          @click="handleConfirm"
+        >
           {{ confirmButtonText }}
         </v-btn>
       </v-card-actions>
@@ -149,6 +185,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import type { PosTable, OrderType } from '@/stores/pos/types'
+import { useChannelsStore } from '@/stores/channels'
 
 interface Props {
   modelValue: boolean
@@ -160,12 +197,27 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  confirm: [data: { orderType: OrderType; tableId?: string }]
+  confirm: [
+    data: { orderType: OrderType; tableId?: string; channelId?: string; channelCode?: string }
+  ]
 }>()
 
+const channelsStore = useChannelsStore()
 const selectedType = ref<OrderType>('dine_in')
 const selectedTableId = ref<string>('')
 const showTableSelection = ref(false)
+const showChannelSelection = ref(false)
+const selectedChannelId = ref<string>('')
+
+const deliveryChannelOptions = computed(() => {
+  return channelsStore.deliveryChannels.map(ch => ({
+    id: ch.id,
+    code: ch.code,
+    name: ch.name,
+    icon: ch.code === 'gobiz' ? 'mdi-food' : ch.code === 'grab' ? 'mdi-car' : 'mdi-truck-delivery',
+    subtitle: ch.code === 'gobiz' ? 'GoFood / GoBiz' : ch.code === 'grab' ? 'GrabFood' : ch.name
+  }))
+})
 
 // Initialize selected type from current order
 watch(
@@ -184,7 +236,9 @@ watch(
   isOpen => {
     if (isOpen) {
       showTableSelection.value = false
+      showChannelSelection.value = false
       selectedTableId.value = ''
+      selectedChannelId.value = ''
       if (props.currentOrder?.type) {
         selectedType.value = props.currentOrder.type
       }
@@ -241,6 +295,17 @@ function handleConfirm() {
     return
   }
 
+  // If converting to delivery, show channel selection
+  if (
+    selectedType.value === 'delivery' &&
+    !showChannelSelection.value &&
+    !showTableSelection.value &&
+    deliveryChannelOptions.value.length > 0
+  ) {
+    showChannelSelection.value = true
+    return
+  }
+
   // If on table selection step, emit with table ID
   if (showTableSelection.value) {
     emit('confirm', {
@@ -256,19 +321,46 @@ function handleConfirm() {
   })
 }
 
+function handleChannelConfirm(channelCode: string, channelId: string) {
+  emit('confirm', {
+    orderType: 'delivery',
+    channelId,
+    channelCode
+  })
+}
+
 function goBack() {
+  if (showChannelSelection.value) {
+    showChannelSelection.value = false
+    return
+  }
   showTableSelection.value = false
   selectedTableId.value = ''
 }
 
 function handleCancel() {
   showTableSelection.value = false
+  showChannelSelection.value = false
   selectedTableId.value = ''
+  selectedChannelId.value = ''
   emit('update:modelValue', false)
 }
 </script>
 
 <style scoped lang="scss">
+.channel-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.channel-btn {
+  height: 80px !important;
+  text-transform: none;
+  border-radius: 12px;
+  justify-content: flex-start;
+}
+
 .tables-list {
   display: flex;
   flex-direction: column;

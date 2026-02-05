@@ -49,6 +49,12 @@ export const STORE_DEPENDENCIES: Record<StoreName, StoreName[]> = {
   // Discounts analytics
   discounts: [],
 
+  // Sales channels (depends on menu for pricing views)
+  channels: ['menu'],
+
+  // GoBiz integration (depends on channels for channel context)
+  gobiz: ['channels'],
+
   // Debug system
   debug: []
 }
@@ -131,6 +137,12 @@ export const STORE_CATEGORIES: Record<StoreName, StoreCategory> = {
   preparations: 'backoffice',
   accounts: 'backoffice',
   discounts: 'backoffice',
+
+  // Channels
+  channels: 'backoffice',
+
+  // GoBiz integration
+  gobiz: 'backoffice',
 
   // Опциональные
   debug: 'optional'
@@ -232,6 +244,8 @@ export function getStoresForContext(context: AppContext, userRoles: UserRole[]):
       stores.add('accounts')
       // discounts грузится как часть backoffice для аналитики
       stores.add('discounts')
+      // Sales channels
+      stores.add('channels')
       break
   }
 

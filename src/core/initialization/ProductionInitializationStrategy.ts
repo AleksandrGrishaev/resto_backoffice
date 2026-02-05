@@ -34,6 +34,8 @@ import { useKitchenKpiStore } from '@/stores/kitchenKpi'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import { useDiscountsStore } from '@/stores/discounts'
 import { useSupplierStore } from '@/stores/supplier_2'
+import { useChannelsStore } from '@/stores/channels'
+import { useGobizStore } from '@/stores/gobiz'
 
 const MODULE_NAME = 'ProductionInitStrategy'
 
@@ -383,6 +385,10 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
         return this.loadKitchenKpiFromAPI()
       case 'discounts':
         return this.loadDiscountsFromAPI()
+      case 'channels':
+        return this.loadChannelsFromAPI()
+      case 'gobiz':
+        return this.loadGobizFromAPI()
       default:
         DebugUtils.warn(MODULE_NAME, `Unknown store: ${storeName}`)
         return null
@@ -980,6 +986,68 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
 
       return {
         name: 'suppliers',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadChannelsFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useChannelsStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading channels from API...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'channels',
+        success: true,
+        count: store.channels.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load channels'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [PROD] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'channels',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadGobizFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useGobizStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading GoBiz integration from API...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'gobiz',
+        success: true,
+        count: store.configs.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load GoBiz'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [PROD] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'gobiz',
         success: false,
         error: message,
         duration: Date.now() - start

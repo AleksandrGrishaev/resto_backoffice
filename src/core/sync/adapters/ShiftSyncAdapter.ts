@@ -308,7 +308,9 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
 
       // Also process supplier payments that might be in expenseOperations
       const supplierPayments = shift.expenseOperations.filter(
-        exp => exp.status === 'confirmed' && exp.type === 'supplier_payment'
+        exp =>
+          (exp.status === 'confirmed' || exp.status === 'completed') &&
+          exp.type === 'supplier_payment'
       )
 
       if (supplierPayments.length > 0) {
@@ -355,6 +357,8 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
       shift.syncError = undefined
       shift.syncAttempts = item.attempts
       shift.lastSyncAttempt = new Date().toISOString()
+      shift.syncStatus = 'synced'
+      shift.pendingSync = false
 
       // ===== SPRINT 7: UPDATE IN SUPABASE =====
 

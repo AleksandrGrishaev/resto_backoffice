@@ -339,6 +339,25 @@
           </template>
         </v-list-item>
 
+        <!-- Sales Channels -->
+        <v-list-item to="/channels" prepend-icon="mdi-source-branch" color="primary" class="ps-8">
+          <template #title>
+            <span>Sales Channels</span>
+          </template>
+        </v-list-item>
+
+        <!-- Channel Pricing -->
+        <v-list-item
+          to="/menu/channel-pricing"
+          prepend-icon="mdi-currency-usd"
+          color="primary"
+          class="ps-8"
+        >
+          <template #title>
+            <span>Channel Pricing</span>
+          </template>
+        </v-list-item>
+
         <!-- Payment Settings -->
         <v-list-item
           to="/payment-settings"
@@ -355,6 +374,24 @@
         <v-list-item to="/kpi-settings" prepend-icon="mdi-target" color="primary" class="ps-8">
           <template #title>
             <span>KPI Settings</span>
+          </template>
+        </v-list-item>
+      </v-list-group>
+
+      <!-- Integrations Section (admin only) -->
+      <v-list-group value="integrations" class="mb-2">
+        <template #activator="{ props }">
+          <v-list-item v-bind="props" prepend-icon="mdi-puzzle" color="primary">
+            <template #title>
+              <span>Integrations</span>
+            </template>
+          </v-list-item>
+        </template>
+
+        <!-- GoBiz / GoFood -->
+        <v-list-item to="/integrations/gobiz" prepend-icon="mdi-moped" color="primary" class="ps-8">
+          <template #title>
+            <span>GoBiz / GoFood</span>
           </template>
         </v-list-item>
       </v-list-group>

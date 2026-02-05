@@ -34,6 +34,8 @@ import { useKitchenKpiStore } from '@/stores/kitchenKpi'
 import { useDebugStore } from '@/stores/debug'
 import { useDiscountsStore } from '@/stores/discounts'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
+import { useChannelsStore } from '@/stores/channels'
+import { useGobizStore } from '@/stores/gobiz'
 
 const MODULE_NAME = 'DevInitStrategy'
 
@@ -306,6 +308,10 @@ export class DevInitializationStrategy implements InitializationStrategy {
         return this.loadKitchen()
       case 'kitchenKpi':
         return this.loadKitchenKpi()
+      case 'channels':
+        return this.loadChannels()
+      case 'gobiz':
+        return this.loadGobiz()
       default:
         DebugUtils.warn(MODULE_NAME, `Unknown store: ${storeName}`)
         return null
@@ -718,6 +724,12 @@ export class DevInitializationStrategy implements InitializationStrategy {
     if (!this.loadedStores.has('discounts')) {
       parallelPromises.push(this.loadDiscounts())
     }
+    if (!this.loadedStores.has('channels')) {
+      parallelPromises.push(this.loadChannels())
+    }
+    if (!this.loadedStores.has('gobiz')) {
+      parallelPromises.push(this.loadGobiz())
+    }
 
     if (parallelPromises.length > 0) {
       const parallelResults = await Promise.all(parallelPromises)
@@ -728,6 +740,68 @@ export class DevInitializationStrategy implements InitializationStrategy {
     }
 
     return results
+  }
+
+  private async loadChannels(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useChannelsStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading channels...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'channels',
+        success: true,
+        count: store.channels.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load channels'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [DEV] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'channels',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadGobiz(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useGobizStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading GoBiz integration...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'gobiz',
+        success: true,
+        count: store.configs.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load GoBiz'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [DEV] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'gobiz',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
   }
 
   private async loadAccounts(): Promise<StoreInitResult> {

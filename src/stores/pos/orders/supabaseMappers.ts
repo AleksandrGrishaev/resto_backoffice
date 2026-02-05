@@ -115,6 +115,11 @@ export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
     // Notes
     notes: order.notes || null,
 
+    // Channel tracking
+    channel_id: order.channelId || null,
+    external_order_id: order.externalOrderId || null,
+    external_status: order.externalStatus || null,
+
     // Timestamps
     created_at: order.createdAt
   }
@@ -223,6 +228,12 @@ export function fromSupabase(supabaseOrder: SupabaseOrder, items?: PosBillItem[]
 
     // Notes
     notes: supabaseOrder.notes || undefined,
+
+    // Channel tracking
+    channelId: (supabaseOrder as any).channel_id || undefined,
+    channelCode: undefined, // Resolved via channels store lookup
+    externalOrderId: (supabaseOrder as any).external_order_id || undefined,
+    externalStatus: (supabaseOrder as any).external_status || undefined,
 
     // Timestamps
     createdAt: supabaseOrder.created_at,

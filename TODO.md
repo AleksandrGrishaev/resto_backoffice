@@ -1,690 +1,398 @@
-# Kitchen Monitor Request Feature - Implementation Plan
+# TODO - Kitchen App Backoffice
 
-## Overview
+## 🚀 Gobiz Integration Project
 
-Add a "Request" tab to Kitchen and Bar monitors, enabling staff to create procurement requests directly from the monitor interface with AI-powered suggestions. This feature mirrors the supplier_2 Order Assistant functionality but is adapted for the kitchen/bar context.
+### Цели интеграции
 
-**IMPORTANT:** useKitchenRequest uses **ISOLATED STATE** - does NOT wrap useOrderAssistant to avoid shared state conflicts between Kitchen Request and Supplier2 Order Assistant screens.
-
----
-
-## Requirements
-
-| Requirement              | Detail                                                           |
-| ------------------------ | ---------------------------------------------------------------- |
-| **Request Type**         | Create and send procurement requests only (no order fulfillment) |
-| **Access**               | All monitor users: `admin`, `kitchen`, `bar` roles               |
-| **Department Filtering** | Auto-filter by current department                                |
-| **Kitchen Monitor**      | Shows only Kitchen products                                      |
-| **Bar Monitor**          | Shows only Bar products                                          |
-| **Admin**                | Uses sidebar department selection                                |
+1. **Multi-channel Sales** - создать отдельные каналы продаж (Dine-in, GoBiz/GoFood, Grab, и т.д.)
+2. **Dynamic Pricing** - разные цены для разных каналов + динамическое ценообразование
+3. **Menu Sync** - синхронизация меню с внешними платформами
+4. **Order Integration** - получение заказов из GoFood прямо в POS
+5. **Availability Management** - управление доступностью позиций по каналам
+6. **Marketing/Promos** - интеграция промо-акций с платформой
+7. **Analytics** - отчеты по продажам по каналам
 
 ---
 
-## Architecture
+## 📚 API Gobiz - Возможности
 
-### Target File Structure
+### Authentication
+
+| Метод              | Описание                       | Применение                |
+| ------------------ | ------------------------------ | ------------------------- |
+| Client Credentials | OAuth 2.0 прямая интеграция    | Для нашего приложения     |
+| Authorization Code | OAuth с согласием пользователя | Для POS-провайдеров       |
+| Refresh Token      | Обновление токенов             | Автоматическое обновление |
+
+**Token lifetime:** 3600 сек (1 час)
+
+### Menu Management API
+
+| Endpoint                                         | Метод    | Возможность                    |
+| ------------------------------------------------ | -------- | ------------------------------ |
+| `GET /gofood/outlets/{id}/v2/catalog`            | Получить | Скачать текущее меню           |
+| `PUT /gofood/outlets/{id}/v1/catalog`            | Обновить | Полная синхронизация меню      |
+| `PATCH /gofood/outlets/{id}/v2/menu_item_stocks` | Обновить | Вкл/выкл доступность товаров   |
+| `PATCH /gofood/outlets/{id}/v2/variant_stocks`   | Обновить | Вкл/выкл доступность вариантов |
+
+**Поддерживает:**
+
+- ✅ Категории с множественными товарами
+- ✅ Варианты (модификаторы) с min/max выбором
+- ✅ Цены на уровне товара и варианта
+- ✅ Расписание работы по товарам
+- ✅ Изображения (max 1MB, 1:1)
+- ✅ Статусы наличия (in/out of stock)
+
+### Order Management API
+
+| Endpoint                                                        | Метод     | Возможность             |
+| --------------------------------------------------------------- | --------- | ----------------------- |
+| `PUT /gofood/outlets/{id}/v1/accept-order`                      | Принять   | Принять ожидающий заказ |
+| `PUT /gofood/outlets/{id}/v1/reject-order`                      | Отклонить | Отклонить заказ         |
+| `PUT /gofood/outlets/{id}/v1/orders/{type}/{num}/food-prepared` | Статус    | Уведомить о готовности  |
+
+**Режимы приема заказов:**
+
+- Auto Accept - автоматический прием
+- Manual Accept - 3 минуты на решение
+- Auto Accept on Timeout - 60 сек на ручное, потом автопринятие
+
+### Promotions API
+
+| Endpoint                                            | Метод   | Возможность                         |
+| --------------------------------------------------- | ------- | ----------------------------------- |
+| `POST /promo/outlets/{id}/v1/food-promos`           | Создать | Создать SKU-промо (мин. 10% скидка) |
+| `GET /promo/outlets/{id}/v1/food-promos`            | Список  | Получить все промо точки            |
+| `GET /promo/outlets/{id}/v1/food-promos/{promo_id}` | Деталь  | Детали конкретного промо            |
+
+**✅ Что ЕСТЬ в Promo API:**
+
+- ✅ SKU Promo (скидка на конкретный товар)
+- ✅ Фиксированная selling_price (новая цена)
+- ✅ Период действия (start_date / end_date)
+- ✅ Привязка к menu item по external_menu_id
+- ✅ Минимум 10% скидка от оригинальной цены
+- ✅ Автоматическое отключение по дате
+
+**❌ Чего НЕТ в API (только через веб-интерфейс GoBiz):**
+
+- ❌ Ads / Sponsored listings / Продвижение
+- ❌ Bundle deals (комбо-наборы)
+- ❌ BOGO (Buy One Get One)
+- ❌ Percentage discount (только fixed price)
+- ❌ Vouchers / Coupons
+- ❌ Campaigns (маркетинговые кампании)
+- ❌ Таргетинг по клиентам
+- ❌ Flash sales
+
+**⚠️ Вывод по Ads & Promo:**
+API ограничен базовыми SKU-промо. Для полноценного маркетинга (ads, bundles, vouchers, campaigns) необходимо использовать веб-интерфейс GoBiz или мобильное приложение напрямую. Нет программного доступа к этим функциям.
+
+### Outlet Management
+
+| Endpoint                                   | Метод    | Возможность           |
+| ------------------------------------------ | -------- | --------------------- |
+| `PATCH /gofood/outlets/{id}/v1/properties` | Обновить | Открыть/закрыть точку |
+
+### Webhooks (Real-time Events)
 
 ```
-src/views/kitchen/request/
-   RequestScreen.vue                          # Main screen component
-   composables/
-      useKitchenRequest.ts                   # Kitchen-specific composable (ISOLATED STATE)
-   components/
-       KitchenOrderAssistant.vue              # Adapted from BaseOrderAssistant
-       KitchenManualItemForm.vue              # Adapted from ManualItemForm
-       KitchenSummaryPanel.vue                # Adapted from RequestSummaryPanel
-       KitchenSuggestionCard.vue              # Adapted from SuggestionItemCard
-       KitchenQuickAddDialog.vue              # Copy from QuickAddItemDialog
-       ItemSearchWidget.vue                   # Copy from supplier_2
-       package/
-           PackageSelector.vue                # Copy from supplier_2
-           PackageOptionDialog.vue            # Copy from supplier_2 (for package creation)
+POST /integrations/partner/v1/notification-subscriptions
 ```
 
-### Component Hierarchy
+**Доступные события:**
+| Event | Описание |
+|-------|----------|
+| `gofood.order.awaiting_merchant_acceptance` | Новый заказ ждет подтверждения |
+| `gofood.order.merchant_accepted` | Заказ подтвержден |
+| `gofood.order.cancelled` | Заказ отменен |
+| `gofood.order.completed` | Заказ доставлен |
+| `gofood.order.driver_otw_pickup` | Курьер в пути |
+| `gofood.order.driver_arrived` | Курьер на месте |
+| `gofood.catalog.menu_mapping_updated` | Меню синхронизировано |
+| `gofood.order.webhook_error` | Ошибка (например, товара нет в меню) |
 
-```
-RequestScreen.vue
-   KitchenOrderAssistant.vue
-       Tab: Suggestions
-          KitchenSuggestionCard.vue (multiple)
-       Tab: Manual
-          KitchenManualItemForm.vue
-              ItemSearchWidget.vue
-              KitchenQuickAddDialog.vue
-                  PackageSelector.vue
-                  PackageOptionDialog.vue
-       Tab: Summary
-           KitchenSummaryPanel.vue
-               PackageSelector.vue
-               PackageOptionDialog.vue
-```
+### Payments API (QRIS)
 
-### Data Flow
+| Endpoint                                            | Метод    | Возможность         |
+| --------------------------------------------------- | -------- | ------------------- |
+| `POST /payment/outlets/{id}/v2/transactions`        | Создать  | Создать QRIS платеж |
+| `GET /payment/outlets/{id}/v1/transactions/{tx_id}` | Получить | Статус транзакции   |
 
-```
-KitchenSidebar (selectedDepartment, screen-select)
-    ↓
-KitchenMainView (routes to screen)
-    ↓ prop: selectedDepartment
-RequestScreen (effectiveDepartment from composable)
-    ↓ props: department, requestedBy
-KitchenOrderAssistant
-    ↓ prop: department
-KitchenManualItemForm (filters products by department)
-```
+### Environments
 
-### Department Detection Logic
-
-| User Role | selectedDepartment | effectiveDepartment |
-| --------- | ------------------ | ------------------- |
-| admin     | 'all'              | 'kitchen' (default) |
-| admin     | 'kitchen'          | 'kitchen'           |
-| admin     | 'bar'              | 'bar'               |
-| kitchen   | any                | 'kitchen'           |
-| bar       | any                | 'bar'               |
+| Среда      | OAuth URL                                  | API URL                                    |
+| ---------- | ------------------------------------------ | ------------------------------------------ |
+| Sandbox    | `https://integration-goauth.gojekapi.com/` | `https://api.partner-sandbox.gobiz.co.id/` |
+| Production | `https://accounts.go-jek.com/`             | `https://api.gobiz.co.id/`                 |
 
 ---
 
-## Sprint 1: Foundation (Components & Composables)
+## 🎯 Хотелки (Requirements)
 
-### Task 1.1: Create `useKitchenRequest.ts` composable (ISOLATED STATE)
+### 1. Multi-Channel Architecture
 
-**File:** `src/views/kitchen/request/composables/useKitchenRequest.ts`
+- [ ] Создать сущность `SalesChannel` (dine-in, gobiz, grab, takeaway)
+- [ ] Расширить `Product` для поддержки цен по каналам
+- [ ] Расширить `MenuItem` для доступности по каналам
+- [ ] UI для управления каналами продаж
 
-**CRITICAL:** This composable has its own ISOLATED state. It does NOT wrap `useOrderAssistant` to avoid sharing state with the Supplier2 Order Assistant.
+### 2. Channel-specific Pricing
 
-**Responsibilities:**
+- [ ] Таблица `channel_prices` (product_id, channel_id, price, is_active)
+- [ ] UI для настройки цен по каналам
+- [ ] Автоматическая маржа для delivery-каналов (например +15%)
+- [ ] Правила ценообразования (базовая цена + множитель канала)
 
-- `effectiveDepartment`: Auto-detect from user role or use `selectedDepartment`
-- `pendingRequestCount`: Count of draft/submitted requests for badge
-- `requestedByName`: Current user's display name from authStore
-- Local `selectedItems` state (NOT shared with supplier_2)
-- Department-filtered suggestions
+### 3. Dynamic Pricing Engine
 
-**Implementation:**
+- [ ] Интеграция с загрузкой кухни (kitchen load factor)
+- [ ] Время дня (happy hour, пиковые часы)
+- [ ] Промо-правила (если < X заказов - скидка Y%)
+- [ ] Синхронизация динамических цен с GoBiz Promo API
 
-```typescript
-// useKitchenRequest.ts - ISOLATED STATE VERSION
-import { computed, reactive, ref, type Ref } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-import { useSupplierStore } from '@/stores/supplier_2/supplierStore'
-import { useProductsStore } from '@/stores/productsStore'
-import { useStorageStore } from '@/stores/storage'
-import type {
-  Department,
-  OrderSuggestion,
-  RequestItem,
-  CreateRequestData,
-  Priority
-} from '@/stores/supplier_2/types'
-import { formatIDR } from '@/utils/currency'
+### 4. Menu Synchronization
 
-// LOCAL STATE (not shared with supplier_2)
-interface KitchenRequestState {
-  selectedItems: RequestItem[]
-  isGenerating: boolean
-  isCreatingRequest: boolean
-}
+- [ ] Сервис `GobizMenuSyncService`
+- [ ] Маппинг локальных категорий → GoBiz категории
+- [ ] Маппинг модификаторов → GoBiz варианты
+- [ ] Изображения: загрузка/кеширование
+- [ ] Расписание доступности (operational hours)
+- [ ] Двусторонняя синхронизация статуса наличия
 
-export function useKitchenRequest(selectedDepartment?: Ref<'all' | 'kitchen' | 'bar'>) {
-  const authStore = useAuthStore()
-  const supplierStore = useSupplierStore()
-  const productsStore = useProductsStore()
-  const storageStore = useStorageStore()
+### 5. Order Integration
 
-  // ISOLATED state - not shared with supplier_2
-  const state = reactive<KitchenRequestState>({
-    selectedItems: [],
-    isGenerating: false,
-    isCreatingRequest: false
-  })
+- [ ] Webhook endpoint для получения заказов
+- [ ] `GobizOrderAdapter` - конвертация в наш формат `Order`
+- [ ] Интеграция в POS: отдельная секция "Online Orders"
+- [ ] Push-уведомления о новых заказах
+- [ ] Статусы заказа: pending → accepted → preparing → ready → picked_up
 
-  // Auto-detect department from role
-  const effectiveDepartment = computed((): Department => {
-    const roles = authStore.userRoles
-    if (roles.includes('admin') && selectedDepartment?.value) {
-      if (selectedDepartment.value === 'all') return 'kitchen'
-      return selectedDepartment.value as Department
-    }
-    if (roles.includes('bar') && !roles.includes('kitchen')) return 'bar'
-    return 'kitchen'
-  })
+### 6. Availability Management
 
-  // Pending request count for badge
-  const pendingRequestCount = computed(() => {
-    return supplierStore.state.requests.filter(
-      r => r.status === 'draft' || r.status === 'submitted'
-    ).length
-  })
+- [ ] Real-time sync: если товар заканчивается → автоматически mark as out-of-stock
+- [ ] Bulk actions: отключить категорию целиком
+- [ ] Schedule: доступность по расписанию
 
-  const requestedByName = computed(() => authStore.currentUser?.email || 'Kitchen Staff')
+### 7. Analytics & Reporting
 
-  // Filter suggestions by department
-  const departmentFilteredSuggestions = computed(() => {
-    const dept = effectiveDepartment.value
-    const suggestions = supplierStore.state.orderSuggestions || []
-    return suggestions.filter(suggestion => {
-      const product = productsStore.getProductById(suggestion.itemId)
-      return product?.usedInDepartments?.includes(dept)
-    })
-  })
+- [ ] Продажи по каналам (revenue, orders, avg ticket)
+- [ ] Популярные товары по каналам
+- [ ] Комиссии платформ
+- [ ] Сравнение каналов
 
-  // Generate suggestions for current department
-  async function generateSuggestions(): Promise<void> {
-    state.isGenerating = true
-    try {
-      await storageStore.fetchBalances(effectiveDepartment.value)
-      await supplierStore.refreshSuggestions(effectiveDepartment.value)
-    } finally {
-      state.isGenerating = false
-    }
-  }
+---
 
-  // Add item to local selection
-  function addSelectedItem(suggestion: OrderSuggestion, customQuantity?: number): void {
-    const existing = state.selectedItems.find(i => i.itemId === suggestion.itemId)
-    if (existing) {
-      existing.requestedQuantity += customQuantity || suggestion.suggestedQuantity
-    } else {
-      const product = productsStore.getProductById(suggestion.itemId)
-      state.selectedItems.push({
-        id: `item-${Date.now()}`,
-        itemId: suggestion.itemId,
-        itemName: suggestion.itemName,
-        category: product?.category || 'other',
-        requestedQuantity: customQuantity || suggestion.suggestedQuantity,
-        unit: product?.baseUnit || 'gram',
-        estimatedPrice: suggestion.estimatedPrice || product?.lastKnownCost || 0,
-        priority: suggestion.urgency === 'high' ? 'urgent' : 'normal'
-      })
-    }
-  }
+## 🔧 Что нужно изменить в системе
 
-  function removeSelectedItem(itemId: string): void {
-    const idx = state.selectedItems.findIndex(i => i.itemId === itemId)
-    if (idx !== -1) state.selectedItems.splice(idx, 1)
-  }
+### Database Schema Changes
 
-  function clearSelectedItems(): void {
-    state.selectedItems = []
-  }
+```sql
+-- 1. Sales Channels
+CREATE TABLE sales_channels (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code TEXT UNIQUE NOT NULL, -- 'dine_in', 'gobiz', 'grab'
+  name TEXT NOT NULL,
+  type TEXT NOT NULL, -- 'internal', 'delivery_platform', 'takeaway'
+  is_active BOOLEAN DEFAULT true,
+  commission_percent DECIMAL(5,2) DEFAULT 0,
+  settings JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 
-  // Create request using supplierStore
-  async function createRequest(
-    requestedBy: string,
-    priority: Priority,
-    notes?: string
-  ): Promise<string> {
-    state.isCreatingRequest = true
-    try {
-      const createData: CreateRequestData = {
-        department: effectiveDepartment.value,
-        requestedBy,
-        items: state.selectedItems,
-        priority,
-        notes: notes || `Request from Kitchen Monitor`
-      }
-      const newRequest = await supplierStore.createRequest(createData)
-      clearSelectedItems()
-      await supplierStore.refreshSuggestions(effectiveDepartment.value)
-      return newRequest.id
-    } finally {
-      state.isCreatingRequest = false
-    }
-  }
+-- 2. Channel Prices
+CREATE TABLE channel_prices (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id UUID REFERENCES products(id),
+  channel_id UUID REFERENCES sales_channels(id),
+  price DECIMAL(12,2) NOT NULL,
+  is_active BOOLEAN DEFAULT true,
+  UNIQUE(product_id, channel_id)
+);
 
-  return {
-    // State
-    state,
-    selectedItems: computed(() => state.selectedItems),
-    isGenerating: computed(() => state.isGenerating),
-    isCreatingRequest: computed(() => state.isCreatingRequest),
+-- 3. Channel Menu Items (availability)
+CREATE TABLE channel_menu_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  menu_item_id UUID REFERENCES menu_items(id),
+  channel_id UUID REFERENCES sales_channels(id),
+  is_available BOOLEAN DEFAULT true,
+  external_id TEXT, -- ID в внешней системе (GoBiz item ID)
+  last_synced_at TIMESTAMPTZ,
+  UNIQUE(menu_item_id, channel_id)
+);
 
-    // Department
-    effectiveDepartment,
-    pendingRequestCount,
-    requestedByName,
+-- 4. Channel Orders (для отслеживания источника)
+ALTER TABLE orders ADD COLUMN channel_id UUID REFERENCES sales_channels(id);
+ALTER TABLE orders ADD COLUMN external_order_id TEXT; -- GoBiz order number
+ALTER TABLE orders ADD COLUMN external_status TEXT; -- статус во внешней системе
 
-    // Suggestions
-    departmentFilteredSuggestions,
-    generateSuggestions,
+-- 5. GoBiz Integration Config
+CREATE TABLE gobiz_config (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  outlet_id TEXT NOT NULL, -- GoBiz outlet ID
+  client_id TEXT NOT NULL,
+  client_secret TEXT NOT NULL, -- encrypted
+  access_token TEXT,
+  refresh_token TEXT,
+  token_expires_at TIMESTAMPTZ,
+  webhook_secret TEXT,
+  settings JSONB DEFAULT '{}',
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 
-    // Item management
-    addSelectedItem,
-    removeSelectedItem,
-    clearSelectedItems,
-
-    // Request creation
-    createRequest,
-
-    // Re-export stores for component access
-    supplierStore,
-    productsStore
-  }
-}
+-- 6. Pricing Rules (для динамического ценообразования)
+CREATE TABLE pricing_rules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  channel_id UUID REFERENCES sales_channels(id),
+  name TEXT NOT NULL,
+  type TEXT NOT NULL, -- 'time_based', 'load_based', 'promo'
+  conditions JSONB NOT NULL, -- { "hours": [11,14], "days": [1,2,3,4,5] }
+  action JSONB NOT NULL, -- { "type": "percent", "value": -10 }
+  priority INT DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  valid_from TIMESTAMPTZ,
+  valid_until TIMESTAMPTZ
+);
 ```
 
-### Task 1.2: Clone and adapt shared components
+### New Services/Modules
 
-**Source → Target mapping:**
-
-| #   | Source File                                                    | Target File                                                  | Changes Required                                                                  |
-| --- | -------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| 1   | `supplier_2/components/shared/BaseOrderAssistant.vue`          | `kitchen/request/components/KitchenOrderAssistant.vue`       | Convert dialog to inline component, remove department toggle, use department prop |
-| 2   | `supplier_2/components/shared/ManualItemForm.vue`              | `kitchen/request/components/KitchenManualItemForm.vue`       | Add `department` prop for product filtering                                       |
-| 3   | `supplier_2/components/shared/RequestSummaryPanel.vue`         | `kitchen/request/components/KitchenSummaryPanel.vue`         | Simplified layout, add department display                                         |
-| 4   | `supplier_2/components/shared/SuggestionItemCard.vue`          | `kitchen/request/components/KitchenSuggestionCard.vue`       | Dark theme styling adjustments                                                    |
-| 5   | `supplier_2/components/shared/QuickAddItemDialog.vue`          | `kitchen/request/components/KitchenQuickAddDialog.vue`       | Copy with minor path updates                                                      |
-| 6   | `supplier_2/components/procurement/ItemSearchWidget.vue`       | `kitchen/request/components/ItemSearchWidget.vue`            | Copy                                                                              |
-| 7   | `supplier_2/components/shared/package/PackageSelector.vue`     | `kitchen/request/components/package/PackageSelector.vue`     | Copy                                                                              |
-| 8   | `supplier_2/components/shared/package/PackageOptionDialog.vue` | `kitchen/request/components/package/PackageOptionDialog.vue` | Copy                                                                              |
-
-### Task 1.3: KitchenOrderAssistant key changes
-
-**Original (BaseOrderAssistant.vue):**
-
-- Full-screen dialog with `v-dialog`
-- Department toggle in header (Kitchen/Bar buttons)
-- Uses `useOrderAssistant` directly
-
-**Adapted (KitchenOrderAssistant.vue):**
-
-- Inline component (no dialog wrapper)
-- Department passed as prop (no toggle)
-- Receives `department` and `requestedBy` from parent
-- Uses `useKitchenRequest` for isolated state
-
-**Key code differences:**
-
-```vue
-<!-- Remove: v-dialog wrapper -->
-<!-- Remove: Department toggle section -->
-<!-- Add: Props interface -->
-<script setup lang="ts">
-interface Props {
-  department: 'kitchen' | 'bar'
-  requestedBy: string
-}
-const props = defineProps<Props>()
-
-// Use props.department instead of selectedDepartmentIndex
-// Use useKitchenRequest instead of useOrderAssistant for isolated state
-</script>
+```
+src/
+├── integrations/
+│   ├── gobiz/
+│   │   ├── GobizApiClient.ts      # HTTP client with OAuth
+│   │   ├── GobizAuthService.ts    # Token management
+│   │   ├── GobizMenuSync.ts       # Menu synchronization
+│   │   ├── GobizOrderAdapter.ts   # Order conversion
+│   │   ├── GobizWebhookHandler.ts # Webhook processing
+│   │   ├── GobizPromoSync.ts      # Promo synchronization
+│   │   └── types.ts               # GoBiz API types
+│   └── index.ts
+├── stores/
+│   ├── channels/
+│   │   ├── channelsStore.ts       # Sales channels management
+│   │   ├── pricingStore.ts        # Channel pricing
+│   │   └── types.ts
+│   └── ...
+├── views/
+│   ├── channels/
+│   │   ├── ChannelsListView.vue   # Manage sales channels
+│   │   ├── ChannelPricingView.vue # Set prices per channel
+│   │   └── components/
+│   └── integrations/
+│       ├── GobizSettingsView.vue  # GoBiz configuration
+│       ├── GobizMenuSyncView.vue  # Menu sync UI
+│       └── GobizOrdersView.vue    # Online orders dashboard
+└── ...
 ```
 
-### Task 1.4: KitchenManualItemForm key changes
+### POS Changes
 
-**Add department prop and filter products:**
-
-```typescript
-interface Props {
-  existingItemIds?: string[]
-  loading?: boolean
-  department: 'kitchen' | 'bar' // NEW
-}
-
-const availableProductsForSearch = computed(() => {
-  const activeProducts = productsStore.products.filter(
-    p => p.isActive && (p.usedInDepartments?.includes(props.department) || !p.usedInDepartments) // Include unrestricted products
-  )
-  // ... enrichment with stock data
-})
+```
+src/views/pos/
+├── online-orders/
+│   ├── OnlineOrdersPanel.vue    # Панель онлайн-заказов
+│   ├── OnlineOrderCard.vue      # Карточка заказа GoBiz
+│   ├── OnlineOrderActions.vue   # Accept/Reject/Ready
+│   └── OnlineOrderDetails.vue   # Детали заказа
+└── ...
 ```
 
 ---
 
-## Sprint 2: RequestScreen Integration
+## 📋 Phases (Этапы внедрения)
 
-### Task 2.1: Create `RequestScreen.vue`
+### Phase 1: Foundation (Multi-channel Architecture) ✅ COMPLETED
 
-**File:** `src/views/kitchen/request/RequestScreen.vue`
+**Цель:** Базовая архитектура каналов продаж
 
-```vue
-<template>
-  <div class="request-screen">
-    <!-- Header with department indicator -->
-    <div class="request-header">
-      <div class="d-flex align-center gap-3">
-        <v-icon size="32" color="primary">mdi-clipboard-list</v-icon>
-        <div>
-          <h2 class="text-h5 font-weight-bold">Create Procurement Request</h2>
-          <div class="text-body-2 text-medium-emphasis">
-            AI-powered suggestions for {{ effectiveDepartment }}
-          </div>
-        </div>
-      </div>
-      <v-chip :color="effectiveDepartment === 'kitchen' ? 'orange' : 'purple'" size="large">
-        <v-icon start>
-          {{ effectiveDepartment === 'kitchen' ? 'mdi-chef-hat' : 'mdi-glass-cocktail' }}
-        </v-icon>
-        {{ effectiveDepartment === 'kitchen' ? 'Kitchen' : 'Bar' }}
-      </v-chip>
-    </div>
+1. [x] Database migration `137_sales_channels.sql` (sales_channels, channel_prices, channel_menu_items + orders columns)
+2. [x] channelsStore (store + service + mappers + types) - полный модуль
+3. [x] Channel pricing: ChannelPricingView с inline-редактированием, copy prices, net/gross toggle
+4. [x] UI: ChannelsListView - CRUD каналов с диалогами создания/редактирования
+5. [x] UI: отдельная страница Channel Pricing (матрица товары x каналы)
+6. [x] Router & Navigation: /channels, /menu/channel-pricing + lazy store guards
+7. [x] POS интеграция: channel_id/channelCode в PosOrder, OrderTypeDialog с выбором канала
+8. [x] Store initialization: channels в StoreName, dependencies, обе стратегии инициализации
 
-    <!-- Inline Assistant -->
-    <KitchenOrderAssistant
-      :department="effectiveDepartment"
-      :requested-by="requestedByName"
-      @success="handleRequestSuccess"
-      @error="handleRequestError"
-    />
+### Phase 2: GoBiz Integration Core
 
-    <!-- Success Snackbar -->
-    <v-snackbar v-model="showSuccess" color="success" timeout="3000">
-      <v-icon start>mdi-check-circle</v-icon>
-      {{ successMessage }}
-    </v-snackbar>
+**Цель:** Базовая интеграция с GoBiz API
 
-    <!-- Error Snackbar -->
-    <v-snackbar v-model="showError" color="error" timeout="5000">
-      <v-icon start>mdi-alert-circle</v-icon>
-      {{ errorMessage }}
-    </v-snackbar>
-  </div>
-</template>
+1. [ ] GobizApiClient с OAuth (client credentials)
+2. [ ] GobizAuthService - управление токенами
+3. [ ] gobiz_config таблица и UI настроек
+4. [ ] Тестирование в Sandbox окружении
 
-<script setup lang="ts">
-import { ref, toRef } from 'vue'
-import { useKitchenRequest } from './composables/useKitchenRequest'
-import KitchenOrderAssistant from './components/KitchenOrderAssistant.vue'
+### Phase 3: Menu Synchronization
 
-interface Props {
-  selectedDepartment?: 'all' | 'kitchen' | 'bar'
-}
+**Цель:** Синхронизация меню с GoBiz
 
-const props = defineProps<Props>()
+1. [ ] GobizMenuSync сервис
+2. [ ] Маппинг категорий и товаров
+3. [ ] UI для управления синхронизацией
+4. [ ] Автоматическая синхронизация при изменениях
+5. [ ] Stock sync (наличие/отсутствие)
 
-const { effectiveDepartment, requestedByName } = useKitchenRequest(
-  toRef(props, 'selectedDepartment')
-)
+### Phase 4: Order Integration
 
-const showSuccess = ref(false)
-const showError = ref(false)
-const successMessage = ref('')
-const errorMessage = ref('')
+**Цель:** Прием заказов из GoBiz в POS
 
-const handleRequestSuccess = (message: string) => {
-  successMessage.value = message
-  showSuccess.value = true
-}
+1. [ ] Webhook endpoint (Supabase Edge Function)
+2. [ ] GobizOrderAdapter
+3. [ ] OnlineOrdersPanel в POS
+4. [ ] Accept/Reject flow
+5. [ ] Order status updates (food-prepared)
+6. [ ] Push-notifications
 
-const handleRequestError = (message: string) => {
-  errorMessage.value = message
-  showError.value = true
-}
-</script>
+### Phase 5: Dynamic Pricing & Promos
 
-<style scoped lang="scss">
-.request-screen {
-  height: 100%;
-  padding: var(--spacing-lg);
-  overflow-y: auto;
-  background-color: var(--v-theme-surface);
-}
+**Цель:** Динамическое ценообразование
 
-.request-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-xl);
-  padding-bottom: var(--spacing-md);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-}
-</style>
-```
+1. [ ] Pricing rules engine
+2. [ ] Kitchen load integration
+3. [ ] Time-based pricing
+4. [ ] GoBiz Promo API integration
+5. [ ] UI для правил ценообразования
 
-### Task 2.2: Update `KitchenSidebar.vue`
+### Phase 6: Analytics
 
-**File:** `src/views/kitchen/components/KitchenSidebar.vue`
+**Цель:** Отчетность по каналам
 
-**Changes:**
-
-1. **Update Props interface:**
-
-```typescript
-interface Props {
-  currentScreen?: 'orders' | 'preparation' | 'kpi' | 'request' // Add 'request'
-}
-```
-
-2. **Update emit type:**
-
-```typescript
-const emit = defineEmits<{
-  'screen-select': [screen: 'orders' | 'preparation' | 'kpi' | 'request'] // Add 'request'
-  'department-change': [department: 'all' | 'kitchen' | 'bar']
-}>()
-```
-
-3. **Import composable:**
-
-```typescript
-import { useKitchenRequest } from '../request/composables/useKitchenRequest'
-
-const { pendingRequestCount } = useKitchenRequest()
-```
-
-4. **Add Request button in template (after KPI button):**
-
-```vue
-<div class="separator" />
-
-<!-- Request Screen Button -->
-<v-btn
-  :class="['screen-btn', { active: currentScreen === 'request' }]"
-  :color="currentScreen === 'request' ? 'primary' : undefined"
-  :variant="currentScreen === 'request' ? 'flat' : 'text'"
-  block
-  height="56"
-  @click="handleScreenSelect('request')"
->
-  <div class="screen-btn-content">
-    <v-icon size="24">mdi-clipboard-list</v-icon>
-    <span class="screen-btn-label">Request</span>
-    <v-badge
-      v-if="pendingRequestCount > 0"
-      :content="pendingRequestCount"
-      color="warning"
-      inline
-    />
-  </div>
-</v-btn>
-```
-
-5. **Update handleScreenSelect method:**
-
-```typescript
-const handleScreenSelect = (screen: 'orders' | 'preparation' | 'kpi' | 'request') => {
-  DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })
-  emit('screen-select', screen)
-}
-```
-
-### Task 2.3: Update `KitchenMainView.vue`
-
-**File:** `src/views/kitchen/KitchenMainView.vue`
-
-**Changes:**
-
-1. **Update currentScreen type:**
-
-```typescript
-const currentScreen = ref<'orders' | 'preparation' | 'kpi' | 'request'>('orders')
-```
-
-2. **Import RequestScreen:**
-
-```typescript
-import RequestScreen from './request/RequestScreen.vue'
-```
-
-3. **Add RequestScreen to template (in screen switching section):**
-
-```vue
-<!-- Request Screen -->
-<RequestScreen v-else-if="currentScreen === 'request'" :selected-department="selectedDepartment" />
-```
-
-4. **Update handleScreenSelect:**
-
-```typescript
-const handleScreenSelect = (screen: 'orders' | 'preparation' | 'kpi' | 'request'): void => {
-  currentScreen.value = screen
-  DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })
-}
-```
+1. [ ] Channel-based sales reports
+2. [ ] Commission tracking
+3. [ ] Performance comparison
+4. [ ] Dashboard widgets
 
 ---
 
-## Sprint 3: Testing & Verification
+## ⚠️ Ограничения API
 
-### Task 3.1: Test department auto-filtering
-
-| #   | Scenario                           | Expected Behavior                          |
-| --- | ---------------------------------- | ------------------------------------------ |
-| 1   | Admin selects "All" in sidebar     | Request screen shows Kitchen products      |
-| 2   | Admin selects "Kitchen" in sidebar | Request screen shows Kitchen products      |
-| 3   | Admin selects "Bar" in sidebar     | Request screen shows Bar products          |
-| 4   | Kitchen user (no admin role)       | Request screen shows only Kitchen products |
-| 5   | Bar user (no admin role)           | Request screen shows only Bar products     |
-
-### Task 3.2: Verify isolated state
-
-Test that Kitchen Request and Supplier2 Order Assistant do NOT share state:
-
-1. Add items in Kitchen Request
-2. Open Supplier2 Order Assistant
-3. Verify items are NOT visible in Supplier2
-
-### Task 3.3: Verify product filtering
-
-Products are filtered by `product.usedInDepartments?.includes(department)`:
-
-```typescript
-// In KitchenManualItemForm.vue
-const availableProductsForSearch = computed(() => {
-  const dept = props.department
-  return productsStore.products.filter(
-    p => p.isActive && (p.usedInDepartments?.includes(dept) || !p.usedInDepartments)
-  )
-})
-```
+1. **Menu updates = полная перезапись** (не инкрементальные)
+2. **Промо минимум 10% скидки**
+3. **Токен живет 1 час** - нужен auto-refresh
+4. **HTTP 4xx = некорректный запрос** (не повторять)
+5. **HTTP 5xx = проблемы сервера** (можно повторить)
+6. **Изображения max 1MB, aspect ratio 1:1**
+7. **Manual accept timeout = 3 минуты**
 
 ---
 
-## Sprint 4: Polish & Error Handling
+## 🔗 Полезные ссылки
 
-### Task 4.1: Badge implementation
-
-**Already implemented in Sprint 2.2** - Sidebar shows pending request count:
-
-- Color: `warning` (yellow/orange)
-- Shows count of `draft` + `submitted` requests
-- Updates reactively
-
-### Task 4.2: Loading states
-
-**In KitchenOrderAssistant.vue:**
-
-```vue
-<!-- Loading overlay for suggestions -->
-<div v-if="isGenerating" class="loading-overlay">
-  <v-progress-circular indeterminate color="primary" size="48" />
-  <span class="mt-3">Analyzing stock levels...</span>
-</div>
-
-<!-- Loading state for request submission -->
-<v-btn
-  :loading="isCreating"
-  :disabled="isCreating || selectedCount === 0"
-  color="success"
-  @click="sendRequest"
->
-  <v-icon start>mdi-send</v-icon>
-  {{ isCreating ? 'Sending...' : 'Send Request' }}
-</v-btn>
-```
-
-### Task 4.3: Error handling
-
-**In RequestScreen.vue:**
-
-- Error snackbar with 5 second timeout
-- Red color, alert icon
-- Error message from child component
-
-### Task 4.4: Success notifications
-
-**In RequestScreen.vue:**
-
-- Success snackbar with 3 second timeout
-- Green color, check icon
-- Message: "Request {id} created successfully"
-
-### Task 4.5: Kitchen-appropriate styling
-
-**Large touch targets (48px minimum) for tablet use:**
-
-```scss
-.kitchen-order-assistant {
-  .v-tab {
-    min-height: 56px;
-    font-size: var(--text-base);
-  }
-
-  .v-btn {
-    min-height: var(--touch-button); // 48px
-  }
-}
-```
+- [GoBiz API Docs](https://app.gobiz.com/files/static/cpp/docs/index.html)
+- Sandbox OAuth: `https://integration-goauth.gojekapi.com/`
+- Sandbox API: `https://api.partner-sandbox.gobiz.co.id/`
+- Production OAuth: `https://accounts.go-jek.com/`
+- Production API: `https://api.gobiz.co.id/`
 
 ---
 
-## Files to Modify Summary
+## 📝 Notes
 
-| File                                              | Action                              | Sprint |
-| ------------------------------------------------- | ----------------------------------- | ------ |
-| `src/views/kitchen/KitchenMainView.vue`           | MODIFY - add request screen routing | 2      |
-| `src/views/kitchen/components/KitchenSidebar.vue` | MODIFY - add Request button         | 2      |
-
-## Files to Create Summary
-
-| File                                                                   | Action                  | Sprint |
-| ---------------------------------------------------------------------- | ----------------------- | ------ |
-| `src/views/kitchen/request/RequestScreen.vue`                          | CREATE                  | 2      |
-| `src/views/kitchen/request/composables/useKitchenRequest.ts`           | CREATE (ISOLATED STATE) | 1      |
-| `src/views/kitchen/request/components/KitchenOrderAssistant.vue`       | CREATE (adapt)          | 1      |
-| `src/views/kitchen/request/components/KitchenManualItemForm.vue`       | CREATE (adapt)          | 1      |
-| `src/views/kitchen/request/components/KitchenSummaryPanel.vue`         | CREATE (adapt)          | 1      |
-| `src/views/kitchen/request/components/KitchenSuggestionCard.vue`       | CREATE (adapt)          | 1      |
-| `src/views/kitchen/request/components/KitchenQuickAddDialog.vue`       | CREATE (copy)           | 1      |
-| `src/views/kitchen/request/components/ItemSearchWidget.vue`            | CREATE (copy)           | 1      |
-| `src/views/kitchen/request/components/package/PackageSelector.vue`     | CREATE (copy)           | 1      |
-| `src/views/kitchen/request/components/package/PackageOptionDialog.vue` | CREATE (copy)           | 1      |
-
-## Source Files Reference
-
-| Source File                                                              | Purpose                                           |
-| ------------------------------------------------------------------------ | ------------------------------------------------- |
-| `src/views/supplier_2/components/shared/BaseOrderAssistant.vue`          | Template for KitchenOrderAssistant                |
-| `src/views/supplier_2/components/shared/ManualItemForm.vue`              | Template for KitchenManualItemForm                |
-| `src/views/supplier_2/components/shared/RequestSummaryPanel.vue`         | Template for KitchenSummaryPanel                  |
-| `src/views/supplier_2/components/shared/SuggestionItemCard.vue`          | Template for KitchenSuggestionCard                |
-| `src/views/supplier_2/components/shared/QuickAddItemDialog.vue`          | Copy for KitchenQuickAddDialog                    |
-| `src/views/supplier_2/components/procurement/ItemSearchWidget.vue`       | Copy                                              |
-| `src/views/supplier_2/components/shared/package/PackageSelector.vue`     | Copy                                              |
-| `src/views/supplier_2/components/shared/package/PackageOptionDialog.vue` | Copy (for package creation)                       |
-| `src/stores/supplier_2/composables/useOrderAssistant.ts`                 | Reference only (DO NOT WRAP - use isolated state) |
-
----
-
-## Dependencies (No Changes Needed)
-
-- `supplierStore` from `@/stores/supplier_2` - request CRUD, suggestions refresh
-- `productsStore` - product data
-- `storageStore` - stock balances
-- `authStore` - user roles
-
-**No database migrations needed** - reuses existing supplier_2 tables.
+- Нужно получить API credentials от GoBiz (client_id, client_secret)
+- Для webhook нужен публичный HTTPS endpoint (Supabase Edge Function)
+- Рассмотреть интеграцию с Grab в будущем (похожий подход)

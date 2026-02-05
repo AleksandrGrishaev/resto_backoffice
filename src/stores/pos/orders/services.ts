@@ -164,6 +164,8 @@ export class OrdersService {
     tableId?: string
     customerName?: string
     waiterName?: string
+    channelId?: string
+    channelCode?: string
   }): Promise<ServiceResponse<PosOrder>>
   async createOrder(
     typeOrData:
@@ -173,6 +175,8 @@ export class OrdersService {
           tableId?: string
           customerName?: string
           waiterName?: string
+          channelId?: string
+          channelCode?: string
         },
     tableId?: string,
     customerName?: string
@@ -195,6 +199,8 @@ export class OrdersService {
         tableId: orderData.tableId,
         customerName: orderData.customerName,
         waiterName: orderData.waiterName,
+        channelId: orderData.channelId,
+        channelCode: orderData.channelCode,
         bills: [],
         totalAmount: 0,
         discountAmount: 0,

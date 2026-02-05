@@ -8,13 +8,13 @@
   >
     <v-card class="order-type-dialog">
       <v-card-text class="dialog-content">
-        <div class="order-types-grid">
+        <!-- Step 1: Order Type Selection -->
+        <div v-if="step === 'type'" class="order-types-grid">
           <!-- Delivery Button -->
           <v-btn
             class="order-type-btn delivery-btn"
             variant="outlined"
             size="x-large"
-            :loading="loading && selectedType === 'delivery'"
             :disabled="loading"
             @click="handleOrderType('delivery')"
           >
@@ -45,19 +45,45 @@
             </div>
           </v-btn>
         </div>
+
+        <!-- Step 2: Delivery Channel Selection -->
+        <div v-else-if="step === 'channel'" class="order-types-grid">
+          <v-btn
+            v-for="channel in deliveryChannelOptions"
+            :key="channel.code"
+            class="order-type-btn"
+            variant="outlined"
+            size="x-large"
+            :loading="loading && selectedChannelCode === channel.code"
+            :disabled="loading"
+            @click="handleChannelSelect(channel.code, channel.id)"
+          >
+            <template #prepend>
+              <v-icon :icon="channel.icon" size="32" />
+            </template>
+            <div class="btn-content">
+              <div class="btn-title">{{ channel.name }}</div>
+              <div class="btn-subtitle">{{ channel.subtitle }}</div>
+            </div>
+          </v-btn>
+        </div>
       </v-card-text>
 
       <v-card-actions class="dialog-actions">
-        <v-btn variant="text" block :disabled="loading" @click="handleCancel">Cancel</v-btn>
+        <v-btn v-if="step === 'channel'" variant="text" :disabled="loading" @click="step = 'type'">
+          Back
+        </v-btn>
+        <v-spacer />
+        <v-btn variant="text" :disabled="loading" @click="handleCancel">Cancel</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
 </template>
 
-<!-- src/views/pos/tables/dialogs/OrderTypeDialog.vue -->
 <script setup lang="ts">
-import { ref } from 'vue'
-import type { OrderType } from '@/stores/pos/types' // ИЗМЕНЕНИЕ 1: Используем POS типы
+import { ref, computed } from 'vue'
+import type { OrderType } from '@/stores/pos/types'
+import { useChannelsStore } from '@/stores/channels'
 
 // =============================================
 // PROPS & EMITS
@@ -71,61 +97,91 @@ const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  create: [type: OrderType] // ИЗМЕНЕНИЕ 2: create вместо create-order
+  create: [type: OrderType, data?: { channelId?: string; channelCode?: string }]
 }>()
 
 // =============================================
 // STATE
 // =============================================
 
+const channelsStore = useChannelsStore()
+const step = ref<'type' | 'channel'>('type')
 const selectedType = ref<OrderType | null>(null)
-const loading = ref(false) // ИЗМЕНЕНИЕ 3: Локальный loading вместо composable
+const selectedChannelCode = ref<string | null>(null)
+const loading = ref(false)
+
+// =============================================
+// COMPUTED
+// =============================================
+
+const deliveryChannelOptions = computed(() => {
+  return channelsStore.deliveryChannels.map(ch => ({
+    id: ch.id,
+    code: ch.code,
+    name: ch.name,
+    icon: ch.code === 'gobiz' ? 'mdi-food' : ch.code === 'grab' ? 'mdi-car' : 'mdi-truck-delivery',
+    subtitle: ch.code === 'gobiz' ? 'GoFood / GoBiz' : ch.code === 'grab' ? 'GrabFood' : ch.name
+  }))
+})
 
 // =============================================
 // METHODS
 // =============================================
 
 /**
- * Обработать выбор типа заказа
+ * Handle order type selection
  */
-async function handleOrderType(type: OrderType): Promise<void> {
+function handleOrderType(type: OrderType): void {
   selectedType.value = type
-  loading.value = true // ИЗМЕНЕНИЕ 4: Устанавливаем локальный loading
 
-  try {
-    // ИЗМЕНЕНИЕ 5: Эмитим правильное событие
-    emit('create', type)
-    handleClose()
-  } catch (error) {
-    console.error('Order creation error:', error)
-    selectedType.value = null
-  } finally {
-    loading.value = false
+  if (type === 'delivery' && deliveryChannelOptions.value.length > 0) {
+    // Show channel selection step for delivery
+    step.value = 'channel'
+    return
   }
+
+  // For takeaway or delivery without channels, emit directly
+  emitCreate(type)
 }
 
 /**
- * Отменить создание заказа
+ * Handle delivery channel selection
+ */
+function handleChannelSelect(channelCode: string, channelId: string): void {
+  selectedChannelCode.value = channelCode
+  emitCreate('delivery', { channelId, channelCode })
+}
+
+/**
+ * Emit create and close
+ */
+function emitCreate(type: OrderType, data?: { channelId?: string; channelCode?: string }): void {
+  loading.value = true
+  emit('create', type, data)
+  handleClose()
+}
+
+/**
+ * Cancel order creation
  */
 function handleCancel(): void {
   handleClose()
 }
 
 /**
- * Закрыть диалог и сбросить состояние
+ * Close dialog and reset state
  */
 function handleClose(): void {
   emit('update:modelValue', false)
 
-  // Сбросить состояние после закрытия анимации
   setTimeout(() => {
+    step.value = 'type'
     selectedType.value = null
+    selectedChannelCode.value = null
     loading.value = false
   }, 300)
 }
 </script>
-
-<!-- Template остается БЕЗ ИЗМЕНЕНИЙ - он уже правильный -->
 
 <style scoped>
 /* =============================================

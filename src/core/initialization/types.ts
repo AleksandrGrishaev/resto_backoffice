@@ -45,6 +45,8 @@ export type StoreName =
   | 'kitchenKpi'
   | 'discounts'
   | 'paymentSettings'
+  | 'channels'
+  | 'gobiz'
   | 'debug'
 
 /**

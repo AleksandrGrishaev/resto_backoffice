@@ -139,6 +139,22 @@ const lazyLoadCounteragents = async () => {
   }
 }
 
+const lazyLoadChannels = async () => {
+  const { useChannelsStore } = await import('@/stores/channels')
+  const store = useChannelsStore()
+  if (!store.initialized) {
+    await store.initialize()
+  }
+}
+
+const lazyLoadGobiz = async () => {
+  const { useGobizStore } = await import('@/stores/gobiz')
+  const store = useGobizStore()
+  if (!store.initialized) {
+    await store.initialize()
+  }
+}
+
 // ===== ROUTES CONFIGURATION =====
 
 const routes: RouteRecordRaw[] = [
@@ -350,6 +366,39 @@ const routes: RouteRecordRaw[] = [
           title: 'Payment Settings',
           allowedRoles: ['admin']
         }
+      },
+      // === Sales Channels ===
+      {
+        path: 'channels',
+        name: 'channels',
+        component: () => import('@/views/channels/ChannelsListView.vue'),
+        meta: {
+          title: 'Sales Channels',
+          allowedRoles: ['admin', 'manager']
+        },
+        beforeEnter: createLazyStoreGuard('channels', lazyLoadChannels)
+      },
+      // === Channel Pricing ===
+      {
+        path: 'menu/channel-pricing',
+        name: 'channel-pricing',
+        component: () => import('@/views/menu/ChannelPricingView.vue'),
+        meta: {
+          title: 'Channel Pricing',
+          allowedRoles: ['admin', 'manager']
+        },
+        beforeEnter: createLazyStoreGuard('channels', lazyLoadChannels)
+      },
+      // === GoBiz Integration (admin only) ===
+      {
+        path: 'integrations/gobiz',
+        name: 'gobiz-settings',
+        component: () => import('@/views/integrations/GobizSettingsView.vue'),
+        meta: {
+          title: 'GoBiz Integration',
+          allowedRoles: ['admin']
+        },
+        beforeEnter: createLazyStoreGuard('gobiz', lazyLoadGobiz, false)
       },
       // === KPI Settings ===
       {

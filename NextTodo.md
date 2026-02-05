@@ -1,350 +1,495 @@
-# NextTodo - Current Sprint
+# NextTodo.md - Current Sprint
 
-## 🔥 PRIORITY: Verify Stock Balances & Snapshots After Negative Batch Cleanup
+## ✅ Phase 1 - Multi-channel Sales Architecture (COMPLETED)
 
-> **Status:** Ready for next session
-> **Date:** 2026-02-02
-> **Context:** После исправления 58 "зависших" reconciled negative batches
+**Итоги Phase 1:**
 
-### Background
-
-В сессии 2026-02-02 были исправлены:
-
-1. **Variance formula** — теперь `Actual - Expected` (одинаково везде)
-2. **Opening calculation** — timezone-aware (Bali UTC+8)
-3. **58 negative batches** — были `status='active'` + `reconciled_at IS NOT NULL`, теперь `status='consumed'`
-
-### Problem
-
-После cleanup негативных батчей нужно проверить:
-
-1. **Правильные ли остатки?** — UI показывает корректные значения?
-2. **Нужно ли пересоздать snapshots?** — старые snapshots включали негативные батчи
-
-### Investigation Tasks
-
-#### Task 1: Verify Current Stock Balances
-
-```sql
--- Найти продукты где UI stock ≠ SUM(active batches)
-SELECT
-  p.id, p.name, p.code,
-  (SELECT SUM(current_quantity) FROM storage_batches sb
-   WHERE sb.item_id = p.id::TEXT AND sb.status = 'active') as batch_sum,
-  -- Compare with what UI shows (from storageStore.balances)
-  'Check in UI' as ui_stock
-FROM products p
-WHERE p.is_active = true
-ORDER BY p.name
-LIMIT 20;
-```
-
-**Questions to answer:**
-
-- [ ] Stock в UI = SUM(active batches)?
-- [ ] Если да → остатки корректны
-- [ ] Если нет → найти источник расхождения
-
-#### Task 2: Analyze Historical Snapshots
-
-```sql
--- Проверить snapshots которые могли включать негативные батчи
-SELECT
-  snapshot_date,
-  COUNT(*) as items_count,
-  SUM(quantity) as total_qty,
-  source
-FROM inventory_snapshots
-WHERE snapshot_date >= '2026-01-01'
-GROUP BY snapshot_date, source
-ORDER BY snapshot_date DESC;
-```
-
-**Questions:**
-
-- [ ] Snapshots создавались из SUM(active batches)?
-- [ ] Если да и негативные батчи были active → snapshots неверны
-- [ ] Нужно ли пересчитать исторические snapshots?
-
-#### Task 3: Understand Snapshot Creation Logic
-
-**Files to review:**
-
-- `src/stores/storage/storageService.ts` — как создаются snapshots?
-- `src/core/shifts/shiftCloseService.ts` — shift_close создаёт snapshots?
-- Database functions — есть ли RPC для snapshot creation?
-
-**Key questions:**
-
-- [ ] Snapshot = SUM of ALL active batches или только positive?
-- [ ] Если ALL → старые snapshots включают reconciled negative batches (неверно!)
-- [ ] Если only positive → snapshots должны быть корректны
-
-#### Task 4: Decision Matrix
-
-| Scenario                                | Snapshots  | Action                                |
-| --------------------------------------- | ---------- | ------------------------------------- |
-| Snapshots include only positive batches | ✅ Correct | No action needed                      |
-| Snapshots included ALL active batches   | ❌ Wrong   | Recalculate snapshots OR live with it |
-| Only recent snapshots wrong             | ⚠️ Partial | Recalculate affected period           |
-
-### Potential Fix: Recalculate Snapshots
-
-**Option A: Live with historical inaccuracy**
-
-- Variance reports для старых периодов будут неточными
-- Новые периоды будут корректными
-- Pros: Simple, no data migration
-- Cons: Historical reports inaccurate
-
-**Option B: Recalculate affected snapshots**
-
-```sql
--- Пример пересчёта snapshot на определённую дату
-UPDATE inventory_snapshots
-SET quantity = (
-  SELECT SUM(sb.current_quantity)
-  FROM storage_batches sb
-  WHERE sb.item_id = inventory_snapshots.item_id
-    AND sb.status = 'active'
-    AND sb.current_quantity > 0  -- Only positive!
-    AND sb.created_at <= inventory_snapshots.created_at
-),
-updated_at = NOW()
-WHERE snapshot_date = '2026-01-31';
-```
-
-- Pros: Historical accuracy restored
-- Cons: Complex, need to recalculate batch states at each snapshot time
-
-**Option C: Mark old snapshots as deprecated, start fresh**
-
-- Add `is_valid` flag to snapshots
-- Mark old ones as `is_valid = false`
-- Reports use only valid snapshots
-- Pros: Clean separation
-- Cons: Loses historical data
-
-### Deliverables
-
-1. [ ] Investigation report: What's the current state?
-2. [ ] Decision: Which option to pursue?
-3. [ ] Implementation (if needed)
-4. [ ] Verification: Variance report shows correct data
-
-### Related Files
-
-- `src/supabase/migrations/134_fix_opening_calculation_timezone.sql`
-- `src/stores/storage/storageService.ts`
-- `src/core/shifts/shiftCloseService.ts`
-- `src/About/docs/storage/inventory-system.md`
+- DB: `137_sales_channels.sql` - 3 таблицы + колонки в orders + seed + RLS + triggers
+- Store: `src/stores/channels/` (store + service + mappers + types + index)
+- UI: ChannelsListView (CRUD каналов), ChannelPricingView (матрица цен с inline-edit)
+- POS: channelId/channelCode в PosOrder, OrderTypeDialog с выбором канала delivery
+- Init: channels в StoreName, dependencies (channels → menu), обе стратегии загрузки
+- Router: /channels, /menu/channel-pricing с lazy store guards
+- **Техдолг:** RLS упрощён до `USING(true)`, `(supabaseOrder as any)` касты до регенерации types.gen.ts
 
 ---
 
-## Refactor Preparation Costs - Split into Unit and Portion
+## 🎯 Sprint: Phase 2 - GoBiz Integration Core
 
-### Problem
+**Цель:** Создать базовую интеграцию с GoBiz API - аутентификация, хранение credentials, и Supabase Edge Function для проксирования запросов.
 
-`last_known_cost` хранит одно значение, но используется по-разному:
+**Предпосылки:**
 
-- Для weight-type: cost per gram
-- Для portion-type: неясно - то cost per portion, то per gram (путаница!)
+- Нужны API credentials от GoBiz (client_id, client_secret, outlet_id)
+- Sandbox окружение для тестирования
+- OAuth: `https://integration-goauth.gojekapi.com/`
+- API: `https://api.partner-sandbox.gobiz.co.id/`
+- Token lifetime: 3600 сек (1 час), нужен auto-refresh
 
-**Пример путаницы:**
+**Архитектурный подход:**
 
-- Chicken breast 120g: `last_known_cost = 70.83` (Rp/gram)
-- Batch cost = 8,500 Rp (70.83 × 120 = cost per portion)
-- Мы "исправили" на 70.83 - но это cost per GRAM!
-
-### Solution
-
-Добавить два явных поля:
-
-```sql
-last_known_cost_unit DECIMAL    -- cost per base unit (gram/ml/piece)
-last_known_cost_portion DECIMAL -- cost per portion (для portion_type='portion')
-```
-
-### Files to Modify
-
-1. **Database Migration** - `src/supabase/migrations/123_split_preparation_costs.sql`
-2. **Types** - `src/stores/recipes/types.ts`
-3. **Service Layer**:
-   - `src/stores/preparation/preparationService.ts`
-   - `src/stores/preparation/negativeBatchService.ts`
-4. **Mappers** - `src/stores/preparation/supabase/mappers.ts`
-5. **UI**:
-   - `src/views/kitchen/preparation/dialogs/PrepItemDetailsDialog.vue`
-   - `src/views/kitchen/preparation/dialogs/SimpleProductionDialog.vue`
-6. **Documentation** - `src/About/docs/preparation/PREPARATION_COST_ARCHITECTURE.md`
-
-### Migration Strategy
-
-1. Add columns (nullable)
-2. Migrate data: `last_known_cost` → `last_known_cost_unit`
-3. Calculate `last_known_cost_portion` = unit × portion_size
-4. Update code to use new fields
-5. Keep old field for backward compatibility
-
-### Status
-
-- [ ] Create migration
-- [ ] Update types
-- [ ] Update preparationService.ts
-- [ ] Update negativeBatchService.ts
-- [ ] Update mappers
-- [ ] Update UI components
-- [ ] Update documentation
-- [ ] Test on DEV
-- [ ] Apply to PROD
+- Credentials и токены хранятся в Supabase (серверная таблица, не на клиенте)
+- API-запросы к GoBiz проксируются через Supabase Edge Functions (не из браузера!)
+- Клиент вызывает Edge Function → Edge Function берёт токен из БД → вызывает GoBiz API
+- Это обеспечивает безопасность (client_secret не на клиенте) и обход CORS
 
 ---
 
-## Refactor: Standardize Cost Parameter Naming
+## 📋 Tasks
 
-> **Status:** Ready for implementation
-> **Scope:** LOW RISK - Debug layer only
-> **Date:** 2026-01-31
+### Task 1: Database - GoBiz Config Table
 
-### Problem
+**Status:** [ ] Not Started
 
-Inconsistent parameter naming between:
+**Файл миграции:** `src/supabase/migrations/138_gobiz_config.sql`
 
-- `avgCostPerUnit` (old, used in debug layer)
-- `averageCostPerUnit` (correct, used in core business logic)
+```sql
+-- Migration: 138_gobiz_config
+-- Description: Create GoBiz integration config table for storing credentials and tokens
+-- Date: 2026-02-XX
 
-Views have defensive code checking both spellings - cleanup needed.
+-- 1. GoBiz Integration Config
+CREATE TABLE IF NOT EXISTS gobiz_config (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  outlet_id TEXT NOT NULL,                     -- GoBiz outlet ID
+  outlet_name TEXT,                            -- Human-readable name
+  client_id TEXT NOT NULL,                     -- OAuth client ID
+  client_secret TEXT NOT NULL,                 -- OAuth client secret (encrypted at rest by Supabase)
+  access_token TEXT,                           -- Current OAuth access token
+  refresh_token TEXT,                          -- Current refresh token
+  token_expires_at TIMESTAMPTZ,               -- When access_token expires
+  environment TEXT NOT NULL DEFAULT 'sandbox'  -- 'sandbox' | 'production'
+    CHECK (environment IN ('sandbox', 'production')),
+  webhook_secret TEXT,                         -- For verifying webhook signatures
+  settings JSONB DEFAULT '{}',                 -- Additional settings
+  is_active BOOLEAN DEFAULT true,
+  last_error TEXT,                             -- Last error message from API
+  last_error_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
 
-### Analysis Results
+-- 2. Indexes
+CREATE INDEX idx_gobiz_config_active ON gobiz_config(is_active) WHERE is_active = true;
 
-#### Already Correct ✅ (No changes needed)
+-- 3. RLS - только admin может видеть/менять credentials
+ALTER TABLE gobiz_config ENABLE ROW LEVEL SECURITY;
 
-- **Type Definitions:**
-  - `ActualCostBreakdown` → `productCosts`, `preparationCosts` ✅
-  - `ProductCostItem`, `PreparationCostItem` → `averageCostPerUnit` ✅
-- **Core Business Logic:**
-  - `batchAllocationUtils.ts` - returns `averageCostPerUnit` ✅
-  - `CostAdapter.ts` - uses `preparationCosts`, `productCosts` ✅
-  - `salesStore.ts` - type guard checks `productCosts`, `preparationCosts` ✅
-- **RPC Functions:**
-  - All migrations return `averageCostPerUnit` ✅
-  - `076_fifo_allocation_rpc.sql`, `111_support_active_negative_batches_fifo.sql`, etc.
+CREATE POLICY "Allow admin read gobiz_config" ON gobiz_config
+  FOR SELECT TO authenticated
+  USING ((auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin'));
 
-#### Needs Refactoring ⚠️
+CREATE POLICY "Allow admin manage gobiz_config" ON gobiz_config
+  FOR ALL TO authenticated
+  USING ((auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin'))
+  WITH CHECK ((auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin'));
 
-| #   | File                                                 | Line | Issue                            |
-| --- | ---------------------------------------------------- | ---- | -------------------------------- |
-| 1   | `src/stores/debug/types.ts`                          | 91   | Interface uses `avgCostPerUnit`  |
-| 2   | `src/stores/debug/debugService.ts`                   | 979  | Calculates `avgCostPerUnit`      |
-| 3   | `src/stores/debug/composables/useDebugFormatting.ts` | 89   | Blacklist has `avgCostPerUnit`   |
-| 4   | `src/stores/debug/composables/useDebugFormatting.ts` | 343  | Formats `metrics.avgCostPerUnit` |
+-- 4. Service role needs full access (for Edge Functions)
+CREATE POLICY "Allow service_role full access gobiz_config" ON gobiz_config
+  FOR ALL TO service_role
+  USING (true)
+  WITH CHECK (true);
 
-#### Defensive Code to Cleanup (after debug fix)
-
-| #   | File                        | Lines            | Current Code                           |
-| --- | --------------------------- | ---------------- | -------------------------------------- |
-| 5   | `SalesTransactionsView.vue` | 340, 354         | `avgCostPerUnit ?? averageCostPerUnit` |
-| 6   | `WriteOffHistoryView.vue`   | 472-473, 494-495 | `avgCostPerUnit ?? averageCostPerUnit` |
-
-### Implementation Plan
-
-#### Phase 1: Update Debug Layer (breaking change for debug only)
-
-**Step 1.1: Update Debug Types**
-
-```typescript
-// src/stores/debug/types.ts:91
-// OLD:
-avgCostPerUnit: number
-
-// NEW:
-averageCostPerUnit: number
+-- 5. Updated_at trigger
+CREATE TRIGGER update_gobiz_config_updated_at
+  BEFORE UPDATE ON gobiz_config
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 ```
 
-**Step 1.2: Update Debug Service**
+**Важно:**
+
+- RLS строгий - только admin видит credentials
+- service_role policy нужна для Edge Functions (они работают с service key)
+- `client_secret` хранится в БД, не в env переменных Edge Function (чтобы можно было менять через UI)
+
+---
+
+### Task 2: TypeScript Types - GoBiz Integration
+
+**Status:** [ ] Not Started
+
+**Файл:** `src/integrations/gobiz/types.ts`
+
+Типы для GoBiz API:
 
 ```typescript
-// src/stores/debug/debugService.ts:979
-// OLD:
-avgCostPerUnit: this.calculateAverage(products, 'baseCostPerUnit'),
+// === Config & Auth ===
 
-// NEW:
-averageCostPerUnit: this.calculateAverage(products, 'baseCostPerUnit'),
+export type GobizEnvironment = 'sandbox' | 'production'
+
+export interface GobizConfig {
+  id: string
+  outletId: string
+  outletName?: string
+  clientId: string
+  clientSecret: string // Masked in UI, full in Edge Function
+  accessToken?: string
+  refreshToken?: string
+  tokenExpiresAt?: string
+  environment: GobizEnvironment
+  webhookSecret?: string
+  settings: Record<string, unknown>
+  isActive: boolean
+  lastError?: string
+  lastErrorAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+// For UI display (без секретов)
+export interface GobizConfigPublic {
+  id: string
+  outletId: string
+  outletName?: string
+  clientId: string
+  environment: GobizEnvironment
+  isActive: boolean
+  isConnected: boolean // Has valid token
+  tokenExpiresAt?: string
+  lastError?: string
+  lastErrorAt?: string
+}
+
+export interface GobizTokenResponse {
+  access_token: string
+  token_type: string // 'Bearer'
+  expires_in: number // seconds (3600)
+}
+
+// === API Response Types ===
+
+export interface GobizApiResponse<T = unknown> {
+  success: boolean
+  data?: T
+  error?: {
+    code: string
+    message: string
+  }
+}
+
+// === Edge Function Request/Response ===
+
+export interface GobizProxyRequest {
+  action: 'get_token' | 'refresh_token' | 'test_connection' | 'api_call'
+  configId: string // gobiz_config.id
+  // For api_call:
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  path?: string // e.g. '/gofood/outlets/{id}/v2/catalog'
+  body?: unknown
+}
+
+export interface GobizProxyResponse {
+  success: boolean
+  data?: unknown
+  error?: string
+  tokenRefreshed?: boolean // If token was auto-refreshed
+}
 ```
 
-**Step 1.3: Update Debug Formatting**
+---
+
+### Task 3: Edge Function - GoBiz Proxy
+
+**Status:** [ ] Not Started
+
+**Файл:** Supabase Edge Function `gobiz-proxy`
+
+Центральная Edge Function для проксирования всех запросов к GoBiz API.
+
+**Функциональность:**
+
+1. `get_token` - получить access_token по client_id/client_secret
+2. `refresh_token` - обновить токен
+3. `test_connection` - проверить связь (get catalog)
+4. `api_call` - произвольный API-вызов с auto-refresh токена
+
+**Логика auto-refresh:**
+
+```
+1. Клиент вызывает Edge Function с action='api_call'
+2. Edge Function читает gobiz_config из БД (access_token, token_expires_at)
+3. Если token_expires_at < now() + 5min → refresh token first
+4. Делает запрос к GoBiz API с access_token
+5. Если 401 → refresh token → retry
+6. Возвращает результат клиенту
+```
+
+**Endpoints GoBiz:**
+
+```
+Sandbox OAuth: https://integration-goauth.gojekapi.com/oauth2/token
+Sandbox API:   https://api.partner-sandbox.gobiz.co.id/
+
+Production OAuth: https://accounts.go-jek.com/oauth2/token
+Production API:   https://api.gobiz.co.id/
+```
+
+**OAuth Token Request:**
+
+```
+POST /oauth2/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials
+&client_id={client_id}
+&client_secret={client_secret}
+&scope=gofood.catalog gofood.order
+```
+
+---
+
+### Task 4: GoBiz Service (Client-side)
+
+**Status:** [ ] Not Started
+
+**Файл:** `src/integrations/gobiz/gobizService.ts`
+
+Клиентский сервис, который вызывает Edge Function:
 
 ```typescript
-// src/stores/debug/composables/useDebugFormatting.ts
+// Основные методы:
+class GobizService {
+  // Auth
+  async testConnection(configId: string): Promise<GobizProxyResponse>
+  async getToken(configId: string): Promise<GobizProxyResponse>
 
-// Line 89 - Update blacklist:
-// OLD: 'avgCostPerUnit',
-// NEW: 'averageCostPerUnit',
+  // Config CRUD (напрямую через Supabase, не через Edge Function)
+  async getConfigs(): Promise<GobizConfigPublic[]>
+  async createConfig(config: CreateGobizConfigInput): Promise<GobizConfigPublic>
+  async updateConfig(id: string, updates: Partial<GobizConfig>): Promise<GobizConfigPublic>
+  async deleteConfig(id: string): Promise<void>
 
-// Line 343 - Update format:
-// OLD: avgCost: metrics.avgCostPerUnit ? formatIDR(metrics.avgCostPerUnit) : 'N/A',
-// NEW: avgCost: metrics.averageCostPerUnit ? formatIDR(metrics.averageCostPerUnit) : 'N/A',
+  // API calls (через Edge Function proxy)
+  async getCatalog(configId: string): Promise<GobizApiResponse>
+  async updateCatalog(configId: string, catalog: unknown): Promise<GobizApiResponse>
+
+  // Private
+  private async callProxy(request: GobizProxyRequest): Promise<GobizProxyResponse>
+}
 ```
 
-#### Phase 2: Cleanup Defensive Code in Views
-
-**Step 2.1: Simplify SalesTransactionsView.vue**
+**Вызов Edge Function:**
 
 ```typescript
-// src/views/backoffice/sales/SalesTransactionsView.vue
-
-// Line 340, 354:
-// OLD: costPerUnit: prep.avgCostPerUnit ?? prep.averageCostPerUnit ?? 0,
-// NEW: costPerUnit: prep.averageCostPerUnit ?? 0,
+const { data, error } = await supabase.functions.invoke('gobiz-proxy', {
+  body: { action: 'test_connection', configId: 'xxx' }
+})
 ```
 
-**Step 2.2: Simplify WriteOffHistoryView.vue**
+---
+
+### Task 5: GoBiz Store
+
+**Status:** [ ] Not Started
+
+**Файл:** `src/stores/gobiz/gobizStore.ts`
+
+Pinia store для управления состоянием GoBiz интеграции:
 
 ```typescript
-// src/views/backoffice/inventory/WriteOffHistoryView.vue
+// State:
+- configs: GobizConfigPublic[]       // Список конфигов (без секретов)
+- isLoading: boolean
+- initialized: boolean
+- connectionStatus: Map<string, 'connected' | 'error' | 'unknown'>
 
-// Lines 472-473, 494-495:
-// OLD:
-//   prep.avgCostPerUnit ??
-//   prep.averageCostPerUnit ??
-// NEW:
-//   prep.averageCostPerUnit ??
+// Getters:
+- activeConfig                        // Первый активный конфиг
+- isConnected                         // Есть ли валидное подключение
+
+// Actions:
+- initialize()                        // Загрузить конфиги
+- createConfig(input)                 // Создать конфиг
+- updateConfig(id, updates)           // Обновить конфиг
+- deleteConfig(id)                    // Удалить конфиг
+- testConnection(configId)            // Проверить подключение
+- getToken(configId)                  // Получить токен
 ```
 
-### Risk Assessment
+---
 
-| Aspect              | Risk Level | Notes                                |
-| ------------------- | ---------- | ------------------------------------ |
-| Core Business Logic | ✅ NONE    | Already uses correct naming          |
-| Database/RPC        | ✅ NONE    | Already returns `averageCostPerUnit` |
-| COGS Calculation    | ✅ NONE    | No changes needed                    |
-| Write-off Flow      | ✅ NONE    | Already correct                      |
-| Debug Layer         | ⚠️ LOW     | Only affects debug UI                |
-| View Components     | ⚠️ LOW     | Cleanup only, not functional change  |
+### Task 6: UI - GoBiz Settings Page
 
-### Backward Compatibility Notes
+**Status:** [ ] Not Started
 
-1. **Database:** No changes needed - RPC already returns `averageCostPerUnit`
-2. **Cached Data:** Old `actualCost` in `order_items.cached_actual_cost` may have old naming
-   - Views already have defensive code (Step 2 keeps this working)
-   - Consider keeping defensive code for 1 sprint, then remove
-3. **Debug Tools:** May need restart after update
+**Файл:** `src/views/integrations/GobizSettingsView.vue`
 
-### Testing Checklist
+UI для настройки GoBiz интеграции:
 
-- [ ] Build passes (`pnpm build`)
-- [ ] Debug panel shows costs correctly
-- [ ] SalesTransactionsView displays cost breakdown
-- [ ] WriteOffHistoryView shows item costs
-- [ ] No console errors related to undefined properties
-- [ ] Check cached_actual_cost from old orders still renders
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ GoBiz Integration Settings                                          │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│ ┌─ Connection Status ──────────────────────────────────────────────┐│
+│ │ ● Connected to Sandbox    Last sync: 5 min ago    [Test]        ││
+│ │ OR                                                              ││
+│ │ ○ Not Connected           Error: Invalid credentials  [Retry]   ││
+│ └─────────────────────────────────────────────────────────────────┘│
+│                                                                     │
+│ ┌─ Credentials ────────────────────────────────────────────────────┐│
+│ │ Environment:  [● Sandbox] [○ Production]                        ││
+│ │ Outlet ID:    [________________________]                        ││
+│ │ Outlet Name:  [________________________]                        ││
+│ │ Client ID:    [________________________]                        ││
+│ │ Client Secret:[••••••••••••••••••••••••] [Show]                 ││
+│ │                                                                  ││
+│ │ [Save]  [Test Connection]                                       ││
+│ └─────────────────────────────────────────────────────────────────┘│
+│                                                                     │
+│ ┌─ Token Info ─────────────────────────────────────────────────────┐│
+│ │ Access Token: ••••••••abc123    Expires: 2026-02-05 15:30:00    ││
+│ │ [Refresh Token]                                                  ││
+│ └─────────────────────────────────────────────────────────────────┘│
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-### Status
+**Функционал:**
 
-- [ ] Update debug/types.ts
-- [ ] Update debug/debugService.ts
-- [ ] Update debug/composables/useDebugFormatting.ts
-- [ ] Cleanup SalesTransactionsView.vue (keep defensive for now)
-- [ ] Cleanup WriteOffHistoryView.vue (keep defensive for now)
-- [ ] Test on DEV
-- [ ] Remove defensive code (next sprint)
+1. Ввод/редактирование credentials (client_id, client_secret, outlet_id)
+2. Переключение sandbox/production
+3. Кнопка "Test Connection" - проверяет OAuth + делает GET catalog
+4. Статус подключения (connected/error) с сообщением об ошибке
+5. Информация о текущем токене и возможность обновить
+
+---
+
+### Task 7: Router & Navigation - Integrations
+
+**Status:** [ ] Not Started
+
+**Изменить:** `src/router/index.ts`
+
+```typescript
+{
+  path: '/integrations/gobiz',
+  name: 'gobiz-settings',
+  component: () => import('@/views/integrations/GobizSettingsView.vue'),
+  meta: {
+    requiresAuth: true,
+    allowedRoles: ['admin']  // Только admin!
+  }
+}
+```
+
+**Изменить:** `src/components/navigation/NavigationMenu.vue`
+
+```typescript
+// Новая секция "Integrations" (только для admin)
+{
+  title: 'Integrations',
+  icon: 'mdi-puzzle',
+  children: [
+    {
+      title: 'GoBiz / GoFood',
+      icon: 'mdi-moped',
+      to: '/integrations/gobiz'
+    }
+  ]
+}
+```
+
+---
+
+### Task 8: Store Initialization - GoBiz
+
+**Status:** [ ] Not Started
+
+**Изменить:** Initialization system
+
+- Добавить `'gobiz'` в `StoreName` union type
+- Добавить в `dependencies.ts`: `gobiz: ['channels']` (зависит от channels)
+- Добавить в `STORE_CATEGORIES`: `gobiz: 'backoffice'`
+- Добавить loader в `DevInitializationStrategy.ts` и `ProductionInitializationStrategy.ts`
+
+---
+
+## 📝 Implementation Order
+
+1. **Task 1** - Database migration (gobiz_config table)
+2. **Task 2** - TypeScript types (нужны для всех остальных)
+3. **Task 3** - Edge Function (gobiz-proxy) - сердце интеграции
+4. **Task 4** - Client-side GoBiz service
+5. **Task 5** - GoBiz Pinia store
+6. **Task 8** - Store initialization
+7. **Task 7** - Router & navigation
+8. **Task 6** - GoBiz settings UI
+
+---
+
+## ✅ Acceptance Criteria
+
+**Database:**
+
+- [ ] `gobiz_config` таблица создана с правильными RLS policies
+- [ ] Только admin может видеть/менять credentials
+- [ ] service_role имеет полный доступ (для Edge Functions)
+
+**Edge Function:**
+
+- [ ] `gobiz-proxy` Edge Function деплоится и работает
+- [ ] OAuth token request (client_credentials) успешно получает токен
+- [ ] Auto-refresh токена при истечении или 401
+- [ ] Ошибки корректно возвращаются клиенту
+- [ ] Поддержка sandbox и production окружений
+
+**Client-side:**
+
+- [ ] GobizService вызывает Edge Function корректно
+- [ ] GoBiz store загружает конфиги при инициализации
+- [ ] Credentials не попадают на клиент (только masked/public данные)
+
+**UI:**
+
+- [ ] Страница настроек GoBiz доступна только admin
+- [ ] Можно ввести credentials и сохранить
+- [ ] Кнопка "Test Connection" проверяет OAuth + API
+- [ ] Статус подключения отображается (connected/error)
+- [ ] Навигация: Integrations → GoBiz / GoFood
+
+---
+
+## 🔗 Related Files
+
+**Новые файлы:**
+
+- `src/supabase/migrations/138_gobiz_config.sql`
+- `src/integrations/gobiz/types.ts`
+- `src/integrations/gobiz/gobizService.ts`
+- `src/integrations/gobiz/index.ts`
+- `src/stores/gobiz/gobizStore.ts`
+- `src/stores/gobiz/types.ts`
+- `src/stores/gobiz/index.ts`
+- `src/views/integrations/GobizSettingsView.vue`
+- Edge Function: `supabase/functions/gobiz-proxy/index.ts`
+
+**Файлы для изменения:**
+
+- `src/core/initialization/types.ts` - добавить 'gobiz' в StoreName
+- `src/core/initialization/dependencies.ts` - gobiz deps/category
+- `src/core/initialization/DevInitializationStrategy.ts` - loader
+- `src/core/initialization/ProductionInitializationStrategy.ts` - loader
+- `src/router/index.ts` - роут /integrations/gobiz
+- `src/components/navigation/NavigationMenu.vue` - секция Integrations
+
+---
+
+## ⚠️ Предварительные условия (Prerequisites)
+
+1. **API Credentials** - нужно получить от GoBiz:
+
+   - `client_id`
+   - `client_secret`
+   - `outlet_id`
+   - Sandbox access
+
+2. **Supabase Edge Functions** - нужно убедиться что:
+
+   - Edge Functions включены на проекте
+   - `SUPABASE_SERVICE_ROLE_KEY` доступен в Edge Function env
+   - Функция может делать HTTP-запросы к внешним API
+
+3. **Тестирование** - весь Phase 2 тестируется на Sandbox:
+   - OAuth URL: `https://integration-goauth.gojekapi.com/`
+   - API URL: `https://api.partner-sandbox.gobiz.co.id/`

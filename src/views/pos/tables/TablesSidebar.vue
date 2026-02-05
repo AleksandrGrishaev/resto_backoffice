@@ -253,8 +253,13 @@ const handleCreateOrder = async (type: OrderType, data?: any): Promise<void> => 
       DebugUtils.debug(MODULE_NAME, 'Dine-in order - user should select table')
       return
     } else {
-      // Создаем заказ на доставку или самовывоз
-      result = await ordersStore.createOrder(type, undefined, data?.customerName)
+      // Создаем заказ на доставку или самовывоз (с каналом если указан)
+      result = await ordersStore.createOrder({
+        type,
+        customerName: data?.customerName,
+        channelId: data?.channelId,
+        channelCode: data?.channelCode
+      })
     }
 
     if (result.success && result.data) {

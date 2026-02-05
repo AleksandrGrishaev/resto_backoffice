@@ -155,6 +155,12 @@ export interface PosOrder extends BaseEntity {
   actualRevenue?: number // Revenue after discounts
   totalCollected?: number // Revenue after discounts + taxes
   revenueBreakdown?: import('@/stores/discounts/types').RevenueBreakdown
+
+  // Channel tracking (Multi-channel Sales)
+  channelId?: string
+  channelCode?: string
+  externalOrderId?: string
+  externalStatus?: string
 }
 
 // ===== BILL TYPES =====

@@ -172,7 +172,15 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
    * Создать новый заказ
    */
   async function createOrder(
-    type: OrderType,
+    typeOrData:
+      | OrderType
+      | {
+          type: OrderType
+          tableId?: string
+          customerName?: string
+          channelId?: string
+          channelCode?: string
+        },
     tableId?: string,
     customerName?: string
   ): Promise<ServiceResponse<PosOrder>> {
@@ -191,7 +199,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         }
       }
 
-      const response = await ordersService.createOrder(type, tableId, customerName)
+      // Normalize: support both positional args and object
+      const orderData =
+        typeof typeOrData === 'string' ? { type: typeOrData, tableId, customerName } : typeOrData
+
+      const response = await ordersService.createOrder(orderData)
 
       if (response.success && response.data) {
         // ДОБАВИТЬ: устанавливаем дефолтный paymentStatus если не установлен
@@ -207,7 +219,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         // Автоматически создаем первый счет если нужно
         if (response.data.bills.length === 0) {
           const billName =
-            type === 'dine_in' ? 'Bill 1' : type === 'takeaway' ? 'Takeaway Bill' : 'Delivery Bill'
+            orderData.type === 'dine_in'
+              ? 'Bill 1'
+              : orderData.type === 'takeaway'
+                ? 'Takeaway Bill'
+                : 'Delivery Bill'
 
           const billResult = await addBillToOrder(response.data.id, billName)
 

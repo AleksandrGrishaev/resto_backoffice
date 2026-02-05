@@ -520,6 +520,8 @@ const handleTableChange = (): void => {
 const handleOrderTypeConfirm = async (data: {
   orderType: OrderType
   tableId?: string
+  channelId?: string
+  channelCode?: string
 }): Promise<void> => {
   if (!currentOrder.value) return
 
@@ -545,6 +547,10 @@ const handleOrderTypeConfirm = async (data: {
 
       // Update order type directly
       currentOrder.value.type = data.orderType
+
+      // Set channel info if provided (delivery channel)
+      if (data.channelId) currentOrder.value.channelId = data.channelId
+      if (data.channelCode) currentOrder.value.channelCode = data.channelCode
 
       // If converting from dine-in to takeaway/delivery, clear table assignment
       if (data.orderType !== 'dine_in' && currentOrder.value.tableId) {
