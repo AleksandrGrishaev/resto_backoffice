@@ -845,11 +845,17 @@ export function validateRevenueBreakdown(
 
   // =============================================
   // Rule 3: plannedRevenue = actualRevenue + totalDiscounts
+  // For inclusive-tax channels, actualRevenue has taxes extracted, so:
+  //   plannedRevenue = actualRevenue + totalDiscounts + totalTaxes
   // =============================================
-  const expectedPlannedRevenue = rb.actualRevenue + rb.totalDiscounts
-  if (Math.abs(rb.plannedRevenue - expectedPlannedRevenue) > tolerance) {
+  const expectedExclusive = rb.actualRevenue + rb.totalDiscounts
+  const expectedInclusive = rb.actualRevenue + rb.totalDiscounts + rb.totalTaxes
+  if (
+    Math.abs(rb.plannedRevenue - expectedExclusive) > tolerance &&
+    Math.abs(rb.plannedRevenue - expectedInclusive) > tolerance
+  ) {
     errors.push(
-      `plannedRevenue mismatch: ${rb.plannedRevenue} !== ${rb.actualRevenue} + ${rb.totalDiscounts} (${expectedPlannedRevenue})`
+      `plannedRevenue mismatch: ${rb.plannedRevenue} !== ${rb.actualRevenue} + ${rb.totalDiscounts} (${expectedExclusive}) [exclusive] or + ${rb.totalTaxes} (${expectedInclusive}) [inclusive]`
     )
   }
 

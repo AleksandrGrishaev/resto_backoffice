@@ -523,7 +523,8 @@ const handleConfirm = () => {
 }
 
 const resetForm = () => {
-  selectedMethod.value = 'cash'
+  // Default to first available method (may not be 'cash' for delivery channels)
+  selectedMethod.value = availablePaymentMethods.value[0]?.code || 'cash'
   cashReceived.value = 0
   localDiscount.value = 0
   localDiscountReason.value = ''
@@ -693,11 +694,13 @@ watch(
     if (newValue) {
       // Ensure payment methods are loaded when dialog opens
       await ensurePaymentMethodsLoaded()
-      // Reset form when dialog opens
+      // Reset form when dialog opens (selects first available method)
       resetForm()
-      // Auto-fill exact amount for convenience
+      // Auto-fill exact amount for cash payments
       setTimeout(() => {
-        cashReceived.value = totalAmount.value
+        if (selectedMethod.value === 'cash') {
+          cashReceived.value = totalAmount.value
+        }
       }, 100)
     }
   }

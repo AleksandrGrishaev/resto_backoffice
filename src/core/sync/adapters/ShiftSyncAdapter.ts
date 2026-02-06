@@ -116,18 +116,35 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
       }
 
       // ===== LOAD SALES TRANSACTIONS FOR CHANNEL-AWARE TAX CALCULATION =====
+      // Query Supabase directly — the in-memory salesStore may be empty at sync time
+      // (POS uses lightweight mode where transactions array is not preloaded)
       let shiftSalesTxs: any[] = []
       try {
-        const { useSalesStore } = await import('@/stores/sales')
-        const salesStore = useSalesStore()
-        shiftSalesTxs = salesStore.transactions.filter((tx: any) => tx.shiftId === shift.id)
-        if (shiftSalesTxs.length > 0) {
+        const { data: rawTxs } = await supabase
+          .from('sales_transactions')
+          .select(
+            'shift_id, payment_method, order_id, service_tax_amount, government_tax_amount, total_tax_amount, profit_calculation'
+          )
+          .eq('shift_id', shift.id)
+
+        if (rawTxs && rawTxs.length > 0) {
+          shiftSalesTxs = rawTxs.map((row: any) => ({
+            shiftId: row.shift_id,
+            paymentMethod: row.payment_method,
+            orderId: row.order_id,
+            serviceTaxAmount: row.service_tax_amount ? Number(row.service_tax_amount) : 0,
+            governmentTaxAmount: row.government_tax_amount ? Number(row.government_tax_amount) : 0,
+            totalTaxAmount: row.total_tax_amount ? Number(row.total_tax_amount) : 0,
+            profitCalculation: row.profit_calculation
+          }))
           console.log(
-            `📊 Found ${shiftSalesTxs.length} sales transactions for shift ${shift.shiftNumber} (channel-aware taxes)`
+            `📊 Loaded ${shiftSalesTxs.length} sales transactions from Supabase for shift ${shift.shiftNumber} (channel-aware taxes)`
           )
         }
       } catch {
-        console.warn('⚠️ Could not load sales transactions, will use global tax rates')
+        console.warn(
+          '⚠️ Could not load sales transactions from Supabase, will use global tax rates'
+        )
       }
 
       // ===== PRE-LOAD CHANNEL DATA FOR COMMISSION CALCULATION =====
@@ -465,14 +482,42 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
       )
 
       if (supplierPayments.length > 0) {
-        console.log(
-          `📦 Found ${supplierPayments.length} supplier payments in shift (already synced via confirmExpense)`
-        )
+        console.log(`📦 Found ${supplierPayments.length} supplier payments in shift`)
 
-        // Add their transaction IDs if they exist
         for (const payment of supplierPayments) {
           if (payment.relatedTransactionId) {
+            // Already has a transaction (created via confirmExpense or createDirectExpense)
             transactionIds.push(payment.relatedTransactionId)
+          } else if (payment.relatedAccountId) {
+            // No transaction yet — created via createLinkedExpense/createUnlinkedExpense
+            // These paths produce supplier_payment + completed but skip transaction creation
+            const spDesc = `${shift.shiftNumber} - ${payment.description}`
+            if (existingDescriptions.has(spDesc)) {
+              console.log(`  ⏭️ Supplier payment ${payment.id} already synced, skipping`)
+            } else {
+              const spTransaction = await accountStore.createOperation({
+                accountId: payment.relatedAccountId,
+                type: 'expense',
+                amount: payment.amount,
+                description: spDesc,
+                expenseCategory: {
+                  type: 'expense',
+                  category: payment.category || 'supplier_payment'
+                },
+                performedBy: payment.performedBy,
+                counteragentId: payment.counteragentId,
+                counteragentName: payment.counteragentName
+              })
+              transactionIds.push(spTransaction.id)
+              payment.relatedTransactionId = spTransaction.id
+              payment.syncStatus = 'synced'
+              payment.lastSyncAt = new Date().toISOString()
+              console.log(
+                `✅ Supplier payment transaction created: ${spTransaction.id} for ${payment.id} (${payment.amount})`
+              )
+            }
+          } else {
+            console.warn(`⚠️ Supplier payment ${payment.id} has no relatedAccountId, skipping`)
           }
         }
       }
