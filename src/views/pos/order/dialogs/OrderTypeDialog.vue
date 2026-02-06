@@ -185,7 +185,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import type { PosTable, OrderType } from '@/stores/pos/types'
-import { useChannelsStore } from '@/stores/channels'
+import { useChannelsStore, getChannelVisual } from '@/stores/channels'
 
 interface Props {
   modelValue: boolean
@@ -210,13 +210,16 @@ const showChannelSelection = ref(false)
 const selectedChannelId = ref<string>('')
 
 const deliveryChannelOptions = computed(() => {
-  return channelsStore.deliveryChannels.map(ch => ({
-    id: ch.id,
-    code: ch.code,
-    name: ch.name,
-    icon: ch.code === 'gobiz' ? 'mdi-food' : ch.code === 'grab' ? 'mdi-car' : 'mdi-truck-delivery',
-    subtitle: ch.code === 'gobiz' ? 'GoFood / GoBiz' : ch.code === 'grab' ? 'GrabFood' : ch.name
-  }))
+  return channelsStore.deliveryChannels.map(ch => {
+    const visual = getChannelVisual(ch.code)
+    return {
+      id: ch.id,
+      code: ch.code,
+      name: ch.name,
+      icon: visual.icon,
+      subtitle: visual.subtitle || ch.name
+    }
+  })
 })
 
 // Initialize selected type from current order

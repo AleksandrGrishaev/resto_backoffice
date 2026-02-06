@@ -23,8 +23,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { PosTable, PosOrder, TableStatus, OrderStatus, OrderType } from '@/stores/pos/types'
+import type { PosTable, PosOrder, TableStatus, OrderStatus } from '@/stores/pos/types'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { getOrderVisual } from '@/stores/channels'
 
 // Get ordersStore for checking payment status
 const ordersStore = usePosOrdersStore()
@@ -104,7 +105,7 @@ const displayIcon = computed((): string => {
   }
 
   if (isOrder.value && props.order) {
-    return getOrderTypeIcon(props.order.type)
+    return getOrderVisual(props.order.type, props.order.channelCode).icon
   }
 
   return 'mdi-help'
@@ -144,7 +145,7 @@ const iconColor = computed((): string | undefined => {
   }
 
   if (isOrder.value && props.order) {
-    return getOrderTypeColor(props.order.type)
+    return getOrderVisual(props.order.type, props.order.channelCode).color
   }
 
   return undefined
@@ -167,6 +168,9 @@ const itemClasses = computed((): Record<string, boolean> => {
     classes['sidebar-item--order'] = true
     classes[`sidebar-item--${props.order.type}`] = true
     classes[`sidebar-item--order-${props.order.status}`] = true
+    if (props.order.channelCode) {
+      classes[`sidebar-item--channel-${props.order.channelCode}`] = true
+    }
   }
 
   return classes
@@ -239,30 +243,6 @@ function getTableStatusColor(status: TableStatus | 'occupied_unpaid' | 'occupied
 }
 
 /**
- * Получить иконку типа заказа
- */
-function getOrderTypeIcon(type: OrderType): string {
-  const icons = {
-    dine_in: 'mdi-table-chair',
-    takeaway: 'mdi-shopping',
-    delivery: 'mdi-bike-fast'
-  }
-  return icons[type] || 'mdi-help'
-}
-
-/**
- * Получить цвет типа заказа
- */
-function getOrderTypeColor(type: OrderType): string {
-  const colors = {
-    dine_in: 'primary',
-    takeaway: 'warning',
-    delivery: 'info'
-  }
-  return colors[type] || 'grey'
-}
-
-/**
  * Получить цвет статуса заказа
  */
 function getOrderStatusColor(status: OrderStatus): string {
@@ -276,18 +256,6 @@ function getOrderStatusColor(status: OrderStatus): string {
     cancelled: 'error'
   }
   return colors[status] || 'grey'
-}
-
-/**
- * Получить текст типа заказа
- */
-function getOrderTypeText(type: OrderType): string {
-  const texts = {
-    dine_in: 'В зале',
-    takeaway: 'Самовывоз',
-    delivery: 'Доставка'
-  }
-  return texts[type] || 'Неизвестно'
 }
 
 // =============================================
@@ -417,6 +385,16 @@ const handleClick = (): void => {
 .sidebar-item--order.sidebar-item--delivery {
   border-color: var(--color-info, #64b5f6);
   background: color-mix(in srgb, var(--color-info, #64b5f6) 4%, transparent);
+}
+
+.sidebar-item--order.sidebar-item--channel-gobiz {
+  border-color: #00aa13;
+  background: color-mix(in srgb, #00aa13 6%, transparent);
+}
+
+.sidebar-item--order.sidebar-item--channel-grab {
+  border-color: #00b14f;
+  background: color-mix(in srgb, #00b14f 6%, transparent);
 }
 
 .sidebar-item--order.sidebar-item--order-preparing {

@@ -6,6 +6,7 @@ import { ref } from 'vue'
 import { DebugUtils } from '@/utils'
 import type { FoodCostDashboard } from './types'
 import { useSalesStore } from '@/stores/sales/salesStore'
+import { getNetRevenue } from '@/stores/sales/composables/useProfitCalculation'
 import { getCOGSForPL } from './services/cogsService'
 
 const MODULE_NAME = 'FoodCostStore'
@@ -65,7 +66,7 @@ export const useFoodCostStore = defineStore('foodCost', () => {
       if (includeTaxesInRevenue.value) {
         // With taxes: calculate from transactions manually
         revenue = transactions.reduce((sum, t) => {
-          const revenueAmount = t.order?.totalCollected || t.profitCalculation.finalRevenue
+          const revenueAmount = t.order?.totalCollected || getNetRevenue(t.profitCalculation)
           return sum + revenueAmount
         }, 0)
         // Use SQL function salesCOGS for consistency
@@ -104,8 +105,8 @@ export const useFoodCostStore = defineStore('foodCost', () => {
 
         const day = dailyMap.get(date)!
         const revenueAmount = includeTaxesInRevenue.value
-          ? tx.order?.totalCollected || tx.profitCalculation.finalRevenue
-          : tx.order?.actualRevenue || tx.profitCalculation.finalRevenue
+          ? tx.order?.totalCollected || getNetRevenue(tx.profitCalculation)
+          : tx.order?.actualRevenue || getNetRevenue(tx.profitCalculation)
         day.revenue += revenueAmount
         day.foodCost += tx.actualCost?.totalCost || 0
         day.count++
@@ -154,8 +155,8 @@ export const useFoodCostStore = defineStore('foodCost', () => {
         const item = itemsMap.get(key)!
         item.quantitySold += tx.quantity
         const revenueAmount = includeTaxesInRevenue.value
-          ? tx.order?.totalCollected || tx.profitCalculation.finalRevenue
-          : tx.order?.actualRevenue || tx.profitCalculation.finalRevenue
+          ? tx.order?.totalCollected || getNetRevenue(tx.profitCalculation)
+          : tx.order?.actualRevenue || getNetRevenue(tx.profitCalculation)
         item.totalRevenue += revenueAmount
         item.totalCost += tx.actualCost?.totalCost || 0
       }
@@ -175,8 +176,8 @@ export const useFoodCostStore = defineStore('foodCost', () => {
         .filter(t => t.department === 'kitchen')
         .reduce((sum, t) => {
           const revenueAmount = includeTaxesInRevenue.value
-            ? t.order?.totalCollected || t.profitCalculation.finalRevenue
-            : t.order?.actualRevenue || t.profitCalculation.finalRevenue
+            ? t.order?.totalCollected || getNetRevenue(t.profitCalculation)
+            : t.order?.actualRevenue || getNetRevenue(t.profitCalculation)
           return sum + revenueAmount
         }, 0)
       const kitchenCost = transactions
@@ -187,8 +188,8 @@ export const useFoodCostStore = defineStore('foodCost', () => {
         .filter(t => t.department === 'bar')
         .reduce((sum, t) => {
           const revenueAmount = includeTaxesInRevenue.value
-            ? t.order?.totalCollected || t.profitCalculation.finalRevenue
-            : t.order?.actualRevenue || t.profitCalculation.finalRevenue
+            ? t.order?.totalCollected || getNetRevenue(t.profitCalculation)
+            : t.order?.actualRevenue || getNetRevenue(t.profitCalculation)
           return sum + revenueAmount
         }, 0)
       const barCost = transactions

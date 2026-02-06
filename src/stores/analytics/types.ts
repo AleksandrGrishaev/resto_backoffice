@@ -56,6 +56,15 @@ export interface PLReport {
     byCategory: Record<string, number> // Group by menu category
   }
 
+  // Platform Commissions (Cost of Revenue — delivery platform fees)
+  platformCommissions: {
+    total: number
+    byChannel: Record<string, number> // e.g. { gobiz: 20800, grab: 0 }
+  }
+
+  // Net Revenue (Revenue - Platform Commissions)
+  netRevenue: number
+
   // Tax Collected section (from sales — dynamic rates from channel/global config)
   taxCollected: {
     serviceTax: number // First configured tax (e.g. Service Tax)

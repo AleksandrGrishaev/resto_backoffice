@@ -161,6 +161,7 @@ import type { PosOrder } from '@/stores/pos/types'
 import { useOrdersComposables } from '@/stores/pos/orders/composables'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { formatIDR } from '@/utils/currency'
+import { getOrderVisual } from '@/stores/channels'
 
 const ordersStore = usePosOrdersStore()
 const formatPrice = formatIDR
@@ -234,49 +235,16 @@ const canDeleteCurrentOrder = computed((): boolean => {
   return ordersStore.canDeleteOrder(props.order)
 })
 
-const orderTypeIcon = computed((): string => {
-  if (!props.order) return 'mdi-help'
-
-  switch (props.order.type) {
-    case 'dine_in':
-      return 'mdi-table-chair'
-    case 'takeaway':
-      return 'mdi-shopping'
-    case 'delivery':
-      return 'mdi-bike-fast'
-    default:
-      return 'mdi-help'
-  }
+const orderVisual = computed(() => {
+  if (!props.order) return null
+  return getOrderVisual(props.order.type, props.order.channelCode)
 })
 
-const orderTypeColor = computed((): string => {
-  if (!props.order) return 'grey'
-
-  switch (props.order.type) {
-    case 'dine_in':
-      return 'primary'
-    case 'takeaway':
-      return 'warning'
-    case 'delivery':
-      return 'info'
-    default:
-      return 'grey'
-  }
-})
-
+const orderTypeIcon = computed((): string => orderVisual.value?.icon ?? 'mdi-help')
+const orderTypeColor = computed((): string => orderVisual.value?.color ?? 'grey')
 const orderTypeLabel = computed((): string => {
   if (!props.order) return 'No Order'
-
-  switch (props.order.type) {
-    case 'dine_in':
-      return 'Dine In'
-    case 'takeaway':
-      return 'Take Away'
-    case 'delivery':
-      return 'Delivery'
-    default:
-      return 'Unknown'
-  }
+  return orderVisual.value?.label ?? 'Unknown'
 })
 
 const orderSubtitle = computed((): string => {

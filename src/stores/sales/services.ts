@@ -3,6 +3,7 @@ import type { SalesTransaction, SalesFilters, SalesStatistics, TopSellingItem } 
 import type { PaymentMethod } from '@/stores/pos/types'
 import { supabase } from '@/supabase/client'
 import { toSupabase, fromSupabase } from './supabase/mappers'
+import { getNetRevenue, getNetProfit } from './composables/useProfitCalculation'
 
 const STORAGE_KEY = 'sales_transactions'
 
@@ -469,9 +470,9 @@ export class SalesService {
 
       const transactions = result.data
 
-      // Calculate statistics
+      // Calculate statistics (using net values — after platform commission)
       const totalRevenue = transactions.reduce(
-        (sum, t) => sum + t.profitCalculation.finalRevenue,
+        (sum, t) => sum + getNetRevenue(t.profitCalculation),
         0
       )
       const totalCost = transactions.reduce(
@@ -490,17 +491,17 @@ export class SalesService {
         if (!revenueByPaymentMethod[t.paymentMethod]) {
           revenueByPaymentMethod[t.paymentMethod] = 0
         }
-        revenueByPaymentMethod[t.paymentMethod] += t.profitCalculation.finalRevenue
+        revenueByPaymentMethod[t.paymentMethod] += getNetRevenue(t.profitCalculation)
       })
 
       // Revenue by department
       const revenueByDepartment = {
         kitchen: transactions
           .filter(t => t.department === 'kitchen')
-          .reduce((sum, t) => sum + t.profitCalculation.finalRevenue, 0),
+          .reduce((sum, t) => sum + getNetRevenue(t.profitCalculation), 0),
         bar: transactions
           .filter(t => t.department === 'bar')
-          .reduce((sum, t) => sum + t.profitCalculation.finalRevenue, 0)
+          .reduce((sum, t) => sum + getNetRevenue(t.profitCalculation), 0)
       }
 
       // Top selling items
@@ -521,9 +522,9 @@ export class SalesService {
 
         const item = itemsMap.get(key)!
         item.quantitySold += t.quantity
-        item.totalRevenue += t.profitCalculation.finalRevenue
+        item.totalRevenue += getNetRevenue(t.profitCalculation)
         item.totalCost += t.profitCalculation.ingredientsCost
-        item.totalProfit += t.profitCalculation.profit
+        item.totalProfit += getNetProfit(t.profitCalculation)
       })
 
       const topSellingItems = Array.from(itemsMap.values())

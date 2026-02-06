@@ -2,6 +2,8 @@
 
 export { useChannelsStore } from './channelsStore'
 export { channelsService } from './channelsService'
+export { getOrderVisual, getChannelVisual } from './channelVisuals'
+export type { ChannelVisual } from './channelVisuals'
 export type {
   SalesChannel,
   ChannelCode,

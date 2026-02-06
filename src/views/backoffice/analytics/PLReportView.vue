@@ -226,6 +226,29 @@
                     <td class="text-right">100.0%</td>
                   </tr>
 
+                  <!-- Platform Commissions (Cost of Revenue) -->
+                  <template v-if="report.platformCommissions?.total > 0">
+                    <tr
+                      v-for="(amount, channel) in report.platformCommissions.byChannel"
+                      :key="channel"
+                    >
+                      <td class="pl-8 text-error">
+                        {{ getChannelCommissionLabel(channel as string) }}
+                      </td>
+                      <td class="text-right text-error">-{{ formatIDR(amount) }}</td>
+                      <td class="text-right text-error">
+                        -{{ calculatePercentage(amount, report.revenue.total) }}
+                      </td>
+                    </tr>
+                    <tr class="font-weight-bold">
+                      <td>Net Revenue</td>
+                      <td class="text-right">{{ formatIDR(report.netRevenue) }}</td>
+                      <td class="text-right">
+                        {{ calculatePercentage(report.netRevenue, report.revenue.total) }}
+                      </td>
+                    </tr>
+                  </template>
+
                   <tr><td colspan="3" class="py-2"></td></tr>
 
                   <!-- Tax Collected Section -->
@@ -679,6 +702,18 @@ function formatDateTime(dateString: string): string {
 }
 
 /**
+ * Get display label for channel commission
+ */
+function getChannelCommissionLabel(channelCode: string): string {
+  const labels: Record<string, string> = {
+    gobiz: 'GoJek Commission',
+    grab: 'Grab Commission',
+    platform: 'Platform Commission'
+  }
+  return labels[channelCode] || `${channelCode} Commission`
+}
+
+/**
  * Get category display name from accountStore or COGS labels
  */
 function getCategoryName(code: string): string {
@@ -768,10 +803,11 @@ const retainedProfitClass = computed(() => {
   return retained >= 0 ? 'text-success' : 'text-error'
 })
 
-// Total Expenses (COGS + OPEX + Tax)
+// Total Expenses (Commissions + COGS + OPEX + Tax)
 const totalExpenses = computed(() => {
   if (!report.value) return 0
   return (
+    (report.value.platformCommissions?.total || 0) +
     (report.value.cogs?.total || 0) +
     (report.value.opex?.total || 0) +
     (report.value.taxExpenses || 0)

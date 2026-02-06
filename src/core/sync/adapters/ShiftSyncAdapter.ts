@@ -115,6 +115,44 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
         console.warn('⚠️ Could not check for existing transactions, proceeding with creation')
       }
 
+      // ===== LOAD SALES TRANSACTIONS FOR CHANNEL-AWARE TAX CALCULATION =====
+      let shiftSalesTxs: any[] = []
+      try {
+        const { useSalesStore } = await import('@/stores/sales')
+        const salesStore = useSalesStore()
+        shiftSalesTxs = salesStore.transactions.filter((tx: any) => tx.shiftId === shift.id)
+        if (shiftSalesTxs.length > 0) {
+          console.log(
+            `📊 Found ${shiftSalesTxs.length} sales transactions for shift ${shift.shiftNumber} (channel-aware taxes)`
+          )
+        }
+      } catch {
+        console.warn('⚠️ Could not load sales transactions, will use global tax rates')
+      }
+
+      // ===== PRE-LOAD CHANNEL DATA FOR COMMISSION CALCULATION =====
+      let orderChannelMap = new Map<string, string>()
+      let channelCommissions = new Map<
+        string,
+        { channelName: string; channelCode: string; commissionPercent: number }
+      >()
+
+      if (shiftSalesTxs.length > 0) {
+        // Collect unique order IDs from sales transactions
+        const uniqueOrderIds = [...new Set(shiftSalesTxs.map((tx: any) => tx.orderId))]
+        orderChannelMap = await this.loadOrderChannelMap(uniqueOrderIds)
+
+        // Load commission rates for channels that appear
+        const uniqueChannelIds = [...new Set(orderChannelMap.values())]
+        channelCommissions = await this.loadChannelCommissions(uniqueChannelIds)
+
+        if (channelCommissions.size > 0) {
+          console.log(
+            `📊 Channels with commissions: ${[...channelCommissions.entries()].map(([, v]) => `${v.channelName} (${v.commissionPercent}%)`).join(', ')}`
+          )
+        }
+      }
+
       // ===== CREATE TRANSACTIONS FOR ALL PAYMENT METHODS =====
 
       for (const pmSummary of shift.paymentMethods) {
@@ -148,33 +186,60 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
 
         if (netAmount <= 0) continue // Skip if no income after adjustments
 
-        // ===== SPRINT 9: TAX BREAKDOWN (channel-aware) =====
-        // Get dynamic tax rates from configured taxes
-        let serviceTaxRate = 0.05
-        let localTaxRate = 0.1
+        // ===== SPRINT 9: TAX BREAKDOWN (channel-aware from SalesTransactions) =====
+        // Get tax names from configured taxes
         let serviceTaxName = 'Service Tax'
         let localTaxName = 'Local Tax'
+        let serviceTaxRate = 0.05
+        let localTaxRate = 0.1
 
         try {
           const pmStore = usePaymentSettingsStore()
           const activeTaxes = pmStore.activeTaxes
           if (activeTaxes.length >= 1) {
-            serviceTaxRate = activeTaxes[0].percentage / 100
             serviceTaxName = activeTaxes[0].name
+            serviceTaxRate = activeTaxes[0].percentage / 100
           }
           if (activeTaxes.length >= 2) {
-            localTaxRate = activeTaxes[1].percentage / 100
             localTaxName = activeTaxes[1].name
+            localTaxRate = activeTaxes[1].percentage / 100
           }
         } catch {
           // Use defaults if store unavailable
         }
 
-        const taxBreakdown = calculateTaxBreakdown(netAmount, { serviceTaxRate, localTaxRate })
+        // Try to use pre-calculated per-order taxes from SalesTransactions (channel-aware)
+        let taxBreakdown: { pureRevenue: number; serviceTaxAmount: number; localTaxAmount: number }
 
-        console.log(
-          `  📊 Tax breakdown for ${pmSummary.methodName}: revenue=${taxBreakdown.pureRevenue}, ${serviceTaxName}=${taxBreakdown.serviceTaxAmount}, ${localTaxName}=${taxBreakdown.localTaxAmount}`
-        )
+        // Match by PM code (e.g. 'cash', 'gopay', 'bni') — SalesTransaction.paymentMethod stores code
+        const methodCode = paymentMethod.code
+        const methodTxs = shiftSalesTxs.filter((tx: any) => tx.paymentMethod === methodCode)
+
+        if (methodTxs.length > 0) {
+          // Use actual per-order taxes (already channel-aware from salesStore)
+          const aggServiceTax = methodTxs.reduce(
+            (sum: number, tx: any) => sum + (tx.serviceTaxAmount || 0),
+            0
+          )
+          const aggGovTax = methodTxs.reduce(
+            (sum: number, tx: any) => sum + (tx.governmentTaxAmount || 0),
+            0
+          )
+          taxBreakdown = {
+            pureRevenue: Math.round(netAmount - aggServiceTax - aggGovTax),
+            serviceTaxAmount: aggServiceTax,
+            localTaxAmount: aggGovTax
+          }
+          console.log(
+            `  📊 Channel-aware taxes from ${methodTxs.length} transactions for ${pmSummary.methodName}: revenue=${taxBreakdown.pureRevenue}, ${serviceTaxName}=${taxBreakdown.serviceTaxAmount}, ${localTaxName}=${taxBreakdown.localTaxAmount}`
+          )
+        } else {
+          // Fallback: use global tax rates (reverse calc from total)
+          taxBreakdown = calculateTaxBreakdown(netAmount, { serviceTaxRate, localTaxRate })
+          console.log(
+            `  📊 Fallback tax breakdown for ${pmSummary.methodName}: revenue=${taxBreakdown.pureRevenue}, ${serviceTaxName}=${taxBreakdown.serviceTaxAmount}, ${localTaxName}=${taxBreakdown.localTaxAmount}`
+          )
+        }
 
         // 1. Create REVENUE transaction (pure sales without taxes)
         const revenueDesc = `POS Shift ${shift.shiftNumber} - ${pmSummary.methodName} Revenue`
@@ -260,6 +325,71 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
             console.log(
               `✅ Local tax transaction created: ${localTaxTransaction.id} (${taxBreakdown.localTaxAmount} → local_tax)`
             )
+          }
+        }
+
+        // 4. Create PLATFORM COMMISSION expense transactions (per channel)
+        if (methodTxs.length > 0 && channelCommissions.size > 0) {
+          // Group sales transactions by channel
+          const txsByChannel = new Map<string, any[]>()
+          for (const tx of methodTxs) {
+            const channelId = orderChannelMap.get(tx.orderId)
+            if (channelId && channelCommissions.has(channelId)) {
+              const arr = txsByChannel.get(channelId) || []
+              arr.push(tx)
+              txsByChannel.set(channelId, arr)
+            }
+          }
+
+          // Channel code → commission category mapping
+          const COMMISSION_CATEGORY: Record<string, string> = {
+            gobiz: 'gojek_commission',
+            grab: 'grab_commission'
+          }
+
+          for (const [channelId, channelTxs] of txsByChannel) {
+            const channelInfo = channelCommissions.get(channelId)!
+            // Commission base = full customer-paid amount (revenue + taxes)
+            const commissionBase = channelTxs.reduce(
+              (sum: number, tx: any) =>
+                sum + (tx.profitCalculation.finalRevenue + (tx.totalTaxAmount || 0)),
+              0
+            )
+            const commissionAmount = Math.round(
+              (commissionBase * channelInfo.commissionPercent) / 100
+            )
+
+            if (commissionAmount <= 0) continue
+
+            // Use channel-specific category or fallback to generic
+            const categoryCode =
+              COMMISSION_CATEGORY[channelInfo.channelCode] || 'platform_commission'
+
+            const commissionDesc = `POS Shift ${shift.shiftNumber} - ${channelInfo.channelName} Commission (${channelInfo.commissionPercent}%)`
+            if (existingDescriptions.has(commissionDesc)) {
+              console.log(`  ⏭️ Commission already exists for ${channelInfo.channelName}, skipping`)
+            } else {
+              const commissionTransaction = await accountStore.createOperation({
+                accountId: paymentMethod.accountId,
+                type: 'expense',
+                amount: commissionAmount,
+                description: commissionDesc,
+                expenseCategory: {
+                  type: 'expense',
+                  category: categoryCode
+                },
+                performedBy: {
+                  type: 'user',
+                  id: shift.cashierId,
+                  name: shift.cashierName
+                },
+                relatedPaymentId: shift.id
+              })
+              transactionIds.push(commissionTransaction.id)
+              console.log(
+                `✅ Commission expense created: ${commissionTransaction.id} (${commissionAmount} → ${channelInfo.channelName} ${channelInfo.commissionPercent}%)`
+              )
+            }
           }
         }
       }
@@ -533,6 +663,63 @@ export class ShiftSyncAdapter implements ISyncAdapter<PosShift> {
 
   async onError(item: SyncQueueItem<PosShift>, error: Error): Promise<void> {
     console.error(`❌ Error syncing shift ${item.data.shiftNumber}:`, error.message)
+  }
+
+  /**
+   * Load order → channel_id mapping for given order IDs
+   */
+  private async loadOrderChannelMap(orderIds: string[]): Promise<Map<string, string>> {
+    const map = new Map<string, string>()
+    if (orderIds.length === 0) return map
+
+    try {
+      const { data } = await supabase.from('orders').select('id, channel_id').in('id', orderIds)
+
+      if (data) {
+        for (const row of data) {
+          if (row.channel_id) {
+            map.set(row.id, row.channel_id)
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not load order channel map:', error)
+    }
+    return map
+  }
+
+  /**
+   * Load channel commission rates (only channels with commission > 0)
+   */
+  private async loadChannelCommissions(
+    channelIds: string[]
+  ): Promise<Map<string, { channelName: string; channelCode: string; commissionPercent: number }>> {
+    const map = new Map<
+      string,
+      { channelName: string; channelCode: string; commissionPercent: number }
+    >()
+    if (channelIds.length === 0) return map
+
+    try {
+      const { data } = await supabase
+        .from('sales_channels')
+        .select('id, code, name, commission_percent')
+        .in('id', channelIds)
+        .gt('commission_percent', 0)
+
+      if (data) {
+        for (const row of data) {
+          map.set(row.id, {
+            channelName: row.name,
+            channelCode: (row as any).code || '',
+            commissionPercent: Number(row.commission_percent)
+          })
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not load channel commissions:', error)
+    }
+    return map
   }
 
   /**

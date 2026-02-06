@@ -44,7 +44,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { OrderType } from '@/stores/pos/types'
-import { useChannelsStore } from '@/stores/channels'
+import { useChannelsStore, getChannelVisual } from '@/stores/channels'
 
 // =============================================
 // PROPS & EMITS
@@ -69,18 +69,6 @@ const loading = ref(false)
 const isLoadingChannels = ref(false)
 
 // =============================================
-// ICONS / SUBTITLES
-// =============================================
-
-const CHANNEL_META: Record<string, { icon: string; subtitle: string }> = {
-  takeaway: { icon: 'mdi-shopping', subtitle: 'Pick up' },
-  gobiz: { icon: 'mdi-food', subtitle: 'GoFood / GoBiz' },
-  grab: { icon: 'mdi-car', subtitle: 'GrabFood' }
-}
-
-const DEFAULT_META = { icon: 'mdi-truck-delivery', subtitle: 'Delivery' }
-
-// =============================================
 // COMPUTED
 // =============================================
 
@@ -88,14 +76,14 @@ const channelOptions = computed(() => {
   return channelsStore.activeChannels
     .filter(ch => ch.code !== 'dine_in')
     .map(ch => {
-      const meta = CHANNEL_META[ch.code] || DEFAULT_META
+      const visual = getChannelVisual(ch.code)
       return {
         id: ch.id,
         code: ch.code,
         name: ch.name,
         type: ch.type,
-        icon: meta.icon,
-        subtitle: meta.subtitle
+        icon: visual.icon,
+        subtitle: visual.subtitle || ch.name
       }
     })
 })

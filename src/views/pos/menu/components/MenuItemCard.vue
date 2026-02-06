@@ -46,7 +46,7 @@
       <div class="price-section mb-2">
         <div v-if="activevariants.length === 1" class="single-price">
           <span class="price-value text-subtitle-1 font-weight-bold">
-            {{ formatPrice(activevariants[0].price) }}
+            {{ formatPrice(getDisplayPrice(activevariants[0])) }}
           </span>
           <span v-if="activevariants[0].name" class="price-variant text-caption ml-2">
             {{ activevariants[0].name }}
@@ -127,17 +127,21 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useChannelsStore } from '@/stores/channels'
 import type { MenuItem, MenuItemVariant } from '@/stores/menu/types'
 
 // Props
 interface Props {
   item: MenuItem
+  channelId?: string
   showVariantChips?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   showVariantChips: false
 })
+
+const channelsStore = useChannelsStore()
 
 // Emits
 const emit = defineEmits<{
@@ -150,13 +154,22 @@ const activevariants = computed(() => {
   return props.item.variants?.filter(v => v.isActive) || []
 })
 
+/**
+ * Get display price for a variant (channel-aware when channelId is set)
+ */
+const getDisplayPrice = (variant: MenuItemVariant): number => {
+  if (!props.channelId) return variant.price
+  return channelsStore.getChannelPrice(props.channelId, props.item.id, variant.id, variant.price)
+    .netPrice
+}
+
 const minPrice = computed(() => {
-  const prices = activevariants.value.map(v => v.price)
+  const prices = activevariants.value.map(v => getDisplayPrice(v))
   return Math.min(...prices)
 })
 
 const maxPrice = computed(() => {
-  const prices = activevariants.value.map(v => v.price)
+  const prices = activevariants.value.map(v => getDisplayPrice(v))
   return Math.max(...prices)
 })
 

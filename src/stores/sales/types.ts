@@ -18,6 +18,15 @@ export interface ProfitCalculation {
   // Profit (Прибыль)
   profit: number // finalRevenue - ingredientsCost
   profitMargin: number // (profit / finalRevenue) * 100%
+
+  // Platform commission (delivery channels)
+  channelCommissionPercent?: number // e.g. 20
+  channelCommissionAmount?: number // e.g. 19000
+
+  // Net profitability (after commission)
+  netRevenue?: number // finalRevenue - commissionAmount
+  netProfit?: number // netRevenue - ingredientsCost
+  netProfitMargin?: number // (netProfit / netRevenue) * 100%
 }
 
 /**

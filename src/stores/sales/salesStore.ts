@@ -3,7 +3,11 @@ import { ref, computed } from 'vue'
 import type { SalesTransaction, SalesFilters, DecompositionSummary } from './types'
 import { SalesService } from './services'
 import { useRecipeWriteOffStore } from './recipeWriteOff'
-import { useProfitCalculation } from './composables/useProfitCalculation'
+import {
+  useProfitCalculation,
+  getNetRevenue,
+  getNetProfit
+} from './composables/useProfitCalculation'
 // ✅ PHASE 3: Use unified DecompositionEngine + adapters
 import {
   createDecompositionEngine,
@@ -70,7 +74,7 @@ export const useSalesStore = defineStore('sales', () => {
     const today = new Date().toISOString().split('T')[0]
     return state.value.transactions
       .filter(t => t.soldAt.startsWith(today))
-      .reduce((sum, t) => sum + t.profitCalculation.finalRevenue, 0)
+      .reduce((sum, t) => sum + getNetRevenue(t.profitCalculation), 0)
   })
 
   /**
@@ -80,7 +84,7 @@ export const useSalesStore = defineStore('sales', () => {
     const today = new Date().toISOString().split('T')[0]
     return state.value.transactions
       .filter(t => t.soldAt.startsWith(today))
-      .reduce((sum, t) => sum + t.profitCalculation.profit, 0)
+      .reduce((sum, t) => sum + getNetProfit(t.profitCalculation), 0)
   })
 
   /**
@@ -122,8 +126,8 @@ export const useSalesStore = defineStore('sales', () => {
 
       const item = itemsMap.get(key)!
       item.quantitySold += t.quantity
-      item.totalRevenue += t.profitCalculation.finalRevenue
-      item.totalProfit += t.profitCalculation.profit
+      item.totalRevenue += getNetRevenue(t.profitCalculation)
+      item.totalProfit += getNetProfit(t.profitCalculation)
     })
 
     return Array.from(itemsMap.values())
@@ -448,6 +452,8 @@ export const useSalesStore = defineStore('sales', () => {
         let governmentTaxRate = 0
         let serviceTaxAmount = 0
         let governmentTaxAmount = 0
+        let isInclusiveTax = false
+        let channelCommissionPercent = 0
 
         try {
           const ordersStore = usePosOrdersStore()
@@ -457,35 +463,31 @@ export const useSalesStore = defineStore('sales', () => {
           if (chId) {
             const channelsStore = useChannelsStore()
             const channel = channelsStore.getChannelById(chId)
+            channelCommissionPercent = channel?.commissionPercent ?? 0
             if (channel?.taxes?.length) {
               const taxes = channel.taxes
+              isInclusiveTax = channel.taxMode === 'inclusive'
+
+              // For inclusive: extract net revenue first, then calculate taxes from it
+              let taxableRevenue = profitCalculation.finalRevenue
+              if (isInclusiveTax) {
+                const totalRate = taxes.reduce((s, t) => s + t.taxPercentage / 100, 0)
+                taxableRevenue = profitCalculation.finalRevenue / (1 + totalRate)
+              }
+
               // Map first tax to "service", second to "government" for backward compat
               if (taxes[0]) {
                 serviceTaxRate = taxes[0].taxPercentage / 100
-                serviceTaxAmount =
-                  channel.taxMode === 'inclusive'
-                    ? Math.round(
-                        (profitCalculation.finalRevenue /
-                          (1 + taxes.reduce((s, t) => s + t.taxPercentage / 100, 0))) *
-                          serviceTaxRate
-                      )
-                    : Math.round(profitCalculation.finalRevenue * serviceTaxRate)
+                serviceTaxAmount = Math.round(taxableRevenue * serviceTaxRate)
               }
               if (taxes[1]) {
                 governmentTaxRate = taxes[1].taxPercentage / 100
-                governmentTaxAmount =
-                  channel.taxMode === 'inclusive'
-                    ? Math.round(
-                        (profitCalculation.finalRevenue /
-                          (1 + taxes.reduce((s, t) => s + t.taxPercentage / 100, 0))) *
-                          governmentTaxRate
-                      )
-                    : Math.round(profitCalculation.finalRevenue * governmentTaxRate)
+                governmentTaxAmount = Math.round(taxableRevenue * governmentTaxRate)
               }
             }
           }
         } catch {
-          // Fallback: use global taxes
+          // Fallback: use global taxes (exclusive mode assumed)
           const pmStore = usePaymentSettingsStore()
           const activeTaxes = pmStore.activeTaxes
           if (activeTaxes[0]) {
@@ -499,6 +501,35 @@ export const useSalesStore = defineStore('sales', () => {
         }
 
         const totalTaxAmount = serviceTaxAmount + governmentTaxAmount
+
+        // For inclusive tax channels, finalRevenue should be net (body without tax)
+        if (isInclusiveTax && totalTaxAmount > 0) {
+          profitCalculation.finalRevenue = profitCalculation.finalRevenue - totalTaxAmount
+          profitCalculation.profit =
+            profitCalculation.finalRevenue - profitCalculation.ingredientsCost
+          profitCalculation.profitMargin =
+            profitCalculation.finalRevenue > 0
+              ? (profitCalculation.profit / profitCalculation.finalRevenue) * 100
+              : 0
+        }
+
+        // 5b. Compute commission and net profitability fields
+        profitCalculation.channelCommissionPercent = channelCommissionPercent
+        if (channelCommissionPercent > 0) {
+          profitCalculation.channelCommissionAmount = Math.round(
+            (profitCalculation.finalRevenue * channelCommissionPercent) / 100
+          )
+        } else {
+          profitCalculation.channelCommissionAmount = 0
+        }
+        profitCalculation.netRevenue =
+          profitCalculation.finalRevenue - profitCalculation.channelCommissionAmount
+        profitCalculation.netProfit =
+          profitCalculation.netRevenue - profitCalculation.ingredientsCost
+        profitCalculation.netProfitMargin =
+          profitCalculation.netRevenue > 0
+            ? (profitCalculation.netProfit / profitCalculation.netRevenue) * 100
+            : 0
 
         // 6. Create sales transaction
         const transaction: SalesTransaction = {

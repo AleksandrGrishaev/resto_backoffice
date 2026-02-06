@@ -8,6 +8,7 @@ import type { PLReport, COGSMethod, COGSCalculation } from './types'
 import { useSalesStore } from '@/stores/sales/salesStore'
 import { useAccountStore } from '@/stores/account'
 import { getCOGSForPL } from './services/cogsService'
+import { supabase } from '@/supabase'
 
 const MODULE_NAME = 'PLReportStore'
 
@@ -63,6 +64,63 @@ export const usePLReportStore = defineStore('plReport', () => {
         },
         byCategory: {} as Record<string, number> // TODO: Group by menu category if needed
       }
+
+      // 1b. Calculate Platform Commissions (Cost of Revenue)
+      DebugUtils.info(MODULE_NAME, 'Calculating platform commissions from sales transactions')
+      const platformCommissions = { total: 0, byChannel: {} as Record<string, number> }
+
+      // Build orderId → channelCode lookup from DB
+      const orderIds = [...new Set(salesTransactions.map(t => t.orderId))]
+      const orderChannelCodeMap = new Map<string, string>()
+      if (orderIds.length > 0) {
+        try {
+          const { data } = await supabase.from('orders').select('id, channel_id').in('id', orderIds)
+
+          if (data) {
+            // Get channel codes for all channel IDs
+            const channelIds = [...new Set(data.filter(r => r.channel_id).map(r => r.channel_id))]
+            if (channelIds.length > 0) {
+              const { data: channels } = await supabase
+                .from('sales_channels')
+                .select('id, code')
+                .in('id', channelIds)
+
+              const channelIdToCode = new Map<string, string>()
+              if (channels) {
+                for (const ch of channels) {
+                  channelIdToCode.set(ch.id, (ch as any).code || 'platform')
+                }
+              }
+
+              for (const row of data) {
+                if (row.channel_id) {
+                  orderChannelCodeMap.set(row.id, channelIdToCode.get(row.channel_id) || 'platform')
+                }
+              }
+            }
+          }
+        } catch {
+          DebugUtils.warn(MODULE_NAME, 'Could not load order channel map for commissions')
+        }
+      }
+
+      for (const tx of salesTransactions) {
+        const amount = tx.profitCalculation.channelCommissionAmount || 0
+        if (amount > 0) {
+          platformCommissions.total += amount
+          const channelCode = orderChannelCodeMap.get(tx.orderId) || 'platform'
+          platformCommissions.byChannel[channelCode] =
+            (platformCommissions.byChannel[channelCode] || 0) + amount
+        }
+      }
+
+      const netRevenue = revenue.total - platformCommissions.total
+
+      DebugUtils.info(MODULE_NAME, 'Platform commissions calculated', {
+        total: platformCommissions.total,
+        byChannel: platformCommissions.byChannel,
+        netRevenue
+      })
 
       // 2. Calculate COGS from actualCost
       DebugUtils.info(MODULE_NAME, 'Calculating COGS from actual costs')
@@ -306,32 +364,29 @@ export const usePLReportStore = defineStore('plReport', () => {
       // ============================================
       const selectedCOGS = cogsCalculation.total
 
-      // Update Gross Profit based on selected method
-      grossProfit.amount = revenue.total - selectedCOGS
-      grossProfit.margin =
-        revenue.total > 0 ? ((revenue.total - selectedCOGS) / revenue.total) * 100 : 0
+      // Update Gross Profit based on selected method (use netRevenue = revenue - commissions)
+      grossProfit.amount = netRevenue - selectedCOGS
+      grossProfit.margin = netRevenue > 0 ? ((netRevenue - selectedCOGS) / netRevenue) * 100 : 0
 
       DebugUtils.info(MODULE_NAME, 'Gross profit recalculated with selected COGS method', {
         method,
         selectedCOGS,
+        netRevenue,
         amount: grossProfit.amount,
         margin: grossProfit.margin
       })
 
       // Calculate Net Profit (before taxes, investments, shareholders)
       const netProfit = {
-        amount: revenue.total - selectedCOGS - opex.total,
-        margin:
-          revenue.total > 0
-            ? ((revenue.total - selectedCOGS - opex.total) / revenue.total) * 100
-            : 0
+        amount: netRevenue - selectedCOGS - opex.total,
+        margin: netRevenue > 0 ? ((netRevenue - selectedCOGS - opex.total) / netRevenue) * 100 : 0
       }
 
       DebugUtils.info(MODULE_NAME, 'Net profit calculated', {
-        revenue: revenue.total,
+        netRevenue,
         selectedCOGS,
         opex: opex.total,
-        calculation: `${revenue.total} - ${selectedCOGS} - ${opex.total}`,
+        calculation: `${netRevenue} - ${selectedCOGS} - ${opex.total}`,
         amount: netProfit.amount,
         margin: netProfit.margin
       })
@@ -343,7 +398,7 @@ export const usePLReportStore = defineStore('plReport', () => {
         netProfit.amount - taxExpenses - investmentExpenses + cashCorrections
       const finalProfit = {
         amount: finalProfitAmount,
-        margin: revenue.total > 0 ? (finalProfitAmount / revenue.total) * 100 : 0
+        margin: netRevenue > 0 ? (finalProfitAmount / netRevenue) * 100 : 0
       }
 
       DebugUtils.info(MODULE_NAME, 'Final profit calculated', {
@@ -362,6 +417,8 @@ export const usePLReportStore = defineStore('plReport', () => {
       const report: PLReport = {
         period: { dateFrom, dateTo },
         revenue,
+        platformCommissions,
+        netRevenue,
         taxCollected,
         totalCollected,
         cogs: cogsCalculation, // ✅ SPRINT 4: New COGSCalculation structure
@@ -383,6 +440,8 @@ export const usePLReportStore = defineStore('plReport', () => {
 
       DebugUtils.info(MODULE_NAME, 'P&L report generated successfully', {
         revenue: revenue.total,
+        platformCommissions: platformCommissions.total,
+        netRevenue,
         taxCollected: taxCollected.total,
         totalCollected,
         cogsMethod: method,

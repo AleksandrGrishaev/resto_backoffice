@@ -4,6 +4,22 @@ import type { PosBillItem, PosItemDiscount, PosBill } from '@/stores/pos/types'
 const MODULE_NAME = 'ProfitCalculation'
 
 /**
+ * Get net revenue (after commission) with backward-compatible fallback.
+ * Old transactions without netRevenue fall back to finalRevenue (gross).
+ */
+export function getNetRevenue(pc: ProfitCalculation): number {
+  return pc.netRevenue ?? pc.finalRevenue
+}
+
+/**
+ * Get net profit (after commission) with backward-compatible fallback.
+ * Old transactions without netProfit fall back to profit (gross-based).
+ */
+export function getNetProfit(pc: ProfitCalculation): number {
+  return pc.netProfit ?? pc.profit
+}
+
+/**
  * useProfitCalculation
  * Расчет прибыли с учетом всех типов скидок
  */

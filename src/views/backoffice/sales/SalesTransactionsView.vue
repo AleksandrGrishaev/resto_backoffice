@@ -76,6 +76,20 @@
             {{ formatDateTime(item.soldAt) }}
           </template>
 
+          <template #[`item.channel`]="{ item }">
+            <v-tooltip v-if="getTransactionChannel(item)" location="top">
+              <template #activator="{ props: tp }">
+                <v-icon
+                  v-bind="tp"
+                  :icon="getTransactionChannel(item)!.icon"
+                  :color="getTransactionChannel(item)!.color"
+                  size="small"
+                />
+              </template>
+              {{ getTransactionChannel(item)!.label }}
+            </v-tooltip>
+          </template>
+
           <template #[`item.menuItemName`]="{ item }">
             <div>
               <div class="font-weight-bold">{{ item.menuItemName }}</div>
@@ -94,7 +108,7 @@
           </template>
 
           <template #[`item.finalRevenue`]="{ item }">
-            {{ formatCurrency(item.profitCalculation.finalRevenue) }}
+            {{ formatCurrency(getNetRevenue(item.profitCalculation)) }}
           </template>
 
           <template #[`item.cost`]="{ item }">
@@ -103,13 +117,24 @@
 
           <template #[`item.profit`]="{ item }">
             <span class="text-success font-weight-bold">
-              {{ formatCurrency(item.profitCalculation.profit) }}
+              {{ formatCurrency(getNetProfit(item.profitCalculation)) }}
             </span>
           </template>
 
           <template #[`item.margin`]="{ item }">
-            <v-chip :color="getMarginColor(item.profitCalculation.profitMargin)" size="small">
-              {{ formatPercent(item.profitCalculation.profitMargin) }}
+            <v-chip
+              :color="
+                getMarginColor(
+                  item.profitCalculation.netProfitMargin ?? item.profitCalculation.profitMargin
+                )
+              "
+              size="small"
+            >
+              {{
+                formatPercent(
+                  item.profitCalculation.netProfitMargin ?? item.profitCalculation.profitMargin
+                )
+              }}
             </v-chip>
           </template>
 
@@ -195,6 +220,19 @@
                 <span class="text-caption text-grey">Order ID:</span>
                 <div class="text-caption">{{ selectedTransaction.orderId }}</div>
               </div>
+              <div v-if="getTransactionChannel(selectedTransaction)" class="mb-2">
+                <span class="text-caption text-grey">Channel:</span>
+                <div class="d-flex align-center ga-2">
+                  <v-icon
+                    :icon="getTransactionChannel(selectedTransaction)!.icon"
+                    :color="getTransactionChannel(selectedTransaction)!.color"
+                    size="small"
+                  />
+                  <span class="font-weight-bold">
+                    {{ getTransactionChannel(selectedTransaction)!.label }}
+                  </span>
+                </div>
+              </div>
             </v-col>
           </v-row>
 
@@ -234,6 +272,33 @@
                     </span>
                   </template>
                 </v-list-item>
+                <template v-if="selectedTransaction.profitCalculation.channelCommissionPercent">
+                  <v-list-item>
+                    <v-list-item-title class="text-warning">
+                      {{ getTransactionChannel(selectedTransaction)?.label || 'Platform' }}
+                      Commission ({{
+                        selectedTransaction.profitCalculation.channelCommissionPercent
+                      }}%)
+                    </v-list-item-title>
+                    <template #append>
+                      <span class="text-warning">
+                        -{{
+                          formatCurrency(
+                            selectedTransaction.profitCalculation.channelCommissionAmount || 0
+                          )
+                        }}
+                      </span>
+                    </template>
+                  </v-list-item>
+                  <v-list-item>
+                    <v-list-item-title class="font-weight-bold">Net Revenue</v-list-item-title>
+                    <template #append>
+                      <span class="font-weight-bold">
+                        {{ formatCurrency(getNetRevenue(selectedTransaction.profitCalculation)) }}
+                      </span>
+                    </template>
+                  </v-list-item>
+                </template>
               </v-list>
             </v-col>
 
@@ -252,7 +317,7 @@
                   </v-list-item-title>
                   <template #append>
                     <span class="font-weight-bold text-success">
-                      {{ formatCurrency(selectedTransaction.profitCalculation.profit) }}
+                      {{ formatCurrency(getNetProfit(selectedTransaction.profitCalculation)) }}
                     </span>
                   </template>
                 </v-list-item>
@@ -260,7 +325,12 @@
                   <v-list-item-title class="font-weight-bold">Profit Margin</v-list-item-title>
                   <template #append>
                     <span class="font-weight-bold">
-                      {{ formatPercent(selectedTransaction.profitCalculation.profitMargin) }}
+                      {{
+                        formatPercent(
+                          selectedTransaction.profitCalculation.netProfitMargin ??
+                            selectedTransaction.profitCalculation.profitMargin
+                        )
+                      }}
                     </span>
                   </template>
                 </v-list-item>
@@ -309,8 +379,15 @@
 import { ref, computed, onMounted } from 'vue'
 import { useSalesStore } from '@/stores/sales'
 import type { SalesTransaction, SalesFilters } from '@/stores/sales'
+import { getNetRevenue, getNetProfit } from '@/stores/sales/composables/useProfitCalculation'
+import { getChannelVisual } from '@/stores/channels/channelVisuals'
+import type { ChannelVisual } from '@/stores/channels/channelVisuals'
+import { supabase } from '@/supabase'
 
 const salesStore = useSalesStore()
+
+// Channel lookup: orderId → channelCode
+const orderChannelMap = ref<Map<string, string>>(new Map())
 
 // State
 const loading = ref(false)
@@ -381,6 +458,7 @@ const departments = [
 // Table headers
 const headers = [
   { title: 'Date & Time', key: 'soldAt', sortable: true },
+  { title: '', key: 'channel', sortable: false, width: '40px' },
   { title: 'Item', key: 'menuItemName', sortable: true },
   { title: 'Qty', key: 'quantity', sortable: true },
   { title: 'Original', key: 'totalPrice', sortable: true },
@@ -431,6 +509,49 @@ function formatDateTime(dateStr: string): string {
   }).format(date)
 }
 
+function getTransactionChannel(tx: SalesTransaction): ChannelVisual | null {
+  const code = orderChannelMap.value.get(tx.orderId)
+  if (!code) return null
+  return getChannelVisual(code)
+}
+
+async function loadOrderChannelMap(txs: SalesTransaction[]) {
+  const orderIds = [...new Set(txs.map(t => t.orderId))]
+  if (orderIds.length === 0) return
+
+  try {
+    const { data } = await supabase.from('orders').select('id, channel_id').in('id', orderIds)
+
+    if (!data) return
+
+    const channelIds = [...new Set(data.filter(r => r.channel_id).map(r => r.channel_id))]
+    if (channelIds.length === 0) return
+
+    const { data: channels } = await supabase
+      .from('sales_channels')
+      .select('id, code')
+      .in('id', channelIds)
+
+    const idToCode = new Map<string, string>()
+    if (channels) {
+      for (const ch of channels) {
+        idToCode.set(ch.id, (ch as any).code || '')
+      }
+    }
+
+    const map = new Map<string, string>()
+    for (const row of data) {
+      if (row.channel_id) {
+        const code = idToCode.get(row.channel_id)
+        if (code) map.set(row.id, code)
+      }
+    }
+    orderChannelMap.value = map
+  } catch {
+    // Silently fail — channel icons are non-critical
+  }
+}
+
 function getMarginColor(margin: number): string {
   if (margin >= 70) return 'success'
   if (margin >= 50) return 'info'
@@ -445,6 +566,7 @@ async function applyFilters() {
   try {
     const result = await salesStore.fetchTransactions(filters.value)
     transactions.value = result
+    await loadOrderChannelMap(result)
   } catch (err) {
     errorMessage.value = err instanceof Error ? err.message : 'Failed to load transactions'
     showError.value = true

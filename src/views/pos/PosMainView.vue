@@ -57,7 +57,7 @@
 
       <!-- Menu Section -->
       <template #menu>
-        <MenuSection @add-item="handleAddItemToOrder" />
+        <MenuSection :channel-id="currentChannelId" @add-item="handleAddItemToOrder" />
       </template>
 
       <!-- Order Section -->
@@ -236,6 +236,11 @@ const hasUnsavedChanges = computed(() => {
  * Текущая смена
  */
 const currentShift = computed(() => shiftsStore.currentShift)
+
+/**
+ * Channel ID текущего заказа (для channel-aware menu pricing)
+ */
+const currentChannelId = computed(() => currentOrder.value?.channelId ?? undefined)
 
 /**
  * Есть ли активный заказ

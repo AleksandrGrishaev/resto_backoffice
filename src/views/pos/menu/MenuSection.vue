@@ -113,6 +113,7 @@
               <v-col v-for="item in directParentItems" :key="item.id" cols="12" sm="6" md="4">
                 <MenuItemCard
                   :item="item"
+                  :channel-id="channelId"
                   :show-variant-chips="false"
                   @add-item="handleAddAndReturn"
                   @select-item="selectItem"
@@ -140,6 +141,7 @@
             <v-col v-for="item in categoryItems" :key="item.id" cols="12" sm="6" md="4">
               <MenuItemCard
                 :item="item"
+                :channel-id="channelId"
                 :show-variant-chips="false"
                 @add-item="handleAddAndReturn"
                 @select-item="selectItem"
@@ -164,7 +166,7 @@
                   </div>
                   <div class="d-flex justify-space-between align-center">
                     <div class="text-h6 font-weight-bold text-primary">
-                      {{ formatPrice(variant.price) }}
+                      {{ formatPrice(getVariantDisplayPrice(variant)) }}
                     </div>
                     <v-btn size="small" color="primary" variant="flat">Add</v-btn>
                   </div>
@@ -195,12 +197,18 @@
 import { ref, computed, onMounted } from 'vue'
 import { useMenuStore } from '@/stores/menu/menuStore'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { useChannelsStore } from '@/stores/channels'
 import type { MenuItem, MenuItemVariant, SelectedModifier } from '@/stores/menu/types'
 
 // Components
 import CategoryCard from './components/CategoryCard.vue'
 import MenuItemCard from './components/MenuItemCard.vue'
 import CustomizationDialog from './dialogs/CustomizationDialog.vue'
+
+// ===== PROPS =====
+const props = defineProps<{
+  channelId?: string
+}>()
 
 // ===== EMITS =====
 const emit = defineEmits<{
@@ -210,6 +218,7 @@ const emit = defineEmits<{
 // ===== STORES =====
 const menuStore = useMenuStore()
 const ordersStore = usePosOrdersStore()
+const channelsStore = useChannelsStore()
 
 // ===== STATE =====
 const loading = ref(false)
@@ -334,6 +343,19 @@ const formatPrice = (price: number): string => {
     currency: 'IDR',
     minimumFractionDigits: 0
   }).format(price)
+}
+
+/**
+ * Get channel-aware display price for a variant
+ */
+const getVariantDisplayPrice = (variant: MenuItemVariant): number => {
+  if (!props.channelId || !selectedItem.value) return variant.price
+  return channelsStore.getChannelPrice(
+    props.channelId,
+    selectedItem.value.id,
+    variant.id,
+    variant.price
+  ).netPrice
 }
 
 /**
