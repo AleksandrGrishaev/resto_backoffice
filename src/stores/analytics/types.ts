@@ -165,8 +165,8 @@ export interface FoodCostDashboard {
     foodCostPercentage: number
   }>
 
-  // Top items by cost
-  topItemsByCost: Array<{
+  // All items by cost
+  itemsByCost: Array<{
     menuItemId: string
     menuItemName: string
     variantName: string

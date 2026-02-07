@@ -243,40 +243,37 @@
           </v-card>
         </v-col>
 
-        <!-- Top 10 Items by Cost -->
+        <!-- Items by Cost -->
         <v-col cols="12">
           <v-card variant="outlined">
-            <v-card-title>Top 10 Items by Cost</v-card-title>
+            <v-card-title>Items by Cost ({{ dashboard.itemsByCost.length }})</v-card-title>
             <v-divider />
             <v-card-text>
-              <v-table density="comfortable">
-                <thead>
-                  <tr>
-                    <th class="text-left">#</th>
-                    <th class="text-left">Item</th>
-                    <th class="text-left">Variant</th>
-                    <th class="text-right">Qty Sold</th>
-                    <th class="text-right">Revenue</th>
-                    <th class="text-right">Cost</th>
-                    <th class="text-right">Cost %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(item, index) in dashboard.topItemsByCost" :key="item.menuItemId">
-                    <td>{{ index + 1 }}</td>
-                    <td class="font-weight-medium">{{ item.menuItemName }}</td>
-                    <td>{{ item.variantName }}</td>
-                    <td class="text-right">{{ item.quantitySold }}</td>
-                    <td class="text-right">{{ formatIDR(item.totalRevenue) }}</td>
-                    <td class="text-right">{{ formatIDR(item.totalCost) }}</td>
-                    <td class="text-right">
-                      <v-chip size="small" :color="getCostPercentageColor(item.costPercentage)">
-                        {{ item.costPercentage.toFixed(1) }}%
-                      </v-chip>
-                    </td>
-                  </tr>
-                </tbody>
-              </v-table>
+              <v-data-table
+                :headers="itemHeaders"
+                :items="dashboard.itemsByCost"
+                :items-per-page="25"
+                density="comfortable"
+                item-value="menuItemId"
+              >
+                <template #[`item.index`]="{ index }">
+                  {{ index + 1 }}
+                </template>
+                <template #[`item.menuItemName`]="{ item }">
+                  <span class="font-weight-medium">{{ item.menuItemName }}</span>
+                </template>
+                <template #[`item.totalRevenue`]="{ item }">
+                  {{ formatIDR(item.totalRevenue) }}
+                </template>
+                <template #[`item.totalCost`]="{ item }">
+                  {{ formatIDR(item.totalCost) }}
+                </template>
+                <template #[`item.costPercentage`]="{ item }">
+                  <v-chip size="small" :color="getCostPercentageColor(item.costPercentage)">
+                    {{ item.costPercentage.toFixed(1) }}%
+                  </v-chip>
+                </template>
+              </v-data-table>
             </v-card-text>
           </v-card>
         </v-col>
@@ -328,6 +325,17 @@ onMounted(() => {
   dateFrom.value = firstDay.toISOString().split('T')[0]
   dateTo.value = lastDay.toISOString().split('T')[0]
 })
+
+// Table headers for sortable items table
+const itemHeaders = [
+  { title: '#', key: 'index', sortable: false, width: '50px' },
+  { title: 'Item', key: 'menuItemName', sortable: true },
+  { title: 'Variant', key: 'variantName', sortable: true },
+  { title: 'Qty Sold', key: 'quantitySold', sortable: true, align: 'end' as const },
+  { title: 'Revenue', key: 'totalRevenue', sortable: true, align: 'end' as const },
+  { title: 'Cost', key: 'totalCost', sortable: true, align: 'end' as const },
+  { title: 'Cost %', key: 'costPercentage', sortable: true, align: 'end' as const }
+]
 
 // Methods
 async function handleGenerateDashboard() {

@@ -161,15 +161,14 @@ export const useFoodCostStore = defineStore('foodCost', () => {
         item.totalCost += tx.actualCost?.totalCost || 0
       }
 
-      const topItemsByCost = Array.from(itemsMap.values())
+      const itemsByCost = Array.from(itemsMap.values())
         .map(item => ({
           ...item,
           costPercentage: item.totalRevenue > 0 ? (item.totalCost / item.totalRevenue) * 100 : 0
         }))
         .sort((a, b) => b.totalCost - a.totalCost)
-        .slice(0, 10)
 
-      DebugUtils.info(MODULE_NAME, 'Top items calculated', { count: topItemsByCost.length })
+      DebugUtils.info(MODULE_NAME, 'Items calculated', { count: itemsByCost.length })
 
       // 5. Calculate department breakdown
       const kitchenRevenue = transactions
@@ -216,7 +215,7 @@ export const useFoodCostStore = defineStore('foodCost', () => {
         period: { dateFrom, dateTo },
         summary,
         dailyBreakdown,
-        topItemsByCost,
+        itemsByCost,
         byDepartment
       }
 
