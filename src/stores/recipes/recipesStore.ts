@@ -382,14 +382,23 @@ export const useRecipesStore = defineStore('recipes', () => {
       if (data.recipe || data.outputQuantity !== undefined) {
         const costResult = await costCalculationComposable.calculatePreparationCost(preparation)
 
-        // ✅ FIX: Update last_known_cost in database
+        // ✅ FIX: Update last_known_cost in database (always per BASE UNIT, i.e. per gram)
         if (costResult.success && costResult.cost) {
           const preparationCost = costResult.cost as PreparationPlanCost
+          // costPerOutputUnit is per-portion for portion-type preps — normalize to per-gram
+          let costPerBaseUnit = preparationCost.costPerOutputUnit
+          if (
+            preparation.portionType === 'portion' &&
+            preparation.portionSize &&
+            preparation.portionSize > 0
+          ) {
+            costPerBaseUnit = preparationCost.costPerOutputUnit / preparation.portionSize
+          }
           await preparationsComposable.updatePreparation(id, {
-            lastKnownCost: preparationCost.costPerOutputUnit
+            lastKnownCost: costPerBaseUnit
           })
           // Update local state
-          preparation.lastKnownCost = preparationCost.costPerOutputUnit
+          preparation.lastKnownCost = costPerBaseUnit
         }
 
         // Пересчитываем рецепты, использующие этот полуфабрикат

@@ -172,8 +172,10 @@ export interface FoodCostDashboard {
     variantName: string
     quantitySold: number
     totalRevenue: number
+    totalMenuPrice: number // Sum of original prices (before discounts)
     totalCost: number
-    costPercentage: number
+    costPercentage: number // Cost % vs actual revenue (after discounts)
+    menuCostPercentage: number // Cost % vs menu price (before discounts)
   }>
 
   // Department breakdown

@@ -96,25 +96,12 @@ class NegativeBatchService {
     }
 
     if (preparation?.last_known_cost && preparation.last_known_cost > 0) {
-      // ✅ FIX: Normalize last_known_cost for portion-type preparations
-      // last_known_cost is stored as cost PER PORTION, but we need cost PER GRAM (base unit)
-      let normalizedCost = preparation.last_known_cost
-      if (
-        preparation.portion_type === 'portion' &&
-        preparation.portion_size &&
-        preparation.portion_size > 0
-      ) {
-        normalizedCost = preparation.last_known_cost / preparation.portion_size
-        console.info(
-          `✅ Using normalized last_known_cost: ${normalizedCost.toFixed(2)}/g ` +
-            `(from ${preparation.last_known_cost}/${preparation.portion_size}g portion) for ${preparation.name}`
-        )
-      } else {
-        console.info(
-          `✅ Using cached last_known_cost: ${preparation.last_known_cost} for ${preparation.name}`
-        )
-      }
-      return normalizedCost
+      // last_known_cost is always stored per BASE UNIT (gram/piece) since migration 147
+      // No normalization needed — writers ensure consistent per-base-unit storage
+      console.info(
+        `✅ Using last_known_cost: ${preparation.last_known_cost}/base_unit for ${preparation.name}`
+      )
+      return preparation.last_known_cost
     }
 
     // FINAL FALLBACK: Return 0 with CRITICAL ERROR

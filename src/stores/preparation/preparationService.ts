@@ -534,29 +534,14 @@ export class PreparationService {
         .single()
 
       if (preparation?.last_known_cost && preparation.last_known_cost > 0) {
-        // Normalize for portion-type preparations (last_known_cost might be per portion)
-        let normalizedCost = preparation.last_known_cost
-        if (
-          preparation.portion_type === 'portion' &&
-          preparation.portion_size &&
-          preparation.portion_size > 0
-        ) {
-          normalizedCost = preparation.last_known_cost / preparation.portion_size
-          DebugUtils.debug(MODULE_NAME, 'Normalized cost from preparation (portion-type)', {
-            preparationId,
-            name: preparation.name,
-            rawCost: preparation.last_known_cost,
-            portionSize: preparation.portion_size,
-            normalizedCost
-          })
-        } else {
-          DebugUtils.debug(MODULE_NAME, 'Cost from preparation.last_known_cost', {
-            preparationId,
-            name: preparation.name,
-            cost: normalizedCost
-          })
-        }
-        return normalizedCost
+        // last_known_cost is always stored per BASE UNIT (gram/piece) since migration 147
+        // No normalization needed — writers ensure consistent per-base-unit storage
+        DebugUtils.debug(MODULE_NAME, 'Cost from preparation.last_known_cost (per base unit)', {
+          preparationId,
+          name: preparation.name,
+          cost: preparation.last_known_cost
+        })
+        return preparation.last_known_cost
       }
 
       // 4. Log error and return 0

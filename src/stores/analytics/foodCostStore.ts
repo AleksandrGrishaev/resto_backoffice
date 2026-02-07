@@ -134,6 +134,7 @@ export const useFoodCostStore = defineStore('foodCost', () => {
           variantName: string
           quantitySold: number
           totalRevenue: number
+          totalMenuPrice: number
           totalCost: number
         }
       >()
@@ -148,6 +149,7 @@ export const useFoodCostStore = defineStore('foodCost', () => {
             variantName: tx.variantName,
             quantitySold: 0,
             totalRevenue: 0,
+            totalMenuPrice: 0,
             totalCost: 0
           })
         }
@@ -158,13 +160,16 @@ export const useFoodCostStore = defineStore('foodCost', () => {
           ? tx.order?.totalCollected || getNetRevenue(tx.profitCalculation)
           : tx.order?.actualRevenue || getNetRevenue(tx.profitCalculation)
         item.totalRevenue += revenueAmount
+        item.totalMenuPrice += tx.profitCalculation?.originalPrice || 0
         item.totalCost += tx.actualCost?.totalCost || 0
       }
 
       const itemsByCost = Array.from(itemsMap.values())
         .map(item => ({
           ...item,
-          costPercentage: item.totalRevenue > 0 ? (item.totalCost / item.totalRevenue) * 100 : 0
+          costPercentage: item.totalRevenue > 0 ? (item.totalCost / item.totalRevenue) * 100 : 0,
+          menuCostPercentage:
+            item.totalMenuPrice > 0 ? (item.totalCost / item.totalMenuPrice) * 100 : 0
         }))
         .sort((a, b) => b.totalCost - a.totalCost)
 

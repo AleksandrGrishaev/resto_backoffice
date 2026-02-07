@@ -273,6 +273,11 @@
                     {{ item.costPercentage.toFixed(1) }}%
                   </v-chip>
                 </template>
+                <template #[`item.menuCostPercentage`]="{ item }">
+                  <v-chip size="small" :color="getCostPercentageColor(item.menuCostPercentage)">
+                    {{ item.menuCostPercentage.toFixed(1) }}%
+                  </v-chip>
+                </template>
               </v-data-table>
             </v-card-text>
           </v-card>
@@ -334,7 +339,8 @@ const itemHeaders = [
   { title: 'Qty Sold', key: 'quantitySold', sortable: true, align: 'end' as const },
   { title: 'Revenue', key: 'totalRevenue', sortable: true, align: 'end' as const },
   { title: 'Cost', key: 'totalCost', sortable: true, align: 'end' as const },
-  { title: 'Cost %', key: 'costPercentage', sortable: true, align: 'end' as const }
+  { title: 'Cost %', key: 'costPercentage', sortable: true, align: 'end' as const },
+  { title: 'Menu FC%', key: 'menuCostPercentage', sortable: true, align: 'end' as const }
 ]
 
 // Methods
