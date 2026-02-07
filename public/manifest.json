@@ -6,7 +6,7 @@
   "start_url": "/pos",
   "scope": "/",
   "display": "standalone",
-  "orientation": "landscape",
+  "orientation": "any",
   "background_color": "#121212",
   "theme_color": "#1976D2",
   "categories": ["business", "food"],
