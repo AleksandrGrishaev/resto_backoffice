@@ -28,14 +28,14 @@
         class="align-center justify-center"
         persistent
       >
-        <div class="text-center pa-6">
+        <v-card class="text-center pa-8" min-width="320" elevation="8">
           <v-icon icon="mdi-cloud-sync" size="48" color="info" class="mb-4" />
           <div class="text-h6 mb-2">Syncing Transactions...</div>
           <div class="text-body-2 text-medium-emphasis mb-4">
             Please wait while shift data is being synced
           </div>
           <v-progress-linear indeterminate color="info" class="mx-auto" style="max-width: 300px" />
-        </div>
+        </v-card>
       </v-overlay>
 
       <!-- Content -->

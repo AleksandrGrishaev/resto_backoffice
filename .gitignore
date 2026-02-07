@@ -56,3 +56,4 @@ PRODUCTION_CREDENTIALS.md
 
 # Temporary data files
 Temp/
+.VSCodeCounter/

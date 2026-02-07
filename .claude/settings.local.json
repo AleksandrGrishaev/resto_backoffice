@@ -76,7 +76,9 @@
       "Bash(mcp__supabase__list_tables schemas:[\"public\"])",
       "Bash(jq:*)",
       "Bash(pnpm tsc:*)",
-      "Bash(pnpm vue-tsc:*)"
+      "Bash(pnpm vue-tsc:*)",
+      "WebFetch(domain:developer.gobiz.com)",
+      "WebFetch(domain:resto-backoffice.vercel.app)"
     ]
   },
   "enableAllProjectMcpServers": true,
