@@ -33,6 +33,11 @@ export const useAuthStore = defineStore('auth', () => {
   // This prevents the "SIGNED_IN every 6 minutes blocks all connections for 60s" issue
   let lastUserId: string | null = null
 
+  // ✅ FIX: Deduplicate loadUserProfile — prevent multiple concurrent calls
+  // After signIn, onAuthStateChange fires SIGNED_IN + TOKEN_REFRESHED + loginWithPin
+  // all calling loadUserProfile simultaneously, overwhelming tablet HTTP connections
+  let loadProfilePromise: Promise<void> | null = null
+
   // ===== GETTERS =====
   const currentUser = computed(() => state.value.currentUser)
   const isAuthenticated = computed(() => state.value.isAuthenticated)
@@ -114,8 +119,10 @@ export const useAuthStore = defineStore('auth', () => {
           reason: isUserIdChanged ? 'userId changed' : 'USER_UPDATED event'
         })
         DebugUtils.info(MODULE_NAME, 'Reloading profile after auth event', { event })
+        // ✅ FIX: Set lastUserId BEFORE async call to prevent duplicate triggers
+        // onAuthStateChange fires SIGNED_IN + TOKEN_REFRESHED nearly simultaneously
+        lastUserId = currentUserId!
         await loadUserProfile(currentUserId!)
-        lastUserId = currentUserId! // Update last userId
       } else if (newSession?.user && !isUserIdChanged && event === 'SIGNED_IN') {
         // Same user, SIGNED_IN event = token refresh
         console.log('🔄 [AuthStore] Token refresh detected - skipping profile reload', {
@@ -190,7 +197,23 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // Load user profile from Supabase users table
+  // ✅ FIX: Deduplicated — if already loading, returns existing promise
+  // Prevents 3+ concurrent calls after signIn (SIGNED_IN + TOKEN_REFRESHED + loginWithPin)
   async function loadUserProfile(userId: string) {
+    if (loadProfilePromise) {
+      DebugUtils.info(MODULE_NAME, 'loadUserProfile already in progress, reusing promise')
+      return loadProfilePromise
+    }
+
+    loadProfilePromise = doLoadUserProfile(userId)
+    try {
+      await loadProfilePromise
+    } finally {
+      loadProfilePromise = null
+    }
+  }
+
+  async function doLoadUserProfile(userId: string) {
     try {
       const data = await executeSupabaseSingle(
         supabase.from('users').select('*').eq('id', userId),
