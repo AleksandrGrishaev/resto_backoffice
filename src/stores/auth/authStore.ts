@@ -215,6 +215,22 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function doLoadUserProfile(userId: string) {
     try {
+      // ✅ FIX: Ensure auth session is established before querying with RLS
+      // After signInWithPassword, the Supabase client may not have set the auth header yet.
+      // RLS policy (auth.uid() = id) returns empty if auth context isn't ready.
+      let retries = 0
+      const maxSessionRetries = 5
+      while (retries < maxSessionRetries) {
+        const { data: sessionData } = await supabase.auth.getSession()
+        if (sessionData.session?.user?.id === userId) break
+        DebugUtils.info(
+          MODULE_NAME,
+          `Waiting for auth session... (${retries + 1}/${maxSessionRetries})`
+        )
+        await new Promise(resolve => setTimeout(resolve, 200))
+        retries++
+      }
+
       const data = await executeSupabaseSingle(
         supabase.from('users').select('*').eq('id', userId),
         `${MODULE_NAME}.loadUserProfile`
