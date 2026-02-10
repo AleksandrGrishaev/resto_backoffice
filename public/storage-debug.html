@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Storage Debug</title>
+<style>
+  body { font-family: monospace; padding: 16px; background: #1a1a1a; color: #e0e0e0; font-size: 14px; }
+  h2 { color: #4fc3f7; margin-top: 24px; }
+  .item { padding: 4px 0; border-bottom: 1px solid #333; }
+  .size { color: #ffd54f; font-weight: bold; }
+  .total { color: #ef5350; font-size: 18px; font-weight: bold; margin: 16px 0; }
+  button { background: #ef5350; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 8px; margin: 8px 4px; }
+  button.green { background: #66bb6a; }
+  .warn { color: #ef5350; }
+</style>
+</head>
+<body>
+<h1>localStorage Debug</h1>
+<div id="output"></div>
+
+<button class="green" onclick="analyze()">Refresh</button>
+<button onclick="clearOld()">Clear OLD orders/shifts (7d)</button>
+<button onclick="clearCaches()">Clear ALL caches</button>
+<button class="warn" onclick="if(confirm('Clear ALL localStorage?')) { localStorage.clear(); analyze(); }">NUKE ALL</button>
+
+<script>
+function analyze() {
+  let total = 0;
+  let items = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    let k = localStorage.key(i);
+    let v = localStorage.getItem(k);
+    let s = new Blob([v]).size;
+    items.push({ k, s });
+    total += s;
+  }
+  items.sort((a, b) => b.s - a.s);
+
+  let html = '<div class="total">TOTAL: ' + (total / 1024 / 1024).toFixed(2) + ' MB / 5 MB (' + (total / 5242880 * 100).toFixed(1) + '%)</div>';
+  html += '<h2>All keys (' + items.length + '):</h2>';
+  items.forEach((x, i) => {
+    let sizeStr = x.s > 1024 ? (x.s / 1024).toFixed(1) + ' KB' : x.s + ' B';
+    if (x.s > 1048576) sizeStr = (x.s / 1048576).toFixed(2) + ' MB';
+    let pct = (x.s / total * 100).toFixed(1);
+    html += '<div class="item">' + (i + 1) + '. <strong>' + x.k + '</strong>: <span class="size">' + sizeStr + '</span> (' + pct + '%)</div>';
+  });
+  document.getElementById('output').innerHTML = html;
+}
+
+function clearOld() {
+  let keys = ['sales_transactions', 'recipe_writeoffs', 'pos_shift_transactions'];
+  keys.forEach(k => localStorage.removeItem(k));
+  alert('Cleared: ' + keys.join(', '));
+  analyze();
+}
+
+function clearCaches() {
+  let keys = [
+    'products_cache', 'products_cache_ts',
+    'menu_items_cache', 'menu_items_cache_ts',
+    'menu_categories_cache',
+    'recipes_cache', 'recipes_cache_ts',
+    'preparations_cache', 'preparations_cache_ts',
+    'sales_transactions', 'recipe_writeoffs'
+  ];
+  let removed = [];
+  keys.forEach(k => { if (localStorage.getItem(k)) { localStorage.removeItem(k); removed.push(k); } });
+  alert('Cleared ' + removed.length + ' keys');
+  analyze();
+}
+
+analyze();
+</script>
+</body>
+</html>
