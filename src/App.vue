@@ -24,6 +24,7 @@ import { usePosStore } from '@/stores/pos'
 import { useKitchenStore } from '@/stores/kitchen'
 import { getConnectionHealthMonitor } from '@/core/connection/ConnectionHealthMonitor'
 import { useUIScale } from '@/composables/useUIScale'
+import { StorageMonitor } from '@/utils/storageMonitor'
 
 const MODULE_NAME = 'App'
 const authStore = useAuthStore()
@@ -48,6 +49,24 @@ const isLoadingAuth = ref(true)
 const isLoadingStores = ref(false)
 const storesLoaded = ref(false)
 const loadingMessage = ref('Checking session...')
+
+/**
+ * Early storage cleanup - runs BEFORE auth to ensure localStorage
+ * has space for the auth session token.
+ * Without this, a full localStorage prevents Supabase from persisting
+ * the session, causing login failures on tablets.
+ */
+async function performEarlyStorageCleanup() {
+  try {
+    const { needed, level } = StorageMonitor.needsCleanup()
+    if (needed) {
+      console.log(`🧹 [App] Early storage cleanup needed (level: ${level})`)
+      await StorageMonitor.performCleanup(level as 'warning' | 'critical')
+    }
+  } catch (error) {
+    console.error('❌ [App] Early storage cleanup failed:', error)
+  }
+}
 
 /**
  * Validate session before loading any stores
@@ -190,6 +209,9 @@ onMounted(async () => {
   } catch (error) {
     console.error('❌ [App] Failed to start connection health monitoring:', error)
   }
+
+  // ✅ FIX: Clean up localStorage BEFORE auth to prevent quota errors
+  await performEarlyStorageCleanup()
 
   // Validate session and load stores if authenticated
   await validateSessionAndLoadStores()

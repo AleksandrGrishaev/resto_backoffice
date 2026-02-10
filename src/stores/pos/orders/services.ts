@@ -1451,6 +1451,73 @@ export class OrdersService {
   }
 
   /**
+   * Clean up old completed/cancelled orders and their bills from localStorage
+   *
+   * Retention policy:
+   * - Remove orders that are (paid OR cancelled) AND older than retentionDays
+   * - Keep all unpaid/partial orders (need attention)
+   * - Keep all recent orders (< retentionDays)
+   * - Also removes matching bills from pos_bills
+   *
+   * @param retentionDays - Number of days to keep old data (default: 7)
+   * @returns Cleanup statistics
+   */
+  async cleanupOldOrders(retentionDays: number = 7): Promise<{
+    removed: number
+    kept: number
+    billsRemoved: number
+  }> {
+    try {
+      const storedOrders = localStorage.getItem(this.ORDERS_KEY)
+      if (!storedOrders) {
+        return { removed: 0, kept: 0, billsRemoved: 0 }
+      }
+
+      const orders: PosOrder[] = JSON.parse(storedOrders)
+      const cutoffDate = new Date()
+      cutoffDate.setDate(cutoffDate.getDate() - retentionDays)
+
+      // Collect IDs of orders to remove
+      const removableOrderIds = new Set<string>()
+
+      const ordersToKeep = orders.filter(order => {
+        const orderDate = new Date(order.createdAt)
+        const isPaid = order.paymentStatus === 'paid'
+        const isCancelled = order.paymentStatus === 'cancelled'
+        const isOld = orderDate < cutoffDate
+
+        if ((isPaid || isCancelled) && isOld) {
+          removableOrderIds.add(order.id)
+          return false
+        }
+        return true
+      })
+
+      const removed = orders.length - ordersToKeep.length
+
+      // Also clean matching bills
+      let billsRemoved = 0
+      if (removableOrderIds.size > 0) {
+        const allBills = this.getAllStoredBills()
+        const billsToKeep = allBills.filter(bill => !removableOrderIds.has(bill.orderId))
+        billsRemoved = allBills.length - billsToKeep.length
+
+        localStorage.setItem(this.BILLS_KEY, JSON.stringify(billsToKeep))
+      }
+
+      if (removed > 0) {
+        localStorage.setItem(this.ORDERS_KEY, JSON.stringify(ordersToKeep))
+        console.log(`✅ Cleaned up ${removed} old orders, ${billsRemoved} bills`)
+      }
+
+      return { removed, kept: ordersToKeep.length, billsRemoved }
+    } catch (error) {
+      console.error('❌ Failed to cleanup old orders:', error)
+      return { removed: 0, kept: 0, billsRemoved: 0 }
+    }
+  }
+
+  /**
    * Clean up old order items from localStorage
    *
    * Retention policy:

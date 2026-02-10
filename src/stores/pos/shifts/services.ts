@@ -876,12 +876,27 @@ export class ShiftsService {
         return false
       })
 
+      const removedShiftIds = new Set(
+        shifts.filter(s => !shiftsToKeep.some(k => k.id === s.id)).map(s => s.id)
+      )
       const removed = shifts.length - shiftsToKeep.length
 
       // Save cleaned shifts
       if (removed > 0) {
         await this.saveShiftsSafely(shiftsToKeep)
         console.log(`✅ Cleaned up ${removed} old shifts (kept ${shiftsToKeep.length})`)
+
+        // Also clean shift transactions for removed shifts
+        const storedTx = localStorage.getItem(this.STORAGE_KEYS.transactions)
+        if (storedTx) {
+          const allTx: ShiftTransaction[] = JSON.parse(storedTx)
+          const txToKeep = allTx.filter(tx => !removedShiftIds.has(tx.shiftId))
+          const txRemoved = allTx.length - txToKeep.length
+          if (txRemoved > 0) {
+            localStorage.setItem(this.STORAGE_KEYS.transactions, JSON.stringify(txToKeep))
+            console.log(`✅ Cleaned up ${txRemoved} shift transactions`)
+          }
+        }
       }
 
       return {

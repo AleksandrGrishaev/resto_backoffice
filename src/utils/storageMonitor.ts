@@ -178,7 +178,18 @@ export class StorageMonitor {
         )
       }
 
-      // 2. Clean up old shifts
+      // 2. Clean up old orders and bills
+      console.log(`🗑️  Cleaning orders older than ${retentionDays} days...`)
+      const ordersResult = await ordersService.cleanupOldOrders(retentionDays)
+      if (ordersResult) {
+        totalItemsRemoved += ordersResult.removed + ordersResult.billsRemoved
+        totalItemsKept += ordersResult.kept
+        console.log(
+          `   ✅ Removed ${ordersResult.removed} orders, ${ordersResult.billsRemoved} bills, kept ${ordersResult.kept} orders`
+        )
+      }
+
+      // 3. Clean up old shifts (also cleans shift transactions)
       console.log(`🗑️  Cleaning shifts older than ${retentionDays} days...`)
       const shiftsResult = await shiftsService.cleanupOldShifts(retentionDays)
       if (shiftsResult) {
@@ -187,7 +198,43 @@ export class StorageMonitor {
         console.log(`   ✅ Removed ${shiftsResult.removed} shifts, kept ${shiftsResult.kept}`)
       }
 
-      // 3. Clean up sync history (if critical)
+      // 4. Clear cache-only keys (rebuilt from Supabase on next load)
+      const cacheKeys = ['sales_transactions', 'recipe_writeoffs']
+      for (const key of cacheKeys) {
+        const cached = localStorage.getItem(key)
+        if (cached) {
+          const size = new Blob([cached]).size
+          localStorage.removeItem(key)
+          totalSizeFreed += size
+          console.log(`   ✅ Cleared cache: ${key} (~${this.formatBytes(size)})`)
+        }
+      }
+
+      // 5. On critical: also clear backoffice caches
+      if (level === 'critical') {
+        const backofficeCacheKeys = [
+          'products_cache',
+          'products_cache_ts',
+          'menu_items_cache',
+          'menu_items_cache_ts',
+          'menu_categories_cache',
+          'recipes_cache',
+          'recipes_cache_ts',
+          'preparations_cache',
+          'preparations_cache_ts'
+        ]
+        for (const key of backofficeCacheKeys) {
+          const cached = localStorage.getItem(key)
+          if (cached) {
+            const size = new Blob([cached]).size
+            localStorage.removeItem(key)
+            totalSizeFreed += size
+            console.log(`   ✅ Cleared backoffice cache: ${key} (~${this.formatBytes(size)})`)
+          }
+        }
+      }
+
+      // 6. Clean up sync history (if critical)
       if (level === 'critical') {
         console.log('🗑️  Trimming sync history to last 100 items...')
         const { useSyncService } = await import('@/core/sync/SyncService')
