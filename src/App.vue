@@ -151,10 +151,13 @@ async function loadStoresAfterAuth() {
 
     // Check if we need to redirect after successful store loading
     const redirectPath = router.currentRoute.value.query.redirect as string
-    if (redirectPath && !redirectPath.startsWith('/auth')) {
+    if (redirectPath && !redirectPath.startsWith('/auth') && redirectPath !== '/unauthorized') {
       DebugUtils.info(MODULE_NAME, `Redirecting to saved path: ${redirectPath}`)
       await router.replace(redirectPath)
-    } else if (router.currentRoute.value.path.startsWith('/auth')) {
+    } else if (
+      router.currentRoute.value.path.startsWith('/auth') ||
+      router.currentRoute.value.path === '/unauthorized'
+    ) {
       // If on auth page but no redirect specified, go to default route
       const defaultRoute = authStore.getDefaultRoute()
       DebugUtils.info(MODULE_NAME, `Redirecting to default route: ${defaultRoute}`)
