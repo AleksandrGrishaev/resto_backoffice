@@ -9,7 +9,7 @@ import {
   fromSupabase as orderFromSupabase,
   fromOrderItemRow
 } from '@/stores/pos/orders/supabaseMappers'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, syncServerTime } from '@/utils'
 import { ENV } from '@/config/environment'
 
 const MODULE_NAME = 'KitchenStore'
@@ -45,6 +45,9 @@ export const useKitchenStore = defineStore('kitchen', () => {
 
     try {
       DebugUtils.info(MODULE_NAME, 'Initializing Kitchen system...')
+
+      // Sync server time to handle device clock skew (common on tablets)
+      await syncServerTime()
 
       // Load active orders from Supabase
       DebugUtils.info(MODULE_NAME, 'Loading orders from Supabase...')

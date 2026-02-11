@@ -113,6 +113,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useKitchenStatus } from '@/stores/kitchen/composables'
 import type { KitchenDish } from '@/stores/kitchen/composables'
 import type { SelectedModifier, ModifierType, TargetComponent } from '@/stores/menu/types'
+import { getServerNow } from '@/utils/serverTime'
 
 // =============================================
 // TYPES
@@ -344,29 +345,30 @@ const handleStatusUpdate = () => {
  * - ready: frozen total time from sent to kitchen until ready
  */
 const updateTimer = () => {
-  const now = new Date()
+  // Use server-adjusted time to handle device clock skew
+  const nowMs = getServerNow()
 
   if (props.dish.status === 'waiting') {
     // Waiting time: since sent to kitchen
     const start = props.dish.sentToKitchenAt
-      ? new Date(props.dish.sentToKitchenAt)
-      : new Date(props.dish.createdAt)
-    elapsedSeconds.value = Math.floor((now.getTime() - start.getTime()) / 1000)
+      ? new Date(props.dish.sentToKitchenAt).getTime()
+      : new Date(props.dish.createdAt).getTime()
+    elapsedSeconds.value = Math.max(0, Math.floor((nowMs - start) / 1000))
   } else if (props.dish.status === 'cooking') {
     // Cooking time: since cooking started
     const start = props.dish.cookingStartedAt
-      ? new Date(props.dish.cookingStartedAt)
-      : new Date(props.dish.sentToKitchenAt || props.dish.createdAt)
-    elapsedSeconds.value = Math.floor((now.getTime() - start.getTime()) / 1000)
+      ? new Date(props.dish.cookingStartedAt).getTime()
+      : new Date(props.dish.sentToKitchenAt || props.dish.createdAt).getTime()
+    elapsedSeconds.value = Math.max(0, Math.floor((nowMs - start) / 1000))
   } else if (props.dish.status === 'ready') {
     // Total time (frozen at completion): from sent to kitchen until ready
-    const start = new Date(props.dish.sentToKitchenAt || props.dish.createdAt)
-    const end = props.dish.readyAt ? new Date(props.dish.readyAt) : now
-    elapsedSeconds.value = Math.floor((end.getTime() - start.getTime()) / 1000)
+    const start = new Date(props.dish.sentToKitchenAt || props.dish.createdAt).getTime()
+    const end = props.dish.readyAt ? new Date(props.dish.readyAt).getTime() : nowMs
+    elapsedSeconds.value = Math.max(0, Math.floor((end - start) / 1000))
   } else {
     // Fallback for any other status
-    const start = new Date(props.dish.createdAt)
-    elapsedSeconds.value = Math.floor((now.getTime() - start.getTime()) / 1000)
+    const start = new Date(props.dish.createdAt).getTime()
+    elapsedSeconds.value = Math.max(0, Math.floor((nowMs - start) / 1000))
   }
 }
 
