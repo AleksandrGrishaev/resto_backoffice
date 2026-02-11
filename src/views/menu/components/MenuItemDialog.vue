@@ -338,6 +338,8 @@ const categories = computed(() => menuStore.activeCategories)
 // Variantless mode: price comes entirely from modifiers
 const isVariantlessMode = computed({
   get: () => {
+    // Variantless mode only applies to modifiable dishes
+    if (formData.value.dishType !== 'modifiable') return false
     const v = formData.value.variants[0]
     return v?.name === '' && v?.price === 0
   },
