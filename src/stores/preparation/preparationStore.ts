@@ -167,7 +167,15 @@ export const usePreparationStore = defineStore('preparation', () => {
 
       DebugUtils.info(MODULE_NAME, 'Fetching preparation balances and batches', { department })
 
-      // ✅ FIXED: Load both balances AND batches simultaneously
+      // Ensure service is initialized
+      if (!preparationService.initialized) {
+        await preparationService.initialize()
+      }
+
+      // Always reload active batches from Supabase and recalculate for fresh data
+      await preparationService.loadBatchesFromSupabase(true)
+      await preparationService.recalculateAllBalances()
+
       const [balances, batches] = await Promise.all([
         preparationService.getBalances(department),
         preparationService.getBatches(department)

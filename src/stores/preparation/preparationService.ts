@@ -46,7 +46,11 @@ export class PreparationService {
   private operations: PreparationOperation[] = []
   private balances: PreparationBalance[] = []
   private inventories: PreparationInventoryDocument[] = []
-  private initialized: boolean = false
+  private _initialized: boolean = false
+
+  get initialized(): boolean {
+    return this._initialized
+  }
 
   // ===========================
   // HELPER METHODS
@@ -174,7 +178,7 @@ export class PreparationService {
 
   async initialize(): Promise<void> {
     try {
-      if (this.initialized) {
+      if (this._initialized) {
         DebugUtils.info(MODULE_NAME, 'Service already initialized')
         return
       }
@@ -205,7 +209,7 @@ export class PreparationService {
       await this.loadInventoriesFromSupabase()
       await this.recalculateAllBalances()
 
-      this.initialized = true
+      this._initialized = true
       DebugUtils.info(MODULE_NAME, 'Preparation service initialized from Supabase', {
         batches: this.batches.length,
         operations: this.operations.length,
@@ -222,7 +226,7 @@ export class PreparationService {
   // SUPABASE DATA LOADING
   // ===========================
 
-  private async loadBatchesFromSupabase(silent: boolean = false): Promise<void> {
+  async loadBatchesFromSupabase(silent: boolean = false): Promise<void> {
     try {
       if (!silent) {
         DebugUtils.info(MODULE_NAME, 'Loading batches from Supabase')
@@ -231,12 +235,10 @@ export class PreparationService {
       const { data, error } = await supabase
         .from('preparation_batches')
         .select('*')
+        .eq('status', 'active')
         .order('production_date', { ascending: true })
 
-      if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to load batches from Supabase', { error })
-        throw error
-      }
+      if (error) throw error
 
       this.batches = (data || []).map(batchFromSupabase)
 
@@ -247,8 +249,7 @@ export class PreparationService {
       }
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error loading batches', { error })
-      // Initialize with empty array on error
-      this.batches = []
+      // Don't clear existing batches on error — keep stale data rather than nothing
     }
   }
 
@@ -260,6 +261,7 @@ export class PreparationService {
         .from('preparation_operations')
         .select('*')
         .order('operation_date', { ascending: false })
+        .limit(500)
 
       if (error) {
         DebugUtils.error(MODULE_NAME, 'Failed to load operations from Supabase', { error })
@@ -327,7 +329,7 @@ export class PreparationService {
 
   async getBalances(department?: PreparationDepartment): Promise<PreparationBalance[]> {
     try {
-      if (!this.initialized) {
+      if (!this._initialized) {
         await this.initialize()
       }
 
@@ -365,7 +367,7 @@ export class PreparationService {
 
   async getBatches(department?: PreparationDepartment): Promise<PreparationBatch[]> {
     try {
-      if (!this.initialized) {
+      if (!this._initialized) {
         await this.initialize()
       }
 
@@ -391,7 +393,7 @@ export class PreparationService {
 
   async getAllBatches(department?: PreparationDepartment): Promise<PreparationBatch[]> {
     try {
-      if (!this.initialized) {
+      if (!this._initialized) {
         await this.initialize()
       }
 
@@ -1943,7 +1945,7 @@ export class PreparationService {
 
   async getOperations(department?: PreparationDepartment): Promise<PreparationOperation[]> {
     try {
-      if (!this.initialized) {
+      if (!this._initialized) {
         await this.initialize()
       }
 
@@ -1966,7 +1968,7 @@ export class PreparationService {
     department?: PreparationDepartment
   ): Promise<PreparationInventoryDocument[]> {
     try {
-      if (!this.initialized) {
+      if (!this._initialized) {
         await this.initialize()
       }
 
@@ -2011,7 +2013,7 @@ export class PreparationService {
   // ✅ BALANCE CALCULATION WITH PROPER PRECISION
   // ===========================
 
-  private async recalculateAllBalances(): Promise<void> {
+  async recalculateAllBalances(): Promise<void> {
     try {
       this.balances = []
       await this.recalculateBalances('kitchen')

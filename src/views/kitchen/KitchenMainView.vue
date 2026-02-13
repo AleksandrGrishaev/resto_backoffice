@@ -254,12 +254,74 @@ const retryInitialization = async (): Promise<void> => {
 
 /**
  * Handle screen selection from sidebar
+ * Triggers background data refresh for the target screen
  */
 const handleScreenSelect = (
   screen: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator' | 'inventory'
 ): void => {
   currentScreen.value = screen
   DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })
+
+  // Background refresh — don't await, let the screen show cached data first
+  refreshScreenData(screen).catch(err => {
+    DebugUtils.warn(MODULE_NAME, 'Background refresh failed', { screen, error: err })
+  })
+}
+
+/**
+ * Refresh store data for the selected screen in the background.
+ * Each screen's component will reactively update when the store state changes.
+ */
+const refreshScreenData = async (
+  screen: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator' | 'inventory'
+): Promise<void> => {
+  switch (screen) {
+    case 'orders': {
+      // Kitchen orders use realtime subscriptions, but do a one-time re-fetch
+      // to catch any missed updates (e.g., after network reconnect)
+      const { kitchenService } = await import('@/stores/kitchen/kitchenService')
+      const { usePosOrdersStore } = await import('@/stores/pos/orders/ordersStore')
+      const posOrdersStore = usePosOrdersStore()
+      const orders = await kitchenService.getActiveKitchenOrders()
+      posOrdersStore.orders = orders
+      DebugUtils.debug(MODULE_NAME, 'Orders refreshed', { count: orders.length })
+      break
+    }
+    case 'preparation': {
+      const { usePreparationStore } = await import('@/stores/preparation')
+      const { useKitchenKpiStore } = await import('@/stores/kitchenKpi')
+      const preparationStore = usePreparationStore()
+      const kpiStore = useKitchenKpiStore()
+      await Promise.all([
+        preparationStore.fetchBalances(userDepartment.value),
+        kpiStore.loadSchedule({ department: userDepartment.value })
+      ])
+      break
+    }
+    case 'kpi': {
+      const { useKitchenKpiStore } = await import('@/stores/kitchenKpi')
+      const kpiStore = useKitchenKpiStore()
+      await Promise.all([kpiStore.loadKpiEntries(), kpiStore.loadSchedule()])
+      break
+    }
+    case 'requests': {
+      const { useSupplierStore } = await import('@/stores/supplier_2/supplierStore')
+      const supplierStore = useSupplierStore()
+      await supplierStore.getRequests()
+      break
+    }
+    case 'inventory': {
+      const { useStorageStore } = await import('@/stores/storage')
+      const { usePreparationStore } = await import('@/stores/preparation')
+      const storageStore = useStorageStore()
+      const preparationStore = usePreparationStore()
+      await Promise.all([storageStore.fetchBalances(), preparationStore.fetchBalances()])
+      break
+    }
+    case 'calculator':
+      // Calculator uses recipes store which is mostly static — no refresh needed
+      break
+  }
 }
 
 /**
