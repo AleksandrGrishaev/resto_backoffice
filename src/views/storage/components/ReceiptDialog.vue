@@ -291,12 +291,16 @@ async function handleSubmit() {
       totalValue: totalValue.value
     })
 
-    await storageStore.createReceipt(formData.value)
+    const { reconciliations } = await storageStore.createReceipt(formData.value)
 
     DebugUtils.info(MODULE_NAME, 'Product receipt created successfully')
+    const reconciledMsg =
+      reconciliations.length > 0
+        ? ` Reconciled ${reconciliations.length} product(s) with negative batches.`
+        : ''
     emit(
       'success',
-      `Receipt created successfully! Added ${formData.value.items.length} products worth ${formatCurrency(totalValue.value)} to ${formatDepartment(props.department).toLowerCase()} inventory.`
+      `Receipt created successfully! Added ${formData.value.items.length} products worth ${formatCurrency(totalValue.value)} to ${formatDepartment(props.department).toLowerCase()} inventory.${reconciledMsg}`
     )
     handleClose()
   } catch (error) {

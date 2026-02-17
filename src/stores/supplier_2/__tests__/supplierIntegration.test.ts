@@ -220,7 +220,10 @@ describe('Supplier Store Integration', () => {
         operationType: 'receipt' as const,
         totalValue: 62500
       }
-      vi.mocked(storageStore.createReceipt).mockResolvedValue(mockStorageOperation)
+      vi.mocked(storageStore.createReceipt).mockResolvedValue({
+        operation: mockStorageOperation,
+        reconciliations: []
+      })
 
       // Complete the receipt
       const completedReceipt = await supplierStore.completeReceipt('receipt-1', {

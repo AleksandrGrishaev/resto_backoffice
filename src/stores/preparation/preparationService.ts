@@ -1362,6 +1362,9 @@ export class PreparationService {
               }
             }
 
+            // Round to whole units (1g, 1ml) to avoid fractional quantities from division
+            finalQuantity = Math.round(finalQuantity)
+
             return {
               itemId: ingredient.id,
               itemName: ingredientName,

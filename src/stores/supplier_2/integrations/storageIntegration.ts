@@ -379,10 +379,20 @@ export class SupplierStorageIntegration {
           batchCount: existingBatches.length
         })
 
-        // ✅ REMOVED (Migration 111): Auto-reconciliation of negative batches
-        // Negative batches now remain active to allow proper balance calculation
-        // via SUM(current_quantity). They will be closed during inventory
-        // reconciliation instead of receipt completion.
+        // Auto-reconcile negative batches for products that received transit batches
+        try {
+          const { reconciliationService } = await import('@/stores/storage/reconciliationService')
+          const uniqueProductIds = [...new Set(existingBatches.map(b => b.itemId))]
+          for (const productId of uniqueProductIds) {
+            try {
+              await reconciliationService.autoReconcileOnNewBatch(productId)
+            } catch (err) {
+              DebugUtils.warn(MODULE_NAME, 'Reconciliation failed', { productId, error: err })
+            }
+          }
+        } catch (err) {
+          DebugUtils.warn(MODULE_NAME, 'Failed to load reconciliation service', { error: err })
+        }
 
         // Return first batch ID as operation reference (for compatibility)
         const operationId = existingBatches[0].id
@@ -412,7 +422,7 @@ export class SupplierStorageIntegration {
         notes: this.buildStorageNotes(receipt, order)
       }
 
-      const operation = await storageStore.createReceipt(storageData)
+      const { operation } = await storageStore.createReceipt(storageData)
       const operationId = operation.id
 
       this.invalidateCache()

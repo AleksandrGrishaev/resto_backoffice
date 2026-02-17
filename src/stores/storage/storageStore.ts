@@ -7,6 +7,8 @@ import { storageService } from './storageService'
 import { useProductsStore } from '@/stores/productsStore'
 import { DebugUtils } from '@/utils'
 import { transitBatchService } from './transitBatchService'
+import { reconciliationService } from './reconciliationService'
+import type { ReconciliationResult } from './reconciliationService'
 
 import type { Department } from '@/stores/productsStore/types' // ✅ ДОБАВЛЕНО
 import type {
@@ -498,7 +500,9 @@ export const useStorageStore = defineStore('storage', () => {
     }
   }
 
-  async function createReceipt(data: CreateReceiptData): Promise<StorageOperation> {
+  async function createReceipt(
+    data: CreateReceiptData
+  ): Promise<{ operation: StorageOperation; reconciliations: ReconciliationResult[] }> {
     state.value.creatingOperation = true
     state.value.error = null
 
@@ -514,16 +518,26 @@ export const useStorageStore = defineStore('storage', () => {
       // Reload balances after operation
       await loadBalances()
 
-      // ✅ REMOVED (Migration 111): Auto-reconciliation of negative batches
-      // Negative batches now remain active to allow proper balance calculation
-      // Reconciliation will happen during inventory count instead of receipt creation
+      // Auto-reconcile negative batches for received products
+      const reconciliations: ReconciliationResult[] = []
+      for (const item of data.items) {
+        try {
+          const result = await reconciliationService.autoReconcileOnNewBatch(item.itemId)
+          if (result.reconciled) reconciliations.push(result)
+        } catch (err) {
+          DebugUtils.warn(MODULE_NAME, 'Reconciliation failed', {
+            itemId: item.itemId,
+            error: err
+          })
+        }
+      }
 
-      // Refresh balances to reflect new batches
+      // Refresh balances to reflect reconciled batches
       await fetchBalances(data.department)
       DebugUtils.info(MODULE_NAME, '✅ Batches refreshed after receipt creation')
 
       DebugUtils.info(MODULE_NAME, '✅ Receipt created successfully')
-      return response.data
+      return { operation: response.data, reconciliations }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create receipt'
       state.value.error = message
@@ -708,7 +722,24 @@ export const useStorageStore = defineStore('storage', () => {
         state.value.operations.unshift(...correctionOperations)
       }
 
-      // ✅ Обновляем балансы конкретного департамента (non-critical, don't throw)
+      // Auto-reconcile negative batches for all inventoried products
+      try {
+        const uniqueProductIds = [
+          ...new Set(inventory.items.map((item: InventoryItem) => item.itemId))
+        ]
+        const reconciliations =
+          await reconciliationService.autoReconcileMultipleProducts(uniqueProductIds)
+        if (reconciliations.length > 0) {
+          DebugUtils.info(
+            MODULE_NAME,
+            `Inventory reconciled ${reconciliations.length} products with negative batches`
+          )
+        }
+      } catch (err) {
+        DebugUtils.warn(MODULE_NAME, 'Post-inventory reconciliation failed', { error: err })
+      }
+
+      // Обновляем балансы конкретного департамента (non-critical, don't throw)
       try {
         await fetchBalances(inventory.department)
       } catch (balanceError) {

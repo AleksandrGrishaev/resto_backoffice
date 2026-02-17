@@ -1,24 +1,11 @@
--- RPC Function: complete_receipt_full
--- Purpose: Atomic receipt completion in single transaction
--- Performance: Replaces 45-60+ sequential API calls with 1 RPC call (20s → 1-2s)
--- Created: 2026-01-02
--- Updated: 2026-01-27 (Migration 098 - fix JSON key names)
--- Updated: 2026-01-30 (Round amounts to whole IDR to avoid tolerance issues)
-
--- PARAMETERS:
--- p_receipt_id: Receipt ID to complete
--- p_order_id: Related purchase order ID
--- p_delivery_date: Actual delivery timestamp
--- p_warehouse_id: Target warehouse
--- p_supplier_id: Supplier counteragent ID
--- p_supplier_name: Supplier name for payment record
--- p_total_amount: Total receipt amount
--- p_received_items: JSONB array of received items with structure:
---   [{ itemId, itemName, receivedQuantity, actualPrice, packageId, packageSize }]
-
--- RETURNS:
--- JSONB: { success: boolean, convertedBatches, reconciledBatches, operationId,
---          originalAmount, actualDeliveredAmount, error?, code? }
+-- Migration: 152_reenable_neg_batch_reconciliation
+-- Description: Re-enable auto-reconciliation of negative batches for raw products
+--   with proper deficit deduction from positive batches
+-- Date: 2026-02-17
+-- Context: Migration 111 disabled NEG batch reconciliation during receipt.
+--   NEG batches remained is_active=true forever. This re-enables reconciliation
+--   but now correctly deducts deficit from positive batches before marking NEGs.
+--   Example: NEG -950g + new batch 1000g → new batch becomes 50g, NEG reconciled.
 
 CREATE OR REPLACE FUNCTION complete_receipt_full(
   p_receipt_id TEXT,
@@ -50,14 +37,12 @@ DECLARE
   v_to_deduct NUMERIC;
   v_new_qty NUMERIC;
 BEGIN
-  -- Get order/receipt numbers for references
   SELECT order_number, COALESCE(original_total_amount, total_amount)
   INTO v_order_number, v_original_total
   FROM supplierstore_orders WHERE id = p_order_id;
 
   SELECT receipt_number INTO v_receipt_number FROM supplierstore_receipts WHERE id = p_receipt_id;
 
-  -- Validate required data exists
   IF v_order_number IS NULL THEN
     RETURN jsonb_build_object('success', false, 'error', 'Order not found', 'code', 'ORDER_NOT_FOUND');
   END IF;
@@ -75,15 +60,12 @@ BEGIN
   WHERE purchase_order_id = p_order_id AND status = 'in_transit';
   GET DIAGNOSTICS v_converted = ROW_COUNT;
 
-  -- 2. UPDATE BATCH QUANTITIES/PRICES AND CALCULATE ACTUAL DELIVERED AMOUNT
+  -- 2. UPDATE BATCH QUANTITIES/PRICES
   FOR v_item IN SELECT * FROM jsonb_array_elements(p_received_items)
   LOOP
-    -- Get price with proper fallback chain
-    -- Client sends: actualPrice (which is actualBaseCost || orderedBaseCost from client side)
-    -- Also support actualBaseCost for backwards compatibility
     v_item_price := COALESCE(
-      (v_item->>'actualPrice')::NUMERIC,      -- Primary: Client sends this
-      (v_item->>'actualBaseCost')::NUMERIC,   -- Fallback: For compatibility
+      (v_item->>'actualPrice')::NUMERIC,
+      (v_item->>'actualBaseCost')::NUMERIC,
       0
     );
 
@@ -97,11 +79,9 @@ BEGIN
       AND item_id = v_item->>'itemId'
       AND status = 'active';
 
-    -- Calculate actual delivered amount
     v_actual_delivered := v_actual_delivered +
       (v_item->>'receivedQuantity')::NUMERIC * v_item_price;
 
-    -- Build items array for storage_operation
     v_items_array := v_items_array || jsonb_build_object(
       'itemId', v_item->>'itemId',
       'itemName', v_item->>'itemName',
@@ -110,67 +90,64 @@ BEGIN
     );
   END LOOP;
 
-  -- 3. AUTO-RECONCILE NEGATIVE BATCHES for received products
-  -- For each received product: deduct NEG deficit from positive batches, then mark NEGs reconciled
+  -- 3. AUTO-RECONCILE NEGATIVE BATCHES
+  -- Deduct NEG deficit from newest positive batches, then mark NEGs reconciled
   v_reconciled := 0;
 
   FOR v_neg IN
-      SELECT id, item_id, current_quantity
+    SELECT id, item_id, current_quantity
+    FROM storage_batches
+    WHERE item_type = 'product'
+      AND is_negative = true
+      AND reconciled_at IS NULL
+      AND item_id IN (
+        SELECT DISTINCT v_item->>'itemId'
+        FROM jsonb_array_elements(p_received_items) AS v_item
+      )
+    ORDER BY created_at ASC
+  LOOP
+    v_deficit := ABS(v_neg.current_quantity);
+
+    -- Deduct deficit from newest positive batches (LIFO)
+    FOR v_pos IN
+      SELECT id, current_quantity, cost_per_unit
       FROM storage_batches
-      WHERE item_type = 'product'
-        AND is_negative = true
-        AND reconciled_at IS NULL
-        AND item_id IN (
-          SELECT DISTINCT v_item->>'itemId'
-          FROM jsonb_array_elements(p_received_items) AS v_item
-        )
-      ORDER BY created_at ASC
+      WHERE item_id = v_neg.item_id
+        AND item_type = 'product'
+        AND is_active = true
+        AND (is_negative = false OR is_negative IS NULL)
+        AND current_quantity > 0
+      ORDER BY created_at DESC
     LOOP
-      v_deficit := ABS(v_neg.current_quantity);
+      EXIT WHEN v_deficit <= 0;
 
-      -- Deduct deficit from newest positive batches (LIFO)
-      FOR v_pos IN
-        SELECT id, current_quantity, cost_per_unit
-        FROM storage_batches
-        WHERE item_id = v_neg.item_id
-          AND item_type = 'product'
-          AND is_active = true
-          AND (is_negative = false OR is_negative IS NULL)
-          AND current_quantity > 0
-        ORDER BY created_at DESC
-      LOOP
-        EXIT WHEN v_deficit <= 0;
+      v_to_deduct := LEAST(v_deficit, v_pos.current_quantity);
+      v_new_qty := v_pos.current_quantity - v_to_deduct;
 
-        v_to_deduct := LEAST(v_deficit, v_pos.current_quantity);
-        v_new_qty := v_pos.current_quantity - v_to_deduct;
+      UPDATE storage_batches
+      SET current_quantity = v_new_qty,
+          total_value = v_new_qty * COALESCE(cost_per_unit, 0),
+          status = CASE WHEN v_new_qty <= 0 THEN 'consumed' ELSE 'active' END,
+          is_active = (v_new_qty > 0),
+          updated_at = NOW()
+      WHERE id = v_pos.id;
 
-        UPDATE storage_batches
-        SET current_quantity = v_new_qty,
-            total_value = v_new_qty * COALESCE(cost_per_unit, 0),
-            status = CASE WHEN v_new_qty <= 0 THEN 'consumed' ELSE 'active' END,
-            is_active = (v_new_qty > 0),
-            updated_at = NOW()
-        WHERE id = v_pos.id;
+      v_deficit := v_deficit - v_to_deduct;
+    END LOOP;
 
-        v_deficit := v_deficit - v_to_deduct;
-      END LOOP;
-
-      -- Mark NEG batch as reconciled (fully or partially)
-      IF v_deficit <= 0 THEN
-        -- Fully reconciled
-        UPDATE storage_batches
-        SET reconciled_at = NOW(), status = 'consumed', is_active = false, updated_at = NOW()
-        WHERE id = v_neg.id;
-        v_reconciled := v_reconciled + 1;
-      ELSE
-        -- Partially reconciled: reduce NEG quantity by what we could deduct
-        UPDATE storage_batches
-        SET current_quantity = -v_deficit, updated_at = NOW()
-        WHERE id = v_neg.id;
-      END IF;
+    IF v_deficit <= 0 THEN
+      UPDATE storage_batches
+      SET reconciled_at = NOW(), status = 'consumed', is_active = false, updated_at = NOW()
+      WHERE id = v_neg.id;
+      v_reconciled := v_reconciled + 1;
+    ELSE
+      UPDATE storage_batches
+      SET current_quantity = -v_deficit, updated_at = NOW()
+      WHERE id = v_neg.id;
+    END IF;
   END LOOP;
 
-  -- 4. CREATE STORAGE OPERATION (audit trail)
+  -- 4. CREATE STORAGE OPERATION
   v_operation_id := 'op_' || gen_random_uuid();
   INSERT INTO storage_operations (
     id, operation_type, document_number, operation_date, department,
@@ -187,10 +164,9 @@ BEGIN
       updated_at = NOW()
   WHERE id = p_receipt_id;
 
-  -- Round to whole IDR to avoid tolerance issues (e.g., 366002.70 -> 366003)
   v_actual_delivered := ROUND(v_actual_delivered);
 
-  -- 6. UPDATE ORDER STATUS WITH AMOUNT FIELDS
+  -- 6. UPDATE ORDER STATUS
   UPDATE supplierstore_orders
   SET status = 'delivered',
       receipt_completed_at = NOW(),
@@ -200,7 +176,6 @@ BEGIN
       updated_at = NOW()
   WHERE id = p_order_id;
 
-  -- Return success with counts
   RETURN jsonb_build_object(
     'success', true,
     'convertedBatches', v_converted,
