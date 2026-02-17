@@ -1,46 +1,57 @@
 import { negativeBatchService } from './negativeBatchService'
 import { supabase } from '@/supabase'
+import { DebugUtils } from '@/utils'
+
+const MODULE_NAME = 'ReconciliationService'
 
 /**
- * Service for auto-reconciling negative batches when new preparation production arrives
+ * Result of auto-reconciliation for a single preparation
+ */
+export interface ReconciliationResult {
+  reconciled: boolean
+  deficitQuantity: number
+  unit: string
+  batchCount: number
+  preparationName: string
+}
+
+/**
+ * Service for auto-reconciling negative batches when new preparation production arrives.
  *
- * @module reconciliationService
- * @description
- * When new preparation production arrives for a preparation that has unreconciled negative batches:
- * 1. Detects all unreconciled negative batches for the preparation
- * 2. Marks negative batches as reconciled (technical records only)
- *
- * NOTE: Negative batches are technical records for inventory tracking.
- * They do NOT create account transactions as they represent inventory variances,
- * not real cash movements.
- *
- * This ensures that:
- * - Negative batches are tracked for monitoring purposes
- * - Full audit trail of reconciliation events
- * - Real cash accounts (acc_1) are NOT affected by inventory adjustments
+ * When a new batch is produced, this service:
+ * 1. Detects unreconciled negative batches (on-the-fly kitchen production)
+ * 2. Creates a phantom "auto_production" batch via preparationService (triggers raw ingredient write-off)
+ * 3. Immediately marks the phantom batch as depleted (it was consumed on the spot)
+ * 4. Marks all negative batches as reconciled
  */
 class ReconciliationService {
   /**
-   * Auto-reconcile negative batches when new batch is added
-   * Marks negative batches as reconciled (tracking only, no account transactions)
+   * Auto-reconcile negative batches when new batch is added.
+   * Creates a phantom production to write off raw ingredients for on-the-fly production.
    *
    * @param preparationId - UUID of the preparation
-   * @returns Promise that resolves when reconciliation is complete
-   *
-   * @example
-   * // Called after creating new preparation batch
-   * await reconciliationService.autoReconcileOnNewBatch(preparationId)
+   * @param department - Department of the new production (used for phantom batch)
+   * @returns ReconciliationResult with details of what was reconciled
    */
-  async autoReconcileOnNewBatch(preparationId: string): Promise<void> {
+  async autoReconcileOnNewBatch(
+    preparationId: string,
+    department: 'kitchen' | 'bar'
+  ): Promise<ReconciliationResult> {
+    const noResult: ReconciliationResult = {
+      reconciled: false,
+      deficitQuantity: 0,
+      unit: '',
+      batchCount: 0,
+      preparationName: ''
+    }
+
     // 1. Check for unreconciled negative batches
     const negativeBatches = await negativeBatchService.getNegativeBatches(preparationId)
     if (negativeBatches.length === 0) {
-      // ✅ DEBUG: No negative batches found
-      console.log(`[ReconciliationService] No negative batches to reconcile for ${preparationId}`)
-      return
+      return noResult
     }
 
-    // 2. Get preparation info for transaction description
+    // 2. Get preparation info
     const { data: preparation, error } = await supabase
       .from('preparations')
       .select('id, name')
@@ -48,69 +59,120 @@ class ReconciliationService {
       .single()
 
     if (error || !preparation) {
-      console.error(`❌ Preparation not found for reconciliation: ${preparationId}`, error)
-      return
+      DebugUtils.error(MODULE_NAME, 'Preparation not found for reconciliation', {
+        preparationId,
+        error
+      })
+      return noResult
     }
 
-    // Get unit from negative batch (unit is stored in batches, not preparations table)
-    const unit = negativeBatches[0]?.unit || 'ml'
+    // 3. Calculate total deficit
+    const totalDeficit = negativeBatches.reduce((sum, b) => sum + Math.abs(b.currentQuantity), 0)
 
-    console.info(
-      `🔄 [ReconciliationService] Auto-reconciling ${negativeBatches.length} negative batches for ${preparation.name}`
+    // Average cost from negative batches (weighted)
+    const totalCostValue = negativeBatches.reduce(
+      (sum, b) => sum + Math.abs(b.currentQuantity) * b.costPerUnit,
+      0
     )
+    const avgCostPerUnit = totalDeficit > 0 ? totalCostValue / totalDeficit : 0
 
-    // ✅ DEBUG: Log batches before reconciliation
-    console.log(
-      `[ReconciliationService] Batches to reconcile:`,
-      negativeBatches.map(b => ({
+    DebugUtils.info(MODULE_NAME, `Auto-reconciling ${negativeBatches.length} negative batches`, {
+      preparationName: preparation.name,
+      totalDeficit,
+      avgCostPerUnit,
+      batches: negativeBatches.map(b => ({
         id: b.id,
         batchNumber: b.batchNumber,
         quantity: b.currentQuantity,
-        costPerUnit: b.costPerUnit,
-        status: b.status
+        costPerUnit: b.costPerUnit
       }))
-    )
+    })
 
-    // 3. Process each negative batch for reconciliation
-    for (const negativeBatch of negativeBatches) {
-      const quantity = Math.abs(negativeBatch.currentQuantity)
-      const costPerUnit = negativeBatch.costPerUnit
+    // 4. Create phantom production via preparationService
+    // This triggers raw ingredient write-off through the normal production flow
+    try {
+      const { preparationService } = await import('./preparationService')
 
-      try {
-        // ✅ DEBUG: Log before marking as reconciled
-        console.log(`[ReconciliationService] Reconciling batch ${negativeBatch.batchNumber}...`)
+      await preparationService.createReceipt({
+        department,
+        responsiblePerson: 'System (auto-reconciliation)',
+        items: [
+          {
+            preparationId,
+            quantity: totalDeficit,
+            costPerUnit: avgCostPerUnit,
+            notes: 'auto_reconciliation'
+          }
+        ],
+        sourceType: 'auto_production',
+        notes: `Auto-reconciliation: on-the-fly production of ${preparation.name}`,
+        skipAutoWriteOff: false // Write off raw ingredients
+      })
 
-        // 4. Mark negative batch as reconciled
-        // NOTE: We do NOT create account transactions for negative batches
-        // Negative batches are technical records for inventory tracking only
-        // They should NOT affect real cash accounts
-        await negativeBatchService.markAsReconciled(negativeBatch.id)
+      // 5. Find the phantom batch we just created and mark it as depleted
+      // (it represents production that was already consumed)
+      const { data: phantomBatch } = await supabase
+        .from('preparation_batches')
+        .select('id')
+        .eq('preparation_id', preparationId)
+        .eq('source_type', 'auto_production')
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
 
-        console.info(
-          `✅ [ReconciliationService] Reconciled negative batch: ${preparation.name} (+${quantity} ${negativeBatch.unit} @ ${costPerUnit})`
-        )
-      } catch (error) {
-        console.error(
-          `❌ [ReconciliationService] Failed to reconcile negative batch ${negativeBatch.id}:`,
-          error
-        )
-        // Continue with other batches even if one fails
+      if (phantomBatch) {
+        await supabase
+          .from('preparation_batches')
+          .update({
+            status: 'depleted',
+            is_active: false,
+            current_quantity: 0,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', phantomBatch.id)
+
+        DebugUtils.info(MODULE_NAME, 'Phantom batch marked as depleted', {
+          phantomBatchId: phantomBatch.id
+        })
       }
-    }
 
-    // 6. Log summary
-    const totalQty = negativeBatches.reduce((sum, b) => sum + Math.abs(b.currentQuantity), 0)
-    console.info(
-      `✅ [ReconciliationService] Auto-reconciled ${negativeBatches.length} negative batches for ${preparation.name} (total: ${totalQty} ${negativeBatches[0]?.unit || ''})`
-    )
+      // 6. Mark all negative batches as reconciled
+      for (const negativeBatch of negativeBatches) {
+        try {
+          await negativeBatchService.markAsReconciled(negativeBatch.id)
+        } catch (err) {
+          DebugUtils.error(MODULE_NAME, 'Failed to reconcile negative batch', {
+            batchId: negativeBatch.id,
+            error: err
+          })
+        }
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Auto-reconciliation completed', {
+        preparationName: preparation.name,
+        totalDeficit,
+        batchCount: negativeBatches.length
+      })
+
+      return {
+        reconciled: true,
+        deficitQuantity: totalDeficit,
+        unit: negativeBatches[0]?.unit || 'g',
+        batchCount: negativeBatches.length,
+        preparationName: preparation.name
+      }
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Auto-reconciliation failed', {
+        preparationName: preparation.name,
+        error: err
+      })
+      return noResult
+    }
   }
 
   /**
    * Get reconciliation summary for a preparation
-   * Useful for reports and debugging
-   *
-   * @param preparationId - UUID of the preparation
-   * @returns Summary of unreconciled negative batches
    */
   async getReconciliationSummary(preparationId: string): Promise<{
     hasNegativeBatches: boolean

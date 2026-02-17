@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { DebugUtils } from '@/utils'
 import { preparationService } from './preparationService'
+import { reconciliationService, type ReconciliationResult } from './reconciliationService'
 import { useRecipesStore } from '@/stores/recipes'
 import type {
   PreparationState,
@@ -270,7 +271,9 @@ export const usePreparationStore = defineStore('preparation', () => {
 
   // ✅ REMOVED: createCorrection method - no longer needed (only Recipe Production now)
 
-  async function createReceipt(data: CreatePreparationReceiptData): Promise<PreparationOperation> {
+  async function createReceipt(
+    data: CreatePreparationReceiptData
+  ): Promise<{ operation: PreparationOperation; reconciliations: ReconciliationResult[] }> {
     try {
       state.value.loading.production = true
       state.value.error = null
@@ -278,16 +281,29 @@ export const usePreparationStore = defineStore('preparation', () => {
       const operation = await preparationService.createReceipt(data)
       state.value.operations.unshift(operation)
 
-      // ✅ FIXED: Sync both balances AND batches
+      // Auto-reconcile negative batches (unless this IS a reconciliation receipt)
+      const reconciliations: ReconciliationResult[] = []
+      const dept = data.department
+      if (!data.skipReconciliation && data.sourceType !== 'auto_production' && dept !== 'all') {
+        for (const item of data.items) {
+          const result = await reconciliationService.autoReconcileOnNewBatch(
+            item.preparationId,
+            dept
+          )
+          if (result.reconciled) {
+            reconciliations.push(result)
+          }
+        }
+      }
+
+      // Sync both balances AND batches
       await fetchBalances(data.department)
 
-      // ✅ REMOVED (Migration 111): Auto-reconciliation of negative batches
-      // Negative batches now remain active to allow proper balance calculation
-      // Reconciliation will happen during inventory count instead of receipt creation
+      DebugUtils.info(MODULE_NAME, '✅ Batches refreshed after receipt creation', {
+        reconciliations: reconciliations.length
+      })
 
-      DebugUtils.info(MODULE_NAME, '✅ Batches refreshed after receipt creation')
-
-      return operation
+      return { operation, reconciliations }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Failed to create preparation receipt'

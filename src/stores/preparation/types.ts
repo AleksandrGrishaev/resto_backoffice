@@ -19,6 +19,7 @@ export type BatchSourceType =
   | 'opening_balance'
   | 'inventory_adjustment'
   | 'negative_correction' // ✅ NEW: Correction for negative stock balance
+  | 'auto_production' // Auto-reconciliation of on-the-fly kitchen production
 export type BatchStatus = 'active' | 'expired' | 'depleted' | 'written_off'
 export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 
@@ -176,6 +177,7 @@ export interface CreatePreparationReceiptData {
   sourceType: BatchSourceType
   notes?: string
   skipAutoWriteOff?: boolean // ✨ NEW: Skip auto write-off for inventory corrections
+  skipReconciliation?: boolean // Skip auto-reconciliation (used by phantom auto-production)
   relatedInventoryId?: string // ✨ NEW: Link to inventory document for deficit coverage
 }
 

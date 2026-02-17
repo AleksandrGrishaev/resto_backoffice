@@ -453,7 +453,8 @@ function formatSource(sourceType: string): string {
     correction: 'Inventory Adjustment',
     opening_balance: 'Opening Balance',
     inventory_adjustment: 'Inventory Adjustment', // Legacy support
-    negative_correction: 'Deficit Coverage (Production)'
+    negative_correction: 'Deficit Coverage (Production)',
+    auto_production: 'On-the-fly production (auto)'
   }
   return sources[sourceType] || sourceType
 }

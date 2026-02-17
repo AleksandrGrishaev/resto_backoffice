@@ -43,7 +43,16 @@
       </div>
 
       <!-- Badge (slot for production, KPI indicator for write-offs) -->
-      <v-chip v-if="isProduction" :color="slotColor" size="small" variant="tonal" class="ml-2">
+      <v-chip
+        v-if="isProduction && isAutoReconciliation"
+        color="info"
+        size="x-small"
+        variant="tonal"
+        class="ml-2"
+      >
+        Auto
+      </v-chip>
+      <v-chip v-else-if="isProduction" :color="slotColor" size="small" variant="tonal" class="ml-2">
         {{ slotLabel }}
       </v-chip>
 
@@ -82,6 +91,9 @@ const props = defineProps<Props>()
 const isProduction = computed(() => props.item.type === 'production')
 const isPrepWriteOff = computed(() => props.item.type === 'preparation_writeoff')
 const isProductWriteOff = computed(() => props.item.type === 'product_writeoff')
+const isAutoReconciliation = computed(
+  () => props.item.notes?.includes('auto_reconciliation') ?? false
+)
 
 const cardClass = computed(() => {
   if (isProduction.value) return 'history-card history-card--production'

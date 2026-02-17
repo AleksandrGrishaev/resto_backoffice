@@ -423,6 +423,7 @@ export interface UnifiedHistoryItem {
   totalValue?: number // Cost value (for write-offs)
   responsiblePerson?: string
   department: 'kitchen' | 'bar'
+  notes?: string // Operation notes (e.g. 'auto_reconciliation' for phantom production)
 
   // Production-specific details
   productionDetails?: {

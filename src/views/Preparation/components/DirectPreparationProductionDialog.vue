@@ -58,6 +58,21 @@
               </v-card-text>
             </v-card>
 
+            <!-- Deficit Info Banner (auto-reconciled on production) -->
+            <v-alert
+              v-if="deficitQuantity > 0"
+              type="info"
+              variant="tonal"
+              density="compact"
+              class="mb-4"
+            >
+              <div class="text-body-2">
+                Deficit of
+                <strong>{{ deficitQuantity }} {{ selectedPreparation?.outputUnit }}</strong>
+                will be auto-reconciled when you produce.
+              </div>
+            </v-alert>
+
             <!-- Quantity Input -->
             <v-text-field
               v-if="isPortionType"
@@ -402,108 +417,7 @@
     </v-card>
   </v-dialog>
 
-  <!-- Deficit Warning Dialog -->
-  <v-dialog v-model="showDeficitDialog" max-width="600px" persistent>
-    <v-card>
-      <v-card-title class="d-flex align-center bg-warning">
-        <v-icon icon="mdi-alert" class="mr-2" />
-        <span>Stock Deficit Detected</span>
-      </v-card-title>
-
-      <v-divider />
-
-      <v-card-text class="pa-6">
-        <v-alert type="warning" variant="tonal" class="mb-4">
-          <div class="text-body-1 mb-2">
-            <strong>{{ selectedPreparation?.name }}</strong>
-            has a deficit of
-            <strong>{{ deficitQuantity }} {{ selectedPreparation?.outputUnit }}</strong>
-          </div>
-          <div class="text-caption">
-            This deficit was created when the preparation was used while out of stock.
-          </div>
-        </v-alert>
-
-        <div class="text-subtitle-1 mb-3">How much would you like to produce?</div>
-
-        <v-card
-          variant="outlined"
-          class="mb-3 cursor-pointer"
-          :color="productionChoice === 'cover_deficit' ? 'primary' : undefined"
-          @click="productionChoice = 'cover_deficit'"
-        >
-          <v-card-text class="d-flex align-center">
-            <v-radio
-              :model-value="productionChoice"
-              value="cover_deficit"
-              color="primary"
-              class="mr-2"
-            />
-            <div class="flex-grow-1">
-              <div class="text-subtitle-2 font-weight-bold">Cover Deficit + Standard Batch</div>
-              <div class="text-caption text-medium-emphasis">
-                Produce {{ suggestedQuantity }} {{ selectedPreparation?.outputUnit }} ({{
-                  deficitQuantity
-                }}
-                to cover deficit + {{ selectedPreparation?.outputQuantity }} standard)
-              </div>
-            </div>
-            <v-chip color="success" size="small">Recommended</v-chip>
-          </v-card-text>
-        </v-card>
-
-        <v-card
-          variant="outlined"
-          class="mb-3 cursor-pointer"
-          :color="productionChoice === 'standard' ? 'primary' : undefined"
-          @click="productionChoice = 'standard'"
-        >
-          <v-card-text class="d-flex align-center">
-            <v-radio
-              :model-value="productionChoice"
-              value="standard"
-              color="primary"
-              class="mr-2"
-            />
-            <div class="flex-grow-1">
-              <div class="text-subtitle-2 font-weight-bold">Standard Batch Only</div>
-              <div class="text-caption text-medium-emphasis">
-                Produce {{ selectedPreparation?.outputQuantity }}
-                {{ selectedPreparation?.outputUnit }} (deficit will remain)
-              </div>
-            </div>
-          </v-card-text>
-        </v-card>
-
-        <v-card
-          variant="outlined"
-          class="cursor-pointer"
-          :color="productionChoice === 'custom' ? 'primary' : undefined"
-          @click="productionChoice = 'custom'"
-        >
-          <v-card-text class="d-flex align-center">
-            <v-radio :model-value="productionChoice" value="custom" color="primary" class="mr-2" />
-            <div class="flex-grow-1">
-              <div class="text-subtitle-2 font-weight-bold">Custom Quantity</div>
-              <div class="text-caption text-medium-emphasis">
-                I'll set a custom production quantity manually
-              </div>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-card-text>
-
-      <v-divider />
-
-      <v-card-actions class="pa-4">
-        <v-spacer />
-        <v-btn variant="outlined" @click="showDeficitDialog = false">Cancel</v-btn>
-        <v-btn color="primary" variant="flat" @click="handleDeficitChoice(productionChoice)">
-          Continue
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+  <!-- Deficit info dialog removed: auto-reconciliation handles deficits automatically -->
 </template>
 
 <script setup lang="ts">
@@ -579,11 +493,8 @@ const formData = ref<CreatePreparationReceiptData>({
   notes: ''
 })
 
-// Deficit dialog state
-const showDeficitDialog = ref(false)
+// Deficit info (displayed as banner, auto-reconciled on production)
 const deficitQuantity = ref(0)
-const suggestedQuantity = ref(0)
-const productionChoice = ref<'cover_deficit' | 'standard' | 'custom'>('cover_deficit')
 
 // NEW: Search and filter state
 const searchQuery = ref('')
@@ -870,45 +781,33 @@ watch(selectedPreparationId, async newId => {
 
   const prep = recipesStore.preparations.find((p: any) => p.id === newId)
   if (prep) {
-    // Check for negative batches
+    // Check for negative batches (info only — auto-reconciled on production)
     try {
+      // getNegativeBatches already returns only unreconciled batches (reconciled_at IS NULL)
       const negativeBatches = await negativeBatchService.getNegativeBatches(newId)
-      const unreconciled = negativeBatches.filter(b => !b.reconciled)
 
-      if (unreconciled.length > 0) {
-        // Calculate total deficit
-        deficitQuantity.value = unreconciled.reduce(
+      if (negativeBatches.length > 0) {
+        deficitQuantity.value = negativeBatches.reduce(
           (sum, b) => sum + Math.abs(b.currentQuantity),
           0
         )
-        suggestedQuantity.value = prep.outputQuantity + deficitQuantity.value
-
-        DebugUtils.info(MODULE_NAME, `Found deficit for ${prep.name}`, {
-          deficitQuantity: deficitQuantity.value,
-          suggestedQuantity: suggestedQuantity.value,
-          standardBatch: prep.outputQuantity
+        DebugUtils.info(MODULE_NAME, `Found deficit for ${prep.name} (auto-reconcile on produce)`, {
+          deficitQuantity: deficitQuantity.value
         })
-
-        showDeficitDialog.value = true
       } else {
-        // No deficit, set standard quantity
-        // ⭐ PHASE 2: Handle portion-type preparations
-        if (prep.portionType === 'portion' && prep.portionSize) {
-          portionInput.value = 1 // Default to 1 portion
-          quantity.value = prep.portionSize
-        } else {
-          quantity.value = prep.outputQuantity
-        }
+        deficitQuantity.value = 0
       }
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to check negative batches', { error })
-      // Fallback to standard quantity
-      if (prep.portionType === 'portion' && prep.portionSize) {
-        portionInput.value = 1
-        quantity.value = prep.portionSize
-      } else {
-        quantity.value = prep.outputQuantity
-      }
+      deficitQuantity.value = 0
+    }
+
+    // Always set standard quantity (deficit is handled automatically)
+    if (prep.portionType === 'portion' && prep.portionSize) {
+      portionInput.value = 1
+      quantity.value = prep.portionSize
+    } else {
+      quantity.value = prep.outputQuantity
     }
 
     DebugUtils.info(MODULE_NAME, `Selected preparation: ${prep.name}`, {
@@ -920,28 +819,6 @@ watch(selectedPreparationId, async newId => {
 })
 
 // Methods
-function handleDeficitChoice(choice: 'cover_deficit' | 'standard' | 'custom') {
-  productionChoice.value = choice
-
-  if (!selectedPreparation.value) return
-
-  switch (choice) {
-    case 'cover_deficit':
-      quantity.value = suggestedQuantity.value
-      break
-    case 'standard':
-      quantity.value = selectedPreparation.value.outputQuantity
-      break
-    case 'custom':
-      // Keep current quantity or set to standard
-      quantity.value = selectedPreparation.value.outputQuantity
-      break
-  }
-
-  showDeficitDialog.value = false
-  DebugUtils.info(MODULE_NAME, `User chose: ${choice}`, { quantity: quantity.value })
-}
-
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',

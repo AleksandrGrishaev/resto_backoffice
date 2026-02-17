@@ -124,7 +124,7 @@ export function useBackgroundTasks() {
       // Main operation: Create receipt (handles FIFO, batches, Supabase)
       DebugUtils.info(MODULE_NAME, 'Processing production task', { taskId: task.id })
 
-      await preparationStore.createReceipt(payload.receiptData)
+      const { reconciliations } = await preparationStore.createReceipt(payload.receiptData)
 
       // KPI recording (non-critical, don't fail if this errors)
       if (payload.kpiData) {
@@ -151,8 +151,17 @@ export function useBackgroundTasks() {
       updateTaskStatus(task.id, 'completed')
       task.completedAt = new Date().toISOString()
 
-      const successMessage = `Produced ${payload.quantity}${payload.unit} of ${payload.preparationName}`
-      DebugUtils.info(MODULE_NAME, 'Production task completed', { taskId: task.id })
+      // Build success message, including reconciliation info if applicable
+      let successMessage = `Produced ${payload.quantity}${payload.unit} of ${payload.preparationName}`
+      if (reconciliations.length > 0) {
+        const r = reconciliations[0]
+        successMessage += ` | Deficit of ${r.deficitQuantity}${r.unit} auto-reconciled`
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Production task completed', {
+        taskId: task.id,
+        reconciliations: reconciliations.length
+      })
       callbacks?.onSuccess?.(successMessage)
 
       // Remove task after delay
@@ -503,7 +512,9 @@ export function useBackgroundTasks() {
       DebugUtils.info(MODULE_NAME, 'Processing schedule complete task', { taskId: task.id })
 
       // Step 1: Create production receipt
-      const receipt = await preparationStore.createReceipt(payload.receiptData)
+      const { operation: receipt, reconciliations } = await preparationStore.createReceipt(
+        payload.receiptData
+      )
 
       // Step 2: Mark schedule task as completed
       await kpiStore.completeTask({
@@ -542,7 +553,11 @@ export function useBackgroundTasks() {
       updateTaskStatus(task.id, 'completed')
       task.completedAt = new Date().toISOString()
 
-      const successMessage = `${payload.preparationName} completed (${payload.completedQuantity}${payload.unit})`
+      let successMessage = `${payload.preparationName} completed (${payload.completedQuantity}${payload.unit})`
+      if (reconciliations.length > 0) {
+        const r = reconciliations[0]
+        successMessage += ` | Deficit of ${r.deficitQuantity}${r.unit} auto-reconciled`
+      }
       DebugUtils.info(MODULE_NAME, 'Schedule complete task finished', { taskId: task.id })
       callbacks?.onSuccess?.(successMessage)
 

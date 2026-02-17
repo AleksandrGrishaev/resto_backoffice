@@ -232,6 +232,7 @@ function transformDirectProductions(rows: PreparationOperationRow[]): UnifiedHis
         totalValue: item.totalCost || item.total_cost || 0,
         responsiblePerson: row.responsible_person || undefined,
         department: row.department as 'kitchen' | 'bar',
+        notes: item.notes || row.notes || undefined,
         productionDetails: {
           productionSlot: 'urgent' as const, // Direct productions are typically urgent/ad-hoc
           portionType: undefined,
@@ -361,6 +362,7 @@ interface PreparationOperationRow {
   operation_date: string
   department: string
   responsible_person: string | null
+  notes?: string | null
   items: PreparationOperationItem[]
   write_off_details?: {
     reason?: string
