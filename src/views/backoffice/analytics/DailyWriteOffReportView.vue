@@ -581,11 +581,14 @@ function escapeCSV(value: string | number): string {
       background-color: rgba(var(--v-theme-surface-variant), 0.5);
     }
   }
+}
+</style>
 
-  // Fix native date input calendar icon visibility in dark theme
-  :deep(input[type='date'])::-webkit-calendar-picker-indicator {
-    filter: invert(1);
-    cursor: pointer;
-  }
+<!-- Unscoped: native date input calendar icon is in browser shadow DOM -->
+<style lang="scss">
+.write-off-report input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+  opacity: 1;
 }
 </style>
