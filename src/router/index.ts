@@ -524,6 +524,14 @@ const routes: RouteRecordRaw[] = [
             meta: {
               title: 'Product Variance Report'
             }
+          },
+          {
+            path: 'write-off-report',
+            name: 'write-off-report',
+            component: () => import('@/views/backoffice/analytics/DailyWriteOffReportView.vue'),
+            meta: {
+              title: 'Daily Write-Off Report'
+            }
           }
         ]
       },

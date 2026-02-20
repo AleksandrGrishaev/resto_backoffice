@@ -255,6 +255,18 @@
           </template>
         </v-list-item>
 
+        <!-- Daily Write-Off Report -->
+        <v-list-item
+          to="/analytics/write-off-report"
+          prepend-icon="mdi-delete-clock"
+          color="primary"
+          class="ps-8"
+        >
+          <template #title>
+            <span>Write-Off Report</span>
+          </template>
+        </v-list-item>
+
         <!-- Print Documents (Inventory Sheets) -->
         <v-list-item
           to="/reports/print-docs"
