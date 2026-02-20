@@ -582,10 +582,10 @@ function escapeCSV(value: string | number): string {
     }
   }
 
-  .expanded-details {
-    .op-detail {
-      border: 1px solid rgba(var(--v-border-color), 0.12);
-    }
+  // Fix native date input calendar icon visibility in dark theme
+  :deep(input[type='date'])::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    cursor: pointer;
   }
 }
 </style>
