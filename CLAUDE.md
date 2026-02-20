@@ -2,46 +2,60 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## ⚠️ CRITICAL: Two Separate Databases
+## ⚠️ CRITICAL: Two Separate Databases with Dual MCP Servers
 
-**The project uses TWO completely separate Supabase databases:**
+**The project uses TWO completely separate Supabase databases, each with its own MCP server:**
 
 ### Development Database
 
 - **URL:** `https://fjkfckjpnbcyuknsnchy.supabase.co`
+- **Project ref:** `fjkfckjpnbcyuknsnchy`
 - **Config:** `.env.development`
 - **Purpose:** Local development, testing, experiments
-- **MCP Connection:** ✅ MCP Supabase server is connected to **DEV database**
+- **MCP tools prefix:** `mcp__supabase_dev__*`
 - **Seed Scripts:** `pnpm seed:users`, `pnpm seed:products`, etc.
 
 ### Production Database
 
 - **URL:** `https://bkntdcvzatawencxghob.supabase.co`
+- **Project ref:** `bkntdcvzatawencxghob`
 - **Config:** `.env.production` (anon key only) + `.env.seed.production` (service key for seeding)
 - **Purpose:** Live production environment
-- **MCP Connection:** ❌ MCP is **NOT** connected to production
+- **MCP tools prefix:** `mcp__supabase_prod__*`
 - **Seed Scripts:** `pnpm seed:users:prod`, `pnpm seed:products:prod`, etc.
+
+### MCP Tool Naming Convention
+
+Both databases are accessible simultaneously — no switching needed:
+
+| Operation       | DEV database                                   | PROD database                                   |
+| --------------- | ---------------------------------------------- | ----------------------------------------------- |
+| List tables     | `mcp__supabase_dev__list_tables`               | `mcp__supabase_prod__list_tables`               |
+| Execute SQL     | `mcp__supabase_dev__execute_sql`               | `mcp__supabase_prod__execute_sql`               |
+| Apply migration | `mcp__supabase_dev__apply_migration`           | `mcp__supabase_prod__apply_migration`           |
+| List migrations | `mcp__supabase_dev__list_migrations`           | `mcp__supabase_prod__list_migrations`           |
+| Get advisors    | `mcp__supabase_dev__get_advisors`              | `mcp__supabase_prod__get_advisors`              |
+| Get logs        | `mcp__supabase_dev__get_logs`                  | `mcp__supabase_prod__get_logs`                  |
+| Generate types  | `mcp__supabase_dev__generate_typescript_types` | `mcp__supabase_prod__generate_typescript_types` |
 
 ### Important Notes
 
-1. **MCP Tools (`mcp__supabase__*`) default to DEV database**
+1. **Default to DEV for all development work**
 
-   - `mcp__supabase__execute_sql` → DEV database (by default)
-   - `mcp__supabase__apply_migration` → DEV database (by default)
-   - **CAN** be switched by editing `.mcp.json` (see below)
+   - Always use `mcp__supabase_dev__*` tools for testing, experiments, and development
+   - Use `mcp__supabase_prod__*` tools only when explicitly working with production
 
-2. **For Production Operations:**
+2. **⚠️ Production safety:**
 
-   - Use seed scripts with `.env.seed.production` (contains service key)
-   - Seed scripts use direct SQL, not PostgREST API
-   - Never commit `.env.seed.production` to git (already in `.gitignore`)
-   - **OR** switch MCP to production temporarily (see Switching MCP section)
+   - **Never run `mcp__supabase_prod__apply_migration` without explicit user confirmation**
+   - Always test migrations on DEV first, then apply to PROD
+   - Production `execute_sql` for SELECT queries is safe; for DML (INSERT/UPDATE/DELETE) — confirm with user
 
 3. **PostgREST Schema Cache Issue:**
 
    - Both databases have schema cache problems
    - Tables/functions exist but not visible via PostgREST API
-   - Use direct SQL via `mcp__supabase__execute_sql` or seed scripts
+   - Use direct SQL via `execute_sql` or seed scripts
    - Reload cache: `NOTIFY pgrst, 'reload schema';`
 
 4. **Seed Script Architecture:**
@@ -56,82 +70,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    pnpm seed:products:prod  # PROD database
    ```
 
-### 🔄 Switching MCP Between DEV and Production
-
-**MCP configuration file:** `.mcp.json` (in project root)
-
-#### Current Configuration:
-
-```json
-{
-  "mcpServers": {
-    "supabase": {
-      "type": "http",
-      "url": "https://mcp.supabase.com/mcp?project_ref=fjkfckjpnbcyuknsnchy"
-      //                                                   ↑ DEV database
-    }
-  }
-}
-```
-
-#### Switching to Production:
-
-**⚠️ WARNING: Use with extreme caution! All MCP operations will affect production!**
-
-1. **Edit `.mcp.json`:**
-
-   ```json
-   {
-     "mcpServers": {
-       "supabase": {
-         "type": "http",
-         "url": "https://mcp.supabase.com/mcp?project_ref=bkntdcvzatawencxghob"
-         //                                                   ↑ PRODUCTION database
-       }
-     }
-   }
-   ```
-
-2. **Restart Claude Code** (close and reopen) to apply changes
-
-3. **Verify connection:**
-
-   ```typescript
-   mcp__supabase__list_tables({ schemas: ['public'] })
-   // Should show production tables
-   ```
-
-4. **⚠️ CRITICAL: Switch back to DEV when done!**
-
-   ```json
-   {
-     "mcpServers": {
-       "supabase": {
-         "type": "http",
-         "url": "https://mcp.supabase.com/mcp?project_ref=fjkfckjpnbcyuknsnchy"
-       }
-     }
-   }
-   ```
-
-5. **Restart Claude Code again** to apply changes
-
-#### Best Practices:
-
-- ✅ **Always test migrations on DEV first** before applying to production
-- ✅ **Create migration files** for all schema changes (see Migration Policy below)
-- ✅ **Switch back to DEV immediately** after production work
-- ✅ **Use Supabase SQL Editor** for production migrations when possible
-- ❌ **Never leave MCP pointed at production** for daily development
-- ❌ **Never commit `.mcp.json` with production ref** to git
-
-#### Quick Reference:
-
-| Database | Project Ref            | URL                                        |
-| -------- | ---------------------- | ------------------------------------------ |
-| DEV      | `fjkfckjpnbcyuknsnchy` | `https://fjkfckjpnbcyuknsnchy.supabase.co` |
-| PROD     | `bkntdcvzatawencxghob` | `https://bkntdcvzatawencxghob.supabase.co` |
-
 ## ⚠️ CRITICAL: Database Migrations Policy
 
 **MANDATORY: All database schema changes MUST be accompanied by migration files.**
@@ -143,7 +81,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 1. **Test changes on DEV database first** using MCP tools:
 
    ```typescript
-   mcp__supabase__apply_migration({
+   mcp__supabase_dev__apply_migration({
      name: 'descriptive_name',
      query: 'ALTER TABLE ...'
    })
@@ -178,9 +116,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 4. **Apply to production:**
    - Review the migration file
-   - Test on a staging/dev branch if possible
-   - Apply manually to production database using Supabase SQL Editor or CLI
-   - Never rely on MCP for production changes (it's connected to DEV only)
+   - Test on DEV first via `mcp__supabase_dev__apply_migration`
+   - Apply to production via `mcp__supabase_prod__apply_migration` (with user confirmation)
+   - Alternatively, apply manually via Supabase SQL Editor or CLI
 
 ### Examples of Changes Requiring Migrations
 
@@ -223,11 +161,11 @@ src/supabase/migrations/
 
 ### Common Mistake to Avoid
 
-❌ **BAD**: Use `mcp__supabase__apply_migration` on DEV → forget to create migration file → production gets out of sync
+❌ **BAD**: Use `mcp__supabase_dev__apply_migration` on DEV → forget to create migration file → production gets out of sync
 
-✅ **GOOD**: Use `mcp__supabase__apply_migration` on DEV → create migration file → apply to production using the file
+✅ **GOOD**: `mcp__supabase_dev__apply_migration` on DEV → create migration file → `mcp__supabase_prod__apply_migration` on PROD (with confirmation)
 
-**Remember: MCP tools are for DEV testing only. Migration files are for production deployment.**
+**Remember: Always test on DEV first. Always create migration files. Confirm before applying to PROD.**
 
 ## ⚠️ CRITICAL: RPC Functions Policy
 
@@ -241,14 +179,14 @@ src/supabase/
 
 **Why two copies?**
 
-- `migrations/` - Applied to DB via `mcp__supabase__apply_migration`
+- `migrations/` - Applied to DB via `mcp__supabase_dev__apply_migration` / `mcp__supabase_prod__apply_migration`
 - `functions/` - Version-controlled source code with comments (NOT executed)
 
 **Workflow:**
 
 1. Write function in `functions/function_name.sql` with detailed comments
 2. Copy same code to `migrations/NNN_function_name.sql`
-3. Apply migration: `mcp__supabase__apply_migration({ name, query })`
+3. Apply migration to DEV: `mcp__supabase_dev__apply_migration({ name, query })`
 4. Use in client: `supabase.rpc('function_name', { params })`
 
 **Best practices:**
@@ -258,7 +196,7 @@ src/supabase/
 - Always include `EXCEPTION WHEN OTHERS` for error handling
 - Always test on DEV first
 
-**⚠️ PostgREST registration:** Always use `mcp__supabase__apply_migration` to create functions. Manual SQL Editor functions require cache reload.
+**⚠️ PostgREST registration:** Always use `mcp__supabase_dev__apply_migration` (or `_prod__`) to create functions. Manual SQL Editor functions require cache reload.
 
 ## Documentation Structure
 
@@ -629,51 +567,52 @@ Current state: Fully integrated for most stores. Uses Supabase as primary data s
 
 ### Working with Database via MCP
 
-The project has **MCP Supabase integration** enabled, allowing direct database operations through Claude Code.
+The project has **two MCP Supabase servers** — one for DEV, one for PROD — both accessible simultaneously.
 
-**Available MCP tools:**
+**Tool prefixes:** `mcp__supabase_dev__*` (development) and `mcp__supabase_prod__*` (production)
 
-- `mcp__supabase__list_tables` - List all database tables and their structure
-- `mcp__supabase__execute_sql` - Execute raw SQL queries (SELECT, INSERT, UPDATE, DELETE)
-- `mcp__supabase__apply_migration` - Apply database migrations (DDL operations)
-- `mcp__supabase__list_migrations` - View migration history
-- `mcp__supabase__get_advisors` - Check for security/performance issues
-- `mcp__supabase__get_logs` - View service logs (api, postgres, auth, storage, etc.)
-- `mcp__supabase__generate_typescript_types` - Generate TypeScript types from database schema
+See the "Two Separate Databases" section above for the full tool reference table.
 
 **Common workflows:**
 
 ```typescript
-// 1. Inspect database structure
-mcp__supabase__list_tables({ schemas: ['public'] })
+// 1. Inspect DEV database structure
+mcp__supabase_dev__list_tables({ schemas: ['public'] })
 
-// 2. Query data
-mcp__supabase__execute_sql({
+// 2. Query DEV data
+mcp__supabase_dev__execute_sql({
   query: 'SELECT * FROM products WHERE category = $1 LIMIT 10'
 })
 
-// 3. Create migration
-mcp__supabase__apply_migration({
+// 3. Apply migration to DEV first
+mcp__supabase_dev__apply_migration({
   name: 'add_products_category_index',
   query: 'CREATE INDEX idx_products_category ON products(category);'
 })
 
-// 4. Check for issues
-mcp__supabase__get_advisors({ type: 'security' }) // Check RLS policies, etc.
+// 4. Then apply same migration to PROD (with user confirmation)
+mcp__supabase_prod__apply_migration({
+  name: 'add_products_category_index',
+  query: 'CREATE INDEX idx_products_category ON products(category);'
+})
+
+// 5. Check for issues on both databases
+mcp__supabase_dev__get_advisors({ type: 'security' })
+mcp__supabase_prod__get_advisors({ type: 'security' })
 ```
 
 **Best practices:**
 
-- Always use `list_tables` first to understand database structure
+- Always use `_dev__` tools for development; use `_prod__` tools only with user confirmation
+- Use `list_tables` first to understand database structure
 - Use `execute_sql` for DML operations (SELECT, INSERT, UPDATE, DELETE)
 - Use `apply_migration` for DDL operations (CREATE, ALTER, DROP)
 - Run `get_advisors` regularly after schema changes to catch missing RLS policies
-- Use prepared statements or parameterized queries to prevent SQL injection
 - **CRITICAL: Always use `apply_migration` for creating RPC functions (stored procedures)**
   - Functions created manually via SQL Editor are NOT registered in PostgREST
   - They will NOT be accessible via Supabase REST API (`.rpc()` calls)
   - Use migrations to ensure functions are properly registered and accessible
-  - Example: `mcp__supabase__apply_migration({ name: 'create_auth_functions', query: 'CREATE FUNCTION ...' })`
+  - Example: `mcp__supabase_dev__apply_migration({ name: 'create_auth_functions', query: 'CREATE FUNCTION ...' })`
 
 **Quick command:** Use `/db` slash command for common database operations (see `.claude/commands/db.md`)
 

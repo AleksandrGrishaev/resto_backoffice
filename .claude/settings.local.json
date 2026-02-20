@@ -78,7 +78,15 @@
       "Bash(pnpm tsc:*)",
       "Bash(pnpm vue-tsc:*)",
       "WebFetch(domain:developer.gobiz.com)",
-      "WebFetch(domain:resto-backoffice.vercel.app)"
+      "WebFetch(domain:resto-backoffice.vercel.app)",
+      "Bash(vercel ls:*)",
+      "mcp__supabase_prod__execute_sql",
+      "mcp__supabase_dev__execute_sql",
+      "mcp__supabase_dev__list_tables",
+      "Bash(git commit:*)",
+      "Bash(git merge:*)",
+      "mcp__supabase_prod__apply_migration",
+      "mcp__supabase_dev__apply_migration"
     ]
   },
   "enableAllProjectMcpServers": true,

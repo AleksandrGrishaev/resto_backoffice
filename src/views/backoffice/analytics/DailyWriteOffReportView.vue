@@ -586,9 +586,23 @@ function escapeCSV(value: string | number): string {
 
 <!-- Unscoped: native date input calendar icon is in browser shadow DOM -->
 <style lang="scss">
-.write-off-report input[type='date']::-webkit-calendar-picker-indicator {
-  filter: invert(1);
-  cursor: pointer;
-  opacity: 1;
+.write-off-report {
+  .v-field__input {
+    // Prevent Vuetify from clipping the native calendar icon
+    flex-wrap: nowrap;
+  }
+
+  input[type='date'] {
+    // Ensure the date text doesn't push the icon out of view
+    min-width: 0;
+
+    &::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+      cursor: pointer;
+      opacity: 1;
+      flex-shrink: 0;
+      margin-left: 2px;
+    }
+  }
 }
 </style>

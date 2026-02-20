@@ -1,24 +1,8 @@
--- RPC Function: complete_receipt_full
--- Purpose: Atomic receipt completion in single transaction
--- Performance: Replaces 45-60+ sequential API calls with 1 RPC call (20s → 1-2s)
--- Created: 2026-01-02
--- Updated: 2026-01-27 (Migration 098 - fix JSON key names)
--- Updated: 2026-01-30 (Round amounts to whole IDR to avoid tolerance issues)
-
--- PARAMETERS:
--- p_receipt_id: Receipt ID to complete
--- p_order_id: Related purchase order ID
--- p_delivery_date: Actual delivery timestamp
--- p_warehouse_id: Target warehouse
--- p_supplier_id: Supplier counteragent ID
--- p_supplier_name: Supplier name for payment record
--- p_total_amount: Total receipt amount
--- p_received_items: JSONB array of received items with structure:
---   [{ itemId, itemName, receivedQuantity, actualPrice, packageId, packageSize }]
-
--- RETURNS:
--- JSONB: { success: boolean, convertedBatches, reconciledBatches, operationId,
---          originalAmount, actualDeliveredAmount, error?, code? }
+-- Migration: 153_fix_complete_receipt_ambiguous_v_item
+-- Description: Fix ambiguous column reference "v_item" in complete_receipt_full RPC
+-- The variable v_item (declared in DECLARE block) conflicted with the table alias
+-- v_item in a subquery on line 124. Renamed the alias to "elem".
+-- Date: 2026-02-18
 
 CREATE OR REPLACE FUNCTION complete_receipt_full(
   p_receipt_id TEXT,
@@ -50,14 +34,12 @@ DECLARE
   v_to_deduct NUMERIC;
   v_new_qty NUMERIC;
 BEGIN
-  -- Get order/receipt numbers for references
   SELECT order_number, COALESCE(original_total_amount, total_amount)
   INTO v_order_number, v_original_total
   FROM supplierstore_orders WHERE id = p_order_id;
 
   SELECT receipt_number INTO v_receipt_number FROM supplierstore_receipts WHERE id = p_receipt_id;
 
-  -- Validate required data exists
   IF v_order_number IS NULL THEN
     RETURN jsonb_build_object('success', false, 'error', 'Order not found', 'code', 'ORDER_NOT_FOUND');
   END IF;
@@ -78,12 +60,9 @@ BEGIN
   -- 2. UPDATE BATCH QUANTITIES/PRICES AND CALCULATE ACTUAL DELIVERED AMOUNT
   FOR v_item IN SELECT * FROM jsonb_array_elements(p_received_items)
   LOOP
-    -- Get price with proper fallback chain
-    -- Client sends: actualPrice (which is actualBaseCost || orderedBaseCost from client side)
-    -- Also support actualBaseCost for backwards compatibility
     v_item_price := COALESCE(
-      (v_item->>'actualPrice')::NUMERIC,      -- Primary: Client sends this
-      (v_item->>'actualBaseCost')::NUMERIC,   -- Fallback: For compatibility
+      (v_item->>'actualPrice')::NUMERIC,
+      (v_item->>'actualBaseCost')::NUMERIC,
       0
     );
 
@@ -97,11 +76,9 @@ BEGIN
       AND item_id = v_item->>'itemId'
       AND status = 'active';
 
-    -- Calculate actual delivered amount
     v_actual_delivered := v_actual_delivered +
       (v_item->>'receivedQuantity')::NUMERIC * v_item_price;
 
-    -- Build items array for storage_operation
     v_items_array := v_items_array || jsonb_build_object(
       'itemId', v_item->>'itemId',
       'itemName', v_item->>'itemName',
@@ -111,7 +88,6 @@ BEGIN
   END LOOP;
 
   -- 3. AUTO-RECONCILE NEGATIVE BATCHES for received products
-  -- For each received product: deduct NEG deficit from positive batches, then mark NEGs reconciled
   v_reconciled := 0;
 
   FOR v_neg IN
@@ -128,7 +104,6 @@ BEGIN
     LOOP
       v_deficit := ABS(v_neg.current_quantity);
 
-      -- Deduct deficit from newest positive batches (LIFO)
       FOR v_pos IN
         SELECT id, current_quantity, cost_per_unit
         FROM storage_batches
@@ -155,15 +130,12 @@ BEGIN
         v_deficit := v_deficit - v_to_deduct;
       END LOOP;
 
-      -- Mark NEG batch as reconciled (fully or partially)
       IF v_deficit <= 0 THEN
-        -- Fully reconciled
         UPDATE storage_batches
         SET reconciled_at = NOW(), status = 'consumed', is_active = false, updated_at = NOW()
         WHERE id = v_neg.id;
         v_reconciled := v_reconciled + 1;
       ELSE
-        -- Partially reconciled: reduce NEG quantity by what we could deduct
         UPDATE storage_batches
         SET current_quantity = -v_deficit, updated_at = NOW()
         WHERE id = v_neg.id;
@@ -187,7 +159,6 @@ BEGIN
       updated_at = NOW()
   WHERE id = p_receipt_id;
 
-  -- Round to whole IDR to avoid tolerance issues (e.g., 366002.70 -> 366003)
   v_actual_delivered := ROUND(v_actual_delivered);
 
   -- 6. UPDATE ORDER STATUS WITH AMOUNT FIELDS
@@ -200,7 +171,6 @@ BEGIN
       updated_at = NOW()
   WHERE id = p_order_id;
 
-  -- Return success with counts
   RETURN jsonb_build_object(
     'success', true,
     'convertedBatches', v_converted,
