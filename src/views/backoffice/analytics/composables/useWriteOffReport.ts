@@ -18,11 +18,17 @@ export interface WriteOffReportFilters {
 }
 
 // Waste = real losses (thrown away)
-const WASTE_REASONS: WriteOffReason[] = ['expired', 'spoiled', 'other', 'cancellation_loss']
+// includes 'expiration' from preparation_operations (same as 'expired')
+const WASTE_REASONS = ['expired', 'expiration', 'spoiled', 'other', 'cancellation_loss']
 // Training/test = intentional, not losses
-const TRAINING_REASONS: WriteOffReason[] = ['education', 'test']
+const TRAINING_REASONS = ['education', 'test']
 // Auto = system-generated consumption
-const AUTO_REASONS: WriteOffReason[] = ['production_consumption', 'sales_consumption']
+const AUTO_REASONS = ['production_consumption', 'sales_consumption']
+
+// Map preparation-specific reasons to display labels
+const EXTRA_REASON_LABELS: Record<string, string> = {
+  expiration: 'Expiration'
+}
 
 export interface DailyWriteOffRow {
   date: string
@@ -31,6 +37,27 @@ export interface DailyWriteOffRow {
   preparationsValue: number
   totalValue: number
   topReason: string
+  // Detail operations for expandable row
+  operations: OperationDetail[]
+}
+
+export interface OperationDetail {
+  id: string
+  source: 'storage' | 'preparation'
+  time: string
+  reason: string
+  reasonLabel: string
+  department: string
+  totalValue: number
+  items: OperationItemDetail[]
+}
+
+export interface OperationItemDetail {
+  itemName: string
+  itemType: 'product' | 'preparation'
+  quantity: number
+  unit: string
+  totalCost: number
 }
 
 export interface ReasonRow {
@@ -62,6 +89,33 @@ export interface WriteOffSummary {
   avgDaily: number
 }
 
+// --- Helpers ---
+
+function isWasteReason(reason: string): boolean {
+  return WASTE_REASONS.includes(reason)
+}
+
+function getReasonLabel(reason: string): string {
+  if (EXTRA_REASON_LABELS[reason]) return EXTRA_REASON_LABELS[reason]
+  const info = WRITE_OFF_REASON_OPTIONS.find(o => o.value === reason)
+  return info?.title || reason || '-'
+}
+
+function getReasonColor(reason: string): string {
+  const info = WRITE_OFF_REASON_OPTIONS.find(o => o.value === reason)
+  if (info) return info.color
+  if (reason === 'expiration') return 'orange'
+  return 'grey'
+}
+
+function matchesTypeFilter(reason: string, type: WriteOffTypeFilter): boolean {
+  if (type === 'all') return true
+  if (type === 'waste') return WASTE_REASONS.includes(reason)
+  if (type === 'training') return TRAINING_REASONS.includes(reason)
+  if (type === 'auto') return AUTO_REASONS.includes(reason)
+  return false
+}
+
 // --- Composable ---
 
 export function useWriteOffReport() {
@@ -88,40 +142,15 @@ export function useWriteOffReport() {
     hasLoaded.value = true
 
     try {
-      // Fetch manual write-offs from storage_operations
-      let query = supabase
-        .from('storage_operations')
-        .select('id, operation_date, department, items, write_off_details, total_value')
-        .eq('operation_type', 'write_off')
-        .gte('operation_date', `${filters.dateFrom}T00:00:00`)
-        .lte('operation_date', `${filters.dateTo}T23:59:59`)
-        .order('operation_date', { ascending: false })
+      // Query both tables in parallel
+      const [storageResult, prepResult] = await Promise.all([
+        fetchStorageOperations(filters),
+        fetchPreparationOperations(filters)
+      ])
 
-      if (filters.department !== 'all') {
-        query = query.eq('department', filters.department)
-      }
-
-      const { data: manualOps, error: manualErr } = await query
-
-      if (manualErr) throw manualErr
-
-      // Filter by type
-      let operations = manualOps || []
-      if (filters.type !== 'all') {
-        const allowedReasons =
-          filters.type === 'waste'
-            ? WASTE_REASONS
-            : filters.type === 'training'
-              ? TRAINING_REASONS
-              : AUTO_REASONS
-        operations = operations.filter((op: any) => {
-          const reason = op.write_off_details?.reason as WriteOffReason
-          return allowedReasons.includes(reason)
-        })
-      }
-
-      // Process data
-      processData(operations, filters)
+      // Merge and process
+      const allOps = [...storageResult, ...prepResult]
+      processData(allOps)
     } catch (err) {
       console.error('Failed to generate write-off report:', err)
       error.value = err instanceof Error ? err.message : 'Failed to generate report'
@@ -131,8 +160,96 @@ export function useWriteOffReport() {
     }
   }
 
-  function processData(operations: any[], filters: WriteOffReportFilters) {
-    // --- Daily aggregation ---
+  interface NormalizedOp {
+    id: string
+    source: 'storage' | 'preparation'
+    operationDate: string
+    department: string
+    reason: string
+    totalValue: number
+    items: Array<{
+      itemName: string
+      itemType: 'product' | 'preparation'
+      quantity: number
+      unit: string
+      totalCost: number
+    }>
+  }
+
+  async function fetchStorageOperations(filters: WriteOffReportFilters): Promise<NormalizedOp[]> {
+    let query = supabase
+      .from('storage_operations')
+      .select('id, operation_date, department, items, write_off_details, total_value')
+      .eq('operation_type', 'write_off')
+      .gte('operation_date', `${filters.dateFrom}T00:00:00`)
+      .lte('operation_date', `${filters.dateTo}T23:59:59`)
+      .order('operation_date', { ascending: false })
+
+    if (filters.department !== 'all') {
+      query = query.eq('department', filters.department)
+    }
+
+    const { data, error: err } = await query
+    if (err) throw err
+
+    return (data || [])
+      .filter((op: any) => matchesTypeFilter(op.write_off_details?.reason || '', filters.type))
+      .map((op: any) => ({
+        id: op.id,
+        source: 'storage' as const,
+        operationDate: op.operation_date,
+        department: op.department || 'unknown',
+        reason: op.write_off_details?.reason || 'other',
+        totalValue: Number(op.total_value) || 0,
+        items: (op.items || []).map((item: any) => ({
+          itemName: item.itemName || item.preparationName || 'Unknown',
+          itemType:
+            item.itemType === 'preparation' ? ('preparation' as const) : ('product' as const),
+          quantity: Number(item.quantity) || 0,
+          unit: item.unit || '',
+          totalCost: Number(item.totalCost) || 0
+        }))
+      }))
+  }
+
+  async function fetchPreparationOperations(
+    filters: WriteOffReportFilters
+  ): Promise<NormalizedOp[]> {
+    let query = supabase
+      .from('preparation_operations')
+      .select('id, operation_date, department, items, write_off_details, total_value')
+      .eq('operation_type', 'write_off')
+      .gte('operation_date', `${filters.dateFrom}T00:00:00`)
+      .lte('operation_date', `${filters.dateTo}T23:59:59`)
+      .order('operation_date', { ascending: false })
+
+    if (filters.department !== 'all') {
+      query = query.eq('department', filters.department)
+    }
+
+    const { data, error: err } = await query
+    if (err) throw err
+
+    return (data || [])
+      .filter((op: any) => matchesTypeFilter(op.write_off_details?.reason || '', filters.type))
+      .map((op: any) => ({
+        id: op.id,
+        source: 'preparation' as const,
+        operationDate: op.operation_date,
+        department: op.department || 'unknown',
+        reason: op.write_off_details?.reason || 'other',
+        totalValue: Number(op.total_value) || 0,
+        items: (op.items || []).map((item: any) => ({
+          itemName: item.preparationName || item.itemName || 'Unknown',
+          itemType: 'preparation' as const,
+          quantity: Number(item.quantity) || 0,
+          unit: item.unit || '',
+          totalCost: Number(item.totalCost) || 0
+        }))
+      }))
+  }
+
+  function processData(operations: NormalizedOp[]) {
     const dailyMap = new Map<
       string,
       {
@@ -141,23 +258,27 @@ export function useWriteOffReport() {
         preparationsValue: number
         totalValue: number
         reasons: Map<string, number>
+        operations: OperationDetail[]
       }
     >()
 
-    // --- Reason aggregation ---
     const reasonMap = new Map<string, { count: number; totalValue: number }>()
-
-    // --- All items (for top-5) ---
     const allItems: TopItemRow[] = []
 
     let totalValue = 0
     let kpiValue = 0
 
     for (const op of operations) {
-      const dateStr = new Date(op.operation_date).toISOString().split('T')[0]
-      const reason: string = op.write_off_details?.reason || 'other'
-      const affectsKPI = WRITE_OFF_CLASSIFICATION.KPI_AFFECTING.includes(reason as WriteOffReason)
-      const opValue = Number(op.total_value) || 0
+      const dateStr = new Date(op.operationDate).toISOString().split('T')[0]
+      const timeStr = new Date(op.operationDate).toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+      const reason = op.reason
+      const affectsKPI =
+        isWasteReason(reason) &&
+        WRITE_OFF_CLASSIFICATION.KPI_AFFECTING.includes(reason as WriteOffReason)
+      const opValue = op.totalValue
 
       totalValue += opValue
       if (affectsKPI) kpiValue += opValue
@@ -169,13 +290,26 @@ export function useWriteOffReport() {
           productsValue: 0,
           preparationsValue: 0,
           totalValue: 0,
-          reasons: new Map()
+          reasons: new Map(),
+          operations: []
         })
       }
       const day = dailyMap.get(dateStr)!
       day.operationsCount++
       day.totalValue += opValue
       day.reasons.set(reason, (day.reasons.get(reason) || 0) + 1)
+
+      // Operation detail for expandable row
+      day.operations.push({
+        id: op.id,
+        source: op.source,
+        time: timeStr,
+        reason,
+        reasonLabel: getReasonLabel(reason),
+        department: op.department,
+        totalValue: opValue,
+        items: op.items
+      })
 
       // Reason
       if (!reasonMap.has(reason)) {
@@ -186,23 +320,19 @@ export function useWriteOffReport() {
       rm.totalValue += opValue
 
       // Items
-      const items: any[] = op.items || []
-      for (const item of items) {
-        const itemType = item.itemType === 'preparation' ? 'preparation' : 'product'
-        const cost = Number(item.totalCost) || 0
-
-        if (itemType === 'preparation') {
-          day.preparationsValue += cost
+      for (const item of op.items) {
+        if (item.itemType === 'preparation') {
+          day.preparationsValue += item.totalCost
         } else {
-          day.productsValue += cost
+          day.productsValue += item.totalCost
         }
 
         allItems.push({
-          itemName: item.itemName || 'Unknown',
-          itemType,
-          quantity: Number(item.quantity) || 0,
-          unit: item.unit || '',
-          totalCost: cost,
+          itemName: item.itemName,
+          itemType: item.itemType,
+          quantity: item.quantity,
+          unit: item.unit,
+          totalCost: item.totalCost,
           reason,
           reasonLabel: getReasonLabel(reason),
           date: dateStr
@@ -213,7 +343,6 @@ export function useWriteOffReport() {
     // Build daily rows sorted by date descending
     dailyRows.value = Array.from(dailyMap.entries())
       .map(([date, data]) => {
-        // Find top reason for this day
         let topReason = ''
         let maxCount = 0
         for (const [r, c] of data.reasons) {
@@ -229,25 +358,23 @@ export function useWriteOffReport() {
           productsValue: data.productsValue,
           preparationsValue: data.preparationsValue,
           totalValue: data.totalValue,
-          topReason: getReasonLabel(topReason)
+          topReason: getReasonLabel(topReason),
+          operations: data.operations.sort((a, b) => a.time.localeCompare(b.time))
         }
       })
       .sort((a, b) => b.date.localeCompare(a.date))
 
     // Build reason breakdown
     reasonBreakdown.value = Array.from(reasonMap.entries())
-      .map(([reason, data]) => {
-        const info = WRITE_OFF_REASON_OPTIONS.find(o => o.value === reason)
-        return {
-          reason,
-          reasonLabel: info?.title || reason,
-          count: data.count,
-          totalValue: data.totalValue,
-          percent: totalValue > 0 ? (data.totalValue / totalValue) * 100 : 0,
-          affectsKPI: WRITE_OFF_CLASSIFICATION.KPI_AFFECTING.includes(reason as WriteOffReason),
-          color: info?.color || 'grey'
-        }
-      })
+      .map(([reason, data]) => ({
+        reason,
+        reasonLabel: getReasonLabel(reason),
+        count: data.count,
+        totalValue: data.totalValue,
+        percent: totalValue > 0 ? (data.totalValue / totalValue) * 100 : 0,
+        affectsKPI: WRITE_OFF_CLASSIFICATION.KPI_AFFECTING.includes(reason as WriteOffReason),
+        color: getReasonColor(reason)
+      }))
       .sort((a, b) => b.totalValue - a.totalValue)
 
     // Top 5 most expensive items
@@ -271,11 +398,6 @@ export function useWriteOffReport() {
     summary.value = { totalValue: 0, operationsCount: 0, kpiValue: 0, kpiPercent: 0, avgDaily: 0 }
   }
 
-  function getReasonLabel(reason: string): string {
-    const info = WRITE_OFF_REASON_OPTIONS.find(o => o.value === reason)
-    return info?.title || reason || '-'
-  }
-
   return {
     loading,
     error,
@@ -285,6 +407,7 @@ export function useWriteOffReport() {
     topItems,
     summary,
     avgDailyValue,
-    generateReport
+    generateReport,
+    getReasonLabel
   }
 }

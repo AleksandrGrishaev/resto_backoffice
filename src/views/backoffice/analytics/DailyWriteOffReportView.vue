@@ -139,11 +139,14 @@
                 </v-card-title>
                 <v-divider />
                 <v-data-table
+                  v-model:expanded="expandedRows"
                   :headers="dailyHeaders"
                   :items="dailyRows"
                   :items-per-page="31"
                   :sort-by="[{ key: 'date', order: 'desc' }]"
                   density="comfortable"
+                  show-expand
+                  item-value="date"
                   class="elevation-0"
                 >
                   <template #[`item.date`]="{ item }">
@@ -168,6 +171,72 @@
                     <v-chip size="small" variant="tonal">
                       {{ item.topReason }}
                     </v-chip>
+                  </template>
+
+                  <!-- Expanded row: operation details -->
+                  <template #expanded-row="{ columns, item }">
+                    <tr>
+                      <td :colspan="columns.length" class="pa-0">
+                        <div class="expanded-details pa-4 bg-grey-darken-4">
+                          <div
+                            v-for="op in item.operations"
+                            :key="op.id"
+                            class="op-detail mb-3 pa-3 rounded border"
+                          >
+                            <div class="d-flex align-center ga-3 mb-2">
+                              <v-chip
+                                :color="op.source === 'preparation' ? 'purple' : 'blue'"
+                                size="x-small"
+                                variant="flat"
+                              >
+                                {{ op.source === 'preparation' ? 'Prep' : 'Storage' }}
+                              </v-chip>
+                              <span class="text-caption text-medium-emphasis">{{ op.time }}</span>
+                              <v-chip size="x-small" variant="tonal">
+                                {{ op.reasonLabel }}
+                              </v-chip>
+                              <span class="text-caption text-medium-emphasis">
+                                {{ op.department }}
+                              </span>
+                              <v-spacer />
+                              <span class="font-weight-bold text-error">
+                                {{ formatIDR(op.totalValue) }}
+                              </span>
+                            </div>
+                            <v-table density="compact" class="bg-transparent">
+                              <thead>
+                                <tr>
+                                  <th class="text-caption">Item</th>
+                                  <th class="text-caption">Type</th>
+                                  <th class="text-caption text-right">Qty</th>
+                                  <th class="text-caption text-right">Cost</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr v-for="(itm, idx) in op.items" :key="idx">
+                                  <td class="text-body-2">{{ itm.itemName }}</td>
+                                  <td>
+                                    <v-chip
+                                      :color="itm.itemType === 'preparation' ? 'purple' : 'blue'"
+                                      size="x-small"
+                                      variant="tonal"
+                                    >
+                                      {{ itm.itemType === 'preparation' ? 'Prep' : 'Product' }}
+                                    </v-chip>
+                                  </td>
+                                  <td class="text-right text-body-2">
+                                    {{ itm.quantity.toFixed(1) }} {{ itm.unit }}
+                                  </td>
+                                  <td class="text-right text-body-2 text-error">
+                                    {{ formatIDR(itm.totalCost) }}
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </v-table>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
                   </template>
                 </v-data-table>
               </v-card>
@@ -329,6 +398,9 @@ const dateTo = ref('')
 const department = ref<'kitchen' | 'bar' | 'all'>('all')
 const typeFilter = ref<'waste' | 'training' | 'auto' | 'all'>('waste')
 
+// Expanded rows (by date key)
+const expandedRows = ref<string[]>([])
+
 const departmentOptions = [
   { title: 'All Departments', value: 'all' },
   { title: 'Kitchen', value: 'kitchen' },
@@ -367,6 +439,7 @@ onMounted(() => {
 
 // Actions
 function handleGenerate() {
+  expandedRows.value = []
   generateReport({
     dateFrom: dateFrom.value,
     dateTo: dateTo.value,
@@ -423,6 +496,12 @@ function escapeCSV(value: string | number): string {
   .v-data-table {
     tbody tr:hover {
       background-color: rgba(var(--v-theme-surface-variant), 0.5);
+    }
+  }
+
+  .expanded-details {
+    .op-detail {
+      border: 1px solid rgba(var(--v-border-color), 0.12);
     }
   }
 }
