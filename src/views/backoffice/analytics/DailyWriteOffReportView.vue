@@ -173,67 +173,78 @@
                     </v-chip>
                   </template>
 
-                  <!-- Expanded row: operation details -->
+                  <!-- Expanded row: grouped by department → source -->
                   <template #expanded-row="{ columns, item }">
                     <tr>
                       <td :colspan="columns.length" class="pa-0">
                         <div class="expanded-details pa-4 bg-grey-darken-4">
-                          <div
-                            v-for="op in item.operations"
-                            :key="op.id"
-                            class="op-detail mb-3 pa-3 rounded border"
+                          <template
+                            v-for="group in groupOperations(item.operations)"
+                            :key="group.department"
                           >
-                            <div class="d-flex align-center ga-3 mb-2">
-                              <v-chip
-                                :color="op.source === 'preparation' ? 'purple' : 'blue'"
-                                size="x-small"
-                                variant="flat"
-                              >
-                                {{ op.source === 'preparation' ? 'Prep' : 'Storage' }}
-                              </v-chip>
-                              <span class="text-caption text-medium-emphasis">{{ op.time }}</span>
-                              <v-chip size="x-small" variant="tonal">
-                                {{ op.reasonLabel }}
-                              </v-chip>
-                              <span class="text-caption text-medium-emphasis">
-                                {{ op.department }}
-                              </span>
-                              <v-spacer />
-                              <span class="font-weight-bold text-error">
-                                {{ formatIDR(op.totalValue) }}
+                            <div class="text-subtitle-2 font-weight-bold text-capitalize mb-2">
+                              {{ group.department }}
+                              <span class="text-caption text-medium-emphasis ml-2">
+                                {{ formatIDR(group.totalValue) }}
                               </span>
                             </div>
-                            <v-table density="compact" class="bg-transparent">
+                            <v-table density="compact" class="mb-4 bg-transparent">
                               <thead>
                                 <tr>
                                   <th class="text-caption">Item</th>
-                                  <th class="text-caption">Type</th>
+                                  <th class="text-caption">Source</th>
+                                  <th class="text-caption">Reason</th>
                                   <th class="text-caption text-right">Qty</th>
                                   <th class="text-caption text-right">Cost</th>
                                 </tr>
                               </thead>
                               <tbody>
-                                <tr v-for="(itm, idx) in op.items" :key="idx">
-                                  <td class="text-body-2">{{ itm.itemName }}</td>
-                                  <td>
-                                    <v-chip
-                                      :color="itm.itemType === 'preparation' ? 'purple' : 'blue'"
-                                      size="x-small"
-                                      variant="tonal"
-                                    >
-                                      {{ itm.itemType === 'preparation' ? 'Prep' : 'Product' }}
-                                    </v-chip>
-                                  </td>
-                                  <td class="text-right text-body-2">
-                                    {{ itm.quantity.toFixed(1) }} {{ itm.unit }}
-                                  </td>
-                                  <td class="text-right text-body-2 text-error">
-                                    {{ formatIDR(itm.totalCost) }}
-                                  </td>
-                                </tr>
+                                <template v-for="section in group.sections" :key="section.source">
+                                  <tr class="section-header">
+                                    <td colspan="5" class="text-caption font-weight-bold pa-1 ps-2">
+                                      <v-chip
+                                        :color="
+                                          section.source === 'preparation' ? 'purple' : 'blue'
+                                        "
+                                        size="x-small"
+                                        variant="flat"
+                                        class="mr-2"
+                                      >
+                                        {{
+                                          section.source === 'preparation'
+                                            ? 'Preparations'
+                                            : 'Products'
+                                        }}
+                                      </v-chip>
+                                      <span class="text-medium-emphasis">
+                                        {{ section.items.length }} items —
+                                        {{ formatIDR(section.totalValue) }}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                  <tr v-for="(itm, idx) in section.items" :key="idx">
+                                    <td class="text-body-2 ps-4">{{ itm.itemName }}</td>
+                                    <td>
+                                      <span class="text-caption text-medium-emphasis">
+                                        {{ itm.time }}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <v-chip size="x-small" variant="tonal">
+                                        {{ itm.reasonLabel }}
+                                      </v-chip>
+                                    </td>
+                                    <td class="text-right text-body-2">
+                                      {{ itm.quantity.toFixed(1) }} {{ itm.unit }}
+                                    </td>
+                                    <td class="text-right text-body-2 text-error">
+                                      {{ formatIDR(itm.totalCost) }}
+                                    </td>
+                                  </tr>
+                                </template>
                               </tbody>
                             </v-table>
-                          </div>
+                          </template>
                         </div>
                       </td>
                     </tr>
@@ -378,7 +389,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { formatIDR } from '@/utils/currency'
 import { TimeUtils } from '@/utils'
-import { useWriteOffReport } from './composables/useWriteOffReport'
+import { useWriteOffReport, type OperationDetail } from './composables/useWriteOffReport'
 
 const {
   loading,
@@ -446,6 +457,78 @@ function handleGenerate() {
     department: department.value,
     type: typeFilter.value
   })
+}
+
+interface GroupedSection {
+  source: 'storage' | 'preparation'
+  totalValue: number
+  items: Array<{
+    itemName: string
+    time: string
+    reasonLabel: string
+    quantity: number
+    unit: string
+    totalCost: number
+  }>
+}
+
+interface GroupedDepartment {
+  department: string
+  totalValue: number
+  sections: GroupedSection[]
+}
+
+function groupOperations(operations: OperationDetail[]): GroupedDepartment[] {
+  const deptMap = new Map<string, Map<'storage' | 'preparation', GroupedSection['items']>>()
+
+  for (const op of operations) {
+    const dept = op.department || 'unknown'
+    if (!deptMap.has(dept)) {
+      deptMap.set(dept, new Map())
+    }
+    const sourceMap = deptMap.get(dept)!
+
+    if (!sourceMap.has(op.source)) {
+      sourceMap.set(op.source, [])
+    }
+    const items = sourceMap.get(op.source)!
+
+    for (const itm of op.items) {
+      items.push({
+        itemName: itm.itemName,
+        time: op.time,
+        reasonLabel: op.reasonLabel,
+        quantity: itm.quantity,
+        unit: itm.unit,
+        totalCost: itm.totalCost
+      })
+    }
+  }
+
+  const result: GroupedDepartment[] = []
+  for (const [dept, sourceMap] of deptMap) {
+    const sections: GroupedSection[] = []
+    // Show storage first, then preparations
+    for (const source of ['storage', 'preparation'] as const) {
+      const items = sourceMap.get(source)
+      if (items && items.length > 0) {
+        sections.push({
+          source,
+          totalValue: items.reduce((sum, i) => sum + i.totalCost, 0),
+          items: items.sort((a, b) => b.totalCost - a.totalCost)
+        })
+      }
+    }
+    if (sections.length > 0) {
+      result.push({
+        department: dept,
+        totalValue: sections.reduce((sum, s) => sum + s.totalValue, 0),
+        sections
+      })
+    }
+  }
+
+  return result.sort((a, b) => b.totalValue - a.totalValue)
 }
 
 function formatDate(dateStr: string): string {
