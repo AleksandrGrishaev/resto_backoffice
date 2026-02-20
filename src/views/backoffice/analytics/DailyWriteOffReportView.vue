@@ -327,7 +327,7 @@ const {
 const dateFrom = ref('')
 const dateTo = ref('')
 const department = ref<'kitchen' | 'bar' | 'all'>('all')
-const typeFilter = ref<'manual' | 'auto' | 'all'>('manual')
+const typeFilter = ref<'waste' | 'training' | 'auto' | 'all'>('waste')
 
 const departmentOptions = [
   { title: 'All Departments', value: 'all' },
@@ -336,7 +336,8 @@ const departmentOptions = [
 ]
 
 const typeOptions = [
-  { title: 'Manual Only', value: 'manual' },
+  { title: 'Waste (Expired, Spoiled, Other)', value: 'waste' },
+  { title: 'Training / Test', value: 'training' },
   { title: 'Auto (Production/Sales)', value: 'auto' },
   { title: 'All', value: 'all' }
 ]

@@ -8,12 +8,21 @@ import {
 
 // --- Types ---
 
+export type WriteOffTypeFilter = 'waste' | 'training' | 'auto' | 'all'
+
 export interface WriteOffReportFilters {
   dateFrom: string
   dateTo: string
   department: 'kitchen' | 'bar' | 'all'
-  type: 'manual' | 'auto' | 'all'
+  type: WriteOffTypeFilter
 }
+
+// Waste = real losses (thrown away)
+const WASTE_REASONS: WriteOffReason[] = ['expired', 'spoiled', 'other', 'cancellation_loss']
+// Training/test = intentional, not losses
+const TRAINING_REASONS: WriteOffReason[] = ['education', 'test']
+// Auto = system-generated consumption
+const AUTO_REASONS: WriteOffReason[] = ['production_consumption', 'sales_consumption']
 
 export interface DailyWriteOffRow {
   date: string
@@ -96,17 +105,18 @@ export function useWriteOffReport() {
 
       if (manualErr) throw manualErr
 
-      // Filter by type if needed
+      // Filter by type
       let operations = manualOps || []
-      if (filters.type === 'auto') {
+      if (filters.type !== 'all') {
+        const allowedReasons =
+          filters.type === 'waste'
+            ? WASTE_REASONS
+            : filters.type === 'training'
+              ? TRAINING_REASONS
+              : AUTO_REASONS
         operations = operations.filter((op: any) => {
-          const reason = op.write_off_details?.reason
-          return reason === 'production_consumption' || reason === 'sales_consumption'
-        })
-      } else if (filters.type === 'manual') {
-        operations = operations.filter((op: any) => {
-          const reason = op.write_off_details?.reason
-          return reason !== 'production_consumption' && reason !== 'sales_consumption'
+          const reason = op.write_off_details?.reason as WriteOffReason
+          return allowedReasons.includes(reason)
         })
       }
 
