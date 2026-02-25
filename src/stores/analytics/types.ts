@@ -106,6 +106,7 @@ export interface PLReport {
   opex: {
     total: number
     byCategory: Record<string, number> // Dynamic: only categories with transactions
+    bySubcategory?: Record<string, Record<string, number>> // Parent → { child → amount }
   }
 
   // Net Profit (before taxes, investments, and shareholders)

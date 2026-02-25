@@ -123,12 +123,26 @@ export const useAccountStore = defineStore('account', () => {
   // ============ CATEGORY GETTERS ============
 
   /**
+   * IDs of parent categories that have children (e.g., marketing)
+   * Used to exclude parents from dropdowns — show children instead
+   */
+  const parentCategoryIds = computed(() => {
+    const ids = new Set<string>()
+    for (const c of state.value.transactionCategories) {
+      if (c.parentId) ids.add(c.parentId)
+    }
+    return ids
+  })
+
+  /**
    * All expense categories (for dropdowns)
-   * Excludes system categories (supplier, sales) - they are used automatically by the system
+   * Excludes system categories and parent categories that have children
    */
   const expenseCategories = computed(() =>
     state.value.transactionCategories
-      .filter(c => c.type === 'expense' && c.isActive && !c.isSystem)
+      .filter(
+        c => c.type === 'expense' && c.isActive && !c.isSystem && !parentCategoryIds.value.has(c.id)
+      )
       .sort((a, b) => a.sortOrder - b.sortOrder)
   )
 
@@ -138,7 +152,13 @@ export const useAccountStore = defineStore('account', () => {
    */
   const posExpenseCategories = computed(() =>
     state.value.transactionCategories
-      .filter(c => c.type === 'expense' && c.isActive && (!c.isSystem || c.code === 'supplier'))
+      .filter(
+        c =>
+          c.type === 'expense' &&
+          c.isActive &&
+          (!c.isSystem || c.code === 'supplier') &&
+          !parentCategoryIds.value.has(c.id)
+      )
       .sort((a, b) => a.sortOrder - b.sortOrder)
   )
 
@@ -148,7 +168,13 @@ export const useAccountStore = defineStore('account', () => {
    */
   const backofficeExpenseCategories = computed(() =>
     state.value.transactionCategories
-      .filter(c => c.type === 'expense' && c.isActive && (!c.isSystem || c.code === 'supplier'))
+      .filter(
+        c =>
+          c.type === 'expense' &&
+          c.isActive &&
+          (!c.isSystem || c.code === 'supplier') &&
+          !parentCategoryIds.value.has(c.id)
+      )
       .sort((a, b) => a.sortOrder - b.sortOrder)
   )
 

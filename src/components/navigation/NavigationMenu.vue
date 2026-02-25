@@ -159,6 +159,18 @@
           </template>
         </v-list-item>
 
+        <!-- Channel Profitability -->
+        <v-list-item
+          to="/analytics/channel-profitability"
+          prepend-icon="mdi-chart-bar"
+          color="primary"
+          class="ps-8"
+        >
+          <template #title>
+            <span>Channel P&L</span>
+          </template>
+        </v-list-item>
+
         <!-- Food Cost Dashboard -->
         <v-list-item
           to="/analytics/food-cost"

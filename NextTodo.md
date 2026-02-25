@@ -14,7 +14,6 @@
 ```
 
 **Важно:** `dine_in` и `takeaway` объединяются в `cafe` — это один бизнес-канал.
-Маркетинг для кафе привлекает людей, которые могут есть на месте или взять с собой.
 
 ---
 
@@ -22,142 +21,84 @@
 
 ### 1. Marketing subcategories (DB migration)
 
-**Статус:** TODO
+**Статус:** DONE (DEV + PROD)
 
-Добавить подкатегории маркетинга для привязки к каналу:
+Подкатегории маркетинга по каналам продаж:
 
-```sql
--- Новые категории (дети marketing)
-google_ads       → cafe        -- Google Ads (приводит людей в кафе)
-social_media     → cafe        -- Instagram, TikTok и т.д.
-influencer       → cafe        -- Блогеры, обзоры
-gofood_promo     → gobiz       -- Промо внутри GoFood (скидки, boost)
-grab_promo       → grab        -- Промо внутри Grab
-offline_promo    → cafe        -- Флаеры, вывески, локальная реклама
-other_marketing  → NULL        -- Общий маркетинг (не привязан к каналу)
+```
+marketing (parent)
+├── marketing_cafe   → cafe   (Google Ads, Instagram, блогеры, флаеры)
+├── marketing_gojek  → gobiz  (GoFood промо, буст)
+├── marketing_grab   → grab   (Grab промо, буст)
+└── marketing_other  → NULL   (общий маркетинг)
 ```
 
-**Что нужно:**
-
-- Добавить поле `parent_id` в `transaction_categories` (ссылка на parent = marketing)
-- Добавить поле `channel_code` в `transaction_categories` (привязка к каналу: cafe/gobiz/grab/NULL)
-- Создать подкатегории маркетинга
-- Обновить UI выбора категории расхода (показывать подкатегории при выборе Marketing)
-
-**Миграция:**
-
-```sql
-ALTER TABLE transaction_categories ADD COLUMN parent_id uuid REFERENCES transaction_categories(id);
-ALTER TABLE transaction_categories ADD COLUMN channel_code text;
-
-INSERT INTO transaction_categories (id, code, name, type, is_opex, is_system, parent_id, channel_code, sort_order)
-VALUES
-  (gen_random_uuid(), 'google_ads',      'Google Ads',       'expense', true, false, (SELECT id FROM transaction_categories WHERE code='marketing'), 'cafe',  1),
-  (gen_random_uuid(), 'social_media',    'Social Media',     'expense', true, false, (SELECT id FROM transaction_categories WHERE code='marketing'), 'cafe',  2),
-  (gen_random_uuid(), 'influencer',      'Influencer',       'expense', true, false, (SELECT id FROM transaction_categories WHERE code='marketing'), 'cafe',  3),
-  (gen_random_uuid(), 'gofood_promo',    'GoFood Promo',     'expense', true, false, (SELECT id FROM transaction_categories WHERE code='marketing'), 'gobiz', 4),
-  (gen_random_uuid(), 'grab_promo',      'Grab Food Promo',  'expense', true, false, (SELECT id FROM transaction_categories WHERE code='marketing'), 'grab',  5),
-  (gen_random_uuid(), 'offline_promo',   'Offline Promo',    'expense', true, false, (SELECT id FROM transaction_categories WHERE code='marketing'), 'cafe',  6),
-  (gen_random_uuid(), 'other_marketing', 'Other Marketing',  'expense', true, false, (SELECT id FROM transaction_categories WHERE code='marketing'), NULL,    7);
-```
+**Миграция 157:** `parent_id`, `channel_code` в `transaction_categories` + 4 подкатегории
+**Данные:** Существующие marketing расходы 2026 переназначены на `marketing_cafe`
 
 ---
 
 ### 2. View: v_channel_profitability (DB)
 
-**Статус:** TODO
+**Статус:** DONE (DEV + PROD)
 
-Аналитический view для P&L по каналам.
+**Миграция 158:** P&L view по каналам (cafe/gobiz/grab) per month
 
-**Логика группировки:**
-
-- `orders.channel_code IN ('dine_in', 'takeaway')` или NULL → `cafe`
-- `orders.channel_code = 'gobiz'` → `gobiz`
-- `orders.channel_code = 'grab'` → `grab`
-
-**Колонки:**
-
-```
-channel          — cafe / gobiz / grab
-period           — month (date_trunc)
-orders_count     — кол-во заказов
-items_sold       — кол-во позиций
-revenue_gross    — выручка до скидок
-revenue_net      — выручка после скидок (реально собрано)
-total_discounts  — скидки (loyalty, promo)
-food_cost        — FIFO себестоимость ингредиентов
-gross_profit     — revenue_net - food_cost
-commission       — комиссия платформы (gojek_commission, grab_commission)
-marketing_cost   — маркетинг привязанный к каналу
-net_profit       — gross_profit - commission - marketing_cost
-food_cost_pct    — food_cost / revenue_net * 100
-net_margin_pct   — net_profit / revenue_net * 100
-```
-
-**Источники данных:**
-
-- Revenue + Discounts + Food cost → `sales_transactions.profit_calculation` (JOIN orders для channel)
-- Commissions → `transactions` WHERE category = gojek_commission / grab_commission
-- Marketing → `transactions` WHERE category IN (marketing subcategories) + channel_code
+- Revenue (gross/net), discounts, food cost, commissions, marketing, net profit
+- Fallback для старых profit_calculation (revenue/cost → netRevenue/ingredientsCost)
 
 ---
 
 ### 3. AI Sherpa access (DB)
 
-**Статус:** DONE
+**Статус:** DONE (DEV + PROD)
 
-- [x] Роль `ai_readonly` с SELECT на 25 таблиц
-- [x] Edge Function `sql-proxy` с API key auth
-- [x] Views: `v_menu_with_cost`, `v_daily_sales`, `v_food_cost_report`, `v_recipe_details`
-- [x] `v_food_cost_report` обновлён: gross/net revenue, food_cost_pct_net/gross
-- [x] Документация: `src/About/docs/ai-agent/sb-agent/README.md`
+- [x] Миграция 159: GRANT SELECT on v_channel_profitability + transaction_categories for ai_readonly
 
 ---
 
-### 4. Data fix: Tom yam paste & Sereh costs
+### 4. Frontend: Marketing subcategory in expense dropdowns
 
 **Статус:** DONE
 
-- [x] Migration 155: Fix batch costs (Tom yam paste 13000→200, Sereh >3000→1286)
-- [x] Recalculated ~20 sales_transactions JSONB
-- [x] Tom Yum margin: -177% → +36.5%
+- [x] `TransactionCategory` type — добавлены `parentId`, `channelCode`
+- [x] `categoryService.ts` — маппинг `parent_id` → `parentId`, `channel_code` → `channelCode`
+- [x] Account store getters — parent категории (marketing) скрыты из dropdowns, показываются children
+- [x] POS ExpenseOperationDialog и Backoffice OperationDialog автоматически показывают подкатегории
 
 ---
 
-### 5. UI: Marketing expense subcategory selector
+### 5. Frontend: P&L Report — marketing subcategory grouping
 
-**Статус:** TODO
+**Статус:** DONE
 
-Обновить UI формы расхода:
-
-- При выборе категории "Marketing" → показать подкатегории (Google Ads, Social Media, etc.)
-- Каждая подкатегория автоматически привязана к каналу
-- Обратная совместимость: старые записи с `marketing` без subcategory → `other_marketing`
+- [x] `plReportStore.ts` — OPEX агрегация группирует subcategories под parent
+- [x] `PLReport` type — добавлен `opex.bySubcategory`
+- [x] `PLReportView.vue` — marketing показывается с вложенными sub-items (indented)
 
 ---
 
 ### 6. UI/View: Channel Profitability Report
 
-**Статус:** TODO
+**Статус:** DONE (DEV + PROD)
 
-Страница в backoffice `/reports/channels` (или вкладка в существующем отчёте):
-
-- Период: month picker
-- Таблица: cafe vs gobiz vs grab
-- Колонки: revenue, food cost, discounts, commissions, marketing, net profit, margins
-- Графики: trend по месяцам
+- [x] Страница `/analytics/channel-profitability` — `ChannelProfitabilityView.vue`
+- [x] Summary cards per channel, P&L comparison table, monthly trend
+- [x] Route + Navigation menu item ("Channel P&L" under Reports)
+- [x] View fix: use `finalRevenue` as unified revenue base (tax-normalized)
+- [x] `revenue_net = revenue_gross - discounts` (NOT netRevenue which deducts commission)
+- [x] `tax_collected` from orders table (order-level, not per-item)
+- [x] Applied to both DEV and PROD
 
 ---
 
 ## Порядок выполнения
 
 ```
-1. Migration: marketing subcategories (parent_id, channel_code)  ← DB only
-2. Migration: v_channel_profitability view                       ← DB only
-3. Grant SELECT на новые объекты для ai_readonly                 ← DB only
-4. UI: expense subcategory selector                              ← Frontend
-5. UI: channel profitability report page                         ← Frontend
+1. ✅ Migration: marketing subcategories (parent_id, channel_code)
+2. ✅ Migration: v_channel_profitability view
+3. ✅ Grant SELECT на новые объекты для ai_readonly
+4. ✅ Frontend: expense subcategory selector
+5. ✅ Frontend: P&L report marketing grouping
+6. ✅ Frontend: channel profitability report page
 ```
-
-Шаги 1-3 можно сделать сейчас (только DB), AI-шерпа сразу получит доступ.
-Шаги 4-5 — фронтенд, можно делать позже.

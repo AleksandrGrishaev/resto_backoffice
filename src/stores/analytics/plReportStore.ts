@@ -273,15 +273,31 @@ export const usePLReportStore = defineStore('plReport', () => {
       })
 
       // Dynamic OPEX aggregation - only categories with actual transactions
+      // Group subcategories under their parent (e.g., marketing_cafe → marketing)
       const opexByCategory: Record<string, number> = {}
+      const opexBySubcategory: Record<string, Record<string, number>> = {}
       for (const tx of opexTransactions) {
         const code = tx.expenseCategory?.category
-        if (code) {
+        if (!code) continue
+
+        const categoryObj = accountStore.getCategoryByCode(code)
+        if (categoryObj?.parentId) {
+          // This is a subcategory — find parent code
+          const allCategories = accountStore.opexCategories
+          const parentCategory = allCategories.find(c => c.id === categoryObj.parentId)
+          const parentCode = parentCategory?.code || code
+          opexByCategory[parentCode] = (opexByCategory[parentCode] || 0) + Math.abs(tx.amount)
+          // Track subcategory breakdown
+          if (!opexBySubcategory[parentCode]) opexBySubcategory[parentCode] = {}
+          opexBySubcategory[parentCode][code] =
+            (opexBySubcategory[parentCode][code] || 0) + Math.abs(tx.amount)
+        } else {
           opexByCategory[code] = (opexByCategory[code] || 0) + Math.abs(tx.amount)
         }
       }
       const opex = {
         byCategory: opexByCategory,
+        bySubcategory: opexBySubcategory,
         total: Object.values(opexByCategory).reduce((sum, v) => sum + v, 0)
       }
 

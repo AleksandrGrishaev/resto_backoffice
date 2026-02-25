@@ -532,6 +532,14 @@ const routes: RouteRecordRaw[] = [
             meta: {
               title: 'Daily Write-Off Report'
             }
+          },
+          {
+            path: 'channel-profitability',
+            name: 'channel-profitability',
+            component: () => import('@/views/backoffice/analytics/ChannelProfitabilityView.vue'),
+            meta: {
+              title: 'Channel Profitability'
+            }
           }
         ]
       },

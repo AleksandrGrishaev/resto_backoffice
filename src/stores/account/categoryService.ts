@@ -279,6 +279,8 @@ class CategoryService {
       isActive: row.is_active as boolean,
       sortOrder: row.sort_order as number,
       description: row.description as string | undefined,
+      parentId: (row.parent_id as string) || undefined,
+      channelCode: (row.channel_code as string) || undefined,
       createdAt: row.created_at as string,
       updatedAt: row.updated_at as string
     }

@@ -44,6 +44,8 @@ export interface TransactionCategory {
   isActive: boolean
   sortOrder: number
   description?: string
+  parentId?: string // Self-referencing FK for subcategories (e.g., marketing → marketing_cafe)
+  channelCode?: string // Sales channel link: 'cafe' | 'gobiz' | 'grab' | null
   createdAt?: string
   updatedAt?: string
 }
