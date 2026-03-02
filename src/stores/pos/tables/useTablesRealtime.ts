@@ -50,14 +50,19 @@ export function useTablesRealtime() {
           handleTableUpdate(payload)
         }
       )
-      .subscribe(status => {
-        DebugUtils.info(MODULE_NAME, 'Tables channel status', { status })
+      .subscribe((status, err) => {
         isConnected.value = status === 'SUBSCRIBED'
 
         if (status === 'SUBSCRIBED') {
           DebugUtils.info(MODULE_NAME, '📡 POS tables Realtime connected')
         } else if (status === 'CHANNEL_ERROR') {
-          DebugUtils.error(MODULE_NAME, '❌ POS tables Realtime error')
+          DebugUtils.warn(
+            MODULE_NAME,
+            '⚠️ POS tables Realtime channel error (will auto-reconnect)',
+            {
+              error: err?.message || 'WebSocket disconnected'
+            }
+          )
         }
       })
   }

@@ -318,6 +318,19 @@ function handleConfirm() {
     return
   }
 
+  // For takeaway, resolve the takeaway channel
+  if (selectedType.value === 'takeaway') {
+    const takeawayChannel = channelsStore.getChannelByCode('takeaway')
+    if (takeawayChannel) {
+      emit('confirm', {
+        orderType: selectedType.value,
+        channelId: takeawayChannel.id,
+        channelCode: 'takeaway'
+      })
+      return
+    }
+  }
+
   // Otherwise, just emit order type change
   emit('confirm', {
     orderType: selectedType.value

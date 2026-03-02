@@ -541,8 +541,15 @@ const handleOrderTypeConfirm = async (data: {
       currentOrder.value.type = data.orderType
 
       // Set channel info if provided (delivery channel)
+      const oldChannelId = currentOrder.value.channelId
       if (data.channelId) currentOrder.value.channelId = data.channelId
       if (data.channelCode) currentOrder.value.channelCode = data.channelCode
+
+      // Reprice items if channel changed (e.g., takeaway→GoFood, dine_in→Grab)
+      const newChannelId = currentOrder.value.channelId
+      if (newChannelId && newChannelId !== oldChannelId) {
+        await ordersStore.repriceItemsForChannel(currentOrder.value.bills, newChannelId)
+      }
 
       // If converting from dine-in to takeaway/delivery, clear table assignment
       if (data.orderType !== 'dine_in' && currentOrder.value.tableId) {
@@ -552,6 +559,9 @@ const handleOrderTypeConfirm = async (data: {
         // Free the table
         await tablesStore.freeTable(tableId)
       }
+
+      // Recalculate totals with new channel taxes
+      await ordersStore.recalculateOrderTotals(currentOrder.value.id)
 
       // Save updated order
       const result = await ordersStore.updateOrder(currentOrder.value)

@@ -57,10 +57,17 @@ export function useOrdersRealtime() {
           handleOrderUpdate(payload)
         }
       )
-      .subscribe(status => {
-        DebugUtils.info(MODULE_NAME, 'Orders channel status', { status })
+      .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
           DebugUtils.info(MODULE_NAME, '📡 POS orders Realtime connected')
+        } else if (status === 'CHANNEL_ERROR') {
+          DebugUtils.warn(
+            MODULE_NAME,
+            '⚠️ POS orders Realtime channel error (will auto-reconnect)',
+            {
+              error: err?.message || 'WebSocket disconnected'
+            }
+          )
         }
       })
 
@@ -80,14 +87,19 @@ export function useOrdersRealtime() {
           handleItemUpdate(payload)
         }
       )
-      .subscribe(status => {
-        DebugUtils.info(MODULE_NAME, 'Items channel status', { status })
+      .subscribe((status, err) => {
         isConnected.value = status === 'SUBSCRIBED'
 
         if (status === 'SUBSCRIBED') {
           DebugUtils.info(MODULE_NAME, '📡 POS order_items Realtime connected')
         } else if (status === 'CHANNEL_ERROR') {
-          DebugUtils.error(MODULE_NAME, '❌ POS order_items Realtime error')
+          DebugUtils.warn(
+            MODULE_NAME,
+            '⚠️ POS order_items Realtime channel error (will auto-reconnect)',
+            {
+              error: err?.message || 'WebSocket disconnected'
+            }
+          )
         }
       })
   }
