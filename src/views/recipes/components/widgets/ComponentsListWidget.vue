@@ -84,6 +84,7 @@ import { ref } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
 import type { Recipe, Preparation } from '@/stores/recipes/types'
+import { getUnitShortName } from '@/types/measurementUnits'
 
 interface Props {
   item: Recipe | Preparation
@@ -161,7 +162,7 @@ function getComponents() {
           if (nestedPrep.portionType === 'portion') {
             baseUnit = 'portion'
           } else {
-            baseUnit = nestedPrep.outputUnit
+            baseUnit = getUnitShortName(nestedPrep.outputUnit)
           }
           // Cost per unit from preparation's calculated cost
           baseCost = nestedPrep.costPerPortion || null
@@ -224,7 +225,7 @@ function getComponents() {
           if (preparation.portionType === 'portion') {
             baseUnit = 'portion'
           } else {
-            baseUnit = preparation.outputUnit
+            baseUnit = getUnitShortName(preparation.outputUnit)
           }
         }
       } else if (component.componentType === 'recipe') {

@@ -754,7 +754,7 @@ function getFixedUnit(component: Component): string {
     if ((prep as any).portionType === 'portion') {
       return 'portion'
     }
-    return prep.outputUnit || 'g'
+    return getUnitShortName(prep.outputUnit)
   }
 
   if (component.componentType === 'recipe') {
@@ -806,7 +806,7 @@ function getBaseUnitInfo(component: Component): string {
   if ((prep as any).portionType === 'portion') {
     return 'portion'
   }
-  return prep.outputUnit || 'g'
+  return getUnitShortName(prep.outputUnit)
 }
 
 // ===== DIALOG METHODS =====
@@ -920,7 +920,7 @@ function getPreparationOutputDisplay(prep: { portionType?: string; outputUnit?: 
   if (prep.portionType === 'portion') {
     return 'portions'
   }
-  return prep.outputUnit || 'g'
+  return getUnitShortName(prep.outputUnit)
 }
 
 // ===== ACCORDION METHODS =====

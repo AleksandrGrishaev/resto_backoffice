@@ -34,7 +34,7 @@
           />
           <v-select
             v-model="form.outputUnit"
-            :items="['gram', 'ml']"
+            :items="['gram', 'ml', 'piece', 'portion']"
             label="Unit"
             variant="outlined"
             density="comfortable"
@@ -126,7 +126,7 @@ import { NumericInputField } from '@/components/input'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
 import { useSnackbar } from '@/composables/useSnackbar'
-import type { RecipeComponent, Preparation } from '@/stores/recipes/types'
+import type { RecipeComponent, Preparation, PreparationOutputUnit } from '@/stores/recipes/types'
 import type { Product } from '@/stores/productsStore/types'
 
 // Lazy import to avoid circular dependency
@@ -151,7 +151,7 @@ const prepTypes = ['sauce', 'base', 'garnish', 'marinade', 'dough', 'filling', '
 const form = reactive({
   name: '',
   outputQuantity: 1000,
-  outputUnit: 'gram' as 'gram' | 'ml',
+  outputUnit: 'gram' as PreparationOutputUnit,
   department: 'kitchen' as 'kitchen' | 'bar',
   type: 'base',
   ingredients: [] as Array<{
