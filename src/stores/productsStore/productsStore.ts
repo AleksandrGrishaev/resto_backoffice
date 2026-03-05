@@ -630,7 +630,7 @@ export const useProductsStore = defineStore('products', {
       if (product) {
         const prepCount = usageData.usedInPreparations?.length || 0
         const recipeCount = usageData.usedInRecipes?.length || 0
-        DebugUtils.info(
+        DebugUtils.debug(
           MODULE_NAME,
           `Product ${product.name} used in ${prepCount} preparations and ${recipeCount} recipes`
         )

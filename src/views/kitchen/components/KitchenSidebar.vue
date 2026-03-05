@@ -128,6 +128,40 @@
           </div>
         </v-btn>
       </template>
+
+      <div class="separator" />
+
+      <!-- Catalog Screen Button -->
+      <v-btn
+        :class="['screen-btn', { active: currentScreen === 'catalog' }]"
+        :color="currentScreen === 'catalog' ? 'primary' : undefined"
+        :variant="currentScreen === 'catalog' ? 'flat' : 'text'"
+        block
+        height="56"
+        @click="handleScreenSelect('catalog')"
+      >
+        <div class="screen-btn-content">
+          <v-icon size="24">mdi-book-open-variant</v-icon>
+          <span class="screen-btn-label">Catalog</span>
+        </div>
+      </v-btn>
+
+      <div class="separator" />
+
+      <!-- Constructor Screen Button -->
+      <v-btn
+        :class="['screen-btn', { active: currentScreen === 'constructor' }]"
+        :color="currentScreen === 'constructor' ? 'primary' : undefined"
+        :variant="currentScreen === 'constructor' ? 'flat' : 'text'"
+        block
+        height="56"
+        @click="handleScreenSelect('constructor')"
+      >
+        <div class="screen-btn-content">
+          <v-icon size="24">mdi-plus-circle-outline</v-icon>
+          <span class="screen-btn-label">Create</span>
+        </div>
+      </v-btn>
     </div>
 
     <div class="spacer" />
@@ -145,6 +179,7 @@ import { useKitchenDishes } from '@/stores/kitchen/composables'
 import { useAuthStore } from '@/stores/auth'
 import { DebugUtils } from '@/utils'
 import KitchenNavigationMenu from './KitchenNavigationMenu.vue'
+import type { KitchenScreenName } from '../types'
 
 const MODULE_NAME = 'KitchenSidebar'
 
@@ -153,7 +188,7 @@ const MODULE_NAME = 'KitchenSidebar'
 // =============================================
 
 interface Props {
-  currentScreen?: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator' | 'inventory'
+  currentScreen?: KitchenScreenName
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -165,9 +200,7 @@ const props = withDefaults(defineProps<Props>(), {
 // =============================================
 
 const emit = defineEmits<{
-  'screen-select': [
-    screen: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator' | 'inventory'
-  ]
+  'screen-select': [screen: KitchenScreenName]
   'department-change': [department: 'all' | 'kitchen' | 'bar']
 }>()
 
@@ -219,9 +252,7 @@ watch(selectedDepartment, value => {
 // METHODS
 // =============================================
 
-const handleScreenSelect = (
-  screen: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator' | 'inventory'
-) => {
+const handleScreenSelect = (screen: KitchenScreenName) => {
   DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })
   emit('screen-select', screen)
 }

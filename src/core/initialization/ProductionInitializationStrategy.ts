@@ -389,6 +389,8 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
         return this.loadChannelsFromAPI()
       case 'gobiz':
         return this.loadGobizFromAPI()
+      case 'menuCollections':
+        return this.loadMenuCollectionsFromAPI()
       default:
         DebugUtils.warn(MODULE_NAME, `Unknown store: ${storeName}`)
         return null
@@ -1052,6 +1054,38 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
 
       return {
         name: 'gobiz',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadMenuCollectionsFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const { useMenuCollectionsStore } = await import('@/stores/menuCollections')
+      const store = useMenuCollectionsStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading menu collections from API...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'menuCollections',
+        success: true,
+        count: store.collections.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load menu collections'
+      DebugUtils.warn(MODULE_NAME, `[PROD] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'menuCollections',
         success: false,
         error: message,
         duration: Date.now() - start
