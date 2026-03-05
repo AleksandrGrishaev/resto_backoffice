@@ -42,10 +42,9 @@
           class="option-name"
           @update:model-value="updateOption(idx, 'name', $event)"
         />
-        <v-text-field
+        <NumericInputField
           :model-value="option.priceAdjustment"
           prefix="+Rp"
-          type="number"
           variant="outlined"
           density="compact"
           hide-details
@@ -64,6 +63,7 @@
 </template>
 
 <script setup lang="ts">
+import { NumericInputField } from '@/components/input'
 import type { ModifierGroup, ModifierOption } from '@/stores/menu/types'
 import { createDefaultModifierOption } from '@/stores/menu/types'
 

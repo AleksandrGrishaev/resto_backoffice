@@ -131,6 +131,7 @@
       v-model="showRecipeDialog"
       :type="editRecipeType"
       :item="editRecipe"
+      tablet
       @saved="handleDialogSaved"
     />
 
@@ -448,6 +449,10 @@ function selectCategory(cat: { id: string; name: string }) {
 }
 
 function openDetail(item: CatalogItem) {
+  // Clear search when selecting a result
+  if (searchQuery.value) {
+    searchQuery.value = ''
+  }
   navStack.value.push({
     item: selectedItem.value ?? undefined,
     category: currentCategory.value ?? undefined

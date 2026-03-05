@@ -22,12 +22,12 @@
           />
 
           <div class="d-flex gap-3 mb-3">
-            <v-text-field
-              v-model.number="formData.packageSize"
+            <NumericInputField
+              v-model="formData.packageSize"
               label="Package Size *"
               :suffix="baseUnit"
               :rules="[rules.required, rules.positive]"
-              type="number"
+              :allow-decimal="true"
               variant="outlined"
               density="comfortable"
               class="flex-grow-1"
@@ -61,11 +61,10 @@
             </div>
           </v-alert>
 
-          <v-text-field
-            v-model.number="formData.packagePrice"
+          <NumericInputField
+            v-model="formData.packagePrice"
             label="Price per Package (optional)"
             suffix="IDR"
-            type="number"
             variant="outlined"
             density="comfortable"
             class="mb-3"
@@ -73,11 +72,11 @@
             persistent-hint
           />
 
-          <v-text-field
-            v-model.number="formData.baseCostPerUnit"
+          <NumericInputField
+            v-model="formData.baseCostPerUnit"
             :label="`Price per ${baseUnit} (optional)`"
             suffix="IDR"
-            type="number"
+            :allow-decimal="true"
             variant="outlined"
             density="comfortable"
             class="mb-3"
@@ -136,6 +135,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
+import { NumericInputField } from '@/components/input'
 import type {
   PackageOption,
   CreatePackageOptionDto,

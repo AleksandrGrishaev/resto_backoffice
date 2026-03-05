@@ -91,17 +91,17 @@
 
             <!-- Base Cost Per Unit -->
             <v-col cols="12" md="6">
-              <v-text-field
-                v-model.number="formData.baseCostPerUnit"
+              <NumericInputField
+                v-model="formData.baseCostPerUnit"
                 label="Base Cost Per Unit *"
                 variant="outlined"
-                type="number"
                 :rules="costRules"
-                prepend-inner-icon="mdi-currency-usd"
                 suffix="IDR"
-                min="0"
-                step="1"
+                :min="0"
               >
+                <template #prepend-inner>
+                  <v-icon>mdi-currency-usd</v-icon>
+                </template>
                 <template #append-inner>
                   <v-tooltip location="top">
                     <template #activator="{ props: tooltipProps }">
@@ -116,23 +116,24 @@
                     </div>
                   </v-tooltip>
                 </template>
-              </v-text-field>
+              </NumericInputField>
             </v-col>
 
             <!-- Yield Percentage -->
             <v-col cols="12" md="6">
-              <v-text-field
-                v-model.number="formData.yieldPercentage"
+              <NumericInputField
+                v-model="formData.yieldPercentage"
                 label="Yield Percentage *"
                 variant="outlined"
-                type="number"
                 :rules="yieldRules"
-                prepend-inner-icon="mdi-percent"
                 suffix="%"
-                min="1"
-                max="100"
-                step="0.1"
+                :min="1"
+                :max="100"
+                :allow-decimal="true"
               >
+                <template #prepend-inner>
+                  <v-icon>mdi-percent</v-icon>
+                </template>
                 <template #append-inner>
                   <v-tooltip location="top">
                     <template #activator="{ props: tooltipProps }">
@@ -147,7 +148,7 @@
                     </div>
                   </v-tooltip>
                 </template>
-              </v-text-field>
+              </NumericInputField>
             </v-col>
 
             <!-- Can Be Sold Switch -->
@@ -218,31 +219,35 @@
 
                       <!-- Shelf Life -->
                       <v-col cols="12" md="6">
-                        <v-text-field
-                          v-model.number="formData.shelfLife"
+                        <NumericInputField
+                          v-model="formData.shelfLife"
                           label="Shelf Life"
                           variant="outlined"
-                          type="number"
-                          prepend-inner-icon="mdi-calendar-clock"
                           suffix="days"
-                          min="1"
+                          :min="1"
                           placeholder="Number of days"
-                        />
+                        >
+                          <template #prepend-inner>
+                            <v-icon>mdi-calendar-clock</v-icon>
+                          </template>
+                        </NumericInputField>
                       </v-col>
 
                       <!-- Minimum Stock -->
                       <v-col cols="12" md="6">
-                        <v-text-field
-                          v-model.number="formData.minStock"
+                        <NumericInputField
+                          v-model="formData.minStock"
                           label="Minimum Stock"
                           variant="outlined"
-                          type="number"
-                          prepend-inner-icon="mdi-package-down"
                           :suffix="getBaseUnitName()"
-                          min="0"
-                          step="0.1"
+                          :min="0"
+                          :allow-decimal="true"
                           placeholder="For notifications"
-                        />
+                        >
+                          <template #prepend-inner>
+                            <v-icon>mdi-package-down</v-icon>
+                          </template>
+                        </NumericInputField>
                       </v-col>
                     </v-row>
                   </v-expansion-panel-text>
@@ -400,6 +405,7 @@ import type {
 import { useProductsStore } from '@/stores/productsStore'
 import { DebugUtils } from '@/utils'
 import PackageOptionDialog from './package/PackageOptionDialog.vue'
+import { NumericInputField } from '@/components/input'
 
 const MODULE_NAME = 'ProductDialog'
 const productsStore = useProductsStore()

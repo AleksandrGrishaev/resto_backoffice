@@ -98,23 +98,21 @@
                   />
                 </v-col>
                 <v-col cols="12" md="4">
-                  <v-text-field
-                    v-model.number="group.minSelection"
-                    type="number"
+                  <NumericInputField
+                    v-model="group.minSelection"
                     label="Min Selection"
                     density="compact"
                     variant="outlined"
-                    min="0"
+                    :min="0"
                   />
                 </v-col>
                 <v-col cols="12" md="4">
-                  <v-text-field
-                    v-model.number="group.maxSelection"
-                    type="number"
+                  <NumericInputField
+                    v-model="group.maxSelection"
                     label="Max Selection (0=unlimited)"
                     density="compact"
                     variant="outlined"
-                    min="0"
+                    :min="0"
                   />
                 </v-col>
 
@@ -211,9 +209,8 @@
                         />
                       </v-col>
                       <v-col cols="12" md="3">
-                        <v-text-field
-                          v-model.number="option.priceAdjustment"
-                          type="number"
+                        <NumericInputField
+                          v-model="option.priceAdjustment"
                           label="Price Adjustment"
                           density="compact"
                           variant="outlined"
@@ -311,9 +308,8 @@
                               <span class="text-caption flex-grow-1">
                                 {{ getCompositionName(comp) }}
                               </span>
-                              <v-text-field
-                                v-model.number="comp.quantity"
-                                type="number"
+                              <NumericInputField
+                                v-model="comp.quantity"
                                 density="compact"
                                 variant="outlined"
                                 hide-details
@@ -621,6 +617,7 @@ import type {
 } from '@/stores/menu/types'
 import type { Recipe, RecipeComponent } from '@/stores/recipes/types'
 import { useRecipesStore } from '@/stores/recipes'
+import { NumericInputField } from '@/components/input'
 import DishSearchWidget from '@/views/menu/components/widgets/DishSearchWidget.vue'
 import ProductSearchWidget from '@/views/menu/components/widgets/ProductSearchWidget.vue'
 

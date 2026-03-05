@@ -8,9 +8,9 @@
       <span class="comp-name">{{ componentName }}</span>
     </div>
     <div class="comp-controls">
-      <v-text-field
+      <NumericInputField
         :model-value="component.quantity"
-        type="number"
+        :allow-decimal="true"
         variant="outlined"
         density="compact"
         hide-details
@@ -26,6 +26,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { NumericInputField } from '@/components/input'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
 import { formatIDR } from '@/utils'

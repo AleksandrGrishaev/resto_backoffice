@@ -27,28 +27,24 @@
           bg-color="surface"
           @update:model-value="emitUpdate"
         />
-        <v-text-field
-          v-model.number="localVariant.price"
-          type="number"
+        <NumericInputField
+          v-model="localVariant.price"
           label="Price"
-          hide-details="auto"
+          :hide-details="'auto'"
           suffix="IDR"
           :rules="[v => v > 0 || 'Price must be greater than 0']"
           required
           style="width: 150px"
-          bg-color="surface"
           @update:model-value="emitUpdate"
         />
-        <v-text-field
-          v-model.number="localVariant.portionMultiplier"
-          type="number"
+        <NumericInputField
+          v-model="localVariant.portionMultiplier"
           label="Modifier Multiplier"
-          hide-details="auto"
+          :hide-details="'auto'"
           placeholder="1.0"
           :rules="[v => !v || v > 0 || 'Must be positive']"
           style="width: 140px"
-          bg-color="surface"
-          step="0.1"
+          :allow-decimal="true"
           @update:model-value="emitUpdate"
         >
           <template #append-inner>
@@ -59,7 +55,7 @@
               <span>Scales modifier quantities (e.g., 1.3 = 30% more)</span>
             </v-tooltip>
           </template>
-        </v-text-field>
+        </NumericInputField>
       </div>
 
       <!-- Композиция -->
@@ -127,13 +123,12 @@
                 </div>
 
                 <!-- Количество -->
-                <v-text-field
-                  v-model.number="component.quantity"
-                  type="number"
+                <NumericInputField
+                  v-model="component.quantity"
                   label="Qty"
-                  hide-details="auto"
-                  bg-color="background"
+                  :hide-details="'auto'"
                   style="width: 100px"
+                  :allow-decimal="true"
                   @update:model-value="emitUpdate"
                 />
 
@@ -232,6 +227,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { MenuItemVariant, MenuComposition, DishType } from '@/stores/menu'
+import { NumericInputField } from '@/components/input'
 import DishSearchWidget from './widgets/DishSearchWidget.vue'
 import ProductSearchWidget from './widgets/ProductSearchWidget.vue'
 

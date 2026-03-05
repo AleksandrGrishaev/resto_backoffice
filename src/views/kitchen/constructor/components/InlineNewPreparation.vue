@@ -23,10 +23,10 @@
         />
 
         <div class="output-row mb-3">
-          <v-text-field
-            v-model.number="form.outputQuantity"
+          <NumericInputField
+            v-model="form.outputQuantity"
             label="Output"
-            type="number"
+            :allow-decimal="true"
             variant="outlined"
             density="comfortable"
             hide-details
@@ -80,9 +80,9 @@
 
           <div v-for="(ing, idx) in form.ingredients" :key="idx" class="ingredient-row">
             <span class="ing-name">{{ getIngredientName(ing) }}</span>
-            <v-text-field
-              v-model.number="ing.quantity"
-              type="number"
+            <NumericInputField
+              v-model="ing.quantity"
+              :allow-decimal="true"
               variant="outlined"
               density="compact"
               hide-details
@@ -122,6 +122,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
+import { NumericInputField } from '@/components/input'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
 import { useSnackbar } from '@/composables/useSnackbar'

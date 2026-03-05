@@ -287,12 +287,10 @@
                 <!-- Quantity and Notes -->
                 <v-row class="mb-2">
                   <v-col cols="4">
-                    <v-text-field
+                    <NumericInputField
                       :model-value="component.quantity"
                       label="Quantity"
-                      type="number"
-                      step="0.1"
-                      min="0"
+                      :allow-decimal="true"
                       variant="outlined"
                       density="comfortable"
                       :rules="[validateRequired, validatePositiveNumber]"
@@ -462,6 +460,7 @@ import { computed, ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { MeasurementUnit } from '@/stores/recipes/types'
 import { formatIDR } from '@/utils/currency'
+import { NumericInputField } from '@/components/input'
 // ✅ ИСПРАВЛЕНО: Используем правильный импорт для единиц измерения
 import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
 // ✅ NEW: Import search widgets

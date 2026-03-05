@@ -1,6 +1,6 @@
 <!-- src/views/recipes/components/UnifiedRecipeDialog.vue - УПРОЩЕННАЯ ВЕРСИЯ -->
 <template>
-  <v-dialog v-model="dialogModel" max-width="900px" persistent scrollable>
+  <v-dialog v-model="dialogModel" :max-width="tablet ? '960px' : '900px'" persistent scrollable>
     <v-card>
       <v-card-title class="text-h5 pa-4">
         {{ getDialogTitle() }}
@@ -22,31 +22,68 @@
 
       <v-card-text class="pa-4">
         <v-form ref="form" v-model="formValid" @submit.prevent="handleSubmit">
-          <!-- ✅ Базовая информация -->
-          <recipe-basic-info-widget
-            :form-data="formData"
-            :type="type"
-            @update-field="updateFormField"
-            @category-changed="handleCategoryChange"
-          />
+          <!-- Tablet: tabbed layout -->
+          <template v-if="tablet">
+            <v-tabs v-model="activeTab" color="primary" class="mb-4">
+              <v-tab value="general">General</v-tab>
+              <v-tab value="components">Components</v-tab>
+            </v-tabs>
 
-          <!-- ✅ Предпросмотр стоимости -->
-          <recipe-cost-preview-widget :form-data="formData" :type="type" />
+            <v-tabs-window v-model="activeTab">
+              <v-tabs-window-item value="general">
+                <recipe-basic-info-widget
+                  :form-data="formData"
+                  :type="type"
+                  tablet
+                  @update-field="updateFormField"
+                  @category-changed="handleCategoryChange"
+                />
+              </v-tabs-window-item>
 
-          <!-- ✅ Редактор компонентов -->
-          <recipe-components-editor-widget
-            :components="formData.components"
-            :type="type"
-            :preparation-id="type === 'preparation' ? formData.id : undefined"
-            :recipe-id="type === 'recipe' ? formData.id : undefined"
-            @component-quantity-changed="onComponentQuantityChange"
-            @add-component="addComponent"
-            @remove-component="removeComponent"
-            @update-component="updateComponent"
-          />
+              <v-tabs-window-item value="components">
+                <recipe-components-editor-widget
+                  :components="formData.components"
+                  :type="type"
+                  :preparation-id="type === 'preparation' ? formData.id : undefined"
+                  :recipe-id="type === 'recipe' ? formData.id : undefined"
+                  @component-quantity-changed="onComponentQuantityChange"
+                  @add-component="addComponent"
+                  @remove-component="removeComponent"
+                  @update-component="updateComponent"
+                />
+                <used-in-widget
+                  v-if="isEditing && formData.id"
+                  :type="type"
+                  :item-id="formData.id"
+                />
+              </v-tabs-window-item>
+            </v-tabs-window>
+          </template>
 
-          <!-- ⭐ PHASE 1: Used In Widget (только для существующих items) -->
-          <used-in-widget v-if="isEditing && formData.id" :type="type" :item-id="formData.id" />
+          <!-- Desktop: single scroll layout -->
+          <template v-else>
+            <recipe-basic-info-widget
+              :form-data="formData"
+              :type="type"
+              @update-field="updateFormField"
+              @category-changed="handleCategoryChange"
+            />
+
+            <recipe-cost-preview-widget :form-data="formData" :type="type" />
+
+            <recipe-components-editor-widget
+              :components="formData.components"
+              :type="type"
+              :preparation-id="type === 'preparation' ? formData.id : undefined"
+              :recipe-id="type === 'recipe' ? formData.id : undefined"
+              @component-quantity-changed="onComponentQuantityChange"
+              @add-component="addComponent"
+              @remove-component="removeComponent"
+              @update-component="updateComponent"
+            />
+
+            <used-in-widget v-if="isEditing && formData.id" :type="type" :item-id="formData.id" />
+          </template>
         </v-form>
       </v-card-text>
 
@@ -87,6 +124,7 @@ interface Props {
   modelValue: boolean
   type: 'recipe' | 'preparation'
   item?: Recipe | Preparation | null
+  tablet?: boolean
 }
 
 interface Emits {
@@ -102,6 +140,7 @@ const form = ref()
 const formValid = ref(false)
 const loading = ref(false)
 const errorMessage = ref('')
+const activeTab = ref('general')
 
 // Dialog model
 const dialogModel = computed({
@@ -338,6 +377,7 @@ watch(dialogModel, async newVal => {
   if (newVal) {
     // Clear any previous errors
     errorMessage.value = ''
+    activeTab.value = 'general'
     DebugUtils.info('UnifiedRecipeDialog', `Dialog opened for ${props.type}`)
 
     if (props.item) {

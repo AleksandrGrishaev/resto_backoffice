@@ -29,6 +29,7 @@
       :suffix="suffix"
       :hint="hint"
       :error-messages="errorMessages"
+      :rules="processedRules"
       :disabled="disabled"
       :readonly="isTabletMode || readonly"
       :variant="variant"
@@ -147,6 +148,7 @@ interface Props {
   max?: number
   maxLength?: number
   required?: boolean
+  rules?: Array<(v: any) => boolean | string>
 
   // Numeric keypad options
   allowDecimal?: boolean
@@ -183,6 +185,7 @@ const props = withDefaults(defineProps<Props>(), {
   max: undefined,
   maxLength: 12,
   required: false,
+  rules: () => [],
   allowDecimal: false,
   allowDoubleZero: true,
   decimalPlaces: 6,
@@ -230,6 +233,14 @@ const editingValue = ref('')
 // =============================================
 
 const isTabletMode = computed(() => props.forceTabletMode || detectedTabletMode.value)
+
+// Process rules to apply against numeric value instead of display string
+const processedRules = computed(() => {
+  if (!props.rules || props.rules.length === 0) return []
+  return props.rules.map(rule => {
+    return (_displayVal: string) => rule(numericValue.value)
+  })
+})
 
 const numericValue = computed(() => {
   if (typeof props.modelValue === 'string') {
