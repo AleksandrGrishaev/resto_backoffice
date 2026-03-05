@@ -3,6 +3,7 @@ import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
 import { useMenuStore } from '@/stores/menu'
 import { formatIDR } from '@/utils'
+import { getUnitShortName } from '@/types/measurementUnits'
 import type { TreeNode } from '../detail/DependencyTree.vue'
 import type { Product } from '@/stores/productsStore/types'
 import type { Preparation, Recipe } from '@/stores/recipes/types'
@@ -92,7 +93,9 @@ export function useCatalogData() {
       unit: p.outputUnit,
       componentCount: p.recipe?.length ?? 0,
       cost: p.costPerPortion,
-      costDisplay: p.costPerPortion ? `${formatIDR(p.costPerPortion)}/${p.outputUnit}` : undefined
+      costDisplay: p.costPerPortion
+        ? `${formatIDR(p.costPerPortion)}/${getUnitShortName(p.outputUnit)}`
+        : undefined
     }))
   )
 
@@ -163,39 +166,46 @@ export function useCatalogData() {
     if (seen.has(key)) return [] // circular dependency guard
     seen.add(key)
 
+    let nodes: TreeNode[] = []
+
     if (type === 'menu') {
       const mi = (menuStore.menuItems as MenuItem[]).find(m => m.id === id)
       if (!mi) return []
       const variant = mi.variants?.[0]
       if (!variant?.composition?.length) return []
-      return variant.composition.map(comp =>
+      nodes = variant.composition.map(comp =>
         buildCompositionNode(
           comp.type as 'product' | 'recipe' | 'preparation',
           comp.id,
           comp.quantity,
           comp.unit,
-          seen
+          seen,
+          comp.useYieldPercentage
         )
       )
-    }
-
-    if (type === 'recipe') {
+    } else if (type === 'recipe') {
       const recipe = recipesStore.getRecipeById(id) as Recipe | undefined
       if (!recipe?.components?.length) return []
-      return recipe.components.map(comp =>
-        buildCompositionNode(comp.componentType, comp.componentId, comp.quantity, comp.unit, seen)
+      nodes = recipe.components.map(comp =>
+        buildCompositionNode(
+          comp.componentType,
+          comp.componentId,
+          comp.quantity,
+          comp.unit,
+          seen,
+          comp.useYieldPercentage
+        )
       )
-    }
-
-    if (type === 'preparation') {
+    } else if (type === 'preparation') {
       const prep = recipesStore.getPreparationById(id) as Preparation | undefined
       if (!prep?.recipe?.length) return []
-      return prep.recipe.map(ing =>
-        buildCompositionNode(ing.type, ing.id, ing.quantity, ing.unit, seen)
+      nodes = prep.recipe.map(ing =>
+        buildCompositionNode(ing.type, ing.id, ing.quantity, ing.unit, seen, ing.useYieldPercentage)
       )
     }
 
-    return []
+    // Sort by cost descending (most expensive first)
+    return nodes.sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0))
   }
 
   function buildCompositionNode(
@@ -203,12 +213,17 @@ export function useCatalogData() {
     id: string,
     quantity: number,
     unit: string,
-    visited: Set<string>
+    visited: Set<string>,
+    useYieldPercentage?: boolean
   ): TreeNode {
-    const cost = resolveComponentCost(type, id, quantity)
+    const cost = resolveComponentCost(type, id, quantity, useYieldPercentage)
 
     if (type === 'product') {
       const p = productsStore.getProductById(id) as Product | null
+      const yieldPct =
+        useYieldPercentage && p?.yieldPercentage && p.yieldPercentage < 100
+          ? p.yieldPercentage
+          : undefined
       return {
         id,
         name: p?.name ?? id,
@@ -216,53 +231,82 @@ export function useCatalogData() {
         quantity,
         unit,
         cost: cost > 0 ? cost : undefined,
-        children: []
+        children: [],
+        yieldPercentage: yieldPct
       }
     }
 
     if (type === 'preparation') {
       const p = recipesStore.getPreparationById(id) as Preparation | undefined
       const children = buildTree('preparation', id, new Set(visited))
-      const totalRecipeCost = children.reduce((sum, c) => sum + (c.cost ?? 0), 0)
+      const childrenSum = children.reduce((sum, c) => sum + (c.cost ?? 0), 0)
+      // If stored cost is missing, derive from children: (childrenSum / outputQuantity) * quantity
+      let effectiveCost = cost
+      if (effectiveCost <= 0 && childrenSum > 0 && p?.outputQuantity && p.outputQuantity > 0) {
+        effectiveCost = Math.round((childrenSum / p.outputQuantity) * quantity)
+      }
+      // For portion-type preparations, outputUnit should be "portion" not the base unit
+      const outputUnit = p?.portionType === 'portion' ? 'portion' : p?.outputUnit
+      // Batch cost: prefer store-calculated cost (accounts for yield etc.), fallback to children sum
+      const batchCost =
+        cost > 0 && p?.outputQuantity
+          ? Math.round((cost / quantity) * p.outputQuantity)
+          : childrenSum
       return {
         id,
         name: p?.name ?? id,
         type: 'preparation',
         quantity,
-        unit,
-        cost: cost > 0 ? cost : undefined,
+        unit: outputUnit || unit,
+        cost: effectiveCost > 0 ? effectiveCost : undefined,
         children,
         outputQuantity: p?.outputQuantity,
-        outputUnit: p?.outputUnit,
-        totalRecipeCost: totalRecipeCost > 0 ? totalRecipeCost : undefined
+        outputUnit,
+        totalRecipeCost: batchCost > 0 ? batchCost : undefined
       }
     }
 
     if (type === 'recipe') {
       const r = recipesStore.getRecipeById(id) as Recipe | undefined
       const children = buildTree('recipe', id, new Set(visited))
-      const totalRecipeCost = children.reduce((sum, c) => sum + (c.cost ?? 0), 0)
+      const childrenSum = children.reduce((sum, c) => sum + (c.cost ?? 0), 0)
+      let effectiveCost = cost
+      if (effectiveCost <= 0 && childrenSum > 0 && r?.portionSize && r.portionSize > 0) {
+        effectiveCost = Math.round((childrenSum / r.portionSize) * quantity)
+      }
+      // Batch cost: prefer store-calculated cost (accounts for yield etc.), fallback to children sum
+      const batchCost =
+        cost > 0 && r?.portionSize ? Math.round((cost / quantity) * r.portionSize) : childrenSum
       return {
         id,
         name: r?.name ?? id,
         type: 'recipe',
         quantity,
-        unit,
-        cost: cost > 0 ? cost : undefined,
+        unit: r?.portionUnit || unit,
+        cost: effectiveCost > 0 ? effectiveCost : undefined,
         children,
         outputQuantity: r?.portionSize,
         outputUnit: r?.portionUnit,
-        totalRecipeCost: totalRecipeCost > 0 ? totalRecipeCost : undefined
+        totalRecipeCost: batchCost > 0 ? batchCost : undefined
       }
     }
 
     return { id, name: id, type, quantity, unit, children: [] }
   }
 
-  function resolveComponentCost(type: string, id: string, quantity: number): number {
+  function resolveComponentCost(
+    type: string,
+    id: string,
+    quantity: number,
+    useYieldPercentage?: boolean
+  ): number {
     if (type === 'product') {
       const p = productsStore.getProductById(id) as Product | null
-      return (p?.baseCostPerUnit ?? 0) * quantity
+      let adjustedQuantity = quantity
+      if (useYieldPercentage && p?.yieldPercentage && p.yieldPercentage < 100) {
+        adjustedQuantity = quantity / (p.yieldPercentage / 100)
+      }
+      return (p?.baseCostPerUnit ?? 0) * adjustedQuantity
     }
     if (type === 'preparation') {
       const p = recipesStore.getPreparationById(id) as Preparation | undefined

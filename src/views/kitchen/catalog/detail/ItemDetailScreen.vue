@@ -29,18 +29,34 @@
       </v-btn>
     </div>
 
-    <!-- Tabs -->
+    <!-- Tabs — products have no tree (leaf entities), show Used In first -->
     <v-tabs v-model="activeTab" density="compact" color="primary">
-      <v-tab value="tree">Tree</v-tab>
-      <v-tab value="info">Info</v-tab>
-      <v-tab value="cost">Cost</v-tab>
-      <v-tab value="used-in">Used In</v-tab>
+      <template v-if="item.type === 'product'">
+        <v-tab value="used-in">Used In</v-tab>
+        <v-tab value="info">Info</v-tab>
+        <v-tab value="cost">Cost</v-tab>
+      </template>
+      <template v-else>
+        <v-tab value="tree">Tree</v-tab>
+        <v-tab value="info">Info</v-tab>
+        <v-tab value="cost">Cost</v-tab>
+        <v-tab value="used-in">Used In</v-tab>
+      </template>
     </v-tabs>
 
     <!-- Tab content -->
     <div class="detail-content">
       <!-- Tree Tab -->
       <div v-if="activeTab === 'tree'" class="tab-content">
+        <!-- Output summary for recipes/preparations -->
+        <div v-if="outputDisplay && treeNodes.length > 0" class="tree-output-header">
+          <span class="tree-output-label">Output:</span>
+          <span class="tree-output-value">{{ outputDisplay }}</span>
+          <span class="tree-output-sep">|</span>
+          <span class="tree-output-label">Cost:</span>
+          <span class="tree-output-value">{{ totalCostDisplay }}</span>
+          <span v-if="costPerUnit" class="tree-output-per-unit">({{ costPerUnit }})</span>
+        </div>
         <DependencyTree
           v-if="treeNodes.length > 0"
           :tree="treeNodes"
@@ -79,7 +95,7 @@
             <InfoRow label="Category" :value="item.categoryName" />
             <InfoRow
               label="Output"
-              :value="`${preparation.outputQuantity} ${preparation.outputUnit}`"
+              :value="`${preparation.outputQuantity} ${getUnitShortName(preparation.outputUnit)}`"
             />
             <InfoRow
               v-if="preparation.preparationTime"
@@ -115,24 +131,64 @@
       <!-- Cost Tab -->
       <div v-if="activeTab === 'cost'" class="tab-content">
         <div class="cost-summary">
-          <div class="cost-line">
-            <span class="cost-label">Total Cost</span>
-            <span class="cost-value">{{ totalCostDisplay }}</span>
-          </div>
-          <div v-if="recommendedPrice > 0" class="cost-line">
-            <span class="cost-label">Rec. Price (35% FC)</span>
-            <span class="cost-value">{{ formatIDR(recommendedPrice) }}</span>
-          </div>
-          <div v-if="totalCost > 0 && recommendedPrice > 0" class="cost-line">
-            <span class="cost-label">Food Cost %</span>
-            <span class="cost-value">35%</span>
-          </div>
+          <!-- Product-specific cost with yield -->
+          <template v-if="item.type === 'product' && product">
+            <div class="cost-line">
+              <span class="cost-label">Purchase Cost</span>
+              <span class="cost-value">
+                {{ formatIDR(product.baseCostPerUnit) }}/{{ product.baseUnit }}
+              </span>
+            </div>
+            <div v-if="product.yieldPercentage && product.yieldPercentage < 100" class="cost-line">
+              <span class="cost-label">Yield</span>
+              <span class="cost-value">{{ product.yieldPercentage }}%</span>
+            </div>
+            <div
+              v-if="product.yieldPercentage && product.yieldPercentage < 100"
+              class="cost-line cost-line--highlight"
+            >
+              <span class="cost-label">Effective Cost</span>
+              <span class="cost-value">
+                {{
+                  formatIDR(Math.round(product.baseCostPerUnit / (product.yieldPercentage / 100)))
+                }}/{{ product.baseUnit }}
+              </span>
+            </div>
+          </template>
+
+          <!-- Non-product items -->
+          <template v-else>
+            <!-- Output info for recipes/preparations -->
+            <div v-if="outputDisplay" class="cost-line">
+              <span class="cost-label">Output</span>
+              <span class="cost-value">{{ outputDisplay }}</span>
+            </div>
+            <div class="cost-line">
+              <span class="cost-label">Total Cost</span>
+              <span class="cost-value">{{ totalCostDisplay }}</span>
+            </div>
+            <div v-if="costPerUnit" class="cost-line">
+              <span class="cost-label">Cost per Unit</span>
+              <span class="cost-value">{{ costPerUnit }}</span>
+            </div>
+            <!-- Rec. price and food cost only for menu items and recipes -->
+            <template v-if="item.type === 'menu' || item.type === 'recipe'">
+              <div v-if="recommendedPrice > 0" class="cost-line">
+                <span class="cost-label">Rec. Price (35% FC)</span>
+                <span class="cost-value">{{ formatIDR(recommendedPrice) }}</span>
+              </div>
+              <div v-if="totalCost > 0 && recommendedPrice > 0" class="cost-line">
+                <span class="cost-label">Food Cost %</span>
+                <span class="cost-value">35%</span>
+              </div>
+            </template>
+          </template>
         </div>
 
-        <!-- Cost breakdown from tree -->
+        <!-- Cost breakdown from tree (sorted by cost descending) -->
         <div v-if="treeNodes.length > 0" class="cost-breakdown">
           <h4>Cost Breakdown</h4>
-          <div v-for="node in treeNodes" :key="node.id + node.type" class="breakdown-row">
+          <div v-for="node in sortedTreeNodes" :key="node.id + node.type" class="breakdown-row">
             <v-chip
               :color="typeColorFor(node.type)"
               size="x-small"
@@ -160,12 +216,23 @@
             v-for="usage in usedInItems"
             :key="usage.id + usage.type"
             class="usage-row"
+            :class="{ 'usage-row--inactive': !usage.isActive }"
             @click="emit('navigate', { id: usage.id, type: usage.type })"
           >
-            <v-chip :color="typeColorFor(usage.type)" size="x-small" variant="flat" label>
+            <v-chip
+              :color="usage.isActive ? typeColorFor(usage.type) : 'grey'"
+              size="x-small"
+              variant="flat"
+              label
+            >
               {{ usage.typeLabel }}
             </v-chip>
             <span class="usage-name">{{ usage.name }}</span>
+            <span class="usage-dots" />
+            <span v-if="usage.quantity" class="usage-quantity">
+              {{ usage.quantity }} {{ usage.unit }}
+            </span>
+            <v-icon size="16" class="usage-arrow">mdi-chevron-right</v-icon>
           </div>
         </div>
       </div>
@@ -174,11 +241,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h } from 'vue'
+import { ref, computed, watch, h } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes'
 import { useMenuStore } from '@/stores/menu'
 import { formatIDR } from '@/utils'
+import { getUnitShortName } from '@/types/measurementUnits'
 import { useCatalogData } from '../composables/useCatalogData'
 import type { CatalogItem } from '../composables/useCatalogData'
 import DependencyTree from './DependencyTree.vue'
@@ -213,7 +281,16 @@ const recipesStore = useRecipesStore()
 const menuStore = useMenuStore()
 const { buildTree } = useCatalogData()
 
-const activeTab = ref('tree')
+const defaultTab = (type: CatalogItem['type']) => (type === 'product' ? 'used-in' : 'tree')
+const activeTab = ref(defaultTab(props.item.type))
+
+// Reset to default tab when navigating to a different item
+watch(
+  () => props.item.id,
+  () => {
+    activeTab.value = defaultTab(props.item.type)
+  }
+)
 
 // Resolve full entity
 const menuItem = computed<MenuItem | undefined>(() =>
@@ -272,6 +349,11 @@ function typeColorFor(type: string) {
 // Build tree
 const treeNodes = computed<TreeNode[]>(() => buildTree(props.item.type, props.item.id))
 
+// Sorted by cost descending for the Cost tab
+const sortedTreeNodes = computed<TreeNode[]>(() =>
+  [...treeNodes.value].sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0))
+)
+
 function handleTreeNavigate(target: { id: string; type: TreeNode['type'] }) {
   emit('navigate', target)
 }
@@ -282,11 +364,42 @@ const totalCost = computed(() => {
   return treeNodes.value.reduce((sum, n) => sum + (n.cost ?? 0), 0)
 })
 
+// Output display for recipes/preparations
+const outputDisplay = computed<string | null>(() => {
+  if (props.item.type === 'recipe' && recipe.value) {
+    return `${recipe.value.portionSize} ${recipe.value.portionUnit}`
+  }
+  if (props.item.type === 'preparation' && preparation.value) {
+    const unit =
+      preparation.value.portionType === 'portion' ? 'portion' : preparation.value.outputUnit
+    return `${preparation.value.outputQuantity} ${getUnitShortName(unit)}`
+  }
+  return null
+})
+
 const totalCostDisplay = computed(() => {
   if (totalCost.value <= 0) return 'Not calculated'
   if (props.item.type === 'product')
     return formatIDR(totalCost.value) + '/' + (product.value?.baseUnit ?? '')
-  return formatIDR(totalCost.value) + '/portion'
+  return formatIDR(totalCost.value)
+})
+
+// Cost per unit (for recipes/preparations with output > 1 or weight-based)
+const costPerUnit = computed<string | null>(() => {
+  if (totalCost.value <= 0) return null
+  if (props.item.type === 'recipe' && recipe.value) {
+    const size = recipe.value.portionSize || 1
+    const perUnit = Math.round(totalCost.value / size)
+    return `${formatIDR(perUnit)}/${recipe.value.portionUnit}`
+  }
+  if (props.item.type === 'preparation' && preparation.value) {
+    const qty = preparation.value.outputQuantity || 1
+    const unit =
+      preparation.value.portionType === 'portion' ? 'portion' : preparation.value.outputUnit
+    const perUnit = Math.round(totalCost.value / qty)
+    return `${formatIDR(perUnit)}/${getUnitShortName(unit)}`
+  }
+  return null
 })
 
 const recommendedPrice = computed(() =>
@@ -299,6 +412,9 @@ interface UsageItem {
   name: string
   type: CatalogItem['type']
   typeLabel: string
+  quantity?: number
+  unit?: string
+  isActive: boolean
 }
 
 const usedInItems = computed<UsageItem[]>(() => {
@@ -309,20 +425,50 @@ const usedInItems = computed<UsageItem[]>(() => {
   // Products → used in preparations, recipes, menu items
   if (itemType === 'product') {
     for (const prep of recipesStore.preparations as Preparation[]) {
-      if (prep.recipe?.some(ing => ing.type === 'product' && ing.id === itemId)) {
-        results.push({ id: prep.id, name: prep.name, type: 'preparation', typeLabel: 'Prep' })
+      const ing = prep.recipe?.find(i => i.type === 'product' && i.id === itemId)
+      if (ing) {
+        results.push({
+          id: prep.id,
+          name: prep.name,
+          type: 'preparation',
+          typeLabel: 'Prep',
+          quantity: ing.quantity,
+          unit: ing.unit,
+          isActive: prep.isActive
+        })
       }
     }
     for (const rec of recipesStore.recipes as Recipe[]) {
-      if (rec.components?.some(c => c.componentType === 'product' && c.componentId === itemId)) {
-        results.push({ id: rec.id, name: rec.name, type: 'recipe', typeLabel: 'Recipe' })
+      const comp = rec.components?.find(
+        c => c.componentType === 'product' && c.componentId === itemId
+      )
+      if (comp) {
+        results.push({
+          id: rec.id,
+          name: rec.name,
+          type: 'recipe',
+          typeLabel: 'Recipe',
+          quantity: comp.quantity,
+          unit: comp.unit,
+          isActive: rec.isActive
+        })
       }
     }
     for (const mi of menuStore.menuItems as MenuItem[]) {
-      if (
-        mi.variants?.some(v => v.composition?.some(c => c.type === 'product' && c.id === itemId))
-      ) {
-        results.push({ id: mi.id, name: mi.name, type: 'menu', typeLabel: 'Menu' })
+      for (const v of mi.variants ?? []) {
+        const comp = v.composition?.find(c => c.type === 'product' && c.id === itemId)
+        if (comp) {
+          results.push({
+            id: mi.id,
+            name: mi.name,
+            type: 'menu',
+            typeLabel: 'Menu',
+            quantity: comp.quantity,
+            unit: comp.unit,
+            isActive: mi.isActive
+          })
+          break
+        }
       }
     }
   }
@@ -330,27 +476,51 @@ const usedInItems = computed<UsageItem[]>(() => {
   // Preparations → used in other preps, recipes, menu items
   if (itemType === 'preparation') {
     for (const prep of recipesStore.preparations as Preparation[]) {
-      if (
-        prep.id !== itemId &&
-        prep.recipe?.some(ing => ing.type === 'preparation' && ing.id === itemId)
-      ) {
-        results.push({ id: prep.id, name: prep.name, type: 'preparation', typeLabel: 'Prep' })
+      if (prep.id === itemId) continue
+      const ing = prep.recipe?.find(i => i.type === 'preparation' && i.id === itemId)
+      if (ing) {
+        results.push({
+          id: prep.id,
+          name: prep.name,
+          type: 'preparation',
+          typeLabel: 'Prep',
+          quantity: ing.quantity,
+          unit: ing.unit,
+          isActive: prep.isActive
+        })
       }
     }
     for (const rec of recipesStore.recipes as Recipe[]) {
-      if (
-        rec.components?.some(c => c.componentType === 'preparation' && c.componentId === itemId)
-      ) {
-        results.push({ id: rec.id, name: rec.name, type: 'recipe', typeLabel: 'Recipe' })
+      const comp = rec.components?.find(
+        c => c.componentType === 'preparation' && c.componentId === itemId
+      )
+      if (comp) {
+        results.push({
+          id: rec.id,
+          name: rec.name,
+          type: 'recipe',
+          typeLabel: 'Recipe',
+          quantity: comp.quantity,
+          unit: comp.unit,
+          isActive: rec.isActive
+        })
       }
     }
     for (const mi of menuStore.menuItems as MenuItem[]) {
-      if (
-        mi.variants?.some(v =>
-          v.composition?.some(c => c.type === 'preparation' && c.id === itemId)
-        )
-      ) {
-        results.push({ id: mi.id, name: mi.name, type: 'menu', typeLabel: 'Menu' })
+      for (const v of mi.variants ?? []) {
+        const comp = v.composition?.find(c => c.type === 'preparation' && c.id === itemId)
+        if (comp) {
+          results.push({
+            id: mi.id,
+            name: mi.name,
+            type: 'menu',
+            typeLabel: 'Menu',
+            quantity: comp.quantity,
+            unit: comp.unit,
+            isActive: mi.isActive
+          })
+          break
+        }
       }
     }
   }
@@ -358,23 +528,47 @@ const usedInItems = computed<UsageItem[]>(() => {
   // Recipes → used in other recipes, menu items
   if (itemType === 'recipe') {
     for (const rec of recipesStore.recipes as Recipe[]) {
-      if (
-        rec.id !== itemId &&
-        rec.components?.some(c => c.componentType === 'recipe' && c.componentId === itemId)
-      ) {
-        results.push({ id: rec.id, name: rec.name, type: 'recipe', typeLabel: 'Recipe' })
+      if (rec.id === itemId) continue
+      const comp = rec.components?.find(
+        c => c.componentType === 'recipe' && c.componentId === itemId
+      )
+      if (comp) {
+        results.push({
+          id: rec.id,
+          name: rec.name,
+          type: 'recipe',
+          typeLabel: 'Recipe',
+          quantity: comp.quantity,
+          unit: comp.unit,
+          isActive: rec.isActive
+        })
       }
     }
     for (const mi of menuStore.menuItems as MenuItem[]) {
-      if (
-        mi.variants?.some(v => v.composition?.some(c => c.type === 'recipe' && c.id === itemId))
-      ) {
-        results.push({ id: mi.id, name: mi.name, type: 'menu', typeLabel: 'Menu' })
+      for (const v of mi.variants ?? []) {
+        const comp = v.composition?.find(c => c.type === 'recipe' && c.id === itemId)
+        if (comp) {
+          results.push({
+            id: mi.id,
+            name: mi.name,
+            type: 'menu',
+            typeLabel: 'Menu',
+            quantity: comp.quantity,
+            unit: comp.unit,
+            isActive: mi.isActive
+          })
+          break
+        }
       }
     }
   }
 
-  // Menu items → not used in anything else
+  // Sort: active first, then alphabetically; inactive at the end
+  results.sort((a, b) => {
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
+
   return results
 })
 </script>
@@ -434,6 +628,34 @@ const usedInItems = computed<UsageItem[]>(() => {
   gap: 8px;
 }
 
+.tree-output-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.tree-output-label {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.tree-output-value {
+  font-weight: 600;
+}
+
+.tree-output-sep {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.tree-output-per-unit {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.8rem;
+}
+
 .empty-state {
   text-align: center;
   padding: 32px;
@@ -476,6 +698,14 @@ const usedInItems = computed<UsageItem[]>(() => {
 .cost-line {
   display: flex;
   justify-content: space-between;
+
+  &--highlight {
+    padding: 6px 8px;
+    margin: 4px -8px 0;
+    background: rgba(var(--v-theme-warning), 0.1);
+    border-radius: 6px;
+    font-weight: 600;
+  }
 }
 
 .cost-label {
@@ -548,17 +778,44 @@ const usedInItems = computed<UsageItem[]>(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px;
+  padding: 10px 12px;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 8px;
   cursor: pointer;
 
+  &:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
   &:active {
     background: rgba(255, 255, 255, 0.08);
+  }
+
+  &--inactive {
+    opacity: 0.45;
   }
 }
 
 .usage-name {
   font-weight: 500;
+  white-space: nowrap;
+}
+
+.usage-dots {
+  flex: 1;
+  border-bottom: 1px dotted rgba(255, 255, 255, 0.12);
+  min-width: 12px;
+  margin-bottom: 4px;
+}
+
+.usage-quantity {
+  white-space: nowrap;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.usage-arrow {
+  flex-shrink: 0;
+  opacity: 0.3;
 }
 </style>

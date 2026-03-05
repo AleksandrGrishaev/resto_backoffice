@@ -40,10 +40,10 @@ export interface PreparationForRecipe {
   type: PreparationType
   department: Department // ✅ NEW: Department that prepares this item
 
-  // ✅ БАЗОВЫЕ ЕДИНИЦЫ: Всегда в граммах или мл
+  // ✅ БАЗОВЫЕ ЕДИНИЦЫ: Выход полуфабриката
   outputQuantity: number
-  outputUnit: 'gram' | 'ml' // Только базовые единицы
-  costPerOutputUnit: number // IDR за грамм/мл
+  outputUnit: PreparationOutputUnit
+  costPerOutputUnit: number // IDR за единицу выхода
 
   isActive: boolean
 }
@@ -77,6 +77,14 @@ export interface RecipeForRecipe {
  */
 export type PortionType = 'weight' | 'portion'
 
+/**
+ * Valid output units for preparations.
+ * - gram/ml: weight/volume-based output
+ * - piece: discrete items (e.g., sliced bread)
+ * - portion: fixed-size portions
+ */
+export type PreparationOutputUnit = 'gram' | 'ml' | 'piece' | 'portion'
+
 // =============================================
 // PREPARATION (полуфабрикаты)
 // =============================================
@@ -91,9 +99,9 @@ export interface Preparation extends BaseEntity {
   // ✅ ОБНОВЛЕНО: Рецепт из продуктов с правильными единицами
   recipe: PreparationIngredient[]
 
-  // ✅ ОБНОВЛЕНО: Выход всегда в базовых единицах
+  // ✅ ОБНОВЛЕНО: Выход полуфабриката
   outputQuantity: number
-  outputUnit: 'gram' | 'ml' // Только базовые единицы
+  outputUnit: PreparationOutputUnit
 
   preparationTime: number
   instructions: string
@@ -308,7 +316,7 @@ export interface CreatePreparationData {
   department: Department // ✅ NEW: Department that prepares this item
   description?: string
   outputQuantity: number
-  outputUnit: 'gram' | 'ml' // Только базовые единицы
+  outputUnit: PreparationOutputUnit
   preparationTime: number
   instructions: string
   shelfLife?: number // ✅ NEW: Shelf life in days

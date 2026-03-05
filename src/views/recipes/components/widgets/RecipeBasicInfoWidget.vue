@@ -2,6 +2,11 @@
 <template>
   <div class="basic-info-widget">
     <v-row>
+      <!-- === SECTION: Identity === -->
+      <v-col v-if="tablet" cols="12" class="section-header pb-0">
+        <div class="section-title">Identity</div>
+      </v-col>
+
       <!-- Name -->
       <v-col cols="12" md="8">
         <v-text-field
@@ -30,8 +35,8 @@
         />
       </v-col>
 
-      <!-- Description -->
-      <v-col cols="12">
+      <!-- Description (moved to bottom in tablet mode) -->
+      <v-col v-if="!tablet" cols="12">
         <v-textarea
           :model-value="formData.description"
           label="Description"
@@ -79,10 +84,15 @@
         />
       </v-col>
 
+      <!-- === SECTION: Output (highlighted in tablet mode) === -->
+      <v-col v-if="tablet" cols="12" class="section-header pb-0">
+        <div class="section-title section-title--output">Output</div>
+      </v-col>
+
       <!-- Output/Portion Info -->
       <template v-if="type === 'preparation'">
-        <!-- ⭐ PHASE 2: Portion Type Selection FIRST -->
-        <v-col cols="12" md="4">
+        <!-- Portion Type Selection -->
+        <v-col cols="12" md="4" :class="{ 'output-highlight': tablet }">
           <v-radio-group
             :model-value="formData.portionType || 'weight'"
             inline
@@ -101,20 +111,20 @@
 
         <!-- Weight mode: Output Quantity + Output Unit -->
         <template v-if="formData.portionType !== 'portion'">
-          <v-col cols="12" md="4">
-            <v-text-field
+          <v-col cols="12" md="4" :class="{ 'output-highlight': tablet }">
+            <NumericInputField
               :model-value="formData.outputQuantity"
               label="Output Quantity (Required)"
-              type="number"
-              step="0.1"
+              :allow-decimal="true"
+              :min="0.01"
               :rules="[rules.required, rules.positiveNumber]"
               required
               variant="outlined"
               density="comfortable"
-              @update:model-value="updateField('outputQuantity', Number($event))"
+              @update:model-value="updateField('outputQuantity', $event)"
             />
           </v-col>
-          <v-col cols="12" md="4">
+          <v-col cols="12" md="4" :class="{ 'output-highlight': tablet }">
             <v-select
               :model-value="formData.outputUnit"
               :items="unitItems"
@@ -130,38 +140,49 @@
           </v-col>
         </template>
 
-        <!-- Portion mode: Number of Portions + Portion Size -->
+        <!-- Portion mode: Number of Portions + Output Unit + Portion Size -->
         <template v-else>
-          <v-col cols="12" md="4">
-            <v-text-field
+          <v-col cols="12" md="4" :class="{ 'output-highlight': tablet }">
+            <NumericInputField
               :model-value="formData.outputQuantity"
               label="Number of Portions (Required)"
-              type="number"
-              step="1"
-              min="1"
+              :min="1"
               :rules="[rules.required, rules.positiveNumber]"
               required
               variant="outlined"
               density="comfortable"
               hint="How many portions this recipe makes"
               persistent-hint
-              @update:model-value="updateField('outputQuantity', Number($event))"
+              @update:model-value="updateField('outputQuantity', $event)"
             />
           </v-col>
-          <v-col cols="12" md="4">
-            <v-text-field
+          <v-col cols="12" md="4" :class="{ 'output-highlight': tablet }">
+            <v-select
+              :model-value="formData.outputUnit || 'gram'"
+              :items="outputUnitItems"
+              item-title="label"
+              item-value="value"
+              label="Output Unit"
+              variant="outlined"
+              density="comfortable"
+              hint="Unit of measurement for portions"
+              persistent-hint
+              @update:model-value="updateField('outputUnit', $event)"
+            />
+          </v-col>
+          <v-col cols="12" md="4" :class="{ 'output-highlight': tablet }">
+            <NumericInputField
               :model-value="formData.portionSize"
-              label="Portion Size (grams)"
-              type="number"
-              step="1"
-              min="1"
+              :label="portionSizeLabel"
+              :allow-decimal="true"
+              :min="1"
               :rules="[rules.required, rules.positiveNumber]"
               required
               variant="outlined"
               density="comfortable"
-              hint="Weight of one portion"
+              :hint="portionSizeHint"
               persistent-hint
-              @update:model-value="updateField('portionSize', Number($event))"
+              @update:model-value="updateField('portionSize', $event)"
             />
           </v-col>
 
@@ -169,8 +190,8 @@
           <v-col v-if="formData.outputQuantity > 0 && formData.portionSize > 0" cols="12">
             <v-alert type="info" variant="tonal" density="compact" class="text-body-2">
               <strong>{{ formData.outputQuantity }} portions</strong>
-              × {{ formData.portionSize }}g =
-              <strong>{{ calculatedTotalWeight }}g total</strong>
+              × {{ formData.portionSize }}{{ portionSizeUnitShort }} =
+              <strong>{{ calculatedTotalWeight }}{{ portionSizeUnitShort }} total</strong>
             </v-alert>
           </v-col>
         </template>
@@ -178,15 +199,16 @@
 
       <template v-else>
         <v-col cols="12" md="4">
-          <v-text-field
+          <NumericInputField
             :model-value="formData.portionSize"
             label="Portion Size (Required)"
-            type="number"
+            :allow-decimal="true"
+            :min="0.01"
             :rules="[rules.required, rules.positiveNumber]"
             required
             variant="outlined"
             density="comfortable"
-            @update:model-value="updateField('portionSize', Number($event))"
+            @update:model-value="updateField('portionSize', $event)"
           />
         </v-col>
         <v-col cols="12" md="4">
@@ -209,45 +231,47 @@
         </v-col>
       </template>
 
+      <!-- === SECTION: Timing & Storage === -->
+      <v-col v-if="tablet" cols="12" class="section-header pb-0">
+        <div class="section-title">Timing & Storage</div>
+      </v-col>
+
       <!-- Time fields -->
       <v-col cols="12" md="6">
-        <v-text-field
+        <NumericInputField
           :model-value="formData.preparationTime"
           :label="type === 'preparation' ? 'Preparation Time (min)' : 'Prep Time (min)'"
-          type="number"
           variant="outlined"
           density="comfortable"
-          @update:model-value="updateField('preparationTime', Number($event))"
+          @update:model-value="updateField('preparationTime', $event)"
         />
       </v-col>
 
       <v-col v-if="type === 'recipe'" cols="12" md="6">
-        <v-text-field
+        <NumericInputField
           :model-value="formData.cookTime"
           label="Cook Time (min)"
-          type="number"
           variant="outlined"
           density="comfortable"
-          @update:model-value="updateField('cookTime', Number($event))"
+          @update:model-value="updateField('cookTime', $event)"
         />
       </v-col>
 
       <!-- Shelf Life (Preparations only) -->
       <v-col v-if="type === 'preparation'" cols="12" md="6">
-        <v-text-field
+        <NumericInputField
           :model-value="formData.shelfLife"
           label="Shelf Life (days)"
-          type="number"
-          min="1"
+          :min="1"
           :rules="[rules.positiveNumber]"
           variant="outlined"
           density="comfortable"
           hint="How many days this preparation can be stored"
-          @update:model-value="updateField('shelfLife', Number($event))"
+          @update:model-value="updateField('shelfLife', $event)"
         />
       </v-col>
 
-      <!-- 🆕 Kitchen Preparation: Storage & Production Settings -->
+      <!-- Kitchen Preparation: Storage & Production Settings -->
       <template v-if="type === 'preparation'">
         <!-- Storage Location -->
         <v-col cols="12" md="6">
@@ -281,35 +305,37 @@
 
         <!-- Min Stock Threshold -->
         <v-col cols="12" md="6">
-          <v-text-field
+          <NumericInputField
             :model-value="formData.minStockThreshold || 0"
             label="Min Stock Threshold"
-            type="number"
-            min="0"
+            :min="0"
             variant="outlined"
             density="comfortable"
             :hint="`Alert when stock falls below this (${formData.outputUnit || 'units'})`"
-            @update:model-value="updateField('minStockThreshold', Number($event))"
+            @update:model-value="updateField('minStockThreshold', $event)"
           />
         </v-col>
 
         <!-- Daily Target Quantity -->
         <v-col cols="12" md="6">
-          <v-text-field
+          <NumericInputField
             :model-value="formData.dailyTargetQuantity || 0"
             label="Daily Target Quantity"
-            type="number"
-            min="0"
+            :min="0"
             variant="outlined"
             density="comfortable"
             :hint="`Target daily production (${formData.outputUnit || 'units'})`"
-            @update:model-value="updateField('dailyTargetQuantity', Number($event))"
+            @update:model-value="updateField('dailyTargetQuantity', $event)"
           />
         </v-col>
       </template>
 
-      <!-- Recipe-specific fields -->
+      <!-- === SECTION: Other (recipe-specific) === -->
       <template v-if="type === 'recipe'">
+        <v-col v-if="tablet" cols="12" class="section-header pb-0">
+          <div class="section-title">Other</div>
+        </v-col>
+
         <v-col cols="12" md="6">
           <v-select
             :model-value="formData.difficulty"
@@ -340,6 +366,22 @@
         </v-col>
       </template>
 
+      <!-- Description & Instructions -->
+      <v-col v-if="tablet" cols="12" class="section-header pb-0">
+        <div class="section-title">Description & Instructions</div>
+      </v-col>
+
+      <v-col v-if="tablet" cols="12">
+        <v-textarea
+          :model-value="formData.description"
+          label="Description"
+          rows="2"
+          variant="outlined"
+          density="comfortable"
+          @update:model-value="updateField('description', $event)"
+        />
+      </v-col>
+
       <!-- Instructions -->
       <v-col cols="12">
         <v-textarea
@@ -364,6 +406,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { DIFFICULTY_LEVELS } from '@/stores/recipes/types'
 import { useRecipesStore } from '@/stores/recipes'
+import { NumericInputField } from '@/components/input'
+import { getUnitShortName } from '@/types/measurementUnits'
 
 interface FormData {
   name: string
@@ -393,6 +437,7 @@ interface FormData {
 interface Props {
   formData: FormData
   type: 'recipe' | 'preparation'
+  tablet?: boolean
 }
 
 interface Emits {
@@ -476,6 +521,34 @@ const portionUnits = [
   { label: 'Milliliter', value: 'ml' }
 ]
 
+// Output unit options for portion mode
+const outputUnitItems = [
+  { label: 'Gram', value: 'gram' },
+  { label: 'Milliliter', value: 'ml' },
+  { label: 'Piece', value: 'piece' },
+  { label: 'Portion', value: 'portion' }
+]
+
+// Dynamic label/hint for portion size based on output unit
+const portionSizeLabel = computed(() => {
+  const unit = props.formData.outputUnit
+  if (unit === 'ml') return 'Portion Size (ml)'
+  if (unit === 'piece' || unit === 'portion') return 'Portion Size'
+  return 'Portion Size (grams)'
+})
+
+const portionSizeHint = computed(() => {
+  const unit = props.formData.outputUnit
+  if (unit === 'piece' || unit === 'portion') return 'Items per portion'
+  return 'Weight of one portion'
+})
+
+const portionSizeUnitShort = computed(() => {
+  const unit = props.formData.outputUnit
+  if (unit === 'piece' || unit === 'portion') return ''
+  return getUnitShortName(unit)
+})
+
 // ⭐ PHASE 2: Calculated total weight for portion-type preparations
 const calculatedTotalWeight = computed(() => {
   if (!props.formData.portionSize || props.formData.portionSize <= 0) return 0
@@ -525,8 +598,10 @@ function handlePortionTypeChange(portionType: 'weight' | 'portion') {
     if (!props.formData.outputQuantity || props.formData.outputQuantity <= 0) {
       updateField('outputQuantity', 10) // Default 10 portions
     }
-    // Set output unit to gram (fixed for portion mode)
-    updateField('outputUnit', 'gram')
+    // Keep existing outputUnit (don't force gram)
+    if (!props.formData.outputUnit) {
+      updateField('outputUnit', 'gram')
+    }
   } else {
     // Switching to weight mode: set defaults
     if (!props.formData.outputQuantity || props.formData.outputQuantity <= 0) {
@@ -544,5 +619,29 @@ onMounted(async () => {
 <style lang="scss" scoped>
 .basic-info-widget {
   // Стили если нужны
+}
+
+.section-header {
+  margin-top: 8px;
+}
+
+.section-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+
+  &--output {
+    color: rgb(var(--v-theme-warning));
+    border-bottom-color: rgba(var(--v-theme-warning), 0.3);
+  }
+}
+
+.output-highlight {
+  background: rgba(var(--v-theme-warning), 0.04);
+  border-radius: 8px;
 }
 </style>

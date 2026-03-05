@@ -7,7 +7,8 @@ import type {
   RecipeStep,
   RecipeComponent,
   PreparationIngredient,
-  PortionType
+  PortionType,
+  PreparationOutputUnit
 } from './types'
 import type { Tables, TablesInsert, TablesUpdate } from '@/supabase/types'
 import type { Department } from '@/stores/menu/types'
@@ -35,6 +36,28 @@ export type SupabaseRecipeComponentUpdate = TablesUpdate<'recipe_components'>
 export type SupabaseRecipeStep = Tables<'recipe_steps'>
 export type SupabaseRecipeStepInsert = TablesInsert<'recipe_steps'>
 export type SupabaseRecipeStepUpdate = TablesUpdate<'recipe_steps'>
+
+// =============================================
+// OUTPUT UNIT NORMALIZER
+// =============================================
+
+/** Normalize legacy DB values (gr, pc) to standard PreparationOutputUnit */
+function normalizeOutputUnit(raw: string | null | undefined): PreparationOutputUnit {
+  switch (raw) {
+    case 'gram':
+    case 'gr':
+      return 'gram'
+    case 'ml':
+      return 'ml'
+    case 'piece':
+    case 'pc':
+      return 'piece'
+    case 'portion':
+      return 'portion'
+    default:
+      return 'gram'
+  }
+}
 
 // =============================================
 // PREPARATION MAPPERS
@@ -94,7 +117,7 @@ export function preparationFromSupabase(
     type: row.type as any, // PreparationType
     department: row.department as Department,
     outputQuantity: Number(row.output_quantity),
-    outputUnit: row.output_unit as any, // MeasurementUnit
+    outputUnit: normalizeOutputUnit(row.output_unit),
     preparationTime: row.preparation_time || undefined,
     instructions: row.instructions || undefined,
     shelfLife: row.shelf_life || undefined, // ✅ NEW: Shelf life in days

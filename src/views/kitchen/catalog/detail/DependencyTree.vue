@@ -40,12 +40,17 @@
         <!-- Dots -->
         <span class="node-dots" />
 
+        <!-- Yield badge for products -->
+        <span v-if="node.yieldPercentage && node.yieldPercentage < 100" class="node-yield">
+          {{ node.yieldPercentage }}%
+        </span>
+
         <!-- Quantity + unit -->
         <span v-if="node.quantity" class="node-quantity">{{ node.quantity }} {{ node.unit }}</span>
 
-        <!-- Cost -->
-        <span v-if="node.cost" class="node-cost">
-          {{ formatIDR(node.cost) }}
+        <!-- Cost (with fallback calculation from children for preps/recipes) -->
+        <span v-if="getEffectiveCost(node)" class="node-cost">
+          {{ formatIDR(getEffectiveCost(node)!) }}
         </span>
 
         <!-- Edit button -->
@@ -69,12 +74,18 @@
           @edit="emit('edit', $event)"
         />
 
-        <!-- Summary: total cost + output yield -->
+        <!-- Summary: batch output, batch cost, cost per unit -->
         <div v-if="node.totalRecipeCost" class="node-summary">
-          <span class="summary-label">
-            Total{{ node.outputQuantity ? ` (${node.outputQuantity} ${node.outputUnit})` : '' }}:
+          <span v-if="node.outputQuantity" class="summary-output">
+            Batch: {{ node.outputQuantity }} {{ getUnitShortName(node.outputUnit) }}
           </span>
+          <span v-if="node.outputQuantity" class="summary-sep">=</span>
           <span class="summary-cost">{{ formatIDR(node.totalRecipeCost) }}</span>
+          <span v-if="node.outputQuantity && node.outputQuantity > 0" class="summary-per-unit">
+            ({{ formatIDR(Math.round(node.totalRecipeCost / node.outputQuantity)) }}/{{
+              getUnitShortName(node.outputUnit)
+            }})
+          </span>
         </div>
       </div>
     </div>
@@ -84,6 +95,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { formatIDR } from '@/utils'
+import { getUnitShortName } from '@/types/measurementUnits'
 
 export interface TreeNode {
   id: string
@@ -97,6 +109,8 @@ export interface TreeNode {
   outputQuantity?: number
   outputUnit?: string
   totalRecipeCost?: number
+  // Yield info for products
+  yieldPercentage?: number
 }
 
 const props = withDefaults(
@@ -139,6 +153,25 @@ function toggleExpand(key: string) {
   } else {
     expandedNodes.value.add(key)
   }
+}
+
+/**
+ * Get effective cost for a node — uses node.cost if available,
+ * otherwise derives from totalRecipeCost / outputQuantity * quantity
+ */
+function getEffectiveCost(node: TreeNode): number | undefined {
+  if (node.cost && node.cost > 0) return node.cost
+  // For preparations/recipes without stored cost, derive from children
+  if (
+    node.totalRecipeCost &&
+    node.totalRecipeCost > 0 &&
+    node.outputQuantity &&
+    node.outputQuantity > 0 &&
+    node.quantity
+  ) {
+    return Math.round((node.totalRecipeCost / node.outputQuantity) * node.quantity)
+  }
+  return undefined
 }
 
 function handleNodeClick(node: TreeNode) {
@@ -238,6 +271,16 @@ export default { name: 'DependencyTree' }
   margin-bottom: 4px;
 }
 
+.node-yield {
+  white-space: nowrap;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgb(var(--v-theme-warning));
+  background: rgba(var(--v-theme-warning), 0.12);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
 .node-quantity {
   white-space: nowrap;
   font-size: 0.85rem;
@@ -274,19 +317,29 @@ export default { name: 'DependencyTree' }
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
   padding: 6px 4px 2px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   margin-top: 4px;
   font-size: 0.8rem;
 }
 
-.summary-label {
-  color: rgba(255, 255, 255, 0.5);
+.summary-output {
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+}
+
+.summary-sep {
+  color: rgba(255, 255, 255, 0.3);
 }
 
 .summary-cost {
   font-weight: 600;
   color: rgba(255, 255, 255, 0.8);
+}
+
+.summary-per-unit {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.75rem;
 }
 </style>
