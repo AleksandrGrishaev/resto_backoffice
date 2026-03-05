@@ -90,8 +90,8 @@
                     <div class="flex-grow-1">
                       <div class="font-weight-medium">{{ item.itemName || 'Unknown Item' }}</div>
                       <div class="text-caption text-medium-emphasis">
-                        System: {{ item.systemQuantity || 0 }} {{ item.unit || 'units' }} → Actual:
-                        {{ item.actualQuantity || 0 }} {{ item.unit || 'units' }}
+                        System: {{ item.systemQuantity || 0 }} {{ getUnitShortName(item.unit) }} →
+                        Actual: {{ item.actualQuantity || 0 }} {{ getUnitShortName(item.unit) }}
                       </div>
                       <div v-if="item.countedBy" class="text-caption text-primary mt-1">
                         <v-icon icon="mdi-account" size="12" class="mr-1" />
@@ -108,7 +108,7 @@
                         :class="(item.difference || 0) > 0 ? 'text-success' : 'text-error'"
                       >
                         {{ (item.difference || 0) > 0 ? '+' : '' }}{{ item.difference || 0 }}
-                        {{ item.unit || 'units' }}
+                        {{ getUnitShortName(item.unit) }}
                       </div>
                       <div class="text-caption text-medium-emphasis">
                         {{ formatCurrency(item.valueDifference || 0) }}
@@ -164,10 +164,11 @@
                           "
                         >
                           {{ item.systemQuantity || 0 }} → {{ item.actualQuantity || 0 }}
-                          {{ item.unit || 'units' }}
+                          {{ getUnitShortName(item.unit) }}
                         </span>
                         <span v-else>
-                          {{ item.systemQuantity || 0 }} {{ item.unit || 'units' }} (confirmed)
+                          {{ item.systemQuantity || 0 }}
+                          {{ getUnitShortName(item.unit) }} (confirmed)
                         </span>
                       </div>
 
@@ -302,6 +303,7 @@ import type {
   InventoryStatus
 } from '@/stores/storage'
 import { DebugUtils } from '@/utils'
+import { getUnitShortName } from '@/types/measurementUnits'
 
 const MODULE_NAME = 'InventoryDetailsDialog'
 

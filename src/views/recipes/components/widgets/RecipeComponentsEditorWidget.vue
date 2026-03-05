@@ -471,7 +471,12 @@ import RecipeSearchWidget from './RecipeSearchWidget.vue' // ⭐ PHASE 1: Recipe
 import { detectCycle, formatCyclePath } from '@/stores/recipes/composables/usePreparationGraph'
 // ⭐ PHASE 1: Recipe nesting - cycle detection and depth validation
 import { useRecipeGraph } from '@/stores/recipes/composables/useRecipeGraph'
-import type { PreparationIngredient, Preparation, Recipe } from '@/stores/recipes/types'
+import type {
+  PreparationIngredient,
+  Preparation,
+  Recipe,
+  PreparationOutputUnit
+} from '@/stores/recipes/types'
 
 // ===== TYPES =====
 interface Component {
@@ -501,7 +506,7 @@ interface PreparationItem {
   id: string
   code: string
   name: string
-  outputUnit: string
+  outputUnit: PreparationOutputUnit
   type?: string // Category/type of preparation
   portionType?: 'weight' | 'portion' // ✅ NEW: How quantities are measured
 }
@@ -653,7 +658,7 @@ const cycleDetectionResult = computed(() => {
     id: p.id,
     name: p.name,
     code: p.code,
-    outputUnit: p.outputUnit as any,
+    outputUnit: p.outputUnit,
     outputQuantity: 1,
     preparationTime: 0,
     instructions: '',

@@ -165,7 +165,9 @@
         <template #[`item.averageCostPerUnit`]="{ item }">
           <div>
             <div class="font-weight-medium">{{ formatCurrency(item.averageCostPerUnit) }}</div>
-            <div class="text-caption text-medium-emphasis">per {{ item.unit }}</div>
+            <div class="text-caption text-medium-emphasis">
+              per {{ getUnitShortName(item.unit) }}
+            </div>
           </div>
         </template>
 
@@ -228,6 +230,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { InventoryValuation } from '@/stores/analytics/types'
+import { getUnitShortName } from '@/types/measurementUnits'
 
 // Props
 interface Props {
@@ -325,7 +328,7 @@ function getBarColor(itemType: 'product' | 'preparation'): string {
 }
 
 function formatQuantity(quantity: number, unit: string): string {
-  return `${quantity.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${unit}`
+  return `${quantity.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${getUnitShortName(unit)}`
 }
 
 function formatCurrency(amount: number): string {

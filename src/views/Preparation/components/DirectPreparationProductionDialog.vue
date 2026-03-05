@@ -625,7 +625,7 @@ const ingredientsPreview = computed(() => {
           id: ingredient.id,
           name: prep.name,
           quantity: scaledQuantity.toFixed(2),
-          unit: prep.outputUnit || 'g',
+          unit: prep.outputUnit || 'gram',
           costPerUnit,
           totalCost: scaledQuantity * costPerUnit
         }
@@ -700,7 +700,7 @@ const availablePreparations = computed(() => {
         ...p,
         code: prep?.code || '',
         outputQuantity: prep?.outputQuantity || 0,
-        outputUnit: prep?.outputUnit || 'g',
+        outputUnit: prep?.outputUnit || 'gram',
         category: prep?.type || '' // category is stored in 'type' field
       }
     })

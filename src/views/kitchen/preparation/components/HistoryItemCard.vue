@@ -72,6 +72,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { formatIDR } from '@/utils/currency'
+import { getUnitShortName } from '@/types/measurementUnits'
 import type { UnifiedHistoryItem } from '@/stores/kitchenKpi'
 
 // =============================================
@@ -140,7 +141,7 @@ const slotColor = computed(() => {
 
 const formatQuantity = computed(() => {
   const value = props.item.quantity
-  const unit = props.item.unit || 'g'
+  const unit = getUnitShortName(props.item.unit)
 
   if (value <= 0) return '0'
 
@@ -152,13 +153,14 @@ const formatQuantity = computed(() => {
     props.item.productionDetails.portionSize > 0
   ) {
     const portions = Math.ceil(value / props.item.productionDetails.portionSize)
-    const weightDisplay = value >= 1000 ? `${(value / 1000).toFixed(1)}kg` : `${Math.round(value)}g`
+    const weightDisplay =
+      value >= 1000 ? `${(value / 1000).toFixed(1)}kg` : `${Math.round(value)}${unit}`
     return `${portions} pcs (${weightDisplay})`
   }
 
   // For weight display
-  if (value >= 1000) {
-    return `${(value / 1000).toFixed(1)}kg`
+  if (value >= 1000 && (unit === 'g' || unit === 'ml')) {
+    return `${(value / 1000).toFixed(1)}${unit === 'g' ? 'kg' : 'L'}`
   }
   return `${Math.round(value)}${unit}`
 })

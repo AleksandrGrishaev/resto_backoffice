@@ -5,6 +5,7 @@ import { useRecipesStore } from '@/stores/recipes/recipesStore'
 import { useProductsStore } from '@/stores/productsStore'
 import type { Preparation, PreparationIngredient } from '@/stores/recipes/types'
 import type { MeasurementUnit } from '@/types/measurementUnits'
+import { getUnitShortName } from '@/types/measurementUnits'
 
 export interface ScaledIngredient {
   id: string
@@ -123,19 +124,7 @@ export function useRecipeScaling() {
    * Format display unit for ingredient
    */
   const formatDisplayUnit = (unit: MeasurementUnit | string): string => {
-    const unitLabels: Record<string, string> = {
-      gram: 'g',
-      gr: 'g',
-      kg: 'kg',
-      ml: 'ml',
-      liter: 'L',
-      piece: 'pcs',
-      pc: 'pcs',
-      pcs: 'pcs',
-      pack: 'pack',
-      portion: 'portion'
-    }
-    return unitLabels[unit] || unit
+    return getUnitShortName(unit)
   }
 
   /**

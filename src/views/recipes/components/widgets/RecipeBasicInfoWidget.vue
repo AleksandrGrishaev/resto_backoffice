@@ -311,7 +311,7 @@
             :min="0"
             variant="outlined"
             density="comfortable"
-            :hint="`Alert when stock falls below this (${formData.outputUnit || 'units'})`"
+            :hint="`Alert when stock falls below this (${getUnitShortName(formData.outputUnit)})`"
             @update:model-value="updateField('minStockThreshold', $event)"
           />
         </v-col>
@@ -324,7 +324,7 @@
             :min="0"
             variant="outlined"
             density="comfortable"
-            :hint="`Target daily production (${formData.outputUnit || 'units'})`"
+            :hint="`Target daily production (${getUnitShortName(formData.outputUnit)})`"
             @update:model-value="updateField('dailyTargetQuantity', $event)"
           />
         </v-col>

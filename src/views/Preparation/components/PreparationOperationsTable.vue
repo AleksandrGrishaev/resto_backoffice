@@ -434,9 +434,11 @@
                           {{ item.preparationName || item.itemName }}
                         </div>
                         <div class="text-caption text-medium-emphasis">
-                          {{ item.quantity }} {{ item.unit || 'g' }}
+                          {{ item.quantity }} {{ getUnitShortName(item.unit) }}
                           <span v-if="item.costPerUnit">
-                            @ {{ formatCurrency(item.costPerUnit) }}/{{ item.unit || 'g' }}
+                            @ {{ formatCurrency(item.costPerUnit) }}/{{
+                              getUnitShortName(item.unit)
+                            }}
                           </span>
                         </div>
                         <!-- Expiry Date (for production) -->
@@ -512,6 +514,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { getUnitShortName } from '@/types/measurementUnits'
 import type {
   PreparationOperation,
   PreparationDepartment,

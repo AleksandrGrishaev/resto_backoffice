@@ -1104,7 +1104,7 @@ async function handleExportPdf(options: { department: DepartmentFilter }) {
               category: prep.type,
               portionType: (prep.portionType || 'weight') as 'weight' | 'portion',
               outputQuantity: prep.outputQuantity || 1,
-              outputUnit: prep.outputUnit || 'unit',
+              outputUnit: prep.outputUnit || 'gram',
               costPerUnit: costCalc?.costPerOutputUnit || 0,
               totalCost: costCalc?.totalCost || 0,
               components: (prep.recipe || []).map((comp: PreparationIngredient) => {
