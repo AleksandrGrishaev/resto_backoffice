@@ -538,6 +538,79 @@ export function isReceipt(obj: any): obj is Receipt {
 }
 
 // =============================================
+// RECEIPT CORRECTION TYPES
+// =============================================
+
+export type CorrectionType = 'item_quantity' | 'item_price' | 'supplier_change' | 'full_reversal'
+
+export interface ReceiptCorrection {
+  id: string
+  correctionNumber: string
+  receiptId: string
+  orderId: string
+
+  correctionType: CorrectionType
+  reason: string
+  correctedBy?: string
+
+  // Supplier change
+  oldSupplierId?: string
+  oldSupplierName?: string
+  newSupplierId?: string
+  newSupplierName?: string
+
+  // Item corrections
+  itemCorrections: ItemCorrectionDetail[]
+
+  // Financial
+  oldTotalAmount?: number
+  newTotalAmount?: number
+  financialImpact?: number
+
+  // Batch adjustments
+  batchAdjustments: BatchAdjustmentDetail[]
+
+  // Audit
+  storageOperationId?: string
+  status: 'applied' | 'failed'
+
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ItemCorrectionDetail {
+  receiptItemId: string
+  itemId: string
+  itemName: string
+  oldQuantity: number
+  newQuantity: number
+  oldBaseCost: number
+  newBaseCost: number
+  delta: number
+  financialImpact: number
+}
+
+export interface BatchAdjustmentDetail {
+  batchId: string
+  action: 'adjusted' | 'reverted_to_in_transit'
+  itemId: string
+  oldQuantity?: number
+  newQuantity?: number
+  oldCostPerUnit?: number
+  newCostPerUnit?: number
+  consumed?: number
+  quantity?: number
+  costPerUnit?: number
+}
+
+export const CORRECTION_TYPES = {
+  item_quantity: 'Quantity Correction',
+  item_price: 'Price Correction',
+  supplier_change: 'Supplier Change',
+  full_reversal: 'Full Reversal'
+} as const
+
+// =============================================
 // UTILITY TYPES - Utility types
 // =============================================
 

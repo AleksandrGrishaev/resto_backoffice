@@ -785,6 +785,130 @@ export function usePurchaseOrders() {
   }
 
   /**
+   * Revert sent order back to draft
+   * Only allowed if no payments are linked
+   */
+  async function revertToDraft(id: string): Promise<PurchaseOrder> {
+    try {
+      const order = getOrderById(id)
+      if (!order) throw new Error(`Order ${id} not found`)
+      if (order.status !== 'sent')
+        throw new Error(`Cannot revert: order status is "${order.status}", must be "sent"`)
+
+      // Check for linked payments
+      const paymentStatus = await getOrderPaymentStatus(id)
+      if (paymentStatus.hasBills) {
+        throw new Error('Cannot revert to draft: order has linked payments. Remove payments first.')
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Reverting order to draft', {
+        orderId: id,
+        orderNumber: order.orderNumber
+      })
+
+      // Remove transit batches created when order was sent
+      try {
+        await storageStore.removeTransitBatchesOnOrderCancel(id)
+        DebugUtils.info(MODULE_NAME, 'Transit batches removed for reverted order')
+      } catch (transitError) {
+        console.warn('Failed to remove transit batches (non-critical):', transitError)
+      }
+
+      const updatedOrder = await supplierStore.updateOrder(id, { status: 'draft' })
+
+      DebugUtils.info(MODULE_NAME, `Order ${updatedOrder.orderNumber} reverted to draft`)
+      return updatedOrder
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error reverting order to draft', { orderId: id, error })
+      throw error
+    }
+  }
+
+  /**
+   * Change supplier on an order (draft or sent status only)
+   */
+  async function changeSupplier(
+    id: string,
+    newSupplierId: string,
+    newSupplierName: string
+  ): Promise<PurchaseOrder> {
+    try {
+      const order = getOrderById(id)
+      if (!order) throw new Error(`Order ${id} not found`)
+      if (!['draft', 'sent'].includes(order.status)) {
+        throw new Error(`Cannot change supplier: order status is "${order.status}"`)
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Changing supplier', {
+        orderId: id,
+        from: order.supplierName,
+        to: newSupplierName
+      })
+
+      // Update order supplier fields
+      const { error } = await supabase
+        .from('supplierstore_orders')
+        .update({
+          supplier_id: newSupplierId,
+          supplier_name: newSupplierName,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+
+      if (error) throw error
+
+      // Update transit batches supplier if order is sent
+      if (order.status === 'sent') {
+        const { error: batchError } = await supabase
+          .from('storage_batches')
+          .update({
+            supplier_id: newSupplierId,
+            supplier_name: newSupplierName,
+            updated_at: new Date().toISOString()
+          })
+          .eq('purchase_order_id', id)
+          .eq('status', 'in_transit')
+
+        if (batchError) {
+          console.warn('Failed to update transit batch supplier:', batchError)
+        }
+      }
+
+      // Reload orders
+      await supplierStore.getOrders()
+      const updatedOrder = getOrderById(id)
+      if (!updatedOrder) throw new Error('Order not found after update')
+
+      DebugUtils.info(MODULE_NAME, `Supplier changed to ${newSupplierName}`)
+      return updatedOrder
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error changing supplier', { orderId: id, error })
+      throw error
+    }
+  }
+
+  /**
+   * Check if order can be reverted to draft
+   */
+  function canRevertToDraft(order: PurchaseOrder): boolean {
+    return order.status === 'sent'
+  }
+
+  /**
+   * Check if order can be cancelled
+   */
+  function canCancelOrder(order: PurchaseOrder): boolean {
+    return ['draft', 'sent'].includes(order.status)
+  }
+
+  /**
+   * Check if supplier can be changed
+   */
+  function canChangeSupplier(order: PurchaseOrder): boolean {
+    return ['draft', 'sent'].includes(order.status)
+  }
+
+  /**
    * Определяет департамент из заказа
    */
   function getDepartmentFromOrder(_order: PurchaseOrder): StorageDepartment {
@@ -1234,6 +1358,11 @@ export function usePurchaseOrders() {
     sendOrder,
     markOrderDelivered,
     cancelOrder,
+    revertToDraft,
+    changeSupplier,
+    canRevertToDraft,
+    canCancelOrder,
+    canChangeSupplier,
 
     // AccountStore Integration
     createBillInAccountStore,
