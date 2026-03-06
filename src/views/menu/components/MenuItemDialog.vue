@@ -144,6 +144,33 @@
                     </v-btn>
                   </v-btn-toggle>
                 </div>
+
+                <!-- Channel Availability -->
+                <div class="mt-5">
+                  <div class="section-label mb-2">Available on Channels</div>
+                  <div class="channel-chips">
+                    <v-chip
+                      v-for="channel in channelsStore.activeChannels"
+                      :key="channel.id"
+                      :color="formData.channelIds.includes(channel.id) ? 'primary' : undefined"
+                      :variant="formData.channelIds.includes(channel.id) ? 'flat' : 'outlined'"
+                      size="large"
+                      class="channel-chip"
+                      @click="toggleChannel(channel.id)"
+                    >
+                      <v-icon
+                        :icon="
+                          formData.channelIds.includes(channel.id)
+                            ? 'mdi-check-circle'
+                            : 'mdi-circle-outline'
+                        "
+                        size="18"
+                        class="mr-1"
+                      />
+                      {{ channel.name }}
+                    </v-chip>
+                  </div>
+                </div>
               </div>
             </v-window-item>
 
@@ -278,6 +305,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useMenuStore } from '@/stores/menu'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes/recipesStore'
+import { useChannelsStore } from '@/stores/channels'
 import type { MenuItem, CreateMenuItemDto, MenuItemVariant, DishType } from '@/stores/menu'
 import MenuItemVariantComponent from './MenuItemVariant.vue'
 import ModifiersEditorWidget from '@/views/recipes/components/widgets/ModifiersEditorWidget.vue'
@@ -305,6 +333,7 @@ const emit = defineEmits<{
 const menuStore = useMenuStore()
 const productsStore = useProductsStore()
 const recipesStore = useRecipesStore()
+const channelsStore = useChannelsStore()
 
 // State
 const form = ref()
@@ -336,7 +365,8 @@ const formData = ref({
   sortOrder: 0,
   variants: [createDefaultVariant()],
   modifierGroups: [] as any[],
-  templates: [] as any[]
+  templates: [] as any[],
+  channelIds: [] as string[]
 })
 
 // Computed
@@ -577,6 +607,15 @@ function updateVariant(index: number, updatedVariant: MenuItemVariant) {
   formData.value.variants[index] = updatedVariant
 }
 
+function toggleChannel(channelId: string) {
+  const idx = formData.value.channelIds.indexOf(channelId)
+  if (idx !== -1) {
+    formData.value.channelIds.splice(idx, 1)
+  } else {
+    formData.value.channelIds.push(channelId)
+  }
+}
+
 function getNextSortOrder(categoryId: string): number {
   const categoryItems = menuStore.getItemsByCategory(categoryId)
   if (categoryItems.length === 0) return 0
@@ -597,7 +636,10 @@ function resetForm() {
     sortOrder: 0,
     variants: [createDefaultVariant()],
     modifierGroups: [],
-    templates: []
+    templates: [],
+    channelIds: channelsStore.activeChannels
+      .filter(c => c.type !== 'delivery_platform')
+      .map(c => c.id)
   }
   currentTab.value = 'basic'
   showAdvancedTab.value = false
@@ -657,6 +699,8 @@ async function handleSaveDraft() {
       }))
     }
 
+    let savedItemId: string | undefined
+
     if (isEdit.value && props.item) {
       await menuStore.updateMenuItem(props.item.id, {
         ...itemData,
@@ -664,11 +708,22 @@ async function handleSaveDraft() {
         sortOrder: formData.value.sortOrder,
         variants: processedVariants
       })
+      savedItemId = props.item.id
     } else {
-      await menuStore.addMenuItem({
+      const newItem = await menuStore.addMenuItem({
         ...itemData,
         sortOrder: getNextSortOrder(formData.value.categoryId)
       })
+      savedItemId = newItem?.id
+    }
+
+    // Save channel availability
+    if (savedItemId) {
+      const availability = channelsStore.activeChannels.map(ch => ({
+        channelId: ch.id,
+        isAvailable: formData.value.channelIds.includes(ch.id)
+      }))
+      await channelsStore.setMenuItemChannels(savedItemId, availability)
     }
 
     emit('saved')
@@ -724,6 +779,8 @@ async function handleSubmit() {
       }))
     }
 
+    let savedItemId: string | undefined
+
     if (isEdit.value && props.item) {
       await menuStore.updateMenuItem(props.item.id, {
         ...itemData,
@@ -731,11 +788,22 @@ async function handleSubmit() {
         sortOrder: formData.value.sortOrder,
         variants: processedVariants
       })
+      savedItemId = props.item.id
     } else {
-      await menuStore.addMenuItem({
+      const newItem = await menuStore.addMenuItem({
         ...itemData,
         sortOrder: getNextSortOrder(formData.value.categoryId)
       })
+      savedItemId = newItem?.id
+    }
+
+    // Save channel availability
+    if (savedItemId) {
+      const availability = channelsStore.activeChannels.map(ch => ({
+        channelId: ch.id,
+        isAvailable: formData.value.channelIds.includes(ch.id)
+      }))
+      await channelsStore.setMenuItemChannels(savedItemId, availability)
     }
 
     emit('saved')
@@ -768,7 +836,8 @@ watch(
           composition: variant.composition || []
         })),
         modifierGroups: newItem.modifierGroups || [],
-        templates: newItem.templates || []
+        templates: newItem.templates || [],
+        channelIds: channelsStore.getMenuItemChannelIds(newItem.id)
       }
     } else {
       resetForm()
@@ -795,7 +864,8 @@ watch(
             composition: variant.composition || []
           })),
           modifierGroups: props.item.modifierGroups || [],
-          templates: props.item.templates || []
+          templates: props.item.templates || [],
+          channelIds: channelsStore.getMenuItemChannelIds(props.item.id)
         }
         // Show modifiers tab if item has modifiers or templates
         showAdvancedTab.value =
@@ -960,6 +1030,19 @@ onMounted(async () => {
 :deep(.v-btn-toggle) {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
+}
+
+// Channel chips
+.channel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.channel-chip {
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s ease;
 }
 
 // Variants list

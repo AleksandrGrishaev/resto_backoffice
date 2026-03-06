@@ -517,6 +517,22 @@ const handleOrderTypeConfirm = async (data: {
 }): Promise<void> => {
   if (!currentOrder.value) return
 
+  // Check for items unavailable on the target channel
+  if (data.channelId && data.channelId !== currentOrder.value.channelId) {
+    const unavailable = await ordersStore.getUnavailableItemsForChannel(
+      currentOrder.value.bills,
+      data.channelId
+    )
+    if (unavailable.length > 0) {
+      const names = [...new Set(unavailable.map(u => u.itemName))].join(', ')
+      showError(
+        `Cannot switch channel: the following items are not available on this channel: ${names}`,
+        'warning'
+      )
+      return
+    }
+  }
+
   try {
     loading.value.global = true
     showOrderTypeDialog.value = false

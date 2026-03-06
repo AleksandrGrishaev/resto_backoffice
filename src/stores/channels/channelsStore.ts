@@ -98,11 +98,60 @@ export const useChannelsStore = defineStore('channels', () => {
     }
   }
 
+  /**
+   * Get all channel IDs linked to a given channel (bidirectional).
+   * Returns linked IDs only, NOT the source channelId itself.
+   */
+  function getLinkedChannelIds(channelId: string): string[] {
+    const channel = getChannelById(channelId)
+    if (!channel?.linkedChannelId) return []
+
+    // Bidirectional: find all channels that point to this one OR that this one points to
+    const linked = new Set<string>()
+    if (channel.linkedChannelId) linked.add(channel.linkedChannelId)
+
+    // Also find channels that link TO this channel
+    for (const ch of channels.value) {
+      if (ch.id !== channelId && ch.linkedChannelId === channelId) {
+        linked.add(ch.id)
+      }
+    }
+
+    return [...linked]
+  }
+
   function isMenuItemAvailable(channelId: string, menuItemId: string): boolean {
     const channelItem = channelMenuItems.value.find(
       ci => ci.channelId === channelId && ci.menuItemId === menuItemId
     )
-    return channelItem?.isAvailable ?? true
+    return channelItem?.isAvailable ?? false
+  }
+
+  function getMenuItemChannelIds(menuItemId: string): string[] {
+    return channelMenuItems.value
+      .filter(ci => ci.menuItemId === menuItemId && ci.isAvailable)
+      .map(ci => ci.channelId)
+  }
+
+  async function setMenuItemChannels(
+    menuItemId: string,
+    channelAvailability: { channelId: string; isAvailable: boolean }[]
+  ): Promise<void> {
+    // Propagate: if channel A is linked to B, mirror A's availability to B
+    const expanded = [...channelAvailability]
+    for (const ca of channelAvailability) {
+      for (const linkedId of getLinkedChannelIds(ca.channelId)) {
+        if (!expanded.some(e => e.channelId === linkedId)) {
+          expanded.push({ channelId: linkedId, isAvailable: ca.isAvailable })
+        }
+      }
+    }
+
+    const results = await channelsService.bulkSetMenuItemChannels(menuItemId, expanded)
+
+    // Replace local records for this menuItemId
+    channelMenuItems.value = channelMenuItems.value.filter(ci => ci.menuItemId !== menuItemId)
+    channelMenuItems.value.push(...results)
   }
 
   // Actions
@@ -166,16 +215,33 @@ export const useChannelsStore = defineStore('channels', () => {
     variantId: string,
     price: number
   ): Promise<void> {
+    // Apply to this channel
     const result = await channelsService.upsertChannelPrice(channelId, menuItemId, variantId, price)
+    upsertLocalChannelPrice(result)
 
-    const existingIndex = channelPrices.value.findIndex(
-      cp => cp.channelId === channelId && cp.menuItemId === menuItemId && cp.variantId === variantId
+    // Propagate to linked channels
+    for (const linkedId of getLinkedChannelIds(channelId)) {
+      const linkedResult = await channelsService.upsertChannelPrice(
+        linkedId,
+        menuItemId,
+        variantId,
+        price
+      )
+      upsertLocalChannelPrice(linkedResult)
+    }
+  }
+
+  function upsertLocalChannelPrice(cp: ChannelPrice): void {
+    const idx = channelPrices.value.findIndex(
+      p =>
+        p.channelId === cp.channelId &&
+        p.menuItemId === cp.menuItemId &&
+        p.variantId === cp.variantId
     )
-
-    if (existingIndex !== -1) {
-      channelPrices.value[existingIndex] = result
+    if (idx !== -1) {
+      channelPrices.value[idx] = cp
     } else {
-      channelPrices.value.push(result)
+      channelPrices.value.push(cp)
     }
   }
 
@@ -241,16 +307,29 @@ export const useChannelsStore = defineStore('channels', () => {
     menuItemId: string,
     isAvailable: boolean
   ): Promise<void> {
+    // Apply to this channel
     const result = await channelsService.upsertChannelMenuItem(channelId, menuItemId, isAvailable)
+    upsertLocalChannelMenuItem(result)
 
-    const existingIndex = channelMenuItems.value.findIndex(
-      ci => ci.channelId === channelId && ci.menuItemId === menuItemId
+    // Propagate to linked channels
+    for (const linkedId of getLinkedChannelIds(channelId)) {
+      const linkedResult = await channelsService.upsertChannelMenuItem(
+        linkedId,
+        menuItemId,
+        isAvailable
+      )
+      upsertLocalChannelMenuItem(linkedResult)
+    }
+  }
+
+  function upsertLocalChannelMenuItem(item: ChannelMenuItem): void {
+    const idx = channelMenuItems.value.findIndex(
+      ci => ci.channelId === item.channelId && ci.menuItemId === item.menuItemId
     )
-
-    if (existingIndex !== -1) {
-      channelMenuItems.value[existingIndex] = result
+    if (idx !== -1) {
+      channelMenuItems.value[idx] = item
     } else {
-      channelMenuItems.value.push(result)
+      channelMenuItems.value.push(item)
     }
   }
 
@@ -271,6 +350,7 @@ export const useChannelsStore = defineStore('channels', () => {
     getPaymentMethodsForChannel,
     getChannelPrice,
     isMenuItemAvailable,
+    getMenuItemChannelIds,
 
     // Actions
     initialize,
@@ -281,6 +361,7 @@ export const useChannelsStore = defineStore('channels', () => {
     setChannelPaymentMethods,
     setChannelPrice,
     removeChannelPrice,
-    setMenuItemAvailability
+    setMenuItemAvailability,
+    setMenuItemChannels
   }
 })

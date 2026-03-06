@@ -33,6 +33,7 @@ export interface SalesChannel {
   taxes: ChannelTaxLink[]
   paymentMethods: ChannelPaymentMethodLink[]
   settings: ChannelSettings
+  linkedChannelId: string | null
   sortOrder: number
   createdAt: string
   updatedAt: string
