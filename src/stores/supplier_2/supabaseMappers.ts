@@ -8,7 +8,10 @@ import type {
   PurchaseOrder,
   OrderItem,
   Receipt,
-  ReceiptItem
+  ReceiptItem,
+  ReceiptCorrection,
+  ItemCorrectionDetail,
+  BatchAdjustmentDetail
 } from './types'
 
 // =============================================
@@ -448,5 +451,42 @@ export function mapReceiptItemToDB(item: ReceiptItem, receiptId: string): DBRece
     actual_base_cost: item.actualBaseCost ?? null,
 
     notes: item.notes ?? null
+  }
+}
+
+// =============================================
+// RECEIPT CORRECTION MAPPERS
+// =============================================
+
+/**
+ * Convert Supabase receipt correction row to TypeScript ReceiptCorrection
+ */
+export function mapCorrectionFromDB(row: Record<string, any>): ReceiptCorrection {
+  return {
+    id: row.id,
+    correctionNumber: row.correction_number,
+    receiptId: row.receipt_id,
+    orderId: row.order_id,
+
+    correctionType: row.correction_type,
+    reason: row.reason,
+    correctedBy: row.corrected_by ?? undefined,
+
+    oldSupplierId: row.old_supplier_id ?? undefined,
+    oldSupplierName: row.old_supplier_name ?? undefined,
+    newSupplierId: row.new_supplier_id ?? undefined,
+    newSupplierName: row.new_supplier_name ?? undefined,
+
+    itemCorrections: (row.item_corrections as ItemCorrectionDetail[]) ?? [],
+    oldTotalAmount: row.old_total_amount ? Number(row.old_total_amount) : undefined,
+    newTotalAmount: row.new_total_amount ? Number(row.new_total_amount) : undefined,
+    financialImpact: row.financial_impact ? Number(row.financial_impact) : undefined,
+
+    batchAdjustments: (row.batch_adjustments as BatchAdjustmentDetail[]) ?? [],
+    storageOperationId: row.storage_operation_id ?? undefined,
+    status: row.status,
+
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   }
 }

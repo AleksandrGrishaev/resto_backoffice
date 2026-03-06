@@ -90,6 +90,15 @@
             v-else-if="currentScreen === 'inventory'"
             :selected-department="selectedDepartment"
           />
+
+          <!-- Catalog Screen -->
+          <CatalogScreen
+            v-else-if="currentScreen === 'catalog'"
+            @create-based="() => (currentScreen = 'constructor')"
+          />
+
+          <!-- Constructor Screen -->
+          <ConstructorScreen v-else-if="currentScreen === 'constructor'" />
         </div>
       </template>
     </KitchenLayout>
@@ -105,16 +114,30 @@
         </v-row>
       </v-container>
     </div>
+
+    <!-- Global snackbar for toast notifications -->
+    <v-snackbar
+      v-model="snackbarState.show"
+      :color="snackbarState.color"
+      :timeout="snackbarState.timeout"
+      location="top right"
+    >
+      {{ snackbarState.message }}
+      <template #actions>
+        <v-btn variant="text" icon="mdi-close" @click="snackbarState.show = false" />
+      </template>
+    </v-snackbar>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, defineAsyncComponent, onMounted, onUnmounted } from 'vue'
 import { useKitchenStore } from '@/stores/kitchen'
 import { useKitchenDishes } from '@/stores/kitchen/composables'
 import { useAuthStore } from '@/stores/auth'
 import { useWakeLock, useOrderAlertService } from '@/core/pwa'
 import { DebugUtils, StorageMonitor } from '@/utils'
+import { useSnackbar } from '@/composables/useSnackbar'
 import KitchenLayout from '@/layouts/KitchenLayout.vue'
 import KitchenSidebar from './components/KitchenSidebar.vue'
 import OrdersScreen from './orders/OrdersScreen.vue'
@@ -123,6 +146,11 @@ import KpiScreen from './kpi/KpiScreen.vue'
 import RequestsPage from './request/RequestsPage.vue'
 import RecipeCalculatorScreen from './calculator/RecipeCalculatorScreen.vue'
 import InventoryScreen from './inventory/InventoryScreen.vue'
+import type { KitchenScreenName } from './types'
+
+// Async-loaded screens to reduce initial bundle
+const CatalogScreen = defineAsyncComponent(() => import('./catalog/CatalogScreen.vue'))
+const ConstructorScreen = defineAsyncComponent(() => import('./constructor/ConstructorScreen.vue'))
 
 const MODULE_NAME = 'KitchenMainView'
 
@@ -133,6 +161,9 @@ const MODULE_NAME = 'KitchenMainView'
 const kitchenStore = useKitchenStore()
 const authStore = useAuthStore()
 const { userDepartment } = useKitchenDishes()
+
+// Global snackbar
+const { state: snackbarState } = useSnackbar()
 
 // PWA: Wake Lock to keep screen on
 const wakeLock = useWakeLock()
@@ -147,9 +178,7 @@ const orderAlerts = useOrderAlertService()
 const isLoading = ref(false)
 const initError = ref<string | null>(null)
 const isInitialized = ref(false)
-const currentScreen = ref<
-  'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator' | 'inventory'
->('orders')
+const currentScreen = ref<KitchenScreenName>('orders')
 
 // Initialize selectedDepartment based on user role
 const getInitialDepartment = (): 'all' | 'kitchen' | 'bar' => {
@@ -256,9 +285,7 @@ const retryInitialization = async (): Promise<void> => {
  * Handle screen selection from sidebar
  * Triggers background data refresh for the target screen
  */
-const handleScreenSelect = (
-  screen: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator' | 'inventory'
-): void => {
+const handleScreenSelect = (screen: KitchenScreenName): void => {
   currentScreen.value = screen
   DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })
 
@@ -272,9 +299,7 @@ const handleScreenSelect = (
  * Refresh store data for the selected screen in the background.
  * Each screen's component will reactively update when the store state changes.
  */
-const refreshScreenData = async (
-  screen: 'orders' | 'preparation' | 'kpi' | 'requests' | 'calculator' | 'inventory'
-): Promise<void> => {
+const refreshScreenData = async (screen: KitchenScreenName): Promise<void> => {
   switch (screen) {
     case 'orders': {
       // Kitchen orders use realtime subscriptions, but do a one-time re-fetch
@@ -319,7 +344,9 @@ const refreshScreenData = async (
       break
     }
     case 'calculator':
-      // Calculator uses recipes store which is mostly static — no refresh needed
+    case 'catalog':
+    case 'constructor':
+      // These screens use existing stores which are mostly static — no refresh needed
       break
   }
 }

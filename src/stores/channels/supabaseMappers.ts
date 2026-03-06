@@ -50,6 +50,7 @@ export function mapChannelFromDb(row: any): SalesChannel {
     taxes,
     paymentMethods,
     settings: row.settings || {},
+    linkedChannelId: row.linked_channel_id || null,
     sortOrder: row.sort_order || 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -66,6 +67,7 @@ export function mapChannelToDb(channel: Partial<SalesChannel>): Record<string, a
   if (channel.taxPercent !== undefined) result.tax_percent = channel.taxPercent
   if (channel.taxMode !== undefined) result.tax_mode = channel.taxMode
   if (channel.settings !== undefined) result.settings = channel.settings
+  if (channel.linkedChannelId !== undefined) result.linked_channel_id = channel.linkedChannelId
   if (channel.sortOrder !== undefined) result.sort_order = channel.sortOrder
   return result
 }

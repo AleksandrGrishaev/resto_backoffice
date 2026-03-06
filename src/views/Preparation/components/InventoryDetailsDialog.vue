@@ -127,7 +127,7 @@
                         {{ item.preparationName || 'Unknown Preparation' }}
                       </div>
                       <div class="text-caption text-medium-emphasis">
-                        Quantity: {{ item.actualQuantity || 0 }} {{ item.unit || 'g' }}
+                        Quantity: {{ item.actualQuantity || 0 }} {{ getUnitShortName(item.unit) }}
                       </div>
                       <div class="d-flex align-center gap-2 mt-1">
                         <v-chip
@@ -190,8 +190,8 @@
                         {{ item.preparationName || 'Unknown Preparation' }}
                       </div>
                       <div class="text-caption text-medium-emphasis">
-                        System: {{ item.systemQuantity || 0 }} {{ item.unit || 'g' }} → Actual:
-                        {{ item.actualQuantity || 0 }} {{ item.unit || 'g' }}
+                        System: {{ item.systemQuantity || 0 }} {{ getUnitShortName(item.unit) }} →
+                        Actual: {{ item.actualQuantity || 0 }} {{ getUnitShortName(item.unit) }}
                       </div>
                       <div v-if="item.countedBy" class="text-caption text-primary mt-1">
                         <v-icon icon="mdi-account" size="12" class="mr-1" />
@@ -208,7 +208,7 @@
                         :class="(item.difference || 0) > 0 ? 'text-success' : 'text-error'"
                       >
                         {{ (item.difference || 0) > 0 ? '+' : '' }}{{ item.difference || 0 }}
-                        {{ item.unit || 'g' }}
+                        {{ getUnitShortName(item.unit) }}
                       </div>
                       <div class="text-caption text-medium-emphasis">
                         {{ formatCurrency(item.valueDifference || 0) }}
@@ -265,10 +265,11 @@
                           "
                         >
                           {{ item.systemQuantity || 0 }} → {{ item.actualQuantity || 0 }}
-                          {{ item.unit || 'g' }}
+                          {{ getUnitShortName(item.unit) }}
                         </span>
                         <span v-else>
-                          {{ item.systemQuantity || 0 }} {{ item.unit || 'g' }} (confirmed)
+                          {{ item.systemQuantity || 0 }}
+                          {{ getUnitShortName(item.unit) }} (confirmed)
                         </span>
                       </div>
 
@@ -462,6 +463,7 @@ import type {
   PreparationInventoryStatus
 } from '@/stores/preparation'
 import { DebugUtils } from '@/utils'
+import { getUnitShortName } from '@/types/measurementUnits'
 
 const MODULE_NAME = 'PreparationInventoryDetailsDialog'
 

@@ -395,6 +395,8 @@ export class RecipesService {
         code,
         recipe: data.recipe || [],
         isActive: data.isActive ?? true,
+        status: (data as any).status || 'active',
+        lastEditedAt: now,
         lastKnownCost: lastKnownCost,
         createdAt: now,
         updatedAt: now
@@ -487,11 +489,13 @@ export class RecipesService {
       }
 
       const { id, recipe, ...updateData } = data
+      const now = TimeUtils.getCurrentLocalISO()
       const updatedPreparation: Preparation = {
         ...existingPreparation,
         ...updateData,
         recipe: recipe || existingPreparation.recipe,
-        updatedAt: TimeUtils.getCurrentLocalISO()
+        lastEditedAt: now,
+        updatedAt: now
       }
 
       // ⭐ PHASE 1: Cycle detection for nested preparations
@@ -761,6 +765,8 @@ export class RecipesService {
         components: data.components || [],
         steps: data.steps || [],
         isActive: data.isActive ?? true,
+        status: (data as any).status || 'active',
+        lastEditedAt: now,
         createdAt: now,
         updatedAt: now
       })
@@ -857,12 +863,14 @@ export class RecipesService {
       }
 
       const { id, components, steps, ...updateData } = data
+      const now = TimeUtils.getCurrentLocalISO()
       const updatedRecipe: Recipe = {
         ...existingRecipe,
         ...updateData,
         components: components || existingRecipe.components,
         steps: steps || existingRecipe.steps,
-        updatedAt: TimeUtils.getCurrentLocalISO()
+        lastEditedAt: now,
+        updatedAt: now
       }
 
       // Update recipe in Supabase

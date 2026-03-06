@@ -7,7 +7,8 @@ import type {
   RecipeStep,
   RecipeComponent,
   PreparationIngredient,
-  PortionType
+  PortionType,
+  PreparationOutputUnit
 } from './types'
 import type { Tables, TablesInsert, TablesUpdate } from '@/supabase/types'
 import type { Department } from '@/stores/menu/types'
@@ -37,6 +38,28 @@ export type SupabaseRecipeStepInsert = TablesInsert<'recipe_steps'>
 export type SupabaseRecipeStepUpdate = TablesUpdate<'recipe_steps'>
 
 // =============================================
+// OUTPUT UNIT NORMALIZER
+// =============================================
+
+/** Normalize legacy DB values (gr, pc) to standard PreparationOutputUnit */
+function normalizeOutputUnit(raw: string | null | undefined): PreparationOutputUnit {
+  switch (raw) {
+    case 'gram':
+    case 'gr':
+      return 'gram'
+    case 'ml':
+      return 'ml'
+    case 'piece':
+    case 'pc':
+      return 'piece'
+    case 'portion':
+      return 'portion'
+    default:
+      return 'gram'
+  }
+}
+
+// =============================================
 // PREPARATION MAPPERS
 // =============================================
 
@@ -64,6 +87,9 @@ export function preparationToSupabaseInsert(preparation: Preparation): SupabaseP
     // ⭐ PHASE 2: Portion type support
     portion_type: preparation.portionType || 'weight',
     portion_size: preparation.portionSize || null,
+    // Entity status
+    status: (preparation as any).status || 'active',
+    last_edited_at: (preparation as any).lastEditedAt || null,
     updated_at: preparation.updatedAt
   }
 }
@@ -94,7 +120,7 @@ export function preparationFromSupabase(
     type: row.type as any, // PreparationType
     department: row.department as Department,
     outputQuantity: Number(row.output_quantity),
-    outputUnit: row.output_unit as any, // MeasurementUnit
+    outputUnit: normalizeOutputUnit(row.output_unit),
     preparationTime: row.preparation_time || undefined,
     instructions: row.instructions || undefined,
     shelfLife: row.shelf_life || undefined, // ✅ NEW: Shelf life in days
@@ -105,6 +131,9 @@ export function preparationFromSupabase(
     // ⭐ PHASE 2: Portion type support
     portionType: (row.portion_type as 'weight' | 'portion') || 'weight',
     portionSize: row.portion_size ? Number(row.portion_size) : undefined,
+    // Entity status
+    status: ((row as any).status as any) || (row.is_active === false ? 'draft' : 'active'),
+    lastEditedAt: (row as any).last_edited_at || undefined,
     recipe: ingredients, // Ingredients from separate query
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || new Date().toISOString()
@@ -186,6 +215,9 @@ export function recipeToSupabaseInsert(recipe: Recipe): SupabaseRecipeInsert {
     tags: recipe.tags && recipe.tags.length > 0 ? recipe.tags : null,
     is_active: recipe.isActive,
     cost: recipe.cost || null,
+    // Entity status
+    status: (recipe as any).status || 'active',
+    last_edited_at: (recipe as any).lastEditedAt || null,
     updated_at: recipe.updatedAt
   }
 }
@@ -224,6 +256,9 @@ export function recipeFromSupabase(
     tags: row.tags || undefined,
     isActive: row.is_active ?? true,
     cost: row.cost ? Number(row.cost) : undefined,
+    // Entity status
+    status: ((row as any).status as any) || (row.is_active === false ? 'draft' : 'active'),
+    lastEditedAt: (row as any).last_edited_at || undefined,
     components, // Components from separate query
     steps, // Steps from separate query
     createdAt: row.created_at || new Date().toISOString(),

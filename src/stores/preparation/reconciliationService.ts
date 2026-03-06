@@ -158,7 +158,7 @@ class ReconciliationService {
       return {
         reconciled: true,
         deficitQuantity: totalDeficit,
-        unit: negativeBatches[0]?.unit || 'g',
+        unit: negativeBatches[0]?.unit || 'gram',
         batchCount: negativeBatches.length,
         preparationName: preparation.name
       }

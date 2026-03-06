@@ -1,6 +1,7 @@
 // src/stores/recipes/types.ts - ОБНОВЛЕННЫЕ типы с поддержкой базовых единиц
 
 import { BaseEntity } from '@/types/common'
+import type { EntityStatus } from '@/types/common'
 import type { MeasurementUnit } from '@/types/measurementUnits'
 import type { Department } from '@/stores/menu/types'
 
@@ -40,10 +41,10 @@ export interface PreparationForRecipe {
   type: PreparationType
   department: Department // ✅ NEW: Department that prepares this item
 
-  // ✅ БАЗОВЫЕ ЕДИНИЦЫ: Всегда в граммах или мл
+  // ✅ БАЗОВЫЕ ЕДИНИЦЫ: Выход полуфабриката
   outputQuantity: number
-  outputUnit: 'gram' | 'ml' // Только базовые единицы
-  costPerOutputUnit: number // IDR за грамм/мл
+  outputUnit: PreparationOutputUnit
+  costPerOutputUnit: number // IDR за единицу выхода
 
   isActive: boolean
 }
@@ -77,6 +78,14 @@ export interface RecipeForRecipe {
  */
 export type PortionType = 'weight' | 'portion'
 
+/**
+ * Valid output units for preparations.
+ * - gram/ml: weight/volume-based output
+ * - piece: discrete items (e.g., sliced bread)
+ * - portion: fixed-size portions
+ */
+export type PreparationOutputUnit = 'gram' | 'ml' | 'piece' | 'portion'
+
 // =============================================
 // PREPARATION (полуфабрикаты)
 // =============================================
@@ -91,9 +100,9 @@ export interface Preparation extends BaseEntity {
   // ✅ ОБНОВЛЕНО: Рецепт из продуктов с правильными единицами
   recipe: PreparationIngredient[]
 
-  // ✅ ОБНОВЛЕНО: Выход всегда в базовых единицах
+  // ✅ ОБНОВЛЕНО: Выход полуфабриката
   outputQuantity: number
-  outputUnit: 'gram' | 'ml' // Только базовые единицы
+  outputUnit: PreparationOutputUnit
 
   preparationTime: number
   instructions: string
@@ -108,6 +117,10 @@ export interface Preparation extends BaseEntity {
   // ⭐ PHASE 2: Portion type support
   portionType: PortionType // 'weight' (default) or 'portion'
   portionSize?: number // Size of one portion in grams (only for portionType='portion')
+
+  // Entity status & last edited tracking
+  status?: EntityStatus
+  lastEditedAt?: string
 }
 
 /**
@@ -157,6 +170,10 @@ export interface Recipe extends BaseEntity {
   tags?: string[]
   isActive: boolean
   cost?: number // Себестоимость в IDR
+
+  // Entity status & last edited tracking
+  status?: EntityStatus
+  lastEditedAt?: string
 }
 
 /**
@@ -308,7 +325,7 @@ export interface CreatePreparationData {
   department: Department // ✅ NEW: Department that prepares this item
   description?: string
   outputQuantity: number
-  outputUnit: 'gram' | 'ml' // Только базовые единицы
+  outputUnit: PreparationOutputUnit
   preparationTime: number
   instructions: string
   shelfLife?: number // ✅ NEW: Shelf life in days

@@ -296,7 +296,7 @@ export const useInventoryValuationStore = defineStore('inventoryValuation', () =
               itemType: 'preparation',
               department,
               quantity: 0,
-              unit: preparation?.outputUnit || 'unit',
+              unit: preparation?.outputUnit || 'gram',
               totalValue: 0,
               batchCount: 0,
               totalCost: 0

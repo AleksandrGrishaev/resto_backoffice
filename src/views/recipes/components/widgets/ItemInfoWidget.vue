@@ -92,6 +92,7 @@ import type {
   RecipePlanCost
 } from '@/stores/recipes/types'
 import CostInfoWidget from './CostInfoWidget.vue'
+import { getUnitShortName } from '@/types/measurementUnits'
 
 interface Props {
   item: Recipe | Preparation
@@ -139,7 +140,7 @@ function getOutputValue(): string {
     if (prep.portionType === 'portion') {
       return prep.outputQuantity === 1 ? '1 portion' : `${prep.outputQuantity} portions`
     }
-    return `${prep.outputQuantity} ${prep.outputUnit}`
+    return `${prep.outputQuantity} ${getUnitShortName(prep.outputUnit)}`
   } else {
     const recipe = props.item as Recipe
     return `${recipe.portionSize} ${recipe.portionUnit}`

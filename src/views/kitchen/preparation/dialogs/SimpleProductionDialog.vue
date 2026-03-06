@@ -55,10 +55,11 @@
                       <span class="text-caption">
                         {{ item.raw.code }} &bull;
                         <template v-if="item.raw.portionType === 'portion'">
-                          {{ item.raw.portionSize }}{{ item.raw.outputUnit }}/portion
+                          {{ item.raw.portionSize
+                          }}{{ getUnitShortName(item.raw.outputUnit) }}/portion
                         </template>
                         <template v-else>
-                          {{ item.raw.outputQuantity }} {{ item.raw.outputUnit }}
+                          {{ item.raw.outputQuantity }} {{ getUnitShortName(item.raw.outputUnit) }}
                         </template>
                       </span>
                     </template>
@@ -74,11 +75,11 @@
                     <div class="text-body-1 font-weight-medium">
                       <template v-if="isPortionType">
                         1 portion ({{ selectedPreparation.portionSize
-                        }}{{ selectedPreparation.outputUnit }})
+                        }}{{ getUnitShortName(selectedPreparation.outputUnit) }})
                       </template>
                       <template v-else>
                         {{ selectedPreparation.outputQuantity }}
-                        {{ selectedPreparation.outputUnit }}
+                        {{ getUnitShortName(selectedPreparation.outputUnit) }}
                       </template>
                     </div>
                   </div>
@@ -117,7 +118,7 @@
                 density="compact"
                 suffix="pcs"
                 prepend-inner-icon="mdi-food-variant"
-                :hint="`= ${effectiveQuantity}${selectedPreparation.outputUnit}`"
+                :hint="`= ${effectiveQuantity}${getUnitShortName(selectedPreparation.outputUnit)}`"
                 persistent-hint
                 :error-messages="!portionInput || portionInput <= 0 ? 'Required' : ''"
               />
@@ -132,7 +133,7 @@
                 :allow-decimal="false"
                 variant="outlined"
                 density="compact"
-                :suffix="selectedPreparation?.outputUnit || 'g'"
+                :suffix="getUnitShortName(selectedPreparation?.outputUnit)"
                 prepend-inner-icon="mdi-scale"
                 :hint="quantityHint"
                 persistent-hint
@@ -193,6 +194,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useCostCalculation } from '@/stores/recipes/composables/useCostCalculation'
 import type { CreatePreparationReceiptData } from '@/stores/preparation'
 import { DebugUtils, TimeUtils, formatIDR } from '@/utils'
+import { getUnitShortName } from '@/types/measurementUnits'
 
 const MODULE_NAME = 'SimpleProductionDialog'
 
@@ -314,9 +316,9 @@ const quantityHint = computed(() => {
   if (!selectedPreparation.value) return ''
   const recipeOutput = selectedPreparation.value.outputQuantity
   if (!quantity.value || quantity.value === recipeOutput) {
-    return `Standard batch: ${recipeOutput} ${selectedPreparation.value.outputUnit}`
+    return `Standard batch: ${recipeOutput} ${getUnitShortName(selectedPreparation.value.outputUnit)}`
   }
-  return `${multiplier.value.toFixed(2)}x recipe (standard: ${recipeOutput} ${selectedPreparation.value.outputUnit})`
+  return `${multiplier.value.toFixed(2)}x recipe (standard: ${recipeOutput} ${getUnitShortName(selectedPreparation.value.outputUnit)})`
 })
 
 const calculatedExpiryDate = computed(() => {

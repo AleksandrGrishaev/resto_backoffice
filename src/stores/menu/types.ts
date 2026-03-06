@@ -1,5 +1,5 @@
 // src/stores/menu/types.ts
-import type { BaseEntity } from '@/types/common'
+import type { BaseEntity, EntityStatus } from '@/types/common'
 import type { MeasurementUnit } from '@/types/measurementUnits'
 import type { PortionType } from '@/stores/recipes/types'
 
@@ -41,6 +41,10 @@ export interface MenuItem extends BaseEntity {
   // ✨ NEW: Модификаторы на уровне блюда (общие для всех вариантов)
   modifierGroups?: ModifierGroup[]
   templates?: VariantTemplate[]
+
+  // Entity status & last edited tracking
+  status?: EntityStatus
+  lastEditedAt?: string
 }
 
 export interface MenuItemVariant {
@@ -98,7 +102,7 @@ export interface TargetComponent {
   sourceType: 'variant' | 'recipe'
   /** ID рецепта (если sourceType === 'recipe') */
   recipeId?: string
-  /** ID компонента в рецепте (RecipeComponent.id) или index в variant composition */
+  /** Stable entity ID: product.id / preparation.id / recipe.id (NOT RecipeComponent row UUID) */
   componentId: string
   /** Тип компонента для валидации */
   componentType: 'product' | 'recipe' | 'preparation'
@@ -219,6 +223,9 @@ export interface CreateMenuItemDto {
   // ✨ NEW: Модификаторы и шаблоны на уровне блюда
   modifierGroups?: ModifierGroup[]
   templates?: VariantTemplate[]
+
+  // Entity status
+  status?: EntityStatus
 }
 
 export interface CreateMenuItemVariantDto {
@@ -235,6 +242,7 @@ export interface UpdateMenuItemDto extends Partial<CreateMenuItemDto> {
   isActive?: boolean
   variants?: MenuItemVariant[] // полная замена вариантов при обновлении
   department: Department
+  lastEditedAt?: string
 }
 
 // =============================================

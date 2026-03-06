@@ -1,4 +1,7 @@
 // src/types/common.ts
+
+export type EntityStatus = 'draft' | 'active' | 'archived'
+
 export interface BaseEntity {
   id: string
   createdAt: string

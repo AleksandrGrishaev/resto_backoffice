@@ -223,7 +223,7 @@ function getActualBaseUnit(component: ComponentPlanCost): string {
     if (prep?.portionType === 'portion') {
       return 'portion'
     }
-    return prep?.outputUnit || 'unit'
+    return getUnitShortName(prep?.outputUnit) || 'unit'
   }
 
   return 'unit'

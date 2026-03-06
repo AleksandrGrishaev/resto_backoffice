@@ -40,11 +40,11 @@
                     <div class="text-h6 font-weight-medium">
                       <template v-if="isPortionType">
                         1 portion ({{ selectedPreparation.portionSize
-                        }}{{ selectedPreparation.outputUnit }})
+                        }}{{ getUnitShortName(selectedPreparation.outputUnit) }})
                       </template>
                       <template v-else>
                         {{ selectedPreparation.outputQuantity }}
-                        {{ selectedPreparation.outputUnit }}
+                        {{ getUnitShortName(selectedPreparation.outputUnit) }}
                       </template>
                     </div>
                   </div>
@@ -68,7 +68,9 @@
             >
               <div class="text-body-2">
                 Deficit of
-                <strong>{{ deficitQuantity }} {{ selectedPreparation?.outputUnit }}</strong>
+                <strong>
+                  {{ deficitQuantity }} {{ getUnitShortName(selectedPreparation?.outputUnit) }}
+                </strong>
                 will be auto-reconciled when you produce.
               </div>
             </v-alert>
@@ -85,7 +87,7 @@
               class="mb-4"
               suffix="portions"
               prepend-inner-icon="mdi-food-variant"
-              :hint="`${portionInput || 0} × ${portionSize}g = ${effectiveQuantity}g`"
+              :hint="`${portionInput || 0} × ${portionSize}${getUnitShortName(selectedPreparation?.outputUnit)} = ${effectiveQuantity}${getUnitShortName(selectedPreparation?.outputUnit)}`"
               persistent-hint
               autofocus
             />
@@ -98,7 +100,7 @@
               step="50"
               variant="outlined"
               class="mb-4"
-              :suffix="selectedPreparation?.outputUnit || 'g'"
+              :suffix="getUnitShortName(selectedPreparation?.outputUnit)"
               prepend-inner-icon="mdi-scale"
               :hint="quantityHint"
               persistent-hint
@@ -206,9 +208,11 @@
                       <v-list-item-subtitle class="text-caption">
                         {{ prep.code }} •
                         <template v-if="prep.portionType === 'portion' && prep.portionSize">
-                          1 portion ({{ prep.portionSize }}{{ prep.outputUnit }})
+                          1 portion ({{ prep.portionSize }}{{ getUnitShortName(prep.outputUnit) }})
                         </template>
-                        <template v-else>{{ prep.outputQuantity }} {{ prep.outputUnit }}</template>
+                        <template v-else>
+                          {{ prep.outputQuantity }} {{ getUnitShortName(prep.outputUnit) }}
+                        </template>
                       </v-list-item-subtitle>
                       <template #append>
                         <v-icon
@@ -239,11 +243,11 @@
                                 <div class="text-subtitle-1 font-weight-medium">
                                   <template v-if="isPortionType">
                                     1 portion ({{ selectedPreparation.portionSize
-                                    }}{{ selectedPreparation.outputUnit }})
+                                    }}{{ getUnitShortName(selectedPreparation.outputUnit) }})
                                   </template>
                                   <template v-else>
                                     {{ selectedPreparation.outputQuantity }}
-                                    {{ selectedPreparation.outputUnit }}
+                                    {{ getUnitShortName(selectedPreparation.outputUnit) }}
                                   </template>
                                 </div>
                               </div>
@@ -269,7 +273,7 @@
                           density="compact"
                           class="mb-2"
                           suffix="portions"
-                          :hint="`${portionInput || 0} × ${portionSize}g = ${effectiveQuantity}g`"
+                          :hint="`${portionInput || 0} × ${portionSize}${getUnitShortName(selectedPreparation?.outputUnit)} = ${effectiveQuantity}${getUnitShortName(selectedPreparation?.outputUnit)}`"
                           persistent-hint
                         />
                         <v-text-field
@@ -282,7 +286,7 @@
                           variant="outlined"
                           density="compact"
                           class="mb-2"
-                          :suffix="selectedPreparation?.outputUnit || 'g'"
+                          :suffix="getUnitShortName(selectedPreparation?.outputUnit)"
                           :hint="quantityHint"
                           persistent-hint
                         />
@@ -434,6 +438,7 @@ import type {
   PreparationReceiptItem
 } from '@/stores/preparation'
 import { DebugUtils, generateId } from '@/utils'
+import { getUnitShortName } from '@/types/measurementUnits'
 
 const MODULE_NAME = 'DirectPreparationProductionDialog'
 
@@ -534,7 +539,7 @@ const displayUnit = computed(() => {
   if (isPortionType.value) {
     return 'portions'
   }
-  return selectedPreparation.value?.outputUnit || 'g'
+  return getUnitShortName(selectedPreparation.value?.outputUnit)
 })
 
 // For portion-type: input is in portions, quantity is in grams
@@ -620,7 +625,7 @@ const ingredientsPreview = computed(() => {
           id: ingredient.id,
           name: prep.name,
           quantity: scaledQuantity.toFixed(2),
-          unit: prep.outputUnit || 'g',
+          unit: prep.outputUnit || 'gram',
           costPerUnit,
           totalCost: scaledQuantity * costPerUnit
         }
@@ -664,9 +669,9 @@ const quantityHint = computed(() => {
   if (!selectedPreparation.value) return ''
   const recipeOutput = selectedPreparation.value.outputQuantity
   if (!quantity.value || quantity.value === recipeOutput) {
-    return `Standard batch: ${recipeOutput} ${selectedPreparation.value.outputUnit}`
+    return `Standard batch: ${recipeOutput} ${getUnitShortName(selectedPreparation.value.outputUnit)}`
   }
-  return `${multiplier.value.toFixed(2)}× recipe (standard: ${recipeOutput} ${selectedPreparation.value.outputUnit})`
+  return `${multiplier.value.toFixed(2)}× recipe (standard: ${recipeOutput} ${getUnitShortName(selectedPreparation.value.outputUnit)})`
 })
 
 const calculatedExpiryDate = computed(() => {
@@ -695,7 +700,7 @@ const availablePreparations = computed(() => {
         ...p,
         code: prep?.code || '',
         outputQuantity: prep?.outputQuantity || 0,
-        outputUnit: prep?.outputUnit || 'g',
+        outputUnit: prep?.outputUnit || 'gram',
         category: prep?.type || '' // category is stored in 'type' field
       }
     })
@@ -854,9 +859,9 @@ function addToQueue() {
   // Build display quantity string
   let displayQty: string
   if (isPortionType.value) {
-    displayQty = `${portionInput.value} portion${portionInput.value > 1 ? 's' : ''} (${effectiveQuantity.value}${prep.outputUnit})`
+    displayQty = `${portionInput.value} portion${portionInput.value > 1 ? 's' : ''} (${effectiveQuantity.value}${getUnitShortName(prep.outputUnit)})`
   } else {
-    displayQty = `${effectiveQuantity.value}${prep.outputUnit}`
+    displayQty = `${effectiveQuantity.value}${getUnitShortName(prep.outputUnit)}`
   }
 
   // Calculate cost per gram for storage
@@ -971,7 +976,7 @@ async function handleSubmit() {
     if (itemsToProcess.length === 1) {
       const item = itemsToProcess[0]
       const prep = recipesStore.preparations.find(p => p.id === item.preparationId)
-      message = `Produced ${item.quantity}${prep?.outputUnit || 'g'} of ${prep?.name || 'preparation'} successfully`
+      message = `Produced ${item.quantity}${getUnitShortName(prep?.outputUnit)} of ${prep?.name || 'preparation'} successfully`
     } else {
       message = `Produced ${itemsToProcess.length} preparations successfully`
     }

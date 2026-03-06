@@ -222,6 +222,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
 
+  // ===== ADMIN ROUTES =====
+  {
+    path: '/admin',
+    name: 'admin',
+    component: () => import('@/views/admin/AdminMainView.vue'),
+    meta: {
+      requiresAuth: true,
+      allowedRoles: ['admin', 'manager'],
+      title: 'Admin Panel'
+    }
+  },
+
   // ===== BACKOFFICE ROUTES =====
   {
     path: '/',

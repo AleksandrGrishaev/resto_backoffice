@@ -166,6 +166,47 @@ export const useProductsStore = defineStore('products', {
       })
     },
 
+    async createProductCategory(data: {
+      name: string
+      key: string
+      color?: string
+      icon?: string
+      sortOrder?: number
+    }): Promise<ProductCategory> {
+      const { productsService } = await import('./productsService')
+      const category = await productsService.createCategory(data)
+      this.categories.push(category)
+      return category
+    },
+
+    async updateProductCategory(
+      id: string,
+      data: Partial<{
+        name: string
+        key: string
+        color: string
+        icon: string
+        sortOrder: number
+        isActive: boolean
+      }>
+    ): Promise<void> {
+      const { productsService } = await import('./productsService')
+      await productsService.updateCategory(id, data)
+      const idx = this.categories.findIndex(c => c.id === id)
+      if (idx >= 0) {
+        Object.assign(this.categories[idx], data)
+      }
+    },
+
+    async deleteProductCategory(id: string): Promise<void> {
+      const { productsService } = await import('./productsService')
+      await productsService.deleteCategory(id)
+      const idx = this.categories.findIndex(c => c.id === id)
+      if (idx >= 0) {
+        this.categories[idx].isActive = false
+      }
+    },
+
     async createProduct(data: CreateProductData): Promise<Product> {
       try {
         this.loading = true
@@ -630,7 +671,7 @@ export const useProductsStore = defineStore('products', {
       if (product) {
         const prepCount = usageData.usedInPreparations?.length || 0
         const recipeCount = usageData.usedInRecipes?.length || 0
-        DebugUtils.info(
+        DebugUtils.debug(
           MODULE_NAME,
           `Product ${product.name} used in ${prepCount} preparations and ${recipeCount} recipes`
         )

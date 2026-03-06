@@ -1559,6 +1559,31 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     }
   }
 
+  async function getUnavailableItemsForChannel(
+    bills: PosBill[],
+    targetChannelId: string
+  ): Promise<{ billId: string; itemName: string; itemId: string }[]> {
+    const { useChannelsStore } = await import('@/stores/channels')
+    const channelsStore = useChannelsStore()
+
+    const unavailable: { billId: string; itemName: string; itemId: string }[] = []
+
+    for (const bill of bills) {
+      for (const item of bill.items) {
+        if (item.status === 'cancelled') continue
+        if (!channelsStore.isMenuItemAvailable(targetChannelId, item.menuItemId)) {
+          unavailable.push({
+            billId: bill.id,
+            itemName: item.name,
+            itemId: item.id
+          })
+        }
+      }
+    }
+
+    return unavailable
+  }
+
   async function convertOrderToDineIn(
     orderId: string,
     tableId: string
@@ -1664,6 +1689,21 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       const { useChannelsStore } = await import('@/stores/channels')
       const channelsStore = useChannelsStore()
       const dineInChannel = channelsStore.getChannelByCode('dine_in')
+
+      // Check for items unavailable on dine_in channel
+      if (dineInChannel) {
+        const unavailable = await getUnavailableItemsForChannel(
+          orderToConvert.bills,
+          dineInChannel.id
+        )
+        if (unavailable.length > 0) {
+          const names = [...new Set(unavailable.map(u => u.itemName))].join(', ')
+          return {
+            success: false,
+            error: `Cannot convert to dine-in: these items are not available on dine-in channel: ${names}`
+          }
+        }
+      }
       if (dineInChannel) {
         orderToConvert.channelId = dineInChannel.id
         orderToConvert.channelCode = 'dine_in'
@@ -2387,6 +2427,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     moveBillToTable,
     mergeBillsIntoOrder,
     repriceItemsForChannel,
+    getUnavailableItemsForChannel,
 
     // Discount Methods (Sprint 7)
     applyItemDiscount,

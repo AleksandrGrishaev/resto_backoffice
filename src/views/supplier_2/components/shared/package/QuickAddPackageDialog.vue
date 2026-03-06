@@ -1,90 +1,81 @@
 <!-- src/views/supplier_2/components/shared/package/QuickAddPackageDialog.vue -->
 <template>
-  <v-dialog v-model="isOpen" max-width="500px" persistent>
+  <v-dialog v-model="isOpen" max-width="720px" persistent>
     <v-card>
-      <v-card-title class="pa-4 bg-primary text-white">
+      <v-card-title class="text-h6 pa-4 pb-2">
         <div class="d-flex align-center justify-space-between">
           <span>Add New Package</span>
-          <v-btn icon="mdi-close" variant="text" color="white" size="small" @click="closeDialog" />
+          <v-btn icon="mdi-close" variant="text" size="small" @click="closeDialog" />
         </div>
       </v-card-title>
 
-      <v-card-text class="pa-4">
-        <v-alert type="info" variant="tonal" class="mb-4">
-          <div class="text-body-2">Quickly add a new package option for this product.</div>
-        </v-alert>
-
+      <v-card-text class="pa-4 pt-2">
         <v-form ref="formRef" v-model="formValid" @submit.prevent="savePackage">
-          <!-- Package Name -->
-          <v-text-field
-            v-model="form.packageName"
-            label="Package Name *"
-            placeholder="e.g., Box 24pcs, Bag 5kg"
-            variant="outlined"
-            density="compact"
-            prepend-inner-icon="mdi-package-variant"
-            :rules="[v => !!v || 'Required']"
-            class="mb-3"
-          />
+          <!-- Row 1: Name + Brand -->
+          <div class="d-flex gap-3 mb-3">
+            <v-text-field
+              v-model="form.packageName"
+              label="Package Name *"
+              placeholder="Box 24pcs, Bag 5kg"
+              variant="outlined"
+              density="compact"
+              :rules="[v => !!v || 'Required']"
+              autofocus
+              style="flex: 2"
+            />
+            <v-text-field
+              v-model="form.brandName"
+              label="Brand (optional)"
+              placeholder="Anchor, Local"
+              variant="outlined"
+              density="compact"
+              style="flex: 1"
+            />
+          </div>
 
-          <!-- Package Size & Unit -->
-          <v-row dense class="mb-3">
-            <v-col cols="6">
-              <NumericInputField
-                v-model="form.packageSize"
-                label="Package Size *"
-                :min="0.001"
-                :max="99999"
-                :allow-decimal="true"
-                :decimal-places="3"
-                variant="outlined"
-                density="compact"
-                :error-messages="!form.packageSize || form.packageSize <= 0 ? 'Must be > 0' : ''"
-              />
-            </v-col>
-            <v-col cols="6">
-              <v-select
-                v-model="form.packageUnit"
-                :items="packageUnitOptions"
-                label="Package Unit *"
-                variant="outlined"
-                density="compact"
-                :rules="[v => !!v || 'Required']"
-              />
-            </v-col>
-          </v-row>
+          <!-- Row 2: Size + Unit + Price -->
+          <div class="d-flex gap-3 mb-3">
+            <NumericInputField
+              v-model="form.packageSize"
+              label="Package Size *"
+              :min="0.001"
+              :max="99999"
+              :allow-decimal="true"
+              :decimal-places="3"
+              variant="outlined"
+              density="compact"
+              :error-messages="!form.packageSize || form.packageSize <= 0 ? 'Must be > 0' : ''"
+              style="flex: 1"
+            />
+            <v-select
+              v-model="form.packageUnit"
+              :items="packageUnitOptions"
+              label="Package Unit *"
+              variant="outlined"
+              density="compact"
+              :rules="[v => !!v || 'Required']"
+              style="flex: 1"
+            />
+            <NumericInputField
+              v-model="form.packagePrice"
+              label="Price (optional)"
+              variant="outlined"
+              density="compact"
+              prefix="Rp"
+              :min="0"
+              :max="999999999"
+              :format-as-currency="true"
+              hint="Auto-calculated if empty"
+              persistent-hint
+              style="flex: 1"
+            />
+          </div>
 
-          <!-- Package Price (optional) with IDR formatting -->
-          <NumericInputField
-            v-model="form.packagePrice"
-            label="Package Price (optional)"
-            variant="outlined"
-            density="compact"
-            prefix="Rp"
-            :min="0"
-            :max="999999999"
-            :format-as-currency="true"
-            hint="Leave empty to calculate from base cost"
-            persistent-hint
-            class="mb-3"
-          />
-
-          <!-- Brand Name (optional) -->
-          <v-text-field
-            v-model="form.brandName"
-            label="Brand Name (optional)"
-            placeholder="e.g., Anchor, Local Brand"
-            variant="outlined"
-            density="compact"
-            prepend-inner-icon="mdi-tag"
-            class="mb-3"
-          />
-
-          <!-- Notes -->
+          <!-- Row 3: Notes -->
           <v-textarea
             v-model="form.notes"
             label="Notes (optional)"
-            placeholder="Any additional notes..."
+            placeholder="Wholesale price, Bulk orders only"
             variant="outlined"
             density="compact"
             rows="2"
@@ -92,8 +83,7 @@
         </v-form>
 
         <!-- Preview -->
-        <v-card variant="outlined" class="mt-4 pa-3">
-          <div class="text-caption text-medium-emphasis mb-2">Preview:</div>
+        <v-card variant="outlined" class="mt-3 pa-3">
           <div class="d-flex align-center justify-space-between">
             <div>
               <div class="text-body-1 font-weight-bold">
@@ -101,9 +91,9 @@
               </div>
               <div class="text-caption">
                 {{ form.packageSize || '0' }} {{ baseUnit }} per {{ form.packageUnit || 'unit' }}
-              </div>
-              <div v-if="form.brandName" class="text-caption text-medium-emphasis">
-                Brand: {{ form.brandName }}
+                <span v-if="form.brandName" class="text-medium-emphasis ml-2">
+                  &middot; {{ form.brandName }}
+                </span>
               </div>
             </div>
             <div class="text-right">
@@ -118,12 +108,11 @@
         </v-card>
       </v-card-text>
 
-      <v-card-actions class="pa-4">
-        <v-spacer />
-        <v-btn variant="outlined" @click="closeDialog">Cancel</v-btn>
+      <v-card-actions class="pa-4 pt-2 d-flex justify-end">
+        <v-btn variant="text" @click="closeDialog">Cancel</v-btn>
         <v-btn
           color="primary"
-          :disabled="!formValid || saving"
+          :variant="formValid ? 'flat' : 'outlined'"
           :loading="saving"
           @click="savePackage"
         >
@@ -315,11 +304,6 @@ watch(
 </script>
 
 <style scoped>
-.bg-primary {
-  background-color: rgb(var(--v-theme-primary));
-}
-
-/* Price input styling */
 :deep(.v-field__prefix) {
   padding-right: 4px;
   color: rgba(var(--v-theme-on-surface), 0.6);

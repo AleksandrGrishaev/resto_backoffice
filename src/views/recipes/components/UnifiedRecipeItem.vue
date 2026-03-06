@@ -207,6 +207,7 @@ import type {
 import { formatIDR, isExpensiveAmount } from '@/utils/currency'
 // ✅ Import recipes store for preparation categories
 import { useRecipesStore } from '@/stores/recipes'
+import { getUnitShortName } from '@/types/measurementUnits'
 
 interface Props {
   item: Recipe | Preparation
@@ -233,7 +234,7 @@ function getOutputDisplay(prep: Preparation): string {
   if (prep.portionType === 'portion') {
     return prep.outputQuantity === 1 ? '1 portion' : `${prep.outputQuantity} portions`
   }
-  return `${prep.outputQuantity} ${prep.outputUnit}`
+  return `${prep.outputQuantity} ${getUnitShortName(prep.outputUnit)}`
 }
 
 const hasCostData = computed(() => {

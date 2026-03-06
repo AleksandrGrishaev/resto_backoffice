@@ -125,6 +125,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { OrderSuggestion } from '@/stores/supplier_2/types'
+import { getUnitShortName } from '@/types/measurementUnits'
 
 // =============================================
 // PROPS & EMITS
@@ -157,13 +158,7 @@ const product = computed(() =>
 
 const baseUnit = computed(() => {
   if (!product.value) return 'g'
-
-  const baseUnits: Record<string, string> = {
-    gram: 'g',
-    ml: 'ml',
-    piece: 'pcs'
-  }
-  return baseUnits[product.value.baseUnit] || 'g'
+  return getUnitShortName(product.value.baseUnit)
 })
 
 const purchaseUnit = computed(() => {
@@ -245,13 +240,7 @@ function formatQuantityInBestUnit(quantity: number): string {
   }
 
   // Otherwise show in base units
-  const units: Record<string, string> = {
-    gram: 'g',
-    ml: 'ml',
-    piece: 'pcs'
-  }
-
-  return `${Math.round(quantity)}${units[productBaseUnit] || 'units'}`
+  return `${Math.round(quantity)}${getUnitShortName(productBaseUnit)}`
 }
 
 function getCurrentQuantityForDisplay(): number {

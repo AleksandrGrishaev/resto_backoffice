@@ -47,6 +47,7 @@ export type StoreName =
   | 'paymentSettings'
   | 'channels'
   | 'gobiz'
+  | 'menuCollections'
   | 'debug'
 
 /**

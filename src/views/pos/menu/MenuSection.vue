@@ -274,7 +274,10 @@ const activeSubcategories = computed(() => {
 const directParentItems = computed(() => {
   if (!selectedRootCategoryId.value) return []
   return menuStore.menuItems.filter(
-    item => item.categoryId === selectedRootCategoryId.value && item.isActive
+    item =>
+      item.categoryId === selectedRootCategoryId.value &&
+      item.isActive &&
+      (!props.channelId || channelsStore.isMenuItemAvailable(props.channelId, item.id))
   )
 })
 
@@ -284,7 +287,10 @@ const directParentItems = computed(() => {
 const categoryItems = computed(() => {
   if (!selectedSubcategoryId.value) return []
   return menuStore.menuItems.filter(
-    item => item.categoryId === selectedSubcategoryId.value && item.isActive
+    item =>
+      item.categoryId === selectedSubcategoryId.value &&
+      item.isActive &&
+      (!props.channelId || channelsStore.isMenuItemAvailable(props.channelId, item.id))
   )
 })
 
@@ -317,7 +323,12 @@ const currentTitle = computed(() => {
  * Count items directly in a category
  */
 const getCategoryItemsCount = (categoryId: string): number => {
-  return menuStore.menuItems.filter(item => item.categoryId === categoryId && item.isActive).length
+  return menuStore.menuItems.filter(
+    item =>
+      item.categoryId === categoryId &&
+      item.isActive &&
+      (!props.channelId || channelsStore.isMenuItemAvailable(props.channelId, item.id))
+  ).length
 }
 
 /**

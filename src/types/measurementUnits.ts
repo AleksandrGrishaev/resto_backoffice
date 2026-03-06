@@ -143,6 +143,7 @@ export const RECIPE_UNITS: MeasurementUnit[] = [
   'ml',
   'liter',
   'piece',
+  'portion',
   'tsp',
   'tbsp',
   'pack'

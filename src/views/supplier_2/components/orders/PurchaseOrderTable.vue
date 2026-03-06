@@ -240,13 +240,14 @@
                 @click="handlePrintOrder(item)"
               />
 
-              <v-divider v-if="canDeleteOrder(item)" />
+              <v-divider v-if="canCancelOrder(item)" />
 
               <v-list-item
-                v-if="canDeleteOrder(item)"
-                prepend-icon="mdi-delete"
-                title="Delete"
-                @click="deleteOrder(item)"
+                v-if="canCancelOrder(item)"
+                prepend-icon="mdi-cancel"
+                title="Cancel Order"
+                base-color="error"
+                @click="handleCancelOrder(item)"
               />
             </v-list>
           </v-menu>
@@ -345,6 +346,8 @@ const {
   getStatusColor,
   canEditOrder,
   canDeleteOrder,
+  canCancelOrder,
+  cancelOrder,
   canSendOrder,
   canReceiveOrder,
   isReadyForReceipt,
@@ -531,8 +534,12 @@ async function handlePrintWithOptions(options: { includePrices: boolean }) {
   printingOrder.value = null
 }
 
-function deleteOrder(order: PurchaseOrder) {
-  console.log('Delete order:', order.id)
+async function handleCancelOrder(order: PurchaseOrder) {
+  try {
+    await cancelOrder(order.id)
+  } catch (error) {
+    console.error('Failed to cancel order:', error)
+  }
 }
 
 // =============================================
