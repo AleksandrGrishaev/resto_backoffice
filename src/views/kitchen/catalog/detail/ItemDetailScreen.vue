@@ -38,6 +38,7 @@
       </template>
       <template v-else>
         <v-tab value="tree">Tree</v-tab>
+        <v-tab v-if="modifierGroups.length > 0" value="modifiers">Modifiers</v-tab>
         <v-tab value="info">Info</v-tab>
         <v-tab value="cost">Cost</v-tab>
         <v-tab value="used-in">Used In</v-tab>
@@ -65,6 +66,144 @@
           @edit="target => emit('edit', target)"
         />
         <div v-else class="empty-state">No components</div>
+      </div>
+
+      <!-- Modifiers Tab -->
+      <div v-if="activeTab === 'modifiers'" class="tab-content">
+        <div v-if="modifierGroups.length === 0" class="empty-state">No modifiers</div>
+        <div v-else class="modifiers-list">
+          <div v-for="group in modifierGroups" :key="group.id" class="modifier-group-card">
+            <!-- Group header -->
+            <div class="modifier-group-header">
+              <div class="modifier-group-header-left">
+                <v-chip :color="modifierTypeColor(group.type)" size="small" variant="flat" label>
+                  {{ group.type }}
+                </v-chip>
+                <span class="modifier-group-name">{{ group.name }}</span>
+              </div>
+              <div class="modifier-group-header-right">
+                <v-chip
+                  :color="group.isRequired ? 'error' : 'grey'"
+                  size="x-small"
+                  variant="tonal"
+                  label
+                >
+                  {{ group.isRequired ? 'Required' : 'Optional' }}
+                </v-chip>
+                <span
+                  v-if="group.minSelection != null || group.maxSelection != null"
+                  class="modifier-selection-range"
+                >
+                  {{ group.minSelection ?? 0 }}-{{ group.maxSelection ?? '∞' }} sel
+                </span>
+              </div>
+            </div>
+
+            <!-- Replacement target info -->
+            <div
+              v-if="group.type === 'replacement' && group.targetComponentNames.length > 0"
+              class="modifier-replaces"
+            >
+              Replaces: {{ group.targetComponentNames.join(', ') }}
+              <span v-if="getReplacedCost(group) > 0" class="modifier-replaces-cost">
+                ({{ formatIDR(getReplacedCost(group)) }})
+              </span>
+            </div>
+
+            <!-- Options list -->
+            <div class="modifier-options">
+              <div
+                v-for="option in group.options"
+                :key="option.id"
+                class="modifier-option"
+                :class="{ 'modifier-option--inactive': !option.isActive }"
+              >
+                <div
+                  class="modifier-option-row"
+                  :class="{ clickable: option.compositionTree.length > 0 }"
+                  @click="
+                    option.compositionTree.length > 0 &&
+                      toggleModifierExpand(group.id + ':' + option.id)
+                  "
+                >
+                  <!-- Expand toggle -->
+                  <v-btn
+                    v-if="option.compositionTree.length > 0"
+                    icon
+                    variant="text"
+                    size="x-small"
+                    density="compact"
+                    class="expand-btn"
+                    @click.stop="toggleModifierExpand(group.id + ':' + option.id)"
+                  >
+                    <v-icon size="16">
+                      {{
+                        isModifierExpanded(group.id + ':' + option.id)
+                          ? 'mdi-chevron-down'
+                          : 'mdi-chevron-right'
+                      }}
+                    </v-icon>
+                  </v-btn>
+                  <div v-else class="expand-placeholder" />
+
+                  <span class="modifier-option-name">
+                    {{ option.name }}
+                    <v-chip
+                      v-if="option.isDefault"
+                      size="x-small"
+                      variant="tonal"
+                      color="primary"
+                      label
+                      class="ml-1"
+                    >
+                      default
+                    </v-chip>
+                  </span>
+                  <span class="modifier-option-dots" />
+                  <span v-if="option.priceAdjustment !== 0" class="modifier-option-price">
+                    {{ option.priceAdjustment > 0 ? '+' : ''
+                    }}{{ formatIDR(option.priceAdjustment) }}
+                  </span>
+                  <span v-if="option.compositionCost > 0" class="modifier-option-cost">
+                    <template
+                      v-if="
+                        group.type === 'replacement' && option.netCost !== option.compositionCost
+                      "
+                    >
+                      <span
+                        class="modifier-option-cost--net"
+                        :class="{
+                          'text-green': option.netCost < 0,
+                          'text-red': option.netCost > 0
+                        }"
+                      >
+                        {{ option.netCost >= 0 ? '+' : '' }}{{ formatIDR(option.netCost) }}
+                      </span>
+                    </template>
+                    <template v-else>
+                      {{ formatIDR(option.compositionCost) }}
+                    </template>
+                  </span>
+                </div>
+                <!-- Expanded composition tree -->
+                <div
+                  v-if="
+                    option.compositionTree.length > 0 &&
+                    isModifierExpanded(group.id + ':' + option.id)
+                  "
+                  class="modifier-option-tree"
+                >
+                  <DependencyTree
+                    :tree="option.compositionTree"
+                    :default-expand-depth="1"
+                    @navigate="handleTreeNavigate"
+                    @edit="target => emit('edit', target)"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Info Tab -->
@@ -158,21 +297,43 @@
 
           <!-- Non-product items -->
           <template v-else>
-            <!-- Output info for recipes/preparations -->
-            <div v-if="outputDisplay" class="cost-line">
-              <span class="cost-label">Output</span>
-              <span class="cost-value">{{ outputDisplay }}</span>
-            </div>
-            <div class="cost-line">
-              <span class="cost-label">Total Cost</span>
-              <span class="cost-value">{{ totalCostDisplay }}</span>
-            </div>
-            <div v-if="costPerUnit" class="cost-line">
-              <span class="cost-label">Cost per Unit</span>
-              <span class="cost-value">{{ costPerUnit }}</span>
-            </div>
-            <!-- Rec. price and food cost only for menu items and recipes -->
-            <template v-if="item.type === 'menu' || item.type === 'recipe'">
+            <!-- Food cost range for modifiable menu items -->
+            <template v-if="foodCostRange">
+              <div class="cost-line">
+                <span class="cost-label">Base Cost</span>
+                <span class="cost-value">{{ formatIDR(foodCostRange.baseCost) }}</span>
+              </div>
+              <div v-if="foodCostRange.defaultCombination" class="cost-line">
+                <span class="cost-label">Default FC%</span>
+                <span class="cost-value">
+                  {{ foodCostRange.defaultCombination.foodCostPercent.toFixed(1) }}%
+                </span>
+              </div>
+              <div class="cost-line cost-line--highlight">
+                <span class="cost-label">FC% Range</span>
+                <span class="cost-value">
+                  {{ foodCostRange.minFoodCostPercent.toFixed(1) }}% —
+                  {{ foodCostRange.maxFoodCostPercent.toFixed(1) }}%
+                </span>
+              </div>
+            </template>
+            <template v-else>
+              <!-- Output info for recipes/preparations -->
+              <div v-if="outputDisplay" class="cost-line">
+                <span class="cost-label">Output</span>
+                <span class="cost-value">{{ outputDisplay }}</span>
+              </div>
+              <div class="cost-line">
+                <span class="cost-label">Total Cost</span>
+                <span class="cost-value">{{ totalCostDisplay }}</span>
+              </div>
+              <div v-if="costPerUnit" class="cost-line">
+                <span class="cost-label">Cost per Unit</span>
+                <span class="cost-value">{{ costPerUnit }}</span>
+              </div>
+            </template>
+            <!-- Rec. price and food cost only for non-modifiable menu items and recipes -->
+            <template v-if="!foodCostRange && (item.type === 'menu' || item.type === 'recipe')">
               <div v-if="recommendedPrice > 0" class="cost-line">
                 <span class="cost-label">Rec. Price (35% FC)</span>
                 <span class="cost-value">{{ formatIDR(recommendedPrice) }}</span>
@@ -248,7 +409,9 @@ import { useMenuStore } from '@/stores/menu'
 import { formatIDR } from '@/utils'
 import { getUnitShortName } from '@/types/measurementUnits'
 import { useCatalogData } from '../composables/useCatalogData'
-import type { CatalogItem } from '../composables/useCatalogData'
+import type { CatalogItem, ModifierGroupDisplay } from '../composables/useCatalogData'
+import { calculateFoodCostRange } from '@/core/cost/modifierCostCalculator'
+import type { FoodCostRange } from '@/core/cost/modifierCostCalculator'
 import DependencyTree from './DependencyTree.vue'
 import type { TreeNode } from './DependencyTree.vue'
 import type { Product } from '@/stores/productsStore/types'
@@ -279,7 +442,7 @@ const emit = defineEmits<{
 const productsStore = useProductsStore()
 const recipesStore = useRecipesStore()
 const menuStore = useMenuStore()
-const { buildTree } = useCatalogData()
+const { buildTree, buildModifierDisplayData } = useCatalogData()
 
 const defaultTab = (type: CatalogItem['type']) => (type === 'product' ? 'used-in' : 'tree')
 const activeTab = ref(defaultTab(props.item.type))
@@ -313,6 +476,58 @@ const product = computed<Product | undefined>(() =>
     ? (productsStore.getProductById(props.item.id) as Product | undefined)
     : undefined
 )
+
+// Modifier display data
+const modifierGroups = computed<ModifierGroupDisplay[]>(() => {
+  if (!menuItem.value) return []
+  return buildModifierDisplayData(menuItem.value)
+})
+
+// Modifier expand state
+const expandedModifiers = ref(new Set<string>())
+
+function toggleModifierExpand(key: string) {
+  if (expandedModifiers.value.has(key)) {
+    expandedModifiers.value.delete(key)
+  } else {
+    expandedModifiers.value.add(key)
+  }
+}
+
+function isModifierExpanded(key: string): boolean {
+  return expandedModifiers.value.has(key)
+}
+
+function getReplacedCost(group: ModifierGroupDisplay): number {
+  if (group.type !== 'replacement' || !group.options.length) return 0
+  const first = group.options[0]
+  // replacedCost = compositionCost - netCost
+  return first.compositionCost - first.netCost
+}
+
+function modifierTypeColor(type: string): string {
+  switch (type) {
+    case 'replacement':
+      return 'teal'
+    case 'addon':
+      return 'amber'
+    case 'removal':
+      return 'grey'
+    default:
+      return 'grey'
+  }
+}
+
+// Food cost range for modifiable items
+const foodCostRange = computed<FoodCostRange | null>(() => {
+  if (!menuItem.value || !menuItem.value.modifierGroups?.length) return null
+  const variant = menuItem.value.variants?.[0]
+  if (!variant) return null
+  return calculateFoodCostRange(variant, menuItem.value, {
+    productsStore,
+    recipesStore
+  })
+})
 
 // Type display
 const typeColor = computed(() => typeColorFor(props.item.type))
@@ -765,6 +980,147 @@ const usedInItems = computed<UsageItem[]>(() => {
   font-weight: 500;
   min-width: 70px;
   text-align: right;
+}
+
+// Modifiers
+.modifiers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modifier-group-card {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.modifier-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.modifier-group-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.modifier-group-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.modifier-group-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modifier-selection-range {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.modifier-replaces {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 4px 0 8px;
+  font-style: italic;
+}
+
+.modifier-replaces-cost {
+  font-style: normal;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.modifier-option-cost--net {
+  &.text-green {
+    color: rgb(var(--v-theme-success));
+  }
+  &.text-red {
+    color: rgb(var(--v-theme-error));
+  }
+}
+
+.modifier-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+}
+
+.modifier-option {
+  &--inactive {
+    opacity: 0.4;
+  }
+}
+
+.modifier-option-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+
+  &.clickable {
+    cursor: pointer;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 4px;
+    }
+  }
+}
+
+.expand-btn {
+  flex-shrink: 0;
+}
+
+.expand-placeholder {
+  width: 24px;
+  flex-shrink: 0;
+}
+
+.modifier-option-name {
+  font-size: 0.9rem;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+
+.modifier-option-dots {
+  flex: 1;
+  border-bottom: 1px dotted rgba(255, 255, 255, 0.12);
+  min-width: 12px;
+  margin-bottom: 4px;
+}
+
+.modifier-option-price {
+  white-space: nowrap;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.modifier-option-cost {
+  white-space: nowrap;
+  font-size: 0.85rem;
+  font-weight: 500;
+  min-width: 60px;
+  text-align: right;
+}
+
+.modifier-option-tree {
+  padding-left: 24px;
+  padding-bottom: 4px;
 }
 
 // Used In

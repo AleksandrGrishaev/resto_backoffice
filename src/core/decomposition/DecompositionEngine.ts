@@ -229,9 +229,21 @@ export class DecompositionEngine {
       return []
     }
 
+    // Scale factor: comp.quantity represents how many portions of this recipe are needed,
+    // recipe.portionSize is how many portions one batch produces.
+    // E.g., recipe makes 2 pieces (portionSize=2), we need 2 pieces (comp.quantity=2) → scale=1
+    // If we need 1 piece → scale=0.5 (half the ingredients)
+    const portionSize = recipe.portionSize || 1
+    const recipeScale = comp.quantity / portionSize
+    const effectiveQuantity = quantity * recipeScale
+
     DebugUtils.debug(MODULE_NAME, 'Decomposing recipe', {
       name: recipe.name,
-      components: recipe.components.length
+      components: recipe.components.length,
+      compQuantity: comp.quantity,
+      portionSize,
+      recipeScale,
+      effectiveQuantity
     })
 
     const results: DecomposedNode[] = []
@@ -253,7 +265,7 @@ export class DecompositionEngine {
           for (const replComp of modifier.composition) {
             const items = await this.traverseComposition(
               replComp,
-              quantity,
+              effectiveQuantity,
               options,
               replacements,
               options.includePath ? [...path, recipe.name, `→${modifier.optionName}`] : []
@@ -279,7 +291,7 @@ export class DecompositionEngine {
 
         const items = await this.traverseComposition(
           menuComp,
-          quantity,
+          effectiveQuantity,
           options,
           replacements,
           options.includePath ? [...path, recipe.name] : []

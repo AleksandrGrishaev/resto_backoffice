@@ -765,12 +765,12 @@ export const useRecipesStore = defineStore('recipes', () => {
         DebugUtils.debug(MODULE_NAME, 'First 10 errors:', errors.slice(0, 10))
       }
 
-      // ✅ NEW: Reload data from database to refresh cache
+      // ✅ Reload data from database to refresh in-memory cache
       if (preparationsUpdated > 0 || recipesUpdated > 0) {
         DebugUtils.info(MODULE_NAME, '🔄 Reloading data to refresh cache...')
         await Promise.all([
-          preparationsComposable.loadPreparations(),
-          recipesComposable.loadRecipes()
+          preparationsComposable.initializePreparations(),
+          recipesComposable.initializeRecipes()
         ])
         DebugUtils.info(MODULE_NAME, '✅ Cache refreshed from database')
       }

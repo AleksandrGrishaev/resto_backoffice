@@ -7,7 +7,31 @@ import { getUnitShortName } from '@/types/measurementUnits'
 import type { TreeNode } from '../detail/DependencyTree.vue'
 import type { Product } from '@/stores/productsStore/types'
 import type { Preparation, Recipe } from '@/stores/recipes/types'
-import type { MenuItem } from '@/stores/menu/types'
+import type { MenuItem, ModifierType, TargetComponent } from '@/stores/menu/types'
+
+// --- Modifier display types ---
+export interface ModifierOptionDisplay {
+  id: string
+  name: string
+  priceAdjustment: number
+  compositionCost: number
+  /** For replacement: compositionCost - replacedCost */
+  netCost: number
+  isDefault: boolean
+  isActive: boolean
+  compositionTree: TreeNode[]
+}
+
+export interface ModifierGroupDisplay {
+  id: string
+  name: string
+  type: ModifierType
+  isRequired: boolean
+  minSelection?: number
+  maxSelection?: number
+  targetComponentNames: string[]
+  options: ModifierOptionDisplay[]
+}
 
 // Unified catalog item for lists and search
 export interface CatalogItem {
@@ -45,7 +69,11 @@ export function useCatalogData() {
       const variant = mi.variants?.[0]
       const cost =
         variant?.composition?.reduce((sum, comp) => {
-          return sum + resolveComponentCost(comp.type, comp.id, comp.quantity)
+          const qty =
+            comp.unit === 'portion' && comp.portionSize
+              ? comp.quantity * comp.portionSize
+              : comp.quantity
+          return sum + resolveComponentCost(comp.type, comp.id, qty)
         }, 0) ?? 0
       return {
         id: mi.id,
@@ -180,7 +208,8 @@ export function useCatalogData() {
           comp.quantity,
           comp.unit,
           seen,
-          comp.useYieldPercentage
+          comp.useYieldPercentage,
+          comp.portionSize
         )
       )
     } else if (type === 'recipe') {
@@ -214,9 +243,12 @@ export function useCatalogData() {
     quantity: number,
     unit: string,
     visited: Set<string>,
-    useYieldPercentage?: boolean
+    useYieldPercentage?: boolean,
+    portionSize?: number
   ): TreeNode {
-    const cost = resolveComponentCost(type, id, quantity, useYieldPercentage)
+    // When unit is "portion" and portionSize is set, convert to base units for cost
+    const effectiveQuantity = unit === 'portion' && portionSize ? quantity * portionSize : quantity
+    const cost = resolveComponentCost(type, id, effectiveQuantity, useYieldPercentage)
 
     if (type === 'product') {
       const p = productsStore.getProductById(id) as Product | null
@@ -243,25 +275,30 @@ export function useCatalogData() {
       // If stored cost is missing, derive from children: (childrenSum / outputQuantity) * quantity
       let effectiveCost = cost
       if (effectiveCost <= 0 && childrenSum > 0 && p?.outputQuantity && p.outputQuantity > 0) {
-        effectiveCost = Math.round((childrenSum / p.outputQuantity) * quantity)
+        effectiveCost = Math.round((childrenSum / p.outputQuantity) * effectiveQuantity)
       }
-      // For portion-type preparations, outputUnit should be "portion" not the base unit
-      const outputUnit = p?.portionType === 'portion' ? 'portion' : p?.outputUnit
+      // Determine display unit: use "portion" if caller specified portionSize, else prep's native unit
+      const displayUnit =
+        unit === 'portion' && portionSize
+          ? 'portion'
+          : p?.portionType === 'portion'
+            ? 'portion'
+            : p?.outputUnit || unit
       // Batch cost: prefer store-calculated cost (accounts for yield etc.), fallback to children sum
       const batchCost =
         cost > 0 && p?.outputQuantity
-          ? Math.round((cost / quantity) * p.outputQuantity)
+          ? Math.round((cost / effectiveQuantity) * p.outputQuantity)
           : childrenSum
       return {
         id,
         name: p?.name ?? id,
         type: 'preparation',
         quantity,
-        unit: outputUnit || unit,
+        unit: displayUnit,
         cost: effectiveCost > 0 ? effectiveCost : undefined,
         children,
         outputQuantity: p?.outputQuantity,
-        outputUnit,
+        outputUnit: displayUnit,
         totalRecipeCost: batchCost > 0 ? batchCost : undefined
       }
     }
@@ -310,7 +347,7 @@ export function useCatalogData() {
     }
     if (type === 'preparation') {
       const p = recipesStore.getPreparationById(id) as Preparation | undefined
-      return (p?.costPerPortion ?? 0) * quantity
+      return (p?.costPerPortion ?? p?.lastKnownCost ?? 0) * quantity
     }
     if (type === 'recipe') {
       const r = recipesStore.getRecipeById(id) as Recipe | undefined
@@ -336,6 +373,134 @@ export function useCatalogData() {
     (productsStore.activeCategories as any[]).map(c => ({ id: c.id, name: c.name }))
   )
 
+  // --- Build modifier display data for a menu item ---
+  function buildModifierDisplayData(menuItem: MenuItem): ModifierGroupDisplay[] {
+    const groups = menuItem.modifierGroups || []
+    return groups.map(group => {
+      // For replacement groups, calculate cost of replaced components
+      let replacedCost = 0
+      if (group.type === 'replacement' && group.targetComponents?.length) {
+        replacedCost = calculateTargetComponentsCost(group.targetComponents, menuItem)
+      }
+
+      const options: ModifierOptionDisplay[] = group.options.map(opt => {
+        // Build mini-tree for option composition
+        let compositionTree: TreeNode[] = []
+        let compositionCost = 0
+        if (opt.composition?.length) {
+          compositionTree = opt.composition.map(comp =>
+            buildCompositionNode(
+              comp.type as 'product' | 'recipe' | 'preparation',
+              comp.id,
+              comp.quantity,
+              comp.unit,
+              new Set<string>(),
+              comp.useYieldPercentage,
+              comp.portionSize
+            )
+          )
+          compositionCost = compositionTree.reduce((sum, n) => sum + (n.cost ?? 0), 0)
+        }
+
+        // Net cost: for replacement = option cost - replaced cost; for others = option cost
+        const netCost =
+          group.type === 'replacement' ? compositionCost - replacedCost : compositionCost
+
+        return {
+          id: opt.id,
+          name: opt.name,
+          priceAdjustment: opt.priceAdjustment || 0,
+          compositionCost,
+          netCost,
+          isDefault: opt.isDefault ?? false,
+          isActive: opt.isActive !== false,
+          compositionTree
+        }
+      })
+
+      const targetComponentNames = (group.targetComponents || []).map(
+        tc => tc.componentName || 'Unknown'
+      )
+
+      return {
+        id: group.id,
+        name: group.name,
+        type: group.type,
+        isRequired: group.isRequired,
+        minSelection: group.minSelection,
+        maxSelection: group.maxSelection,
+        targetComponentNames,
+        options
+      }
+    })
+  }
+
+  /** Calculate total cost of target components being replaced */
+  function calculateTargetComponentsCost(targets: TargetComponent[], menuItem: MenuItem): number {
+    let total = 0
+    for (const target of targets) {
+      if (target.sourceType === 'recipe' && target.recipeId) {
+        const recipe = recipesStore.getRecipeById(target.recipeId) as Recipe | undefined
+        if (!recipe?.components) continue
+        const comp = findRecipeComponent(recipe.components, target)
+        if (comp) {
+          total += resolveComponentCost(comp.componentType, comp.componentId, comp.quantity)
+        }
+      } else if (target.sourceType === 'variant') {
+        const variant = menuItem.variants?.[0]
+        const comp = variant?.composition?.find(c => c.id === target.componentId)
+        if (comp) {
+          total += resolveComponentCost(comp.type, comp.id, comp.quantity)
+        }
+      }
+    }
+    return total
+  }
+
+  /** Find recipe component matching a target (handles stale IDs) */
+  function findRecipeComponent(
+    components: Recipe['components'],
+    target: TargetComponent
+  ): Recipe['components'][number] | undefined {
+    if (!components) return undefined
+
+    // 1. Exact row ID match
+    const byRowId = components.find(c => c.id === target.componentId)
+    if (byRowId) return byRowId
+
+    // 2. Match by componentType + entity ID
+    const byEntityId = components.find(
+      c => c.componentType === target.componentType && c.componentId === target.componentId
+    )
+    if (byEntityId) return byEntityId
+
+    // 3. Build entity name map and match by name
+    // (target.componentId is stale — recipe was re-saved with new component IDs)
+    const sameTypeComponents = components.filter(c => c.componentType === target.componentType)
+    for (const comp of sameTypeComponents) {
+      const entityName = getEntityName(comp.componentType, comp.componentId)
+      if (entityName && entityName === target.componentName) {
+        return comp
+      }
+    }
+
+    return undefined
+  }
+
+  /** Resolve entity name by type and ID */
+  function getEntityName(type: string, id: string): string | undefined {
+    if (type === 'recipe') {
+      return (recipesStore.getRecipeById(id) as Recipe | undefined)?.name
+    }
+    if (type === 'preparation') {
+      return (recipesStore.getPreparationById(id) as Preparation | undefined)?.name
+    }
+    if (type === 'product') {
+      return (productsStore.getProductById(id) as Product | undefined)?.name
+    }
+    return undefined
+  }
+
   return {
     menuCatalogItems,
     recipeCatalogItems,
@@ -347,6 +512,7 @@ export function useCatalogData() {
     productCategories,
     search,
     buildTree,
+    buildModifierDisplayData,
     resolveComponentCost
   }
 }

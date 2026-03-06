@@ -71,19 +71,19 @@
           <span class="breadcrumb-item clickable" @click="goToCategories">
             {{ currentSectionLabel }}
           </span>
-          <v-icon size="14" class="breadcrumb-sep">mdi-chevron-right</v-icon>
-          <span
-            v-for="(crumb, idx) in breadcrumb"
-            :key="idx"
-            class="breadcrumb-item"
-            :class="{ clickable: idx < breadcrumb.length - 1 }"
-            @click="idx < breadcrumb.length - 1 && goToBreadcrumb(idx)"
-          >
-            {{ crumb.label }}
-            <v-icon v-if="idx < breadcrumb.length - 1" size="14" class="breadcrumb-sep">
+          <v-icon size="18" class="breadcrumb-sep">mdi-chevron-right</v-icon>
+          <template v-for="(crumb, idx) in breadcrumb" :key="idx">
+            <span
+              class="breadcrumb-item"
+              :class="{ clickable: idx < breadcrumb.length - 1 }"
+              @click="idx < breadcrumb.length - 1 && goToBreadcrumb(idx)"
+            >
+              {{ crumb.label }}
+            </span>
+            <v-icon v-if="idx < breadcrumb.length - 1" size="18" class="breadcrumb-sep">
               mdi-chevron-right
             </v-icon>
-          </span>
+          </template>
         </div>
       </div>
 
@@ -682,19 +682,22 @@ watch(activeDepartment, () => {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 2px;
-  font-size: 0.8rem;
+  gap: 4px;
+  font-size: 1rem;
   color: rgba(255, 255, 255, 0.5);
-  padding-top: 2px;
+  padding: 4px 0;
 }
 
 .breadcrumb-item {
+  padding: 6px 8px;
+  border-radius: 6px;
+
   &.clickable {
     cursor: pointer;
     color: rgba(255, 255, 255, 0.7);
 
-    &:hover {
-      text-decoration: underline;
+    &:active {
+      background: rgba(255, 255, 255, 0.08);
     }
   }
 }

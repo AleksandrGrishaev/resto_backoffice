@@ -401,7 +401,12 @@ function calculateOptionCompositionCost(
 
   let totalCost = 0
   for (const comp of option.composition) {
-    const compCost = calculateComponentCost(comp.type, comp.id, comp.quantity || 1, context)
+    // When unit is "portion" with portionSize, convert to base units for cost calculation
+    const effectiveQuantity =
+      comp.unit === 'portion' && comp.portionSize
+        ? (comp.quantity || 1) * comp.portionSize
+        : comp.quantity || 1
+    const compCost = calculateComponentCost(comp.type, comp.id, effectiveQuantity, context)
     totalCost += compCost * portionMultiplier
   }
   return totalCost
@@ -429,14 +434,13 @@ function calculateReplacedComponentsCost(
  * Get cost of a target component (from recipe)
  */
 function getTargetComponentCost(target: TargetComponent, context: CostCalculationContext): number {
-  const { recipesStore } = context
+  const { recipesStore, productsStore } = context
 
   if (target.sourceType === 'recipe' && target.recipeId) {
-    // Find the recipe and get the component
     const recipe = recipesStore.getRecipeById(target.recipeId)
     if (!recipe?.components) return 0
 
-    const component = recipe.components.find(c => c.id === target.componentId)
+    const component = findRecipeComponentByTarget(recipe.components, target, context)
     if (!component) return 0
 
     return calculateComponentCost(
@@ -448,6 +452,45 @@ function getTargetComponentCost(target: TargetComponent, context: CostCalculatio
   }
 
   return 0
+}
+
+/**
+ * Find recipe component matching a target (handles stale IDs)
+ * Target componentId can become stale when recipe is re-saved with new component IDs
+ */
+function findRecipeComponentByTarget(
+  components: { id: string; componentId: string; componentType: string; quantity: number }[],
+  target: TargetComponent,
+  context: CostCalculationContext
+) {
+  // 1. Exact row ID match
+  const byRowId = components.find(c => c.id === target.componentId)
+  if (byRowId) return byRowId
+
+  // 2. Match by type + entity ID
+  const byEntityId = components.find(
+    c => c.componentType === target.componentType && c.componentId === target.componentId
+  )
+  if (byEntityId) return byEntityId
+
+  // 3. Match by type + entity name (most resilient)
+  const { recipesStore, productsStore } = context
+  const sameType = components.filter(c => c.componentType === target.componentType)
+  for (const comp of sameType) {
+    let entityName: string | undefined
+    if (comp.componentType === 'recipe') {
+      entityName = recipesStore.getRecipeById(comp.componentId)?.name
+    } else if (comp.componentType === 'preparation') {
+      entityName = recipesStore.getPreparationById(comp.componentId)?.name
+    } else if (comp.componentType === 'product') {
+      entityName = productsStore.getProductById(comp.componentId)?.name
+    }
+    if (entityName && entityName === target.componentName) {
+      return comp
+    }
+  }
+
+  return undefined
 }
 
 /**
@@ -470,7 +513,7 @@ function calculateComponentCost(
       return quantity * recipeCost.costPerPortion
     }
     const recipe = recipesStore.getRecipeById(id)
-    return quantity * (recipe?.costPerPortion || 0)
+    return quantity * (recipe?.cost || 0)
   } else if (type === 'preparation') {
     const prepCost = recipesStore.getPreparationCostCalculation(id)
     if (prepCost?.costPerOutputUnit) {
@@ -493,7 +536,11 @@ function calculateVariantBaseCost(
   let totalCost = 0
 
   for (const comp of variant.composition || []) {
-    totalCost += calculateComponentCost(comp.type, comp.id, comp.quantity || 1, context)
+    const effectiveQuantity =
+      comp.unit === 'portion' && comp.portionSize
+        ? (comp.quantity || 1) * comp.portionSize
+        : comp.quantity || 1
+    totalCost += calculateComponentCost(comp.type, comp.id, effectiveQuantity, context)
   }
 
   return totalCost
