@@ -250,7 +250,12 @@ export class DecompositionEngine {
 
     for (const recipeComp of recipe.components) {
       // Check if this component should be replaced
-      const replacementEntry = getReplacementForComponent(recipe.id, recipeComp.id, replacements)
+      // Use stable entity ID (componentId) instead of row UUID (id) for matching
+      const replacementEntry = getReplacementForComponent(
+        recipe.id,
+        recipeComp.componentId,
+        replacements
+      )
 
       if (replacementEntry) {
         const { modifier, isCompositionTarget } = replacementEntry
@@ -272,6 +277,18 @@ export class DecompositionEngine {
             )
             results.push(...items)
           }
+        } else if (isCompositionTarget && !modifier.composition?.length) {
+          // Replacement target but no composition — ingredient removed without replacement
+          DebugUtils.warn(
+            MODULE_NAME,
+            'Replacement modifier has no composition — ingredient excluded without replacement',
+            {
+              excluded: recipeComp.name || recipeComp.componentId,
+              modifier: modifier.optionName,
+              groupName: modifier.groupName,
+              hint: 'Add composition to the modifier option in Menu Item settings'
+            }
+          )
         } else {
           // Not composition target: just skip (exclude) this component
           DebugUtils.debug(MODULE_NAME, 'Excluding component (multi-target)', {

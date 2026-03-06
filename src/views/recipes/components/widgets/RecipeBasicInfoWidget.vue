@@ -2,37 +2,69 @@
 <template>
   <div class="basic-info-widget">
     <v-row>
-      <!-- === SECTION: Identity === -->
-      <v-col v-if="tablet" cols="12" class="section-header pb-0">
-        <div class="section-title">Identity</div>
-      </v-col>
+      <!-- === SECTION: Identity (highlighted) === -->
+      <v-col cols="12" class="pb-0">
+        <div class="identity-section">
+          <div class="section-title-bar mb-3">Identity</div>
 
-      <!-- Name -->
-      <v-col cols="12" md="8">
-        <v-text-field
-          :model-value="formData.name"
-          label="Name (Required)"
-          :rules="[rules.required]"
-          required
-          variant="outlined"
-          density="comfortable"
-          @update:model-value="updateField('name', $event)"
-        />
-      </v-col>
+          <v-row>
+            <!-- Name (primary field) -->
+            <v-col cols="12" :md="formData.code ? 8 : 12">
+              <v-text-field
+                :model-value="formData.name"
+                label="Name"
+                :rules="[rules.required]"
+                required
+                variant="outlined"
+                density="comfortable"
+                autofocus
+                @update:model-value="updateField('name', $event)"
+              />
+            </v-col>
 
-      <!-- Code -->
-      <v-col cols="12" md="4">
-        <v-text-field
-          :model-value="formData.code"
-          label="Code (Required)"
-          :placeholder="type === 'preparation' ? 'P-001' : 'R-001'"
-          :rules="[rules.required, rules.codeFormat]"
-          required
-          variant="outlined"
-          density="comfortable"
-          hint="Auto-generated, but can be edited"
-          @input="handleCodeInput"
-        />
+            <!-- Code (read-only display) -->
+            <v-col v-if="formData.code" cols="12" md="4">
+              <div class="code-display">
+                <div class="code-display__label">Code</div>
+                <div class="code-display__value">{{ formData.code }}</div>
+              </div>
+            </v-col>
+          </v-row>
+
+          <v-row>
+            <!-- Category/Type -->
+            <v-col cols="12" md="6">
+              <v-select
+                :model-value="formData.category"
+                :items="categoryItems"
+                item-title="text"
+                item-value="value"
+                :label="type === 'preparation' ? 'Type' : 'Category'"
+                :rules="[rules.required]"
+                required
+                variant="outlined"
+                density="comfortable"
+                @update:model-value="handleCategoryChange"
+              />
+            </v-col>
+
+            <!-- Department -->
+            <v-col cols="12" md="6">
+              <v-select
+                :model-value="formData.department"
+                :items="departmentItems"
+                item-title="label"
+                item-value="value"
+                label="Department"
+                :rules="[rules.required]"
+                required
+                variant="outlined"
+                density="comfortable"
+                @update:model-value="updateField('department', $event)"
+              />
+            </v-col>
+          </v-row>
+        </div>
       </v-col>
 
       <!-- Description (moved to bottom in tablet mode) -->
@@ -47,196 +79,206 @@
         />
       </v-col>
 
-      <!-- Category/Type -->
-      <v-col cols="12" md="4">
-        <v-select
-          :model-value="formData.category"
-          :items="categoryItems"
-          item-title="text"
-          item-value="value"
-          :label="type === 'preparation' ? 'Type (Required)' : 'Category (Required)'"
-          :rules="[rules.required]"
-          required
-          variant="outlined"
-          density="comfortable"
-          @update:model-value="handleCategoryChange"
-        />
-      </v-col>
+      <!-- === SECTION: Output (highlighted) === -->
+      <v-col cols="12" class="pb-0">
+        <div class="output-section">
+          <div class="section-title-bar section-title-bar--output mb-3">Output</div>
 
-      <!-- Department (Both recipes and preparations) -->
-      <v-col cols="12" md="4">
-        <v-select
-          :model-value="formData.department"
-          :items="departmentItems"
-          item-title="label"
-          item-value="value"
-          label="Department (Required)"
-          :rules="[rules.required]"
-          required
-          variant="outlined"
-          density="comfortable"
-          :hint="
-            type === 'preparation'
-              ? 'Which department prepares this item'
-              : 'Which department prepares this recipe'
-          "
-          @update:model-value="updateField('department', $event)"
-        />
-      </v-col>
+          <v-row v-if="type === 'preparation'">
+            <!-- Portion Type Selection -->
+            <v-col cols="12" md="4">
+              <v-radio-group
+                :model-value="formData.portionType || 'weight'"
+                inline
+                density="comfortable"
+                hide-details
+                class="mt-0"
+                @update:model-value="handlePortionTypeChange($event)"
+              >
+                <template #label>
+                  <span class="text-body-2 text-medium-emphasis">Quantity Type</span>
+                </template>
+                <v-radio label="Weight" value="weight" />
+                <v-radio label="Portions" value="portion" />
+              </v-radio-group>
+            </v-col>
 
-      <!-- === SECTION: Output (highlighted in tablet mode) === -->
-      <v-col v-if="tablet" cols="12" class="section-header pb-0">
-        <div class="section-title section-title--output">Output</div>
-      </v-col>
-
-      <!-- Output/Portion Info -->
-      <template v-if="type === 'preparation'">
-        <!-- Portion Type Selection -->
-        <v-col cols="12" md="4" :class="{ 'output-highlight': tablet }">
-          <v-radio-group
-            :model-value="formData.portionType || 'weight'"
-            inline
-            density="comfortable"
-            hide-details
-            class="mt-0"
-            @update:model-value="handlePortionTypeChange($event)"
-          >
-            <template #label>
-              <span class="text-body-2 text-medium-emphasis">Quantity Type</span>
+            <!-- Weight mode: Output Quantity + Output Unit -->
+            <template v-if="formData.portionType !== 'portion'">
+              <v-col cols="12" md="4">
+                <NumericInputField
+                  :model-value="formData.outputQuantity"
+                  label="Output Quantity"
+                  :allow-decimal="true"
+                  :min="0.01"
+                  :rules="[rules.required, rules.positiveNumber]"
+                  required
+                  variant="outlined"
+                  density="comfortable"
+                  @update:model-value="updateField('outputQuantity', $event)"
+                />
+              </v-col>
+              <v-col cols="12" md="4">
+                <v-select
+                  :model-value="formData.outputUnit"
+                  :items="unitItems"
+                  item-title="label"
+                  item-value="value"
+                  label="Output Unit"
+                  :rules="[rules.required]"
+                  required
+                  variant="outlined"
+                  density="comfortable"
+                  @update:model-value="updateField('outputUnit', $event)"
+                />
+              </v-col>
             </template>
-            <v-radio label="Weight" value="weight" />
-            <v-radio label="Portions" value="portion" />
-          </v-radio-group>
-        </v-col>
 
-        <!-- Weight mode: Output Quantity + Output Unit -->
-        <template v-if="formData.portionType !== 'portion'">
-          <v-col cols="12" md="4" :class="{ 'output-highlight': tablet }">
-            <NumericInputField
-              :model-value="formData.outputQuantity"
-              label="Output Quantity (Required)"
-              :allow-decimal="true"
-              :min="0.01"
-              :rules="[rules.required, rules.positiveNumber]"
-              required
-              variant="outlined"
-              density="comfortable"
-              @update:model-value="updateField('outputQuantity', $event)"
-            />
-          </v-col>
-          <v-col cols="12" md="4" :class="{ 'output-highlight': tablet }">
-            <v-select
-              :model-value="formData.outputUnit"
-              :items="unitItems"
-              item-title="label"
-              item-value="value"
-              label="Output Unit (Required)"
-              :rules="[rules.required]"
-              required
-              variant="outlined"
-              density="comfortable"
-              @update:model-value="updateField('outputUnit', $event)"
-            />
-          </v-col>
-        </template>
+            <!-- Portion mode: Number of Portions + Output Unit + Portion Size -->
+            <template v-else>
+              <v-col cols="12" md="4">
+                <NumericInputField
+                  :model-value="formData.outputQuantity"
+                  label="Number of Portions"
+                  :min="1"
+                  :rules="[rules.required, rules.positiveNumber]"
+                  required
+                  variant="outlined"
+                  density="comfortable"
+                  hint="How many portions this recipe makes"
+                  persistent-hint
+                  @update:model-value="updateField('outputQuantity', $event)"
+                />
+              </v-col>
+              <v-col cols="12" md="4">
+                <v-select
+                  :model-value="formData.outputUnit || 'gram'"
+                  :items="outputUnitItems"
+                  item-title="label"
+                  item-value="value"
+                  label="Output Unit"
+                  variant="outlined"
+                  density="comfortable"
+                  hint="Unit of measurement for portions"
+                  persistent-hint
+                  @update:model-value="updateField('outputUnit', $event)"
+                />
+              </v-col>
+              <v-col cols="12" md="4">
+                <NumericInputField
+                  :model-value="formData.portionSize"
+                  :label="portionSizeLabel"
+                  :allow-decimal="true"
+                  :min="1"
+                  :rules="[rules.required, rules.positiveNumber]"
+                  required
+                  variant="outlined"
+                  density="comfortable"
+                  :hint="portionSizeHint"
+                  persistent-hint
+                  @update:model-value="updateField('portionSize', $event)"
+                />
+              </v-col>
 
-        <!-- Portion mode: Number of Portions + Output Unit + Portion Size -->
-        <template v-else>
-          <v-col cols="12" md="4" :class="{ 'output-highlight': tablet }">
-            <NumericInputField
-              :model-value="formData.outputQuantity"
-              label="Number of Portions (Required)"
-              :min="1"
-              :rules="[rules.required, rules.positiveNumber]"
-              required
-              variant="outlined"
-              density="comfortable"
-              hint="How many portions this recipe makes"
-              persistent-hint
-              @update:model-value="updateField('outputQuantity', $event)"
-            />
-          </v-col>
-          <v-col cols="12" md="4" :class="{ 'output-highlight': tablet }">
-            <v-select
-              :model-value="formData.outputUnit || 'gram'"
-              :items="outputUnitItems"
-              item-title="label"
-              item-value="value"
-              label="Output Unit"
-              variant="outlined"
-              density="comfortable"
-              hint="Unit of measurement for portions"
-              persistent-hint
-              @update:model-value="updateField('outputUnit', $event)"
-            />
-          </v-col>
-          <v-col cols="12" md="4" :class="{ 'output-highlight': tablet }">
-            <NumericInputField
-              :model-value="formData.portionSize"
-              :label="portionSizeLabel"
-              :allow-decimal="true"
-              :min="1"
-              :rules="[rules.required, rules.positiveNumber]"
-              required
-              variant="outlined"
-              density="comfortable"
-              :hint="portionSizeHint"
-              persistent-hint
-              @update:model-value="updateField('portionSize', $event)"
-            />
-          </v-col>
-
-          <!-- Total Weight Preview -->
-          <v-col v-if="formData.outputQuantity > 0 && formData.portionSize > 0" cols="12">
-            <v-alert type="info" variant="tonal" density="compact" class="text-body-2">
-              <strong>{{ formData.outputQuantity }} portions</strong>
-              × {{ formData.portionSize }}{{ portionSizeUnitShort }} =
-              <strong>{{ calculatedTotalWeight }}{{ portionSizeUnitShort }} total</strong>
-            </v-alert>
-          </v-col>
-        </template>
-      </template>
-
-      <template v-else>
-        <v-col cols="12" md="4">
-          <NumericInputField
-            :model-value="formData.portionSize"
-            label="Portion Size (Required)"
-            :allow-decimal="true"
-            :min="0.01"
-            :rules="[rules.required, rules.positiveNumber]"
-            required
-            variant="outlined"
-            density="comfortable"
-            @update:model-value="updateField('portionSize', $event)"
-          />
-        </v-col>
-        <v-col cols="12" md="4">
-          <v-select
-            :model-value="formData.portionUnit"
-            :items="portionUnits"
-            item-title="label"
-            item-value="value"
-            label="Portion Unit (Required)"
-            :rules="[rules.required]"
-            required
-            variant="outlined"
-            density="comfortable"
-            @update:model-value="updateField('portionUnit', $event)"
-          >
-            <template #prepend-inner>
-              <v-icon>mdi-scale</v-icon>
+              <!-- Total Weight Preview -->
+              <v-col v-if="formData.outputQuantity > 0 && formData.portionSize > 0" cols="12">
+                <v-alert type="info" variant="tonal" density="compact" class="text-body-2">
+                  <strong>{{ formData.outputQuantity }} portions</strong>
+                  × {{ formData.portionSize }}{{ portionSizeUnitShort }} =
+                  <strong>{{ calculatedTotalWeight }}{{ portionSizeUnitShort }} total</strong>
+                </v-alert>
+              </v-col>
             </template>
-          </v-select>
-        </v-col>
-      </template>
+          </v-row>
 
-      <!-- === SECTION: Timing & Storage === -->
-      <v-col v-if="tablet" cols="12" class="section-header pb-0">
-        <div class="section-title">Timing & Storage</div>
+          <v-row v-else>
+            <v-col cols="12" md="6">
+              <NumericInputField
+                :model-value="formData.portionSize"
+                label="Portion Size"
+                :allow-decimal="true"
+                :min="0.01"
+                :rules="[rules.required, rules.positiveNumber]"
+                required
+                variant="outlined"
+                density="comfortable"
+                @update:model-value="updateField('portionSize', $event)"
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-select
+                :model-value="formData.portionUnit"
+                :items="portionUnits"
+                item-title="label"
+                item-value="value"
+                label="Portion Unit"
+                :rules="[rules.required]"
+                required
+                variant="outlined"
+                density="comfortable"
+                @update:model-value="updateField('portionUnit', $event)"
+              >
+                <template #prepend-inner>
+                  <v-icon>mdi-scale</v-icon>
+                </template>
+              </v-select>
+            </v-col>
+          </v-row>
+        </div>
       </v-col>
 
-      <!-- Time fields -->
+      <!-- === SECTION: Storage (highlighted, preparations only) — right after Output === -->
+      <v-col v-if="type === 'preparation'" cols="12" class="pb-0">
+        <div class="storage-section">
+          <div class="section-title-bar section-title-bar--storage mb-3">Storage</div>
+
+          <v-row>
+            <v-col cols="12" md="4">
+              <NumericInputField
+                :model-value="formData.shelfLife"
+                label="Shelf Life (days)"
+                :min="1"
+                :rules="[rules.positiveNumber]"
+                variant="outlined"
+                density="comfortable"
+                @update:model-value="updateField('shelfLife', $event)"
+              />
+            </v-col>
+
+            <v-col cols="12" md="4">
+              <v-select
+                :model-value="formData.storageLocation || 'fridge'"
+                :items="storageLocationItems"
+                item-title="label"
+                item-value="value"
+                label="Storage Location"
+                variant="outlined"
+                density="comfortable"
+                @update:model-value="updateField('storageLocation', $event)"
+              />
+            </v-col>
+
+            <v-col cols="12" md="4">
+              <v-select
+                :model-value="formData.productionSlot || 'any'"
+                :items="productionSlotItems"
+                item-title="label"
+                item-value="value"
+                label="Production Time"
+                variant="outlined"
+                density="comfortable"
+                @update:model-value="updateField('productionSlot', $event)"
+              />
+            </v-col>
+          </v-row>
+        </div>
+      </v-col>
+
+      <!-- === Timing === -->
+      <v-col cols="12" class="section-header pb-0">
+        <div class="section-title">Timing</div>
+      </v-col>
+
       <v-col cols="12" md="6">
         <NumericInputField
           :model-value="formData.preparationTime"
@@ -256,79 +298,6 @@
           @update:model-value="updateField('cookTime', $event)"
         />
       </v-col>
-
-      <!-- Shelf Life (Preparations only) -->
-      <v-col v-if="type === 'preparation'" cols="12" md="6">
-        <NumericInputField
-          :model-value="formData.shelfLife"
-          label="Shelf Life (days)"
-          :min="1"
-          :rules="[rules.positiveNumber]"
-          variant="outlined"
-          density="comfortable"
-          hint="How many days this preparation can be stored"
-          @update:model-value="updateField('shelfLife', $event)"
-        />
-      </v-col>
-
-      <!-- Kitchen Preparation: Storage & Production Settings -->
-      <template v-if="type === 'preparation'">
-        <!-- Storage Location -->
-        <v-col cols="12" md="6">
-          <v-select
-            :model-value="formData.storageLocation || 'fridge'"
-            :items="storageLocationItems"
-            item-title="label"
-            item-value="value"
-            label="Storage Location"
-            variant="outlined"
-            density="comfortable"
-            hint="Where this preparation is stored"
-            @update:model-value="updateField('storageLocation', $event)"
-          />
-        </v-col>
-
-        <!-- Production Slot -->
-        <v-col cols="12" md="6">
-          <v-select
-            :model-value="formData.productionSlot || 'any'"
-            :items="productionSlotItems"
-            item-title="label"
-            item-value="value"
-            label="Production Time"
-            variant="outlined"
-            density="comfortable"
-            hint="Preferred production time slot"
-            @update:model-value="updateField('productionSlot', $event)"
-          />
-        </v-col>
-
-        <!-- Min Stock Threshold -->
-        <v-col cols="12" md="6">
-          <NumericInputField
-            :model-value="formData.minStockThreshold || 0"
-            label="Min Stock Threshold"
-            :min="0"
-            variant="outlined"
-            density="comfortable"
-            :hint="`Alert when stock falls below this (${getUnitShortName(formData.outputUnit)})`"
-            @update:model-value="updateField('minStockThreshold', $event)"
-          />
-        </v-col>
-
-        <!-- Daily Target Quantity -->
-        <v-col cols="12" md="6">
-          <NumericInputField
-            :model-value="formData.dailyTargetQuantity || 0"
-            label="Daily Target Quantity"
-            :min="0"
-            variant="outlined"
-            density="comfortable"
-            :hint="`Target daily production (${getUnitShortName(formData.outputUnit)})`"
-            @update:model-value="updateField('dailyTargetQuantity', $event)"
-          />
-        </v-col>
-      </template>
 
       <!-- === SECTION: Other (recipe-specific) === -->
       <template v-if="type === 'recipe'">
@@ -621,6 +590,69 @@ onMounted(async () => {
   // Стили если нужны
 }
 
+.identity-section {
+  background: rgba(var(--v-theme-primary), 0.06);
+  border: 1px solid rgba(var(--v-theme-primary), 0.15);
+  border-radius: 12px;
+  padding: 16px 16px 4px;
+}
+
+.output-section {
+  background: rgba(var(--v-theme-warning), 0.06);
+  border: 1px solid rgba(var(--v-theme-warning), 0.15);
+  border-radius: 12px;
+  padding: 16px 16px 4px;
+}
+
+.storage-section {
+  background: rgba(var(--v-theme-info), 0.06);
+  border: 1px solid rgba(var(--v-theme-info), 0.15);
+  border-radius: 12px;
+  padding: 16px 16px 4px;
+}
+
+.section-title-bar {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgb(var(--v-theme-primary));
+
+  &--output {
+    color: rgb(var(--v-theme-warning));
+  }
+
+  &--storage {
+    color: rgb(var(--v-theme-info));
+  }
+}
+
+.code-display {
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 8px;
+  padding: 10px 14px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  &__label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(var(--v-theme-on-surface), 0.45);
+  }
+
+  &__value {
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: monospace;
+    color: rgba(var(--v-theme-on-surface), 0.7);
+  }
+}
+
 .section-header {
   margin-top: 8px;
 }
@@ -633,15 +665,5 @@ onMounted(async () => {
   color: rgba(var(--v-theme-on-surface), 0.5);
   padding-bottom: 4px;
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-
-  &--output {
-    color: rgb(var(--v-theme-warning));
-    border-bottom-color: rgba(var(--v-theme-warning), 0.3);
-  }
-}
-
-.output-highlight {
-  background: rgba(var(--v-theme-warning), 0.04);
-  border-radius: 8px;
 }
 </style>

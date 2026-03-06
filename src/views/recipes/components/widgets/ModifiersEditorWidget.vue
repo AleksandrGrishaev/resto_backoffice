@@ -1,209 +1,234 @@
 <!-- src/views/recipes/components/widgets/ModifiersEditorWidget.vue -->
 <template>
-  <v-card class="modifiers-editor-widget" variant="outlined">
-    <v-card-title class="d-flex align-center justify-space-between bg-grey-lighten-4">
-      <div class="d-flex align-center">
-        <v-icon icon="mdi-puzzle" class="mr-2" />
-        <span>Modifiers & Customization</span>
+  <div class="modifiers-editor">
+    <!-- Empty State -->
+    <div v-if="!hasModifiers" class="empty-state">
+      <v-icon icon="mdi-puzzle-outline" size="48" color="deep-purple-lighten-2" class="mb-3" />
+      <div class="text-body-1 mb-2">No modifiers configured</div>
+      <div class="text-body-2 text-medium-emphasis mb-4">
+        Add modifier groups to let customers customize this dish.
       </div>
-      <v-chip size="small" :color="hasModifiers ? 'success' : 'default'">
-        {{ modifierGroups.length }} groups
-      </v-chip>
-    </v-card-title>
+      <v-btn color="deep-purple" variant="flat" size="large" height="48" @click="addModifierGroup">
+        <v-icon icon="mdi-plus" size="20" class="mr-2" />
+        Add First Modifier Group
+      </v-btn>
+    </div>
 
-    <v-card-text class="pa-4">
-      <!-- Empty State -->
-      <div v-if="!hasModifiers" class="text-center py-8">
-        <v-icon icon="mdi-puzzle-outline" size="48" color="grey" class="mb-4" />
-        <div class="text-body-1 text-grey mb-4">No modifiers configured</div>
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="addModifierGroup">
-          Add First Modifier Group
-        </v-btn>
-      </div>
+    <!-- Modifier Groups List -->
+    <div v-else>
+      <v-expansion-panels v-model="openPanels" multiple>
+        <v-expansion-panel
+          v-for="(group, groupIndex) in modifierGroups"
+          :key="group.id"
+          :value="groupIndex"
+          class="modifier-panel"
+          :class="group.isRequired ? 'modifier-panel--required' : 'modifier-panel--optional'"
+        >
+          <!-- Panel Header -->
+          <v-expansion-panel-title class="modifier-panel__title">
+            <div class="d-flex align-center w-100 pr-2">
+              <v-chip
+                :color="group.isRequired ? 'error' : 'info'"
+                size="small"
+                variant="flat"
+                class="mr-3"
+              >
+                {{ group.isRequired ? 'Required' : 'Optional' }}
+              </v-chip>
+              <span class="font-weight-bold text-body-1">{{ group.name }}</span>
+              <v-chip size="small" variant="tonal" class="ml-3">
+                {{ group.options.length }} option{{ group.options.length !== 1 ? 's' : '' }}
+              </v-chip>
+            </div>
+          </v-expansion-panel-title>
 
-      <!-- Modifier Groups List -->
-      <div v-else>
-        <v-expansion-panels v-model="openPanels" multiple>
-          <v-expansion-panel
-            v-for="(group, groupIndex) in modifierGroups"
-            :key="group.id"
-            :value="groupIndex"
-          >
-            <!-- Panel Header -->
-            <v-expansion-panel-title>
-              <div class="d-flex align-center justify-space-between w-100 pr-4">
-                <div class="d-flex align-center">
-                  <v-chip :color="group.isRequired ? 'error' : 'default'" size="small" class="mr-2">
-                    {{ group.isRequired ? 'Required' : 'Optional' }}
-                  </v-chip>
-                  <span class="font-weight-bold">{{ group.name }}</span>
-                  <span class="text-grey ml-2 text-body-2">
-                    ({{ group.options.length }} options)
-                  </span>
-                </div>
+          <!-- Panel Content -->
+          <v-expansion-panel-text>
+            <!-- ===== SECTION: Group Settings ===== -->
+            <div class="section-block section-block--settings mb-5">
+              <div class="section-block__header">
+                <v-icon icon="mdi-cog" size="18" class="mr-2" />
+                Group Settings
               </div>
-            </v-expansion-panel-title>
+              <div class="section-block__body">
+                <v-row>
+                  <v-col cols="12" md="6">
+                    <v-text-field
+                      v-model="group.name"
+                      label="Group Name *"
+                      variant="outlined"
+                      placeholder="e.g., Choose your bread"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-select
+                      v-model="group.type"
+                      :items="modifierTypes"
+                      label="Modifier Type *"
+                      variant="outlined"
+                    />
+                  </v-col>
+                  <v-col cols="12">
+                    <v-text-field
+                      v-model="group.kitchenDisplayName"
+                      label="Kitchen Display Name"
+                      variant="outlined"
+                      placeholder="e.g., Bread: Toast -> Baguette"
+                      hint="Short name for kitchen screen (optional)"
+                      persistent-hint
+                    />
+                  </v-col>
+                  <v-col cols="12">
+                    <v-textarea
+                      v-model="group.description"
+                      label="Description"
+                      variant="outlined"
+                      rows="2"
+                      placeholder="Optional description for customers"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="4">
+                    <v-switch
+                      v-model="group.isRequired"
+                      label="Required Selection"
+                      color="error"
+                      hide-details
+                    />
+                  </v-col>
+                  <v-col cols="12" md="4">
+                    <NumericInputField
+                      v-model="group.minSelection"
+                      label="Min Selection"
+                      variant="outlined"
+                      :min="0"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="4">
+                    <NumericInputField
+                      v-model="group.maxSelection"
+                      label="Max Selection (0=unlimited)"
+                      variant="outlined"
+                      :min="0"
+                    />
+                  </v-col>
 
-            <!-- Panel Content -->
-            <v-expansion-panel-text>
-              <!-- Group Settings -->
-              <v-row class="mb-4">
-                <v-col cols="12" md="6">
-                  <v-text-field
-                    v-model="group.name"
-                    label="Group Name *"
-                    density="compact"
-                    variant="outlined"
-                    placeholder="e.g., Choose your bread"
-                  />
-                </v-col>
-                <v-col cols="12" md="6">
-                  <v-select
-                    v-model="group.type"
-                    :items="modifierTypes"
-                    label="Modifier Type *"
-                    density="compact"
-                    variant="outlined"
-                  />
-                </v-col>
-                <!-- ✅ Group Style удалено - логика определяется через isRequired -->
-                <v-col cols="12">
-                  <v-textarea
-                    v-model="group.description"
-                    label="Description"
-                    density="compact"
-                    variant="outlined"
-                    rows="2"
-                    placeholder="Optional description for customers"
-                  />
-                </v-col>
-                <v-col cols="12">
-                  <v-text-field
-                    v-model="group.kitchenDisplayName"
-                    label="Kitchen Display Name"
-                    density="compact"
-                    variant="outlined"
-                    placeholder="e.g., Bread: Toast → Baguette"
-                    hint="Short name for kitchen screen (optional)"
-                    persistent-hint
-                  />
-                </v-col>
-                <v-col cols="12" md="4">
-                  <v-switch
-                    v-model="group.isRequired"
-                    label="Required Selection"
-                    color="error"
-                    density="compact"
-                    hide-details
-                  />
-                </v-col>
-                <v-col cols="12" md="4">
-                  <NumericInputField
-                    v-model="group.minSelection"
-                    label="Min Selection"
-                    density="compact"
-                    variant="outlined"
-                    :min="0"
-                  />
-                </v-col>
-                <v-col cols="12" md="4">
-                  <NumericInputField
-                    v-model="group.maxSelection"
-                    label="Max Selection (0=unlimited)"
-                    density="compact"
-                    variant="outlined"
-                    :min="0"
-                  />
-                </v-col>
-
-                <!-- Target Components Selector (only for replacement type) - Multi-select -->
-                <v-col v-if="group.type === 'replacement'" cols="12">
-                  <v-alert
-                    v-if="availableTargetComponents.length === 0"
-                    type="warning"
-                    density="compact"
-                    variant="tonal"
-                    class="mb-2"
-                  >
-                    <div class="text-caption">
+                  <!-- Target Components Selector (only for replacement type) -->
+                  <v-col v-if="group.type === 'replacement'" cols="12">
+                    <div
+                      v-if="availableTargetComponents.length === 0"
+                      class="accent-bar accent-bar--warning mb-2"
+                    >
+                      <v-icon icon="mdi-alert" size="18" class="mr-2" />
                       No recipe components available. Add a recipe to the variant composition first.
                     </div>
-                  </v-alert>
-                  <v-select
-                    v-else
-                    :model-value="getSelectedTargetValues(group)"
-                    :items="availableTargetComponents"
-                    item-title="label"
-                    item-value="value"
-                    label="Target Components to Replace"
-                    density="compact"
-                    variant="outlined"
-                    multiple
-                    chips
-                    closable-chips
-                    prepend-inner-icon="mdi-target"
-                    hint="Select which ingredients will be replaced. First selected gets composition, others are excluded."
-                    persistent-hint
-                    :return-object="true"
-                    @update:model-value="vals => updateTargetComponents(groupIndex, vals)"
-                  >
-                    <template #prepend-inner>
-                      <v-icon icon="mdi-swap-horizontal" color="warning" />
-                    </template>
-                    <template #chip="{ item, index }">
-                      <v-chip
-                        size="small"
-                        :color="index === 0 ? 'success' : 'warning'"
-                        variant="tonal"
-                        closable
-                        @click:close="removeTargetComponent(groupIndex, index)"
-                      >
-                        <v-icon
-                          :icon="index === 0 ? 'mdi-plus-circle' : 'mdi-minus-circle'"
-                          size="14"
-                          class="mr-1"
-                        />
-                        {{ item.title }}
-                      </v-chip>
-                    </template>
-                  </v-select>
-                  <div v-if="group.targetComponents?.length" class="mt-2 text-caption text-grey">
-                    <v-icon icon="mdi-information-outline" size="14" class="mr-1" />
-                    First target (green) receives replacement composition. Others (orange) are
-                    excluded only.
-                  </div>
-                </v-col>
-              </v-row>
+                    <v-select
+                      v-else
+                      :model-value="getSelectedTargetValues(group)"
+                      :items="availableTargetComponents"
+                      item-title="label"
+                      item-value="value"
+                      label="Target Components to Replace"
+                      variant="outlined"
+                      multiple
+                      chips
+                      closable-chips
+                      prepend-inner-icon="mdi-target"
+                      hint="First selected (green) gets composition, others (orange) excluded."
+                      persistent-hint
+                      :return-object="true"
+                      @update:model-value="vals => updateTargetComponents(groupIndex, vals)"
+                    >
+                      <template #prepend-inner>
+                        <v-icon icon="mdi-swap-horizontal" color="warning" />
+                      </template>
+                      <template #chip="{ item, index }">
+                        <v-chip
+                          size="small"
+                          :color="index === 0 ? 'success' : 'warning'"
+                          variant="tonal"
+                          closable
+                          @click:close="removeTargetComponent(groupIndex, index)"
+                        >
+                          <v-icon
+                            :icon="index === 0 ? 'mdi-plus-circle' : 'mdi-minus-circle'"
+                            size="14"
+                            class="mr-1"
+                          />
+                          {{ item.title }}
+                        </v-chip>
+                      </template>
+                    </v-select>
+                  </v-col>
+                </v-row>
+              </div>
+            </div>
 
-              <v-divider class="my-4" />
-
-              <!-- Options List -->
-              <div class="mb-2">
-                <div class="d-flex align-center justify-space-between mb-2">
-                  <span class="text-subtitle-2">Options:</span>
-                  <v-btn
-                    size="small"
-                    color="primary"
-                    variant="text"
-                    prepend-icon="mdi-plus"
-                    @click="addOption(groupIndex)"
-                  >
-                    Add Option
-                  </v-btn>
+            <!-- ===== SECTION: Options ===== -->
+            <div class="section-block section-block--options">
+              <div class="section-block__header section-block__header--options">
+                <div class="d-flex align-center">
+                  <v-icon icon="mdi-format-list-checks" size="18" class="mr-2" />
+                  Options
+                  <v-chip size="small" variant="tonal" color="deep-purple" class="ml-2">
+                    {{ group.options.length }}
+                  </v-chip>
                 </div>
+                <v-btn
+                  color="deep-purple"
+                  variant="tonal"
+                  size="default"
+                  height="36"
+                  @click="addOption(groupIndex)"
+                >
+                  <v-icon icon="mdi-plus" size="18" class="mr-1" />
+                  Add Option
+                </v-btn>
+              </div>
 
-                <v-list class="pa-0">
-                  <v-list-item
-                    v-for="(option, optionIndex) in group.options"
-                    :key="option.id"
-                    class="px-0 mb-2 border rounded option-item"
-                  >
-                    <v-row dense class="pa-3">
-                      <v-col cols="12" md="4">
+              <div v-if="group.options.length === 0" class="empty-options">
+                No options yet. Add at least one option.
+              </div>
+
+              <div v-else class="options-list">
+                <div
+                  v-for="(option, optionIndex) in group.options"
+                  :key="option.id"
+                  class="option-card"
+                >
+                  <!-- Option header row -->
+                  <div class="option-card__header">
+                    <v-chip
+                      size="x-small"
+                      :color="option.isActive ? 'success' : 'grey'"
+                      variant="flat"
+                      class="mr-2"
+                    >
+                      {{ option.isActive ? 'Active' : 'Inactive' }}
+                    </v-chip>
+                    <span class="option-card__number">#{{ optionIndex + 1 }}</span>
+                    <span class="option-card__name">{{ option.name || 'Unnamed' }}</span>
+                    <v-spacer />
+                    <span v-if="option.priceAdjustment" class="option-card__price">
+                      {{ option.priceAdjustment > 0 ? '+' : ''
+                      }}{{ option.priceAdjustment.toLocaleString() }} IDR
+                    </span>
+                    <v-btn
+                      icon="mdi-delete"
+                      variant="text"
+                      size="small"
+                      color="error"
+                      class="ml-2"
+                      @click="removeOption(groupIndex, optionIndex)"
+                    />
+                  </div>
+
+                  <!-- Option fields -->
+                  <div class="option-card__body">
+                    <v-row dense>
+                      <v-col cols="12" md="5">
                         <v-text-field
                           v-model="option.name"
                           label="Option Name *"
-                          density="compact"
                           variant="outlined"
                           hide-details
                         />
@@ -211,71 +236,65 @@
                       <v-col cols="12" md="3">
                         <NumericInputField
                           v-model="option.priceAdjustment"
-                          label="Price Adjustment"
-                          density="compact"
+                          label="Price +/-"
                           variant="outlined"
                           prefix="IDR"
                           hide-details
                         />
                       </v-col>
-                      <v-col cols="12" md="3">
-                        <div class="d-flex align-center ga-2 pa-2">
-                          <!-- ✅ isDefault для required groups (заменяемые компоненты) -->
+                      <v-col cols="12" md="4">
+                        <div class="d-flex align-center ga-3 h-100">
                           <v-switch
                             v-if="group.isRequired"
                             v-model="option.isDefault"
                             label="Default"
-                            density="compact"
                             color="success"
                             hide-details
+                            density="compact"
                           />
                           <v-switch
                             v-model="option.isActive"
                             label="Active"
-                            density="compact"
                             color="primary"
                             hide-details
+                            density="compact"
                           />
                         </div>
-                      </v-col>
-                      <v-col cols="12" md="2" class="d-flex align-center justify-end">
-                        <v-btn
-                          icon="mdi-delete"
-                          variant="text"
-                          size="small"
-                          color="error"
-                          @click="removeOption(groupIndex, optionIndex)"
-                        />
                       </v-col>
                       <v-col cols="12">
                         <v-textarea
                           v-model="option.description"
                           label="Description"
-                          density="compact"
                           variant="outlined"
                           rows="1"
                           hide-details
                         />
                       </v-col>
-                      <!-- ✅ Composition Editor -->
+
+                      <!-- Composition -->
                       <v-col cols="12">
-                        <div class="composition-editor pa-3 rounded">
-                          <div class="d-flex align-center justify-space-between mb-2">
-                            <span class="text-caption font-weight-bold">Composition</span>
+                        <div class="composition-editor">
+                          <div class="composition-editor__header">
+                            <span class="text-caption font-weight-bold">
+                              <v-icon icon="mdi-package-variant-closed" size="14" class="mr-1" />
+                              Composition
+                            </span>
                             <div class="d-flex ga-1">
                               <v-btn
-                                size="x-small"
-                                variant="text"
+                                size="small"
+                                variant="tonal"
                                 color="primary"
+                                height="30"
                                 @click="showDishSelector(groupIndex, optionIndex)"
                               >
                                 <v-icon icon="mdi-chef-hat" size="14" class="mr-1" />
                                 Dish
                               </v-btn>
                               <v-btn
-                                size="x-small"
-                                variant="text"
-                                color="secondary"
+                                size="small"
+                                variant="tonal"
+                                color="info"
+                                height="30"
                                 @click="showProductSelector(groupIndex, optionIndex)"
                               >
                                 <v-icon icon="mdi-package-variant" size="14" class="mr-1" />
@@ -284,49 +303,48 @@
                             </div>
                           </div>
 
-                          <!-- Empty state -->
                           <div
                             v-if="!option.composition || option.composition.length === 0"
-                            class="text-caption text-grey text-center pa-2"
-                            style="border: 1px dashed #ccc; border-radius: 4px"
+                            class="composition-empty"
+                            :class="{
+                              'composition-empty--warning':
+                                group.type === 'replacement' && !option.isDefault
+                            }"
                           >
-                            No composition defined (modifier won't affect inventory)
+                            <template v-if="group.type === 'replacement' && !option.isDefault">
+                              <v-icon icon="mdi-alert" size="14" color="warning" class="mr-1" />
+                              No composition — will remove original ingredient without replacement.
+                              Add a dish or product.
+                            </template>
+                            <template v-else>No composition (won't affect inventory)</template>
                           </div>
 
-                          <!-- Composition items -->
                           <div v-else class="composition-list">
                             <div
                               v-for="(comp, compIndex) in option.composition"
                               :key="compIndex"
-                              class="composition-item d-flex align-center ga-2 pa-2 mb-1 rounded"
+                              class="composition-item"
                             >
                               <v-icon
                                 :icon="getCompositionIcon(comp.type)"
-                                size="14"
+                                size="16"
                                 :color="getCompositionColor(comp.type)"
                               />
-                              <span class="text-caption flex-grow-1">
+                              <span class="composition-item__name">
                                 {{ getCompositionName(comp) }}
                               </span>
                               <NumericInputField
                                 v-model="comp.quantity"
-                                density="compact"
                                 variant="outlined"
                                 hide-details
-                                style="width: 60px"
-                              />
-                              <!-- ⭐ PHASE 2: Lock unit selector for portion-type preparations -->
-                              <v-select
-                                v-model="comp.unit"
-                                :items="unitOptions"
                                 density="compact"
-                                variant="outlined"
-                                hide-details
-                                style="width: 80px"
-                                :disabled="isCompositionPortionType(comp)"
+                                style="width: 70px"
                               />
+                              <v-chip size="small" variant="tonal" class="composition-item__unit">
+                                {{ resolveCompositionUnit(comp) }}
+                              </v-chip>
                               <v-btn
-                                icon="mdi-delete"
+                                icon="mdi-close"
                                 variant="text"
                                 size="x-small"
                                 color="error"
@@ -337,112 +355,43 @@
                         </div>
                       </v-col>
                     </v-row>
-                  </v-list-item>
-                </v-list>
+                  </div>
+                </div>
               </div>
+            </div>
 
-              <!-- Group Actions -->
-              <v-divider class="my-4" />
-              <div class="d-flex justify-end">
-                <v-btn
-                  variant="text"
-                  color="error"
-                  prepend-icon="mdi-delete"
-                  @click="removeModifierGroup(groupIndex)"
-                >
-                  Remove Group
-                </v-btn>
-              </div>
-            </v-expansion-panel-text>
-          </v-expansion-panel>
-        </v-expansion-panels>
-
-        <!-- Add Group Button -->
-        <v-btn
-          class="mt-4"
-          block
-          variant="outlined"
-          color="primary"
-          prepend-icon="mdi-plus"
-          @click="addModifierGroup"
-        >
-          Add Another Modifier Group
-        </v-btn>
-      </div>
-
-      <!-- Templates Section -->
-      <v-divider class="my-6" />
-      <div>
-        <div class="d-flex align-center justify-space-between mb-3">
-          <div class="text-subtitle-1 font-weight-bold">Quick Select Templates</div>
-          <div class="d-flex align-center ga-2">
-            <v-chip size="small">{{ templates.length }} templates</v-chip>
-            <v-btn
-              v-if="templates.length > 0"
-              size="small"
-              variant="text"
-              color="primary"
-              prepend-icon="mdi-plus"
-              @click="openAddTemplateDialog"
-            >
-              Add
-            </v-btn>
-          </div>
-        </div>
-
-        <div v-if="templates.length === 0" class="text-center py-4 bg-grey-lighten-5 rounded">
-          <div class="text-body-2 text-grey mb-2">No templates configured</div>
-          <v-btn
-            size="small"
-            variant="text"
-            color="primary"
-            prepend-icon="mdi-plus"
-            @click="openAddTemplateDialog"
-          >
-            Add Template
-          </v-btn>
-        </div>
-
-        <v-list v-else class="pa-0">
-          <v-list-item
-            v-for="(template, index) in templates"
-            :key="template.id"
-            class="border rounded mb-2"
-          >
-            <v-list-item-title>{{ template.name }}</v-list-item-title>
-            <v-list-item-subtitle class="text-caption">
-              {{ getTemplateModifiersPreview(template) }}
-            </v-list-item-subtitle>
-            <template #append>
+            <!-- Group delete -->
+            <div class="d-flex justify-end mt-4">
               <v-btn
-                icon="mdi-pencil"
                 variant="text"
-                size="small"
-                color="primary"
-                @click="openEditTemplateDialog(index)"
-              />
-              <v-btn
-                icon="mdi-delete"
-                variant="text"
-                size="small"
                 color="error"
-                @click="deleteTemplate(index)"
-              />
-            </template>
-          </v-list-item>
-        </v-list>
+                height="40"
+                @click="removeModifierGroup(groupIndex)"
+              >
+                <v-icon icon="mdi-delete" size="18" class="mr-1" />
+                Remove Group
+              </v-btn>
+            </div>
+          </v-expansion-panel-text>
+        </v-expansion-panel>
+      </v-expansion-panels>
 
-        <v-alert type="info" density="compact" variant="tonal" class="mt-3">
-          <div class="text-caption">
-            <strong>Templates</strong>
-            allow customers to quickly select pre-configured modifier combinations (e.g., "Simple
-            Breakfast", "Premium Breakfast")
-          </div>
-        </v-alert>
-      </div>
-    </v-card-text>
+      <!-- Add Group Button -->
+      <v-btn
+        class="mt-5"
+        block
+        variant="outlined"
+        color="deep-purple"
+        size="large"
+        height="48"
+        @click="addModifierGroup"
+      >
+        <v-icon icon="mdi-plus" size="20" class="mr-2" />
+        Add Modifier Group
+      </v-btn>
+    </div>
 
-    <!-- Диалог выбора блюда -->
+    <!-- Dish selector dialog -->
     <v-dialog v-model="dishSelectorDialog.show" max-width="800">
       <v-card>
         <v-card-title class="d-flex align-center justify-space-between">
@@ -461,7 +410,7 @@
       </v-card>
     </v-dialog>
 
-    <!-- Диалог выбора продукта -->
+    <!-- Product selector dialog -->
     <v-dialog v-model="productSelectorDialog.show" max-width="800">
       <v-card>
         <v-card-title class="d-flex align-center justify-space-between">
@@ -482,125 +431,7 @@
         </v-card-text>
       </v-card>
     </v-dialog>
-
-    <!-- Template Editor Dialog -->
-    <v-dialog v-model="templateDialog.show" max-width="600" persistent>
-      <v-card>
-        <v-card-title class="d-flex align-center justify-space-between bg-grey-lighten-4">
-          <span>{{ templateDialog.editIndex !== null ? 'Edit Template' : 'Add Template' }}</span>
-          <v-btn
-            icon="mdi-close"
-            variant="text"
-            size="small"
-            @click="templateDialog.show = false"
-          />
-        </v-card-title>
-        <v-divider />
-        <v-card-text class="pa-4">
-          <!-- Template Name -->
-          <v-text-field
-            v-model="templateDialog.name"
-            label="Template Name *"
-            placeholder="e.g., Simple Breakfast, Premium Breakfast"
-            density="compact"
-            variant="outlined"
-            class="mb-3"
-            :rules="[v => !!v?.trim() || 'Name is required']"
-          />
-
-          <!-- Template Description -->
-          <v-textarea
-            v-model="templateDialog.description"
-            label="Description (optional)"
-            placeholder="Brief description shown to customers"
-            density="compact"
-            variant="outlined"
-            rows="2"
-            class="mb-4"
-          />
-
-          <!-- Modifier Groups Selection -->
-          <div
-            v-if="modifierGroups.length === 0"
-            class="text-center py-4 bg-grey-lighten-5 rounded"
-          >
-            <v-icon icon="mdi-alert-circle-outline" color="warning" class="mb-2" />
-            <div class="text-body-2 text-grey">
-              Add modifier groups first before creating templates
-            </div>
-          </div>
-
-          <div v-else>
-            <div class="text-subtitle-2 mb-2">Select modifiers for this template:</div>
-            <v-expansion-panels variant="accordion">
-              <v-expansion-panel v-for="group in modifierGroups" :key="group.id">
-                <v-expansion-panel-title>
-                  <div class="d-flex align-center">
-                    <v-chip
-                      :color="group.isRequired ? 'error' : 'default'"
-                      size="x-small"
-                      class="mr-2"
-                    >
-                      {{ group.isRequired ? 'Required' : 'Optional' }}
-                    </v-chip>
-                    <span>{{ group.name }}</span>
-                    <v-chip
-                      v-if="templateDialog.selectedModifiers.get(group.id)?.size"
-                      size="x-small"
-                      color="primary"
-                      class="ml-2"
-                    >
-                      {{ templateDialog.selectedModifiers.get(group.id)?.size }} selected
-                    </v-chip>
-                  </div>
-                </v-expansion-panel-title>
-                <v-expansion-panel-text>
-                  <div class="options-grid">
-                    <v-chip
-                      v-for="option in group.options.filter(o => o.isActive)"
-                      :key="option.id"
-                      :color="isTemplateOptionSelected(group.id, option.id) ? 'primary' : 'default'"
-                      :variant="isTemplateOptionSelected(group.id, option.id) ? 'flat' : 'outlined'"
-                      class="ma-1"
-                      @click="toggleTemplateOption(group.id, option.id)"
-                    >
-                      <v-icon
-                        v-if="isTemplateOptionSelected(group.id, option.id)"
-                        icon="mdi-check"
-                        size="14"
-                        class="mr-1"
-                      />
-                      {{ option.name }}
-                      <span v-if="option.priceAdjustment" class="ml-1 text-caption">
-                        (+{{ option.priceAdjustment.toLocaleString() }})
-                      </span>
-                    </v-chip>
-                  </div>
-                  <div v-if="group.maxSelection === 1" class="text-caption text-grey mt-2">
-                    <v-icon icon="mdi-information-outline" size="12" class="mr-1" />
-                    Single selection only
-                  </div>
-                </v-expansion-panel-text>
-              </v-expansion-panel>
-            </v-expansion-panels>
-          </div>
-        </v-card-text>
-        <v-divider />
-        <v-card-actions class="pa-3">
-          <v-spacer />
-          <v-btn variant="text" @click="templateDialog.show = false">Cancel</v-btn>
-          <v-btn
-            color="primary"
-            variant="flat"
-            :disabled="!templateDialog.name.trim() || modifierGroups.length === 0"
-            @click="saveTemplate"
-          >
-            {{ templateDialog.editIndex !== null ? 'Save Changes' : 'Add Template' }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </v-card>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -608,7 +439,6 @@ import { ref, computed } from 'vue'
 import type {
   ModifierGroup,
   ModifierOption,
-  VariantTemplate,
   DishType,
   MenuComposition,
   DishOption,
@@ -623,34 +453,29 @@ import ProductSearchWidget from '@/views/menu/components/widgets/ProductSearchWi
 
 interface Props {
   modifierGroups: ModifierGroup[]
-  templates: VariantTemplate[]
-  dishType: DishType // ✨ NEW: тип блюда
-  dishOptions?: DishOption[] // ✅ NEW: Опции для блюд (рецепты + полуфабрикаты)
-  productOptions?: ProductOption[] // ✅ NEW: Опции для продуктов
-  variantComposition?: MenuComposition[] // ✅ NEW: Composition варианта для target component selection
+  dishType: DishType
+  dishOptions?: DishOption[]
+  productOptions?: ProductOption[]
+  variantComposition?: MenuComposition[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
   modifierGroups: () => [],
-  templates: () => [],
   dishType: 'simple',
   dishOptions: () => [],
   productOptions: () => [],
   variantComposition: () => []
 })
 
-// Store access for recipe components
 const recipesStore = useRecipesStore()
 
 const emit = defineEmits<{
   'update:modifierGroups': [groups: ModifierGroup[]]
-  'update:templates': [templates: VariantTemplate[]]
 }>()
 
 // State
 const openPanels = ref<number[]>([])
 
-// ✅ NEW: Dialog state for composition selectors
 const dishSelectorDialog = ref<{
   show: boolean
   groupIndex: number | null
@@ -671,33 +496,15 @@ const productSelectorDialog = ref<{
   optionIndex: null
 })
 
-// Unit options for composition
-// ⭐ PHASE 2: Added 'portion' for portion-type preparations
-const unitOptions = [
-  { title: 'Grams', value: 'gram' },
-  { title: 'Milliliters', value: 'ml' },
-  { title: 'Pieces', value: 'piece' },
-  { title: 'Liters', value: 'liter' },
-  { title: 'Kilograms', value: 'kg' },
-  { title: 'Portions', value: 'portion' }
-]
-
-// Constants
 const modifierTypes = [
   { title: 'Add-on (adds to base)', value: 'addon' },
   { title: 'Replacement (replaces base)', value: 'replacement' },
   { title: 'Removal (removes from base)', value: 'removal' }
 ]
 
-// ✅ groupStyleOptions удалено - groupStyle больше не используется
-
 // Computed
 const hasModifiers = computed(() => props.modifierGroups.length > 0)
 
-/**
- * Построение списка доступных target компонентов для replacement модификаторов.
- * Включает компоненты из рецептов в composition варианта.
- */
 interface TargetComponentOption {
   label: string
   value: TargetComponent
@@ -710,20 +517,18 @@ const availableTargetComponents = computed((): TargetComponentOption[] => {
     return options
   }
 
-  // Iterate through variant composition
   for (const comp of props.variantComposition) {
     if (comp.type === 'recipe') {
-      // Get recipe and its components
       const recipe = recipesStore.recipes.find((r: Recipe) => r.id === comp.id)
       if (recipe && recipe.components) {
         for (const recipeComp of recipe.components) {
           const componentName = getRecipeComponentName(recipeComp)
           options.push({
-            label: `${recipe.name} → ${componentName}`,
+            label: `${recipe.name} -> ${componentName}`,
             value: {
               sourceType: 'recipe',
               recipeId: recipe.id,
-              componentId: recipeComp.id,
+              componentId: recipeComp.componentId, // stable entity ID, not row UUID
               componentType: recipeComp.componentType,
               componentName: componentName
             }
@@ -731,10 +536,9 @@ const availableTargetComponents = computed((): TargetComponentOption[] => {
         }
       }
     } else if (comp.type === 'product') {
-      // Direct product in variant composition
       const product = props.productOptions?.find(p => p.id === comp.id)
       options.push({
-        label: `Variant → ${product?.name || 'Unknown product'}`,
+        label: `Variant -> ${product?.name || 'Unknown product'}`,
         value: {
           sourceType: 'variant',
           componentId: comp.id,
@@ -743,10 +547,9 @@ const availableTargetComponents = computed((): TargetComponentOption[] => {
         }
       })
     } else if (comp.type === 'preparation') {
-      // Direct preparation in variant composition
       const dish = props.dishOptions?.find(d => d.id === comp.id && d.type === 'preparation')
       options.push({
-        label: `Variant → ${dish?.name || 'Unknown preparation'}`,
+        label: `Variant -> ${dish?.name || 'Unknown preparation'}`,
         value: {
           sourceType: 'variant',
           componentId: comp.id,
@@ -772,7 +575,6 @@ function getRecipeComponentName(comp: RecipeComponent): string {
 
 function updateTargetComponents(groupIndex: number, selected: TargetComponentOption[]): void {
   const updated = [...props.modifierGroups]
-  // Extract .value from each select option object
   updated[groupIndex].targetComponents = selected.map(opt => opt.value)
   emit('update:modifierGroups', updated)
 }
@@ -789,7 +591,6 @@ function removeTargetComponent(groupIndex: number, targetIndex: number): void {
 
 function getSelectedTargetValues(group: ModifierGroup): TargetComponentOption[] {
   if (!group.targetComponents?.length) return []
-  // Find matching options for v-select with return-object="true"
   return group.targetComponents
     .map((target: TargetComponent) =>
       availableTargetComponents.value.find((opt: TargetComponentOption) =>
@@ -815,7 +616,6 @@ function addModifierGroup(): void {
     name: 'New Modifier Group',
     description: '',
     type: 'addon',
-    // ✅ groupStyle удалено
     isRequired: false,
     minSelection: 0,
     maxSelection: 1,
@@ -856,21 +656,12 @@ function removeOption(groupIndex: number, optionIndex: number): void {
   emit('update:modifierGroups', updated)
 }
 
-// ✅ NEW: Composition editor methods
 function showDishSelector(groupIndex: number, optionIndex: number): void {
-  dishSelectorDialog.value = {
-    show: true,
-    groupIndex,
-    optionIndex
-  }
+  dishSelectorDialog.value = { show: true, groupIndex, optionIndex }
 }
 
 function showProductSelector(groupIndex: number, optionIndex: number): void {
-  productSelectorDialog.value = {
-    show: true,
-    groupIndex,
-    optionIndex
-  }
+  productSelectorDialog.value = { show: true, groupIndex, optionIndex }
 }
 
 function addDishToComposition(dish: DishOption): void {
@@ -884,7 +675,6 @@ function addDishToComposition(dish: DishOption): void {
     option.composition = []
   }
 
-  // ⭐ PHASE 2: For portion-type preparations, auto-set unit to 'portion' and quantity to 1
   const isPortionType = dish.portionType === 'portion' && dish.portionSize
 
   const newComp: MenuComposition = {
@@ -893,7 +683,6 @@ function addDishToComposition(dish: DishOption): void {
     quantity: isPortionType ? 1 : dish.outputQuantity,
     unit: isPortionType ? 'portion' : dish.unit,
     role: 'addon',
-    // ⭐ PHASE 2: Store portion info for UI
     portionType: dish.portionType,
     portionSize: dish.portionSize
   }
@@ -936,7 +725,6 @@ function removeComposition(groupIndex: number, optionIndex: number, compIndex: n
   }
 }
 
-// ✅ NEW: Helper functions for composition display
 function getCompositionIcon(type: 'product' | 'recipe' | 'preparation'): string {
   switch (type) {
     case 'recipe':
@@ -973,191 +761,248 @@ function getCompositionName(comp: MenuComposition): string {
   }
 }
 
-// ⭐ PHASE 2: Check if composition is portion-type (unit selector should be locked)
-function isCompositionPortionType(comp: MenuComposition): boolean {
-  return comp.portionType === 'portion' && !!comp.portionSize
-}
+// Auto-resolve unit from recipe/preparation — user shouldn't choose it manually
+// Uses the recipe's portion_unit (e.g., "piece") not "portion"
+function resolveCompositionUnit(comp: MenuComposition): string {
+  // If unit is already stored, use it
+  if (comp.unit) return comp.unit
 
-// =============================================
-// TEMPLATES FUNCTIONALITY
-// =============================================
-
-interface TemplateDialogState {
-  show: boolean
-  editIndex: number | null // null = add new, number = edit existing
-  name: string
-  description: string
-  selectedModifiers: Map<string, Set<string>> // groupId -> Set of optionIds
-}
-
-const templateDialog = ref<TemplateDialogState>({
-  show: false,
-  editIndex: null,
-  name: '',
-  description: '',
-  selectedModifiers: new Map()
-})
-
-function openAddTemplateDialog(): void {
-  // Initialize with default options selected
-  const defaultSelection = new Map<string, Set<string>>()
-  for (const group of props.modifierGroups) {
-    const defaultOptions = group.options.filter(opt => opt.isDefault).map(opt => opt.id)
-    if (defaultOptions.length > 0) {
-      defaultSelection.set(group.id, new Set(defaultOptions))
-    } else {
-      defaultSelection.set(group.id, new Set())
+  // Auto-resolve from linked dish (recipe/preparation)
+  if (comp.type === 'recipe' || comp.type === 'preparation') {
+    const dish = props.dishOptions?.find(d => d.id === comp.id && d.type === comp.type)
+    if (dish) {
+      // Use the dish's output unit (portion_unit from recipe, e.g., "piece")
+      return dish.unit || 'piece'
     }
   }
 
-  templateDialog.value = {
-    show: true,
-    editIndex: null,
-    name: '',
-    description: '',
-    selectedModifiers: defaultSelection
-  }
-}
-
-function openEditTemplateDialog(index: number): void {
-  const template = props.templates[index]
-  if (!template) return
-
-  // Convert template.selectedModifiers array to Map<string, Set<string>>
-  const selection = new Map<string, Set<string>>()
-  // Initialize all groups with empty sets
-  for (const group of props.modifierGroups) {
-    selection.set(group.id, new Set())
-  }
-  // Fill in selected options from template
-  for (const sel of template.selectedModifiers) {
-    selection.set(sel.groupId, new Set(sel.optionIds))
+  // For products, try to find unit
+  if (comp.type === 'product') {
+    const product = props.productOptions?.find(p => p.id === comp.id)
+    if (product) return product.unit
   }
 
-  templateDialog.value = {
-    show: true,
-    editIndex: index,
-    name: template.name,
-    description: template.description || '',
-    selectedModifiers: selection
-  }
-}
-
-function toggleTemplateOption(groupId: string, optionId: string): void {
-  const group = props.modifierGroups.find(g => g.id === groupId)
-  if (!group) return
-
-  const currentSelection = templateDialog.value.selectedModifiers.get(groupId) || new Set()
-
-  if (currentSelection.has(optionId)) {
-    // Deselect
-    currentSelection.delete(optionId)
-  } else {
-    // Check if this is a single-select group (maxSelection === 1 or isRequired with single option needed)
-    const isSingleSelect = group.maxSelection === 1
-    if (isSingleSelect) {
-      // Clear previous selection and set new one
-      currentSelection.clear()
-    }
-    currentSelection.add(optionId)
-  }
-
-  templateDialog.value.selectedModifiers.set(groupId, currentSelection)
-}
-
-function isTemplateOptionSelected(groupId: string, optionId: string): boolean {
-  return templateDialog.value.selectedModifiers.get(groupId)?.has(optionId) || false
-}
-
-function saveTemplate(): void {
-  if (!templateDialog.value.name.trim()) {
-    return // Name is required
-  }
-
-  // Convert Map<string, Set<string>> to TemplateModifierSelection[]
-  const selectedModifiers: { groupId: string; optionIds: string[] }[] = []
-  templateDialog.value.selectedModifiers.forEach((optionIds, groupId) => {
-    if (optionIds.size > 0) {
-      selectedModifiers.push({
-        groupId,
-        optionIds: Array.from(optionIds)
-      })
-    }
-  })
-
-  const updatedTemplates = [...props.templates]
-
-  if (templateDialog.value.editIndex !== null) {
-    // Edit existing
-    updatedTemplates[templateDialog.value.editIndex] = {
-      ...updatedTemplates[templateDialog.value.editIndex],
-      name: templateDialog.value.name.trim(),
-      description: templateDialog.value.description.trim() || undefined,
-      selectedModifiers
-    }
-  } else {
-    // Add new
-    const newTemplate: VariantTemplate = {
-      id: `tpl-${Date.now()}`,
-      name: templateDialog.value.name.trim(),
-      description: templateDialog.value.description.trim() || undefined,
-      selectedModifiers,
-      sortOrder: updatedTemplates.length
-    }
-    updatedTemplates.push(newTemplate)
-  }
-
-  emit('update:templates', updatedTemplates)
-  templateDialog.value.show = false
-}
-
-function deleteTemplate(index: number): void {
-  const updatedTemplates = [...props.templates]
-  updatedTemplates.splice(index, 1)
-  emit('update:templates', updatedTemplates)
-}
-
-function getTemplateModifiersPreview(template: VariantTemplate): string {
-  const parts: string[] = []
-  for (const sel of template.selectedModifiers) {
-    const group = props.modifierGroups.find(g => g.id === sel.groupId)
-    if (group) {
-      const optionNames = sel.optionIds
-        .map(oid => group.options.find(o => o.id === oid)?.name)
-        .filter(Boolean)
-      if (optionNames.length > 0) {
-        parts.push(optionNames.join(', '))
-      }
-    }
-  }
-  return parts.length > 0 ? parts.join(' | ') : 'No modifiers selected'
+  return 'piece'
 }
 </script>
 
 <style scoped lang="scss">
-.modifiers-editor-widget {
-  border: 2px solid rgba(var(--v-theme-primary), 0.2);
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
 }
 
-.option-item {
-  :deep(.v-list-item__content) {
-    overflow: visible;
+// ==========================================
+// Modifier Panel (expansion panel)
+// ==========================================
+.modifier-panel {
+  margin-bottom: 12px !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+
+  &--required {
+    border-left: 4px solid var(--color-error) !important;
+  }
+
+  &--optional {
+    border-left: 4px solid var(--color-info) !important;
+  }
+
+  &__title {
+    min-height: 56px !important;
+    font-size: 15px;
   }
 }
 
+// ==========================================
+// Section blocks (Settings / Options)
+// ==========================================
+.section-block {
+  border-radius: 10px;
+  overflow: hidden;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  &__body {
+    padding: 16px;
+  }
+
+  // Settings section
+  &--settings {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+
+    .section-block__header {
+      background: rgba(255, 255, 255, 0.04);
+      color: rgba(255, 255, 255, 0.6);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+  }
+
+  // Options section
+  &--options {
+    border: 1px solid rgba(163, 149, 233, 0.2);
+    background: rgba(163, 149, 233, 0.03);
+
+    .section-block__header {
+      background: rgba(163, 149, 233, 0.08);
+      color: var(--color-primary);
+      border-bottom: 1px solid rgba(163, 149, 233, 0.12);
+
+      &--options {
+        display: flex;
+        justify-content: space-between;
+      }
+    }
+  }
+}
+
+// ==========================================
+// Options list
+// ==========================================
+.empty-options {
+  padding: 24px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 14px;
+}
+
+.options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.option-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  overflow: hidden;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    gap: 8px;
+  }
+
+  &__number {
+    font-size: 12px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.3);
+    margin-right: 4px;
+  }
+
+  &__name {
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  &__price {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--color-warning);
+    white-space: nowrap;
+  }
+
+  &__body {
+    padding: 14px;
+  }
+}
+
+// ==========================================
+// Composition editor
+// ==========================================
 .composition-editor {
-  background: rgba(var(--v-theme-surface-variant), 0.3);
-  border: 1px solid rgba(var(--v-border-color), 0.2);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+}
+
+.composition-empty {
+  text-align: center;
+  padding: 14px;
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 13px;
+
+  &--warning {
+    color: rgba(255, 183, 77, 0.8);
+    background: rgba(255, 183, 77, 0.08);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+.composition-list {
+  padding: 8px;
 }
 
 .composition-item {
-  background: rgba(var(--v-theme-surface), 0.8);
-  border: 1px solid rgba(var(--v-border-color), 0.1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+
+  &__name {
+    flex: 1;
+    font-size: 13px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__unit {
+    flex-shrink: 0;
+    min-width: 60px;
+    justify-content: center;
+  }
 }
 
-.options-grid {
+// ==========================================
+// Accent bars
+// ==========================================
+.accent-bar {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+
+  &--warning {
+    background: rgba(255, 176, 118, 0.12);
+    border-left: 4px solid var(--color-warning);
+    color: var(--color-warning);
+  }
 }
 </style>

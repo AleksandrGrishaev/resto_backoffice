@@ -1,267 +1,276 @@
 <template>
-  <base-dialog
-    v-model="dialogModel"
-    :title="isEdit ? 'Edit Dish' : 'Add Dish'"
-    :loading="loading"
-    :disabled="!isFormValid"
-    max-width="1200"
-    cancel-text="Cancel"
-    confirm-text="Save"
-    @cancel="handleCancel"
-    @confirm="handleSubmit"
-  >
-    <v-form ref="form" v-model="isValid">
-      <!-- ✨ NEW: Вкладки -->
-      <v-tabs v-model="currentTab" bg-color="transparent" class="mb-4">
-        <v-tab value="basic">
-          <v-icon icon="mdi-information-outline" size="20" class="mr-2" />
-          Basic
-        </v-tab>
-        <v-tab value="variants">
-          <v-icon icon="mdi-format-list-bulleted" size="20" class="mr-2" />
-          Variants
-          <v-badge
-            v-if="formData.variants.length > 0"
-            :content="formData.variants.length"
-            color="primary"
-            inline
-            class="ml-2"
-          />
-        </v-tab>
-        <v-tab v-if="formData.dishType !== 'simple'" value="modifiers">
-          <v-icon icon="mdi-puzzle-outline" size="20" class="mr-2" />
-          Modifiers
-          <v-badge
-            v-if="formData.modifierGroups && formData.modifierGroups.length > 0"
-            :content="formData.modifierGroups.length"
-            color="primary"
-            inline
-            class="ml-2"
-          />
-        </v-tab>
-        <v-tab v-if="formData.dishType !== 'simple'" value="templates">
-          <v-icon icon="mdi-content-copy" size="20" class="mr-2" />
-          Templates
-          <v-badge
-            v-if="formData.templates && formData.templates.length > 0"
-            :content="formData.templates.length"
-            color="primary"
-            inline
-            class="ml-2"
-          />
-        </v-tab>
-      </v-tabs>
+  <v-dialog :model-value="dialogModel" max-width="1200" persistent @click:outside="handleCancel">
+    <v-card class="base-dialog-card">
+      <v-card-title class="d-flex align-center pa-4 base-dialog-card__title">
+        <span class="text-h5">{{ isEdit ? 'Edit Dish' : 'Add Dish' }}</span>
+        <v-chip v-if="isDraft" color="warning" size="small" class="ml-3">Draft</v-chip>
+        <v-spacer />
+      </v-card-title>
 
-      <v-window v-model="currentTab">
-        <!-- Вкладка "Основное" -->
-        <v-window-item value="basic">
-          <div class="tab-content">
-            <!-- Категория -->
-            <v-select
-              v-model="formData.categoryId"
-              :items="hierarchicalCategories"
-              item-title="displayName"
-              item-value="id"
-              label="Category"
-              :rules="[v => !!v || 'Required field']"
-              hide-details="auto"
-              class="mb-4"
-            >
-              <template #item="{ props: itemProps, item }">
-                <v-list-item v-bind="itemProps" :class="{ 'pl-8': item.raw.isSubcategory }">
-                  <template v-if="item.raw.isSubcategory" #prepend>
-                    <v-icon size="16" class="mr-1">mdi-subdirectory-arrow-right</v-icon>
-                  </template>
-                </v-list-item>
-              </template>
-            </v-select>
+      <v-card-text class="pa-4 base-dialog-card__content">
+        <v-form ref="form" v-model="isValid">
+          <!-- Tabs -->
+          <div class="d-flex align-center mb-6">
+            <v-tabs v-model="currentTab" class="menu-item-tabs flex-grow-1" height="52">
+              <v-tab value="basic" class="tab-basic">
+                <v-icon icon="mdi-information-outline" size="22" class="mr-2" />
+                Basic
+              </v-tab>
+              <v-tab value="variants" class="tab-variants">
+                <v-icon icon="mdi-format-list-bulleted" size="22" class="mr-2" />
+                Variants
+                <v-badge
+                  v-if="formData.variants.length > 0"
+                  :content="formData.variants.length"
+                  color="info"
+                  inline
+                  class="ml-2"
+                />
+              </v-tab>
+              <v-tab v-if="showAdvancedTab" value="modifiers" class="tab-modifiers">
+                <v-icon icon="mdi-puzzle-outline" size="22" class="mr-2" />
+                Modifiers
+                <v-badge
+                  v-if="modifierCount > 0"
+                  :content="modifierCount"
+                  color="deep-purple"
+                  inline
+                  class="ml-2"
+                />
+              </v-tab>
+              <v-tab v-if="showAdvancedTab" value="templates" class="tab-templates">
+                <v-icon icon="mdi-content-copy" size="22" class="mr-2" />
+                Templates
+                <v-badge
+                  v-if="templateCount > 0"
+                  :content="templateCount"
+                  color="teal"
+                  inline
+                  class="ml-2"
+                />
+              </v-tab>
+            </v-tabs>
 
-            <!-- Зона приготовления -->
-            <div class="mb-4">
-              <v-btn-toggle
-                v-model="formData.type"
-                mandatory
-                rounded="lg"
-                color="primary"
-                class="w-100"
-              >
-                <v-btn value="food" class="flex-grow-1">
-                  <v-icon icon="mdi-silverware-fork-knife" size="20" class="mr-2" />
-                  Kitchen
-                </v-btn>
-                <v-btn value="beverage" class="flex-grow-1">
-                  <v-icon icon="mdi-coffee" size="20" class="mr-2" />
-                  Bar
-                </v-btn>
-              </v-btn-toggle>
-            </div>
-
-            <!-- ✨ Индикатор типа блюда -->
-            <v-alert
-              v-if="formData.dishType !== 'simple'"
-              type="info"
-              density="compact"
+            <v-btn
+              v-if="!showAdvancedTab"
               variant="tonal"
-              class="mb-4"
-            >
-              <div class="text-body-2">
-                <strong>Dish Type:</strong>
-                <template v-if="formData.dishType === 'modifiable'">
-                  Customizable Dish (with required/optional modifiers)
-                </template>
-              </div>
-            </v-alert>
-
-            <!-- Variantless mode checkbox (only for modifiable dishes) -->
-            <v-checkbox
-              v-if="formData.dishType === 'modifiable'"
-              v-model="isVariantlessMode"
-              label="Build from modifiers only (no base price)"
-              hint="Price will come entirely from selected modifiers. Use for dishes like Custom Breakfast."
-              persistent-hint
               color="primary"
-              class="mb-4"
-            />
-
-            <!-- Название -->
-            <v-text-field
-              v-model="formData.name"
-              label="Dish Name"
-              :rules="[v => !!v || 'Required field']"
-              hide-details="auto"
-              class="mb-4"
-            />
-
-            <!-- Описание -->
-            <v-textarea
-              v-model="formData.description"
-              label="Description"
-              rows="3"
-              hide-details="auto"
-              class="mb-4"
-            />
-
-            <!-- Статус -->
-            <div v-if="isEdit" class="mb-4">
-              <v-btn-toggle
-                v-model="formData.isActive"
-                mandatory
-                rounded="lg"
-                color="primary"
-                class="w-100"
-              >
-                <v-btn :value="true" class="flex-grow-1">Active</v-btn>
-                <v-btn :value="false" class="flex-grow-1">Inactive</v-btn>
-              </v-btn-toggle>
-            </div>
-          </div>
-        </v-window-item>
-
-        <!-- Вкладка "Варианты" -->
-        <v-window-item value="variants">
-          <div class="tab-content">
-            <!-- Variantless mode message -->
-            <v-alert
-              v-if="isVariantlessMode"
-              type="info"
-              variant="tonal"
-              density="comfortable"
-              class="mb-4"
+              size="small"
+              class="add-tab-btn ml-2"
+              @click="enableAdvancedTab"
             >
-              <div class="text-body-2">
-                <strong>Build from modifiers only mode enabled</strong>
-                <div class="mt-2">
-                  Variants are disabled. The dish price will be calculated entirely from selected
-                  modifiers. This is perfect for dishes like Custom Breakfast where customers choose
-                  all components.
+              <v-icon icon="mdi-plus" size="18" class="mr-1" />
+              Modifiers & Templates
+            </v-btn>
+          </div>
+
+          <v-window v-model="currentTab">
+            <!-- ====== BASIC TAB ====== -->
+            <v-window-item value="basic">
+              <div class="tab-content">
+                <!-- Name (first!) -->
+                <v-text-field
+                  v-model="formData.name"
+                  label="Dish Name"
+                  :rules="[v => !!v || 'Required field']"
+                  hide-details="auto"
+                  class="mb-5"
+                  autofocus
+                />
+
+                <!-- Category -->
+                <v-select
+                  v-model="formData.categoryId"
+                  :items="hierarchicalCategories"
+                  item-title="displayName"
+                  item-value="id"
+                  label="Category"
+                  hide-details="auto"
+                  class="mb-5"
+                >
+                  <template #item="{ props: itemProps, item }">
+                    <v-list-item v-bind="itemProps" :class="{ 'pl-8': item.raw.isSubcategory }">
+                      <template v-if="item.raw.isSubcategory" #prepend>
+                        <v-icon size="16" class="mr-1">mdi-subdirectory-arrow-right</v-icon>
+                      </template>
+                    </v-list-item>
+                  </template>
+                </v-select>
+
+                <!-- Department toggle -->
+                <div class="section-label mb-2">Department</div>
+                <v-btn-toggle
+                  v-model="formData.type"
+                  mandatory
+                  rounded="lg"
+                  color="primary"
+                  class="w-100 mb-5 dept-toggle"
+                >
+                  <v-btn value="food" class="flex-grow-1" height="48">
+                    <v-icon icon="mdi-silverware-fork-knife" size="22" class="mr-2" />
+                    Kitchen
+                  </v-btn>
+                  <v-btn value="beverage" class="flex-grow-1" height="48">
+                    <v-icon icon="mdi-coffee" size="22" class="mr-2" />
+                    Bar
+                  </v-btn>
+                </v-btn-toggle>
+
+                <!-- Description -->
+                <v-textarea
+                  v-model="formData.description"
+                  label="Description"
+                  rows="3"
+                  hide-details="auto"
+                  class="mb-5"
+                />
+
+                <!-- Status (edit only) -->
+                <div v-if="isEdit">
+                  <div class="section-label mb-2">Status</div>
+                  <v-btn-toggle
+                    v-model="formData.isActive"
+                    mandatory
+                    rounded="lg"
+                    class="w-100 status-toggle"
+                  >
+                    <v-btn :value="true" class="flex-grow-1" height="48" color="success">
+                      <v-icon icon="mdi-check-circle" size="20" class="mr-2" />
+                      Active
+                    </v-btn>
+                    <v-btn :value="false" class="flex-grow-1" height="48" color="error">
+                      <v-icon icon="mdi-close-circle" size="20" class="mr-2" />
+                      Inactive
+                    </v-btn>
+                  </v-btn-toggle>
                 </div>
               </div>
-            </v-alert>
+            </v-window-item>
 
-            <!-- Normal variants mode -->
-            <template v-else>
-              <div class="variants-header d-flex align-center mb-4">
-                <div class="text-subtitle-1">Dish Variants</div>
-                <v-spacer />
-                <v-btn color="primary" variant="text" @click="addVariant">
-                  <v-icon icon="mdi-plus" size="20" class="mr-2" />
-                  Add Variant
-                </v-btn>
+            <!-- ====== VARIANTS TAB ====== -->
+            <v-window-item value="variants">
+              <div class="tab-content">
+                <div class="d-flex align-center mb-4">
+                  <div class="section-title text-info">
+                    <v-icon icon="mdi-format-list-bulleted" size="22" class="mr-2" color="info" />
+                    Dish Variants
+                  </div>
+                  <v-spacer />
+                  <v-btn
+                    color="info"
+                    variant="tonal"
+                    size="default"
+                    height="44"
+                    @click="addVariant"
+                  >
+                    <v-icon icon="mdi-plus" size="20" class="mr-1" />
+                    Add Variant
+                  </v-btn>
+                </div>
+
+                <div class="variants-list">
+                  <menu-item-variant-component
+                    v-for="(variant, index) in formData.variants"
+                    :key="variant.id"
+                    :variant="variant"
+                    :index="index"
+                    :can-delete="formData.variants.length > 1"
+                    :item-name="formData.name"
+                    :dish-type="effectiveDishType"
+                    :dish-options="dishOptions"
+                    :product-options="productOptions"
+                    :unit-options="unitOptions"
+                    :role-options="roleOptions"
+                    class="mb-4"
+                    @update:variant="updateVariant(index, $event)"
+                    @delete="removeVariant(index)"
+                  />
+                </div>
               </div>
+            </v-window-item>
 
-              <div class="variants-list">
-                <menu-item-variant-component
-                  v-for="(variant, index) in formData.variants"
-                  :key="variant.id"
-                  :variant="variant"
-                  :index="index"
-                  :can-delete="formData.variants.length > 1"
-                  :item-name="formData.name"
-                  :dish-type="formData.dishType"
+            <!-- ====== MODIFIERS TAB ====== -->
+            <v-window-item v-if="showAdvancedTab" value="modifiers">
+              <div class="tab-content">
+                <div class="accent-bar accent-bar--purple-subtle mb-4">
+                  <v-icon icon="mdi-puzzle" size="20" class="mr-2" />
+                  <span>
+                    <strong>Required</strong>
+                    = customer must choose.
+                    <strong class="ml-2">Optional</strong>
+                    = customer can add.
+                  </span>
+                </div>
+
+                <modifiers-editor-widget
+                  :modifier-groups="formData.modifierGroups"
+                  :dish-type="effectiveDishType"
                   :dish-options="dishOptions"
-                  :product-options="productOptions"
-                  :unit-options="unitOptions"
-                  :role-options="roleOptions"
-                  class="mb-3"
-                  @update:variant="updateVariant(index, $event)"
-                  @delete="removeVariant(index)"
+                  :product-options="allProductOptions"
+                  :variant-composition="currentVariantComposition"
+                  @update:modifier-groups="formData.modifierGroups = $event"
                 />
               </div>
-            </template>
-          </div>
-        </v-window-item>
+            </v-window-item>
 
-        <!-- Вкладка "Модификаторы" -->
-        <v-window-item value="modifiers">
-          <div class="tab-content">
-            <v-alert type="info" variant="tonal" density="compact" class="mb-4">
-              <div class="text-body-2">
-                Modifiers apply to all variants of the dish.
-                <ul class="mt-2 mb-0">
-                  <li>
-                    <strong>Required modifiers:</strong>
-                    Customer must choose (e.g., side dish, sauce)
-                  </li>
-                  <li>
-                    <strong>Optional modifiers:</strong>
-                    Customer can add (e.g., toppings, syrups)
-                  </li>
-                </ul>
+            <!-- ====== TEMPLATES TAB ====== -->
+            <v-window-item v-if="showAdvancedTab" value="templates">
+              <div class="tab-content">
+                <div class="accent-bar accent-bar--teal mb-4">
+                  <v-icon icon="mdi-lightning-bolt" size="20" class="mr-2" />
+                  <span>Preset modifier combos for quick POS selection</span>
+                </div>
+
+                <templates-editor-widget
+                  :templates="formData.templates"
+                  :modifier-groups="formData.modifierGroups"
+                  @update:templates="formData.templates = $event"
+                />
               </div>
-            </v-alert>
+            </v-window-item>
+          </v-window>
+        </v-form>
+      </v-card-text>
 
-            <modifiers-editor-widget
-              :modifier-groups="formData.modifierGroups"
-              :templates="formData.templates"
-              :dish-type="formData.dishType"
-              :dish-options="dishOptions"
-              :product-options="allProductOptions"
-              :variant-composition="currentVariantComposition"
-              @update:modifier-groups="formData.modifierGroups = $event"
-              @update:templates="formData.templates = $event"
-            />
-          </div>
-        </v-window-item>
+      <v-divider />
 
-        <!-- Вкладка "Шаблоны" -->
-        <v-window-item value="templates">
-          <div class="tab-content">
-            <v-alert type="info" variant="tonal" density="compact" class="mb-4">
-              <div class="text-body-2">
-                Templates are preset modifier combinations for quick selection in POS.
-              </div>
-            </v-alert>
-
-            <!-- TODO: Создать TemplatesEditorWidget -->
-            <div class="text-center py-8 text-medium-emphasis">
-              <v-icon icon="mdi-content-copy" size="48" />
-              <div class="mt-2">Template editor will be added later</div>
-            </div>
-          </div>
-        </v-window-item>
-      </v-window>
-    </v-form>
-  </base-dialog>
+      <v-card-actions class="pa-4 base-dialog-card__actions justify-end">
+        <v-btn
+          v-if="!isEdit"
+          variant="outlined"
+          color="warning"
+          class="text-uppercase mr-2"
+          height="44"
+          :loading="savingDraft"
+          :disabled="!canSaveDraft || loading"
+          @click="handleSaveDraft"
+        >
+          <v-icon icon="mdi-content-save-outline" size="20" class="mr-1" />
+          Save Draft
+        </v-btn>
+        <v-btn
+          variant="text"
+          class="text-uppercase mr-2"
+          height="44"
+          :disabled="loading"
+          @click="handleCancel"
+        >
+          Cancel
+        </v-btn>
+        <v-btn
+          color="primary"
+          :variant="isFormValid ? 'flat' : 'outlined'"
+          class="text-uppercase"
+          height="44"
+          :loading="loading"
+          :disabled="!isFormValid || loading"
+          @click="handleSubmit"
+        >
+          {{ isEdit ? 'Update' : 'Save' }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script setup lang="ts">
@@ -270,10 +279,9 @@ import { useMenuStore } from '@/stores/menu'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes/recipesStore'
 import type { MenuItem, CreateMenuItemDto, MenuItemVariant, DishType } from '@/stores/menu'
-import BaseDialog from '@/components/base/BaseDialog.vue'
 import MenuItemVariantComponent from './MenuItemVariant.vue'
 import ModifiersEditorWidget from '@/views/recipes/components/widgets/ModifiersEditorWidget.vue'
-import { ENV } from '@/config/environment'
+import TemplatesEditorWidget from './widgets/TemplatesEditorWidget.vue'
 
 const MODULE_NAME = 'MenuItemDialog'
 
@@ -281,13 +289,11 @@ const MODULE_NAME = 'MenuItemDialog'
 interface Props {
   modelValue: boolean
   item?: MenuItem | null
-  dishType?: DishType | null // ✨ NEW: Тип блюда для создания
 }
 
 const props = withDefaults(defineProps<Props>(), {
   modelValue: false,
-  item: null,
-  dishType: null
+  item: null
 })
 
 const emit = defineEmits<{
@@ -303,10 +309,11 @@ const recipesStore = useRecipesStore()
 // State
 const form = ref()
 const loading = ref(false)
+const savingDraft = ref(false)
 const isValid = ref(false)
-const currentTab = ref('basic') // ✨ NEW: Текущая вкладка
+const currentTab = ref('basic')
+const showAdvancedTab = ref(false)
 
-// Создаем дефолтный вариант
 function createDefaultVariant(): MenuItemVariant {
   return {
     id: crypto.randomUUID(),
@@ -314,7 +321,8 @@ function createDefaultVariant(): MenuItemVariant {
     price: 0,
     isActive: true,
     sortOrder: 0,
-    composition: []
+    composition: [],
+    portionMultiplier: 1
   }
 }
 
@@ -323,50 +331,24 @@ const formData = ref({
   name: '',
   description: '',
   type: 'food' as 'food' | 'beverage',
-  dishType: 'simple' as DishType, // ✨ NEW: тип блюда
+  dishType: 'simple' as DishType,
   isActive: true,
   sortOrder: 0,
   variants: [createDefaultVariant()],
-  modifierGroups: [] as any[], // ✨ NEW: Модификаторы на уровне MenuItem
-  templates: [] as any[] // ✨ NEW: Шаблоны на уровне MenuItem
+  modifierGroups: [] as any[],
+  templates: [] as any[]
 })
 
 // Computed
 const isEdit = computed(() => !!props.item)
-const categories = computed(() => menuStore.activeCategories)
 
-// Variantless mode: price comes entirely from modifiers
-const isVariantlessMode = computed({
-  get: () => {
-    // Variantless mode only applies to modifiable dishes
-    if (formData.value.dishType !== 'modifiable') return false
-    const v = formData.value.variants[0]
-    return v?.name === '' && v?.price === 0
-  },
-  set: (val: boolean) => {
-    if (val) {
-      // Set variantless mode - empty name, price 0
-      formData.value.variants = [
-        {
-          id: formData.value.variants[0]?.id || crypto.randomUUID(),
-          name: '',
-          price: 0,
-          isActive: true,
-          sortOrder: 0,
-          composition: [],
-          modifierMultiplier: 1
-        }
-      ]
-    } else {
-      // Reset to normal variant
-      if (formData.value.variants[0]) {
-        formData.value.variants[0].name = 'Standard'
-      }
-    }
-  }
+// Auto-detect dishType from modifiers
+const effectiveDishType = computed<DishType>(() => {
+  return formData.value.modifierGroups && formData.value.modifierGroups.length > 0
+    ? 'modifiable'
+    : 'simple'
 })
 
-// Hierarchical categories for dropdown with visual indentation
 const hierarchicalCategories = computed(() => {
   const result: Array<{
     id: string
@@ -376,7 +358,6 @@ const hierarchicalCategories = computed(() => {
     parentName?: string
   }> = []
 
-  // First, add root categories
   const rootCategories = menuStore.activeRootCategories
 
   for (const rootCat of rootCategories) {
@@ -387,7 +368,6 @@ const hierarchicalCategories = computed(() => {
       isSubcategory: false
     })
 
-    // Then add its subcategories right after
     const subcategories = menuStore.getActiveSubcategories(rootCat.id)
     for (const subCat of subcategories) {
       result.push({
@@ -408,14 +388,10 @@ const dialogModel = computed({
   set: value => emit('update:modelValue', value)
 })
 
-// ✅ NEW: Current menu item department
 const currentMenuItemDepartment = computed<'kitchen' | 'bar'>(() => {
   return formData.value.type === 'food' ? 'kitchen' : 'bar'
 })
 
-// Опции для блюд (рецепты + полуфабрикаты)
-// ✅ FILTERED by menu item department
-// ⭐ PHASE 2: Include portionType and portionSize
 const dishOptions = computed(() => {
   const options: Array<{
     id: string
@@ -431,9 +407,7 @@ const dishOptions = computed(() => {
   try {
     const menuDepartment = currentMenuItemDepartment.value
 
-    // ✅ Рецепты - только из того же департамента
     const activeRecipes = recipesStore.activeRecipes || []
-    const recipesBeforeFilter = activeRecipes.length
     const filteredRecipes = activeRecipes.filter(recipe => recipe.department === menuDepartment)
 
     filteredRecipes.forEach(recipe => {
@@ -446,18 +420,12 @@ const dishOptions = computed(() => {
       })
     })
 
-    // ✅ Полуфабрикаты - только из того же департамента
-    // ⭐ PHASE 2: Include portionType and portionSize
     const activePreparations = recipesStore.activePreparations || []
-    let preparationsBeforeFilter = 0
-    let preparationsAfterFilter = 0
 
     if (Array.isArray(activePreparations)) {
-      preparationsBeforeFilter = activePreparations.length
       const filteredPreparations = activePreparations.filter(
         prep => prep.department === menuDepartment
       )
-      preparationsAfterFilter = filteredPreparations.length
 
       filteredPreparations.forEach(prep => {
         options.push({
@@ -467,19 +435,11 @@ const dishOptions = computed(() => {
           unit: prep.outputUnit || 'gram',
           outputQuantity: prep.outputQuantity || 1,
           category: prep.type,
-          // ⭐ PHASE 2: Portion type support
           portionType: prep.portionType,
           portionSize: prep.portionSize
         })
       })
     }
-
-    console.log('🔍 [MenuItemDialog] Dish options filtering:', {
-      menuDepartment,
-      recipes: { total: recipesBeforeFilter, filtered: filteredRecipes.length },
-      preparations: { total: preparationsBeforeFilter, filtered: preparationsAfterFilter },
-      totalDishOptions: options.length
-    })
   } catch (error) {
     console.warn('Error building dish options:', error)
   }
@@ -487,8 +447,6 @@ const dishOptions = computed(() => {
   return options.sort((a, b) => a.name.localeCompare(b.name))
 })
 
-// Опции для продуктов (только с canBeSold = true)
-// ✅ FILTERED by menu item department
 const productOptions = computed(() => {
   const options: Array<{
     id: string
@@ -501,11 +459,8 @@ const productOptions = computed(() => {
   try {
     const menuDepartment = currentMenuItemDepartment.value
 
-    // ✅ FIX: Use sellableProducts instead of activeProducts (which doesn't exist)
     const sellableProducts = productsStore.sellableProducts || []
-    const productsBeforeFilter = sellableProducts.length
 
-    // ✅ FILTER: Only products used in current menu item's department
     const filteredProducts = sellableProducts.filter(
       product => product.usedInDepartments && product.usedInDepartments.includes(menuDepartment)
     )
@@ -519,12 +474,6 @@ const productOptions = computed(() => {
         costPerUnit: product.baseCostPerUnit
       })
     })
-
-    console.log('🔍 [MenuItemDialog] Product options filtering:', {
-      menuDepartment,
-      products: { total: productsBeforeFilter, filtered: filteredProducts.length },
-      totalProductOptions: options.length
-    })
   } catch (error) {
     console.warn('Error building product options:', error)
   }
@@ -532,8 +481,6 @@ const productOptions = computed(() => {
   return options.sort((a, b) => a.name.localeCompare(b.name))
 })
 
-// Опции для всех продуктов (БЕЗ фильтра canBeSold - для модификаторов)
-// Используется в ModifiersEditorWidget для replacement модификаторов
 const allProductOptions = computed(() => {
   const options: Array<{
     id: string
@@ -546,10 +493,8 @@ const allProductOptions = computed(() => {
   try {
     const menuDepartment = currentMenuItemDepartment.value
 
-    // Все активные продукты (не только sellable)
     const allProducts = productsStore.products.filter(p => p.isActive) || []
 
-    // Фильтруем только по департаменту
     const filteredProducts = allProducts.filter(
       product => product.usedInDepartments && product.usedInDepartments.includes(menuDepartment)
     )
@@ -570,17 +515,13 @@ const allProductOptions = computed(() => {
   return options.sort((a, b) => a.name.localeCompare(b.name))
 })
 
-// Composition текущего варианта (для target component selection в модификаторах)
 const currentVariantComposition = computed(() => {
-  // Берём composition первого варианта (обычно основной)
   if (formData.value.variants.length > 0) {
     return formData.value.variants[0].composition || []
   }
   return []
 })
 
-// Опции для единиц измерения
-// ⭐ PHASE 2: Added 'portion' for portion-type preparations
 const unitOptions = computed(() => [
   { title: 'Grams', value: 'gram' },
   { title: 'Milliliters', value: 'ml' },
@@ -590,7 +531,6 @@ const unitOptions = computed(() => [
   { title: 'Portions', value: 'portion' }
 ])
 
-// Опции для ролей компонентов
 const roleOptions = computed(() => [
   { title: 'Main', value: 'main' },
   { title: 'Side', value: 'garnish' },
@@ -598,18 +538,24 @@ const roleOptions = computed(() => [
   { title: 'Add-on', value: 'addon' }
 ])
 
-const isFormValid = computed(() => {
-  // In variantless mode, price=0 is allowed
-  const priceValid = isVariantlessMode.value
-    ? true
-    : formData.value.variants.every(v => v.price > 0)
+const isDraft = computed(() => {
+  return isEdit.value && props.item?.status === 'draft'
+})
 
+const canSaveDraft = computed(() => {
+  return formData.value.name.trim().length > 0
+})
+
+const modifierCount = computed(() => formData.value.modifierGroups?.length || 0)
+const templateCount = computed(() => formData.value.templates?.length || 0)
+
+const isFormValid = computed(() => {
   return (
     isValid.value &&
     formData.value.name.trim().length > 0 &&
     formData.value.categoryId &&
     formData.value.variants.length > 0 &&
-    priceValid
+    formData.value.variants.every(v => v.price > 0)
   )
 })
 
@@ -646,19 +592,93 @@ function resetForm() {
     name: '',
     description: '',
     type: 'food',
-    dishType: 'simple', // ✨ NEW: по умолчанию simple
+    dishType: 'simple',
     isActive: true,
     sortOrder: 0,
     variants: [createDefaultVariant()],
-    modifierGroups: [], // ✨ NEW
-    templates: [] // ✨ NEW
+    modifierGroups: [],
+    templates: []
   }
-  currentTab.value = 'basic' // ✨ Сбросить на первую вкладку
+  currentTab.value = 'basic'
+  showAdvancedTab.value = false
+}
+
+function enableAdvancedTab() {
+  showAdvancedTab.value = true
+  currentTab.value = 'modifiers'
 }
 
 function handleCancel() {
   resetForm()
   dialogModel.value = false
+}
+
+async function handleSaveDraft() {
+  if (!canSaveDraft.value) return
+
+  try {
+    savingDraft.value = true
+
+    const processedVariants = formData.value.variants.map((variant, index) => ({
+      id: variant.id,
+      name: variant.name?.trim() || '',
+      price: variant.price || 0,
+      isActive: variant.isActive ?? true,
+      sortOrder: index,
+      portionMultiplier: variant.portionMultiplier,
+      composition:
+        variant.composition?.map(comp => ({
+          type: comp.type,
+          id: comp.id,
+          quantity: comp.quantity,
+          unit: comp.unit,
+          role: comp.role,
+          notes: comp.notes
+        })) || []
+    }))
+
+    const itemData: CreateMenuItemDto = {
+      categoryId: formData.value.categoryId || '',
+      name: formData.value.name.trim(),
+      description: formData.value.description?.trim(),
+      type: formData.value.type,
+      department: formData.value.type === 'food' ? 'kitchen' : 'bar',
+      dishType: effectiveDishType.value,
+      modifierGroups: formData.value.modifierGroups || [],
+      templates: formData.value.templates || [],
+      status: 'draft',
+      variants: processedVariants.map(v => ({
+        name: v.name,
+        price: v.price,
+        isActive: v.isActive,
+        sortOrder: v.sortOrder,
+        portionMultiplier: v.portionMultiplier,
+        composition: v.composition
+      }))
+    }
+
+    if (isEdit.value && props.item) {
+      await menuStore.updateMenuItem(props.item.id, {
+        ...itemData,
+        isActive: false,
+        sortOrder: formData.value.sortOrder,
+        variants: processedVariants
+      })
+    } else {
+      await menuStore.addMenuItem({
+        ...itemData,
+        sortOrder: getNextSortOrder(formData.value.categoryId)
+      })
+    }
+
+    emit('saved')
+    dialogModel.value = false
+    resetForm()
+  } catch (error) {
+    console.error('Failed to save draft:', error)
+  } finally {
+    savingDraft.value = false
+  }
 }
 
 async function handleSubmit() {
@@ -667,7 +687,6 @@ async function handleSubmit() {
   try {
     loading.value = true
 
-    // Обработка вариантов перед сохранением
     const processedVariants = formData.value.variants.map((variant, index) => ({
       id: variant.id,
       name: variant.name?.trim() || '',
@@ -691,10 +710,10 @@ async function handleSubmit() {
       name: formData.value.name.trim(),
       description: formData.value.description?.trim(),
       type: formData.value.type,
-      department: formData.value.type === 'food' ? 'kitchen' : 'bar', // ✨ NEW: department
-      dishType: formData.value.dishType, // ✨ NEW: тип блюда
-      modifierGroups: formData.value.modifierGroups || [], // ✨ NEW
-      templates: formData.value.templates || [], // ✨ NEW
+      department: formData.value.type === 'food' ? 'kitchen' : 'bar',
+      dishType: effectiveDishType.value,
+      modifierGroups: formData.value.modifierGroups || [],
+      templates: formData.value.templates || [],
       variants: processedVariants.map(v => ({
         name: v.name,
         price: v.price,
@@ -735,82 +754,34 @@ async function handleSubmit() {
 watch(
   () => props.item,
   newItem => {
-    console.log('🔍 [MenuItemDialog] Watch props.item triggered:', {
-      hasItem: !!newItem,
-      dishTypeProp: props.dishType,
-      currentFormDishType: formData.value.dishType
-    })
-
     if (newItem) {
-      console.log('📝 [MenuItemDialog] Loading existing item:', {
-        name: newItem.name,
-        dishType: newItem.dishType
-      })
       formData.value = {
         categoryId: newItem.categoryId,
         name: newItem.name,
         description: newItem.description || '',
         type: newItem.type,
-        dishType: newItem.dishType || 'simple', // ✨ NEW: тип блюда из существующего item (fallback to 'simple')
+        dishType: newItem.dishType || 'simple',
         isActive: newItem.isActive,
         sortOrder: newItem.sortOrder,
         variants: newItem.variants.map(variant => ({
           ...variant,
           composition: variant.composition || []
         })),
-        modifierGroups: newItem.modifierGroups || [], // ✨ NEW
-        templates: newItem.templates || [] // ✨ NEW
+        modifierGroups: newItem.modifierGroups || [],
+        templates: newItem.templates || []
       }
-    } else if (props.dishType) {
-      // ✨ NEW: Создание нового блюда с выбранным типом
-      console.log('✨ [MenuItemDialog] Creating new item with dishType:', props.dishType)
-      resetForm()
-      formData.value.dishType = props.dishType
-      console.log('✅ [MenuItemDialog] dishType set to:', formData.value.dishType)
     } else {
-      console.log('🔄 [MenuItemDialog] Resetting form (no item, no dishType)')
       resetForm()
     }
   },
   { immediate: true }
 )
 
-// ✨ NEW: Watch dishType prop separately
-watch(
-  () => props.dishType,
-  newDishType => {
-    console.log('🔧 [MenuItemDialog] Watch dishType triggered:', {
-      newDishType,
-      currentDishType: formData.value.dishType,
-      isOpen: props.modelValue
-    })
-
-    if (newDishType && !props.item) {
-      console.log('✨ [MenuItemDialog] Setting dishType from prop:', newDishType)
-      formData.value.dishType = newDishType
-      console.log('✅ [MenuItemDialog] dishType updated to:', formData.value.dishType)
-    }
-  }
-)
-
-// Watch dialog state
 watch(
   () => props.modelValue,
   isOpen => {
-    console.log('👁️ [MenuItemDialog] Watch modelValue triggered:', {
-      isOpen,
-      hasItem: !!props.item,
-      hasDishType: !!props.dishType,
-      currentDishType: formData.value.dishType
-    })
-
     if (isOpen) {
-      // При каждом открытии диалога загружаем данные
       if (props.item) {
-        console.log('📝 [MenuItemDialog] Loading existing item on dialog open:', {
-          name: props.item.name,
-          dishType: props.item.dishType
-        })
         formData.value = {
           categoryId: props.item.categoryId,
           name: props.item.name,
@@ -826,15 +797,10 @@ watch(
           modifierGroups: props.item.modifierGroups || [],
           templates: props.item.templates || []
         }
-      } else if (props.dishType) {
-        console.log(
-          '✨ [MenuItemDialog] Creating new item with dishType on dialog open:',
-          props.dishType
-        )
-        resetForm()
-        formData.value.dishType = props.dishType
+        // Show modifiers tab if item has modifiers or templates
+        showAdvancedTab.value =
+          (props.item.modifierGroups?.length || 0) > 0 || (props.item.templates?.length || 0) > 0
       } else {
-        console.log('🔄 [MenuItemDialog] Resetting form (dialog opened, no item, no dishType)')
         resetForm()
       }
     }
@@ -844,22 +810,10 @@ watch(
 // Initialize stores
 onMounted(async () => {
   try {
-    console.log('MenuItemDialog: Initializing stores...')
-
-    // Загружаем продукты (используем ENV.useMockData)
     await productsStore.loadProducts()
-    console.log('MenuItemDialog: Products loaded:', productsStore.products?.length)
 
-    // Инициализируем recipes store
     if (recipesStore && typeof recipesStore.initialize === 'function') {
       await recipesStore.initialize()
-      console.log('MenuItemDialog: Recipes initialized:', recipesStore.activeRecipes?.length)
-      console.log(
-        'MenuItemDialog: Preparations initialized:',
-        recipesStore.activePreparations?.length
-      )
-    } else {
-      console.warn('MenuItemDialog: RecipesStore not available or no initialize method')
     }
   } catch (error) {
     console.error('MenuItemDialog: Failed to initialize stores:', error)
@@ -868,25 +822,153 @@ onMounted(async () => {
 </script>
 
 <style lang="scss" scoped>
-// ✨ NEW: Стили для вкладок
-.tab-content {
-  max-height: 600px;
-  overflow-y: auto;
-  padding: 8px 4px;
+// Dialog card layout (mirrors BaseDialog)
+.base-dialog-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+
+  &__title {
+    flex-shrink: 0;
+  }
+
+  &__content {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  &__actions {
+    flex-shrink: 0;
+  }
 }
 
-.variants-list {
-  max-height: 100%;
-  overflow-y: auto;
-  padding: 4px;
+// Tab color coding
+.menu-item-tabs {
+  :deep(.v-tab) {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    min-height: 52px;
+    padding: 0 20px;
+  }
+}
+
+.tab-basic {
+  &.v-tab--selected {
+    color: var(--color-secondary) !important;
+  }
+}
+
+.tab-variants {
+  &.v-tab--selected {
+    color: var(--color-info) !important;
+  }
+}
+
+.tab-modifiers {
+  &.v-tab--selected {
+    color: var(--color-primary) !important;
+  }
+}
+
+.tab-templates {
+  &.v-tab--selected {
+    color: var(--color-success) !important;
+  }
+}
+
+.add-tab-btn {
+  text-transform: none;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+// Tab content
+.tab-content {
+  padding: 12px 8px;
+}
+
+// Accent bars (replace verbose alerts)
+.accent-bar {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.4;
+
+  &--purple {
+    background: rgba(163, 149, 233, 0.12);
+    border-left: 4px solid var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  &--purple-subtle {
+    background: rgba(163, 149, 233, 0.08);
+    border-left: 4px solid var(--color-primary);
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  &--blue {
+    background: rgba(118, 176, 255, 0.12);
+    border-left: 4px solid var(--color-info);
+    color: var(--color-info);
+  }
+
+  &--teal {
+    background: rgba(146, 201, 175, 0.12);
+    border-left: 4px solid var(--color-success);
+    color: var(--color-success);
+  }
+}
+
+// Section labels
+.section-label {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+}
+
+// Toggles
+.dept-toggle,
+.status-toggle {
+  :deep(.v-btn) {
+    font-weight: 600;
+    font-size: 14px;
+  }
 }
 
 :deep(.v-btn-toggle) {
-  border: 1px solid var(--color-surface);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
 }
 
-// Стили для бейджей на вкладках
+// Variants list
+.variants-list {
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+// Tab badges
 :deep(.v-tab) {
   .v-badge {
     margin-left: 8px;

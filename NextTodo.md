@@ -1,104 +1,139 @@
-# Sprint: Channel Profitability & Marketing Attribution
+# Sprint: Constructor v2 — Status & last_edited_at Integration
 
-## Цель
+## Контекст
 
-Построить отчёт доходности по каналам продаж с учётом food cost, комиссий, скидок и маркетинга.
+Миграция 162 добавила два новых поля во все 4 таблицы (`menu_items`, `recipes`, `preparations`, `products`):
 
-## Модель каналов
-
-```
-Каналы (для P&L анализа):
-├── cafe (dine_in + takeaway) — внутренний, люди приходят в кафе
-├── gobiz (GoFood)           — delivery platform, 20% комиссия
-└── grab (Grab Food)         — delivery platform, 25% комиссия
+```sql
+status TEXT NOT NULL DEFAULT 'active'  -- 'draft' | 'active' | 'archived'
+last_edited_at TIMESTAMPTZ             -- only manual user edits, NOT batch recalculations
 ```
 
-**Важно:** `dine_in` и `takeaway` объединяются в `cafe` — это один бизнес-канал.
+`is_active` пока сохраняется для обратной совместимости. Цель — перевести весь код на `status` + `last_edited_at`.
 
 ---
 
 ## Задачи
 
-### 1. Marketing subcategories (DB migration)
+### 1. Types — добавить `status` и `lastEditedAt`
 
-**Статус:** DONE (DEV + PROD)
+- [x] `src/stores/menu/types.ts` — `MenuItem`: добавить `status: 'draft' | 'active' | 'archived'`, `lastEditedAt: string`
+- [x] `src/stores/recipes/types.ts` — `Recipe`, `Preparation`: аналогично
+- [x] `src/stores/productsStore/types.ts` — `Product`: аналогично
+- [x] `src/types/common.ts` — добавить `EntityStatus` type
 
-Подкатегории маркетинга по каналам продаж:
+### 2. Supabase mappers — маппинг snake_case → camelCase
 
-```
-marketing (parent)
-├── marketing_cafe   → cafe   (Google Ads, Instagram, блогеры, флаеры)
-├── marketing_gojek  → gobiz  (GoFood промо, буст)
-├── marketing_grab   → grab   (Grab промо, буст)
-└── marketing_other  → NULL   (общий маркетинг)
-```
+- [x] `src/stores/menu/supabaseMappers.ts` — `status`, `last_edited_at` → `lastEditedAt`
+- [x] `src/stores/recipes/supabaseMappers.ts` — аналогично для recipes + preparations
+- [x] `src/stores/productsStore/supabaseMappers.ts` — аналогично
 
-**Миграция 157:** `parent_id`, `channel_code` в `transaction_categories` + 4 подкатегории
-**Данные:** Существующие marketing расходы 2026 переназначены на `marketing_cafe`
+### 3. Services — обновить `last_edited_at` при ручном редактировании
 
----
+**Ключевое правило:** `last_edited_at` обновляется ТОЛЬКО при:
 
-### 2. View: v_channel_profitability (DB)
+- Создание через UI (constructor, dialog)
+- Ручное редактирование (edit dialog, inline edit)
+- Изменение статуса (activate/deactivate/archive)
 
-**Статус:** DONE (DEV + PROD)
+**НЕ обновляется при:**
 
-**Миграция 158:** P&L view по каналам (cafe/gobiz/grab) per month
+- Пересчёте стоимости (batch cost recalculation)
+- Seed-скриптах
+- Автоматических обновлениях (sync, triggers)
 
-- Revenue (gross/net), discounts, food cost, commissions, marketing, net profit
-- Fallback для старых profit_calculation (revenue/cost → netRevenue/ingredientsCost)
+Файлы:
 
----
+- [x] `src/stores/menu/menuService.ts` — `addMenuItem`, `updateMenuItem`: добавить `last_edited_at: new Date().toISOString()`
+- [x] `src/stores/recipes/recipesService.ts` — `createRecipe`, `updateRecipe`, `createPreparation`, `updatePreparation`
+- [x] `src/stores/productsStore/productsService.ts` — `createProduct`, `updateProduct`
 
-### 3. AI Sherpa access (DB)
+### 4. Stores — sync `isActive` ↔ `status`
 
-**Статус:** DONE (DEV + PROD)
+Временная обратная совместимость (пока POS использует `isActive`):
 
-- [x] Миграция 159: GRANT SELECT on v_channel_profitability + transaction_categories for ai_readonly
+- [x] При сохранении: `isActive = (status === 'active')` — in menuService.update()
+- [x] При чтении: если `status` есть → fallback from `is_active` — in all mappers
+- [ ] В store actions: добавить `setStatus(id, status)` method (optional, can use update)
 
----
+### 5. Constructor Hub — использовать `lastEditedAt` и `status`
 
-### 4. Frontend: Marketing subcategory in expense dropdowns
+- [x] `ConstructorHub.vue` — сортировка по `lastEditedAt` вместо `updatedAt`
+- [x] Фильтр статуса: Draft / Active / Archived (вместо All / Active / Inactive)
+- [x] Timeline группировка по `lastEditedAt` (Today / This week / This month / Older)
+- [x] Badge цвета: draft=warning, active=success, archived=grey
 
-**Статус:** DONE
+### 6. Catalog — добавить статус в отображение
 
-- [x] `TransactionCategory` type — добавлены `parentId`, `channelCode`
-- [x] `categoryService.ts` — маппинг `parent_id` → `parentId`, `channel_code` → `channelCode`
-- [x] Account store getters — parent категории (marketing) скрыты из dropdowns, показываются children
-- [x] POS ExpenseOperationDialog и Backoffice OperationDialog автоматически показывают подкатегории
+- [x] `useCatalogData.ts` — маппинг `status` в `CatalogItem`
+- [x] `ItemDetailScreen.vue` — показывать `status` вместо `isActive`
+- [x] `ItemsList.vue` — badge статуса на карточках
+- [x] Фильтр статуса в CatalogScreen (вместо active/inactive)
 
----
+### 7. POS — обратная совместимость
 
-### 5. Frontend: P&L Report — marketing subcategory grouping
+- [ ] POS фильтрует меню по `isActive` — пока продолжает работать (поле синхронизировано)
+- [ ] В будущем: переход на `status === 'active'`
 
-**Статус:** DONE
+### 8. Constructor wizard — статус при сохранении
 
-- [x] `plReportStore.ts` — OPEX агрегация группирует subcategories под parent
-- [x] `PLReport` type — добавлен `opex.bySubcategory`
-- [x] `PLReportView.vue` — marketing показывается с вложенными sub-items (indented)
+- [x] "Save" → `status: 'active'`, `isActive: true`
+- [x] "Save Draft" → `status: 'draft'`, `isActive: false`
+- [x] `last_edited_at` устанавливается автоматически при обоих
 
----
+### 9. Admin views — поддержка статуса
 
-### 6. UI/View: Channel Profitability Report
+- [ ] Menu admin — показать/использовать `status`
+- [ ] Products admin — аналогично
+- [ ] Recipes admin — аналогично
 
-**Статус:** DONE (DEV + PROD)
+### 10. PROD migration
 
-- [x] Страница `/analytics/channel-profitability` — `ChannelProfitabilityView.vue`
-- [x] Summary cards per channel, P&L comparison table, monthly trend
-- [x] Route + Navigation menu item ("Channel P&L" under Reports)
-- [x] View fix: use `finalRevenue` as unified revenue base (tax-normalized)
-- [x] `revenue_net = revenue_gross - discounts` (NOT netRevenue which deducts commission)
-- [x] `tax_collected` from orders table (order-level, not per-item)
-- [x] Applied to both DEV and PROD
+- [ ] Протестировать всё на DEV
+- [ ] `mcp__supabase_prod__apply_migration` (с подтверждением)
 
 ---
 
 ## Порядок выполнения
 
 ```
-1. ✅ Migration: marketing subcategories (parent_id, channel_code)
-2. ✅ Migration: v_channel_profitability view
-3. ✅ Grant SELECT на новые объекты для ai_readonly
-4. ✅ Frontend: expense subcategory selector
-5. ✅ Frontend: P&L report marketing grouping
-6. ✅ Frontend: channel profitability report page
+1. Types + Mappers (1, 2) — фундамент
+2. Services (3) — last_edited_at в записях
+3. Stores (4) — sync isActive ↔ status
+4. Constructor Hub (5) — timeline на lastEditedAt
+5. Catalog (6) — статус в UI
+6. Wizard (8) — draft/active при сохранении
+7. Admin views (9) — опционально
+8. PROD migration (10) — финал
 ```
+
+---
+
+## Текущее состояние Constructor (что уже сделано)
+
+### Новые файлы:
+
+- `constructor/composables/useConstructorState.ts` — shared state (mode, wizard data, source)
+- `constructor/ConstructorHub.vue` — timeline dashboard с type/status/dept фильтрами
+- `constructor/steps/StepModifiers.vue` — отдельный шаг модификаторов
+- `constructor/steps/StepFinalize.vue` — name + category + preview + save
+
+### Изменённые файлы:
+
+- `constructor/ConstructorScreen.vue` — hub ↔ wizard mode switcher, Save Draft на любом шаге
+- `constructor/steps/StepComposition.vue` — только ингредиенты (модификаторы вынесены)
+- `catalog/detail/ItemDetailScreen.vue` — кнопка "Clone" → constructor
+- `catalog/CatalogScreen.vue` — `createBased` emit
+- `KitchenMainView.vue` — wiring catalog→constructor
+
+### Старые файлы (можно удалить):
+
+- `constructor/steps/StepBaseInfo.vue` — заменён на StepFinalize
+- `constructor/steps/StepPreview.vue` — заменён на StepFinalize
+
+### DB Migration 162 (applied to DEV):
+
+- `status` (draft/active/archived) + CHECK constraints + indexes
+- `last_edited_at` + indexes
+- Backfill: `is_active=true` → `active`, `is_active=false` → `draft`
+- Backfill: `last_edited_at` = `created_at`

@@ -5,14 +5,20 @@
       v-for="item in items"
       :key="item.id"
       class="item-card"
-      :class="[sectionClass, { inactive: !item.isActive }]"
+      :class="[sectionClass, { inactive: item.status !== 'active' }]"
       @click="emit('select', item)"
     >
       <div class="item-main">
         <div class="item-header">
           <span class="item-name">{{ item.name }}</span>
-          <v-chip v-if="!item.isActive" color="grey" size="x-small" variant="flat" label>
-            off
+          <v-chip
+            v-if="item.status !== 'active'"
+            :color="item.status === 'draft' ? 'warning' : 'grey'"
+            size="x-small"
+            variant="flat"
+            label
+          >
+            {{ item.status === 'draft' ? 'Draft' : 'Archived' }}
           </v-chip>
         </div>
         <div class="item-meta">

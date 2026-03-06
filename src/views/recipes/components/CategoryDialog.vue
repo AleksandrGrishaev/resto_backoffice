@@ -2,46 +2,32 @@
 <template>
   <v-dialog
     :model-value="modelValue"
-    max-width="600"
+    max-width="500"
     persistent
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-card>
-      <v-card-title class="d-flex align-center ga-2 bg-surface-variant">
-        <v-icon :color="isEdit ? 'warning' : 'primary'">
-          {{ isEdit ? 'mdi-pencil' : 'mdi-plus' }}
-        </v-icon>
+      <v-card-title class="dialog-title d-flex align-center ga-2">
+        <span class="title-emoji">{{ formData.emoji || '📁' }}</span>
         {{ isEdit ? 'Edit Category' : 'New Category' }}
       </v-card-title>
 
-      <v-divider />
-
-      <v-card-text class="pt-6">
+      <v-card-text class="pt-4 pb-2">
         <v-form ref="formRef" v-model="isFormValid" @submit.prevent="save">
-          <!-- Category Name -->
-          <v-text-field
-            v-model="formData.name"
-            label="Category Name *"
-            :rules="[rules.required]"
-            variant="outlined"
-            density="comfortable"
-            prepend-inner-icon="mdi-text"
-            autofocus
-            class="mb-4"
-          />
-
-          <!-- Category Key (auto-generated from name) -->
-          <v-text-field
-            v-model="formData.key"
-            label="Category Key (Unique ID) *"
-            :rules="[rules.required, rules.key]"
-            variant="outlined"
-            density="comfortable"
-            prepend-inner-icon="mdi-key"
-            hint="Lowercase, no spaces (e.g., 'sauce', 'side_dish')"
-            persistent-hint
-            class="mb-4"
-          />
+          <!-- Icon (emoji) + Name row -->
+          <div class="d-flex align-center gap-3 mb-4">
+            <EmojiPicker v-model="formData.emoji" placeholder="📁" />
+            <v-text-field
+              v-model="formData.name"
+              label="Category Name"
+              :rules="[rules.required]"
+              variant="outlined"
+              density="comfortable"
+              autofocus
+              hide-details="auto"
+              class="flex-grow-1"
+            />
+          </div>
 
           <!-- Description -->
           <v-textarea
@@ -49,120 +35,37 @@
             label="Description"
             variant="outlined"
             density="comfortable"
-            prepend-inner-icon="mdi-text-box-outline"
             rows="2"
-            class="mb-4"
-          />
-
-          <!-- Icon & Emoji (for Preparation Categories) -->
-          <div v-if="type === 'preparation'" class="d-flex gap-4 mb-4">
-            <v-text-field
-              v-model="formData.icon"
-              label="Icon (Material Design)"
-              variant="outlined"
-              density="comfortable"
-              prepend-inner-icon="mdi-emoticon-outline"
-              hint="e.g., mdi-bottle-soda, mdi-food"
-              persistent-hint
-              class="flex-grow-1"
-            />
-            <v-text-field
-              v-model="formData.emoji"
-              label="Emoji"
-              variant="outlined"
-              density="comfortable"
-              prepend-inner-icon="mdi-emoticon"
-              hint="e.g., 🍕, 🍔"
-              persistent-hint
-              maxlength="2"
-              class="flex-grow-1"
-            />
-          </div>
-
-          <!-- Icon (for Recipe Categories) -->
-          <v-text-field
-            v-if="type === 'recipe'"
-            v-model="formData.icon"
-            label="Icon (Material Design)"
-            variant="outlined"
-            density="comfortable"
-            prepend-inner-icon="mdi-emoticon-outline"
-            hint="e.g., mdi-silverware-fork-knife, mdi-cup"
-            persistent-hint
-            class="mb-4"
-          />
-
-          <!-- Color Picker -->
-          <v-text-field
-            v-model="formData.color"
-            label="Color"
-            variant="outlined"
-            density="comfortable"
-            prepend-inner-icon="mdi-palette"
-            hint="e.g., primary, success, #FF5722"
-            persistent-hint
-            class="mb-4"
-          >
-            <template #append-inner>
-              <v-menu>
-                <template #activator="{ props }">
-                  <v-btn
-                    v-bind="props"
-                    icon
-                    size="small"
-                    variant="text"
-                    :color="formData.color || 'grey'"
-                  >
-                    <v-icon>mdi-circle</v-icon>
-                  </v-btn>
-                </template>
-                <v-card>
-                  <v-card-text>
-                    <div class="d-flex flex-wrap gap-2" style="max-width: 250px">
-                      <v-btn
-                        v-for="color in colorOptions"
-                        :key="color"
-                        icon
-                        size="small"
-                        :color="color"
-                        @click="formData.color = color"
-                      >
-                        <v-icon>mdi-circle</v-icon>
-                      </v-btn>
-                    </div>
-                  </v-card-text>
-                </v-card>
-              </v-menu>
-            </template>
-          </v-text-field>
-
-          <!-- Sort Order -->
-          <v-text-field
-            v-model.number="formData.sortOrder"
-            label="Sort Order"
-            type="number"
-            variant="outlined"
-            density="comfortable"
-            prepend-inner-icon="mdi-sort"
-            hint="Lower numbers appear first"
-            persistent-hint
-            class="mb-4"
-          />
-
-          <!-- Active Status -->
-          <v-switch
-            v-model="formData.isActive"
-            label="Active"
-            color="primary"
-            density="comfortable"
             hide-details
+            class="mb-4"
           />
+
+          <!-- Color -->
+          <div class="section-label mb-2">Color</div>
+          <div class="color-grid mb-2">
+            <button
+              v-for="color in colorOptions"
+              :key="color"
+              type="button"
+              class="color-btn"
+              :class="{ 'color-btn--active': formData.color === color }"
+              @click="formData.color = color"
+            >
+              <v-icon :color="color" size="20">mdi-circle</v-icon>
+            </button>
+          </div>
         </v-form>
       </v-card-text>
 
-      <v-divider />
-
-      <v-card-actions>
+      <v-card-actions class="px-4 pb-3">
+        <v-switch
+          v-if="isEdit"
+          v-model="formData.isActive"
+          label="Active"
+          color="primary"
+          density="compact"
+          hide-details
+        />
         <v-spacer />
         <v-btn variant="text" @click="cancel">Cancel</v-btn>
         <v-btn
@@ -181,6 +84,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import EmojiPicker from '@/components/base/EmojiPicker.vue'
 import type { PreparationCategory, RecipeCategory } from '@/stores/recipes/types'
 
 const props = defineProps<{
@@ -194,16 +98,12 @@ const emit = defineEmits<{
   save: [data: CategoryFormData]
 }>()
 
-// =============================================
-// STATE
-// =============================================
-
 interface CategoryFormData {
   name: string
   key: string
   description?: string
   icon?: string
-  emoji?: string // Only for preparation categories
+  emoji?: string
   color?: string
   sortOrder: number
   isActive: boolean
@@ -226,10 +126,6 @@ const formData = ref<CategoryFormData>({
 
 const isEdit = computed(() => !!props.category)
 
-// =============================================
-// COLOR OPTIONS
-// =============================================
-
 const colorOptions = [
   'primary',
   'secondary',
@@ -248,31 +144,15 @@ const colorOptions = [
   'grey'
 ]
 
-// =============================================
-// VALIDATION RULES
-// =============================================
-
 const rules = {
-  required: (value: string) => !!value?.trim() || 'This field is required',
-  key: (value: string) => {
-    if (!value?.trim()) return 'Key is required'
-    if (!/^[a-z0-9_]+$/.test(value)) {
-      return 'Key must be lowercase letters, numbers, and underscores only'
-    }
-    return true
-  }
+  required: (value: string) => !!value?.trim() || 'Required'
 }
-
-// =============================================
-// WATCHERS
-// =============================================
 
 // Auto-generate key from name
 watch(
   () => formData.value.name,
   newName => {
     if (!isEdit.value && newName) {
-      // Auto-generate key: lowercase, replace spaces with underscores
       formData.value.key = newName
         .toLowerCase()
         .trim()
@@ -288,25 +168,24 @@ watch(
   ([isOpen, category]) => {
     if (isOpen) {
       if (category) {
-        // Edit mode - load existing data
+        const emoji = ('emoji' in category ? category.emoji : '') || category.icon || ''
         formData.value = {
           name: category.name,
           key: category.key,
           description: category.description || '',
-          icon: category.icon || '',
-          emoji: 'emoji' in category ? category.emoji || '' : '',
+          icon: emoji,
+          emoji,
           color: category.color || 'primary',
           sortOrder: category.sortOrder || 0,
           isActive: category.isActive ?? true
         }
       } else {
-        // Create mode - reset form with default values based on type
         formData.value = {
           name: '',
           key: '',
           description: '',
-          icon: props.type === 'preparation' ? 'mdi-chef-hat' : 'mdi-silverware-fork-knife',
-          emoji: props.type === 'preparation' ? '👨‍🍳' : '',
+          icon: '',
+          emoji: '',
           color: 'primary',
           sortOrder: 0,
           isActive: true
@@ -317,25 +196,20 @@ watch(
   { immediate: true }
 )
 
-// =============================================
-// METHODS
-// =============================================
-
 function cancel() {
   emit('update:modelValue', false)
 }
 
 async function save() {
   if (!formRef.value) return
-
   const { valid } = await formRef.value.validate()
   if (!valid) return
 
   saving.value = true
-
   try {
-    // Emit save event with form data
-    emit('save', formData.value)
+    // Set icon = emoji for backwards compat
+    const data = { ...formData.value, icon: formData.value.emoji }
+    emit('save', data)
   } finally {
     saving.value = false
   }
@@ -343,7 +217,49 @@ async function save() {
 </script>
 
 <style scoped lang="scss">
-:deep(.v-input__details) {
-  padding-inline-start: 0;
+.dialog-title {
+  padding: 16px 20px 8px;
+  font-size: 1.1rem;
+}
+
+.title-emoji {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.color-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.color-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  background: none;
+  transition: all 0.1s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  &--active {
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.08);
+  }
 }
 </style>

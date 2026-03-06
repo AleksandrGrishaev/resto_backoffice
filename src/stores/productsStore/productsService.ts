@@ -164,6 +164,81 @@ export class ProductsService {
     }
   }
 
+  async createCategory(data: {
+    name: string
+    key: string
+    color?: string
+    icon?: string
+    sortOrder?: number
+  }): Promise<ProductCategory> {
+    if (!isSupabaseAvailable()) throw new Error('Supabase not available')
+
+    const { data: row, error } = await supabase
+      .from('product_categories')
+      .insert({
+        id: generateId(),
+        key: data.key,
+        name: data.name,
+        color: data.color || 'grey',
+        icon: data.icon || null,
+        sort_order: data.sortOrder ?? 99,
+        is_active: true
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+
+    return {
+      id: row.id,
+      key: row.key,
+      name: row.name,
+      color: row.color,
+      icon: row.icon,
+      sortOrder: row.sort_order,
+      isActive: row.is_active,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }
+  }
+
+  async updateCategory(
+    id: string,
+    data: Partial<{
+      name: string
+      key: string
+      color: string
+      icon: string
+      sortOrder: number
+      isActive: boolean
+    }>
+  ): Promise<void> {
+    if (!isSupabaseAvailable()) throw new Error('Supabase not available')
+
+    const update: Record<string, any> = {}
+    if (data.name !== undefined) update.name = data.name
+    if (data.key !== undefined) update.key = data.key
+    if (data.color !== undefined) update.color = data.color
+    if (data.icon !== undefined) update.icon = data.icon
+    if (data.sortOrder !== undefined) update.sort_order = data.sortOrder
+    if (data.isActive !== undefined) update.is_active = data.isActive
+
+    const { error } = await supabase.from('product_categories').update(update).eq('id', id)
+
+    if (error) throw error
+  }
+
+  async deleteCategory(id: string): Promise<void> {
+    if (!isSupabaseAvailable()) throw new Error('Supabase not available')
+
+    const { error } = await supabase
+      .from('product_categories')
+      .update({ is_active: false })
+      .eq('id', id)
+
+    if (error) throw error
+  }
+
   /**
    * Get active products
    */
@@ -262,8 +337,10 @@ export class ProductsService {
         id: generateId(),
         packageOptions: [],
         isActive: data.isActive ?? true,
+        status: 'active',
         canBeSold: data.canBeSold ?? false,
         lastKnownCost: lastKnownCost,
+        lastEditedAt: now,
         createdAt: now,
         updatedAt: now
       }
@@ -328,10 +405,12 @@ export class ProductsService {
       }
 
       const { id, ...updateData } = data
+      const now = TimeUtils.getCurrentLocalISO()
       const updatedProduct: Product = {
         ...existingProduct,
         ...updateData,
-        updatedAt: TimeUtils.getCurrentLocalISO()
+        lastEditedAt: now,
+        updatedAt: now
       }
 
       // Update in Supabase

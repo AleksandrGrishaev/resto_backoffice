@@ -104,6 +104,7 @@
           @back="goBack"
           @navigate="handleNavigate"
           @edit="handleEdit"
+          @create-based="handleCreateBased"
         />
 
         <!-- Items in category -->
@@ -161,8 +162,9 @@
             <div class="filter-label">Status</div>
             <v-chip-group v-model="filterStatus" selected-class="bg-secondary">
               <v-chip value="" variant="outlined">All</v-chip>
+              <v-chip value="draft" variant="outlined">Draft</v-chip>
               <v-chip value="active" variant="outlined">Active</v-chip>
-              <v-chip value="inactive" variant="outlined">Inactive</v-chip>
+              <v-chip value="archived" variant="outlined">Archived</v-chip>
             </v-chip-group>
           </div>
         </v-card-text>
@@ -199,6 +201,10 @@ interface BreadcrumbItem {
   label: string
   categoryId?: string
 }
+
+const emit = defineEmits<{
+  createBased: [ref: { id: string; type: string; name: string }]
+}>()
 
 const recipesStore = useRecipesStore()
 const menuStore = useMenuStore()
@@ -314,10 +320,8 @@ function applyCommonFilters(items: CatalogItem[]): CatalogItem[] {
     )
   }
 
-  if (filterStatus.value === 'active') {
-    result = result.filter(i => i.isActive)
-  } else if (filterStatus.value === 'inactive') {
-    result = result.filter(i => !i.isActive)
+  if (filterStatus.value) {
+    result = result.filter(i => i.status === filterStatus.value)
   }
   return result
 }
@@ -502,6 +506,10 @@ function handleNavigate(target: { id: string; type: CatalogItem['type'] }) {
   if (found) {
     openDetail(found)
   }
+}
+
+function handleCreateBased(ref: { id: string; type: string; name: string }) {
+  emit('createBased', ref)
 }
 
 function handleEdit(target: { id: string; type: string }) {

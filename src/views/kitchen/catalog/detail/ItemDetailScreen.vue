@@ -13,11 +13,26 @@
           <span v-if="item.code" class="subtitle-text">{{ item.code }}</span>
           <span v-if="item.department" class="subtitle-text">{{ item.department }}</span>
           <span v-if="item.categoryName" class="subtitle-text">{{ item.categoryName }}</span>
-          <v-chip v-if="!item.isActive" color="grey" size="small" variant="flat" label>
-            Inactive
+          <v-chip
+            v-if="item.status !== 'active'"
+            :color="item.status === 'draft' ? 'warning' : 'grey'"
+            size="small"
+            variant="flat"
+            label
+          >
+            {{ item.status === 'draft' ? 'Draft' : 'Archived' }}
           </v-chip>
         </div>
       </div>
+      <v-btn
+        variant="tonal"
+        size="small"
+        prepend-icon="mdi-content-copy"
+        class="mr-1"
+        @click="emit('createBased', { id: item.id, type: item.type, name: item.name })"
+      >
+        Clone
+      </v-btn>
       <v-btn
         variant="tonal"
         color="primary"
@@ -215,7 +230,10 @@
             <InfoRow label="Type" :value="menuItem.type" />
             <InfoRow label="Dish Type" :value="menuItem.dishType" />
             <InfoRow label="Variants" :value="String(menuItem.variants?.length ?? 0)" />
-            <InfoRow label="Status" :value="menuItem.isActive ? 'Active' : 'Inactive'" />
+            <InfoRow
+              label="Status"
+              :value="menuItem.status || (menuItem.isActive ? 'Active' : 'Draft')"
+            />
           </template>
           <template v-else-if="item.type === 'recipe' && recipe">
             <InfoRow label="Code" :value="recipe.code" />
@@ -226,7 +244,10 @@
             <InfoRow v-if="recipe.cookTime" label="Cook Time" :value="recipe.cookTime + ' min'" />
             <InfoRow v-if="recipe.difficulty" label="Difficulty" :value="recipe.difficulty" />
             <InfoRow label="Components" :value="String(recipe.components?.length ?? 0)" />
-            <InfoRow label="Status" :value="recipe.isActive ? 'Active' : 'Inactive'" />
+            <InfoRow
+              label="Status"
+              :value="recipe.status || (recipe.isActive ? 'Active' : 'Draft')"
+            />
           </template>
           <template v-else-if="item.type === 'preparation' && preparation">
             <InfoRow label="Code" :value="preparation.code" />
@@ -247,7 +268,10 @@
               :value="preparation.shelfLife + ' days'"
             />
             <InfoRow label="Ingredients" :value="String(preparation.recipe?.length ?? 0)" />
-            <InfoRow label="Status" :value="preparation.isActive ? 'Active' : 'Inactive'" />
+            <InfoRow
+              label="Status"
+              :value="preparation.status || (preparation.isActive ? 'Active' : 'Draft')"
+            />
           </template>
           <template v-else-if="item.type === 'product' && product">
             <InfoRow label="Category" :value="item.categoryName" />
@@ -262,7 +286,10 @@
               :value="product.yieldPercentage + '%'"
             />
             <InfoRow label="Departments" :value="product.usedInDepartments?.join(', ') || '-'" />
-            <InfoRow label="Status" :value="product.isActive ? 'Active' : 'Inactive'" />
+            <InfoRow
+              label="Status"
+              :value="product.status || (product.isActive ? 'Active' : 'Draft')"
+            />
           </template>
         </div>
       </div>
@@ -437,6 +464,7 @@ const emit = defineEmits<{
   back: []
   navigate: [{ id: string; type: CatalogItem['type'] }]
   edit: [{ id: string; type: CatalogItem['type'] }]
+  createBased: [{ id: string; type: CatalogItem['type']; name: string }]
 }>()
 
 const productsStore = useProductsStore()

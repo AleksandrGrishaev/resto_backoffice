@@ -387,12 +387,16 @@ export class MenuItemService {
         sortOrder: variant.sortOrder ?? index
       }))
 
+      const now = createTimestamp()
+      const status = data.status || 'active'
+
       const newMenuItem: MenuItem = {
         id: generateId(),
         categoryId: data.categoryId,
         name: data.name,
         description: data.description,
-        isActive: true,
+        isActive: status === 'active',
+        status,
         type: data.type,
         department: data.department, // ✨ NEW
         dishType: data.dishType, // ✨ NEW
@@ -403,8 +407,9 @@ export class MenuItemService {
         tags: data.tags || [],
         modifierGroups: data.modifierGroups || [], // ✨ NEW
         templates: data.templates || [], // ✨ NEW
-        createdAt: createTimestamp(),
-        updatedAt: createTimestamp()
+        lastEditedAt: now,
+        createdAt: now,
+        updatedAt: now
       }
 
       // Save to Supabase only (Backoffice is online-first)
@@ -454,11 +459,18 @@ export class MenuItemService {
         }))
       }
 
+      const now = createTimestamp()
       const updatedMenuItem = {
         ...existingItem,
         ...data,
-        updatedAt: createTimestamp()
-      }
+        // Sync isActive ↔ status
+        ...(data.status ? { isActive: data.status === 'active' } : {}),
+        ...(data.isActive !== undefined && !data.status
+          ? { status: data.isActive ? 'active' : 'draft' }
+          : {}),
+        lastEditedAt: now,
+        updatedAt: now
+      } as MenuItem
 
       // Update Supabase only (Backoffice is online-first)
       if (!isSupabaseAvailable()) {

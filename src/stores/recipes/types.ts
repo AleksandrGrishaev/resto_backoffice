@@ -1,6 +1,7 @@
 // src/stores/recipes/types.ts - ОБНОВЛЕННЫЕ типы с поддержкой базовых единиц
 
 import { BaseEntity } from '@/types/common'
+import type { EntityStatus } from '@/types/common'
 import type { MeasurementUnit } from '@/types/measurementUnits'
 import type { Department } from '@/stores/menu/types'
 
@@ -116,6 +117,10 @@ export interface Preparation extends BaseEntity {
   // ⭐ PHASE 2: Portion type support
   portionType: PortionType // 'weight' (default) or 'portion'
   portionSize?: number // Size of one portion in grams (only for portionType='portion')
+
+  // Entity status & last edited tracking
+  status?: EntityStatus
+  lastEditedAt?: string
 }
 
 /**
@@ -165,6 +170,10 @@ export interface Recipe extends BaseEntity {
   tags?: string[]
   isActive: boolean
   cost?: number // Себестоимость в IDR
+
+  // Entity status & last edited tracking
+  status?: EntityStatus
+  lastEditedAt?: string
 }
 
 /**

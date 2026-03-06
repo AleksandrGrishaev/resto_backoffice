@@ -8,6 +8,7 @@ import type { TreeNode } from '../detail/DependencyTree.vue'
 import type { Product } from '@/stores/productsStore/types'
 import type { Preparation, Recipe } from '@/stores/recipes/types'
 import type { MenuItem, ModifierType, TargetComponent } from '@/stores/menu/types'
+import type { EntityStatus } from '@/types/common'
 
 // --- Modifier display types ---
 export interface ModifierOptionDisplay {
@@ -39,6 +40,7 @@ export interface CatalogItem {
   name: string
   type: 'menu' | 'recipe' | 'preparation' | 'product'
   isActive: boolean
+  status: EntityStatus
   department?: string
   categoryId?: string
   categoryName?: string
@@ -80,6 +82,7 @@ export function useCatalogData() {
         name: mi.name,
         type: 'menu' as const,
         isActive: mi.isActive,
+        status: (mi.status || (mi.isActive ? 'active' : 'draft')) as EntityStatus,
         department: mi.department,
         categoryId: mi.categoryId,
         categoryName: cat?.name,
@@ -97,6 +100,7 @@ export function useCatalogData() {
       name: r.name,
       type: 'recipe' as const,
       isActive: r.isActive,
+      status: (r.status || (r.isActive ? 'active' : 'draft')) as EntityStatus,
       department: r.department,
       categoryId: r.category,
       categoryName: recipesStore.getRecipeCategoryName(r.category),
@@ -114,6 +118,7 @@ export function useCatalogData() {
       name: p.name,
       type: 'preparation' as const,
       isActive: p.isActive,
+      status: (p.status || (p.isActive ? 'active' : 'draft')) as EntityStatus,
       department: p.department,
       categoryId: p.type,
       categoryName: recipesStore.getPreparationCategoryName(p.type),
@@ -134,6 +139,7 @@ export function useCatalogData() {
       name: p.name,
       type: 'product' as const,
       isActive: p.isActive,
+      status: (p.status || (p.isActive ? 'active' : 'draft')) as EntityStatus,
       department: p.usedInDepartments?.join(', '),
       categoryId: p.category,
       categoryName: productsStore.getCategoryName(p.category),

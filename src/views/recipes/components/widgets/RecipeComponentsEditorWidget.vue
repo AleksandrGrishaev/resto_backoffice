@@ -170,11 +170,21 @@
                       mandatory
                       @update:model-value="handleComponentTypeChange(index, $event)"
                     >
-                      <v-chip value="product" variant="outlined" size="small">
+                      <v-chip
+                        value="product"
+                        :variant="component.componentType === 'product' ? 'flat' : 'tonal'"
+                        size="small"
+                        color="blue"
+                      >
                         <v-icon start size="14">mdi-food-apple</v-icon>
                         Product
                       </v-chip>
-                      <v-chip value="preparation" variant="outlined" size="small">
+                      <v-chip
+                        value="preparation"
+                        :variant="component.componentType === 'preparation' ? 'flat' : 'tonal'"
+                        size="small"
+                        color="orange"
+                      >
                         <v-icon start size="14">mdi-chef-hat</v-icon>
                         Preparation
                       </v-chip>
@@ -182,8 +192,9 @@
                       <v-chip
                         v-if="type === 'recipe'"
                         value="recipe"
-                        variant="outlined"
+                        :variant="component.componentType === 'recipe' ? 'flat' : 'tonal'"
                         size="small"
+                        color="green"
                       >
                         <v-icon start size="14">mdi-book-open-variant</v-icon>
                         Recipe

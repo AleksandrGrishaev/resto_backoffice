@@ -92,7 +92,10 @@
           />
 
           <!-- Catalog Screen -->
-          <CatalogScreen v-else-if="currentScreen === 'catalog'" />
+          <CatalogScreen
+            v-else-if="currentScreen === 'catalog'"
+            @create-based="() => (currentScreen = 'constructor')"
+          />
 
           <!-- Constructor Screen -->
           <ConstructorScreen v-else-if="currentScreen === 'constructor'" />

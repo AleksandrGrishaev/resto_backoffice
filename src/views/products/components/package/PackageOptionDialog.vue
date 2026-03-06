@@ -1,26 +1,39 @@
 <template>
   <v-dialog
     :model-value="modelValue"
-    max-width="500px"
+    max-width="720px"
     @update:model-value="$emit('update:model-value', $event)"
   >
     <v-card>
-      <v-card-title>
+      <v-card-title class="text-h6 pa-4 pb-2">
         {{ isEditing ? 'Edit Package' : 'Add Package' }}
       </v-card-title>
 
-      <v-card-text>
+      <v-card-text class="pa-4 pt-2">
         <v-form ref="formRef" v-model="formValid">
-          <v-text-field
-            v-model="formData.packageName"
-            label="Package Name *"
-            placeholder="Kilogram, Pack 500g, Box 24pcs"
-            :rules="[rules.required]"
-            variant="outlined"
-            density="comfortable"
-            class="mb-3"
-          />
+          <!-- Row 1: Name + Brand -->
+          <div class="d-flex gap-3 mb-3">
+            <v-text-field
+              v-model="formData.packageName"
+              label="Package Name *"
+              placeholder="Kilogram, Pack 500g, Box 24pcs"
+              :rules="[rules.required]"
+              variant="outlined"
+              density="comfortable"
+              autofocus
+              style="flex: 2"
+            />
+            <v-text-field
+              v-model="formData.brandName"
+              label="Brand (optional)"
+              placeholder="Anchor, Local"
+              variant="outlined"
+              density="comfortable"
+              style="flex: 1"
+            />
+          </div>
 
+          <!-- Row 2: Size + Unit -->
           <div class="d-flex gap-3 mb-3">
             <NumericInputField
               v-model="formData.packageSize"
@@ -30,9 +43,8 @@
               :allow-decimal="true"
               variant="outlined"
               density="comfortable"
-              class="flex-grow-1"
+              style="flex: 1"
             />
-
             <v-select
               v-model="formData.packageUnit"
               label="Package Unit *"
@@ -42,73 +54,72 @@
               :rules="[rules.required]"
               variant="outlined"
               density="comfortable"
-              class="flex-grow-1"
+              style="flex: 1"
             />
           </div>
 
-          <v-text-field
-            v-model="formData.brandName"
-            label="Brand (optional)"
-            placeholder="Anchor, Local Brand"
-            variant="outlined"
-            density="comfortable"
-            class="mb-3"
-          />
-
+          <!-- Row 3: Prices side by side -->
           <v-alert type="info" variant="tonal" density="compact" class="mb-3">
             <div class="text-caption">
               Prices are optional and can be updated after the first delivery
             </div>
           </v-alert>
 
-          <NumericInputField
-            v-model="formData.packagePrice"
-            label="Price per Package (optional)"
-            suffix="IDR"
-            variant="outlined"
-            density="comfortable"
-            class="mb-3"
-            hint="Leave empty if unknown, will be calculated automatically"
-            persistent-hint
-          />
+          <div class="d-flex gap-3 mb-3">
+            <NumericInputField
+              v-model="formData.packagePrice"
+              label="Price per Package"
+              suffix="IDR"
+              variant="outlined"
+              density="comfortable"
+              hint="Auto-calculated if empty"
+              persistent-hint
+              style="flex: 1"
+            />
+            <NumericInputField
+              v-model="formData.baseCostPerUnit"
+              :label="`Price per ${baseUnit}`"
+              suffix="IDR"
+              :allow-decimal="true"
+              variant="outlined"
+              density="comfortable"
+              hint="Updated from deliveries"
+              persistent-hint
+              style="flex: 1"
+            />
+          </div>
 
-          <NumericInputField
-            v-model="formData.baseCostPerUnit"
-            :label="`Price per ${baseUnit} (optional)`"
-            suffix="IDR"
-            :allow-decimal="true"
-            variant="outlined"
-            density="comfortable"
-            class="mb-3"
-            hint="Leave empty if unknown, will be updated from actual deliveries"
-            persistent-hint
-          />
-
-          <v-textarea
-            v-model="formData.notes"
-            label="Notes (optional)"
-            placeholder="Wholesale price, Bulk orders only"
-            variant="outlined"
-            density="comfortable"
-            rows="2"
-            class="mb-3"
-          />
-
-          <v-switch v-model="formData.isActive" label="Active" color="primary" class="mb-3" />
+          <!-- Row 4: Notes + Active -->
+          <div class="d-flex gap-3 align-start">
+            <v-textarea
+              v-model="formData.notes"
+              label="Notes (optional)"
+              placeholder="Wholesale price, Bulk orders only"
+              variant="outlined"
+              density="comfortable"
+              rows="2"
+              style="flex: 1"
+            />
+            <div
+              v-if="isEditing"
+              class="d-flex flex-column align-center pt-2"
+              style="min-width: 80px"
+            >
+              <v-switch v-model="formData.isActive" label="Active" color="primary" hide-details />
+            </div>
+          </div>
 
           <!-- Calculation Information -->
-          <v-card v-if="hasCalculations" variant="tonal" color="info" class="mb-3">
+          <v-card v-if="hasCalculations" variant="tonal" color="info" class="mt-3">
             <v-card-text class="py-2">
-              <div class="text-body-2">
-                <strong>Calculations:</strong>
-                <br />
+              <div class="d-flex gap-4 text-body-2">
                 <span v-if="calculatedPackagePrice">
-                  Calculated package price: {{ formatPrice(calculatedPackagePrice) }}
-                  <br />
+                  Package price:
+                  <strong>{{ formatPrice(calculatedPackagePrice) }}</strong>
                 </span>
                 <span v-if="calculatedBaseCost">
-                  Calculated price per {{ baseUnit }}: {{ formatPrice(calculatedBaseCost) }}
-                  <br />
+                  Per {{ baseUnit }}:
+                  <strong>{{ formatPrice(calculatedBaseCost) }}</strong>
                 </span>
               </div>
             </v-card-text>
@@ -116,13 +127,11 @@
         </v-form>
       </v-card-text>
 
-      <v-card-actions>
-        <v-spacer />
+      <v-card-actions class="pa-4 pt-2 d-flex justify-end">
         <v-btn variant="text" @click="$emit('update:model-value', false)">Cancel</v-btn>
         <v-btn
           color="primary"
-          variant="flat"
-          :disabled="!formValid"
+          :variant="formValid ? 'flat' : 'outlined'"
           :loading="loading"
           @click="handleSave"
         >

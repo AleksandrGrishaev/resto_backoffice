@@ -89,10 +89,28 @@
 
       <v-divider />
 
-      <v-card-actions class="pa-4">
-        <v-spacer />
-        <v-btn variant="text" @click="handleCancel">Cancel</v-btn>
-        <v-btn color="primary" :loading="loading" :disabled="!formValid" @click="handleSubmit">
+      <v-card-actions class="pa-4 justify-end">
+        <v-btn
+          v-if="!isEditing"
+          variant="outlined"
+          color="warning"
+          class="text-uppercase mr-2"
+          height="40"
+          :loading="savingDraft"
+          :disabled="!canSaveDraft || loading"
+          @click="handleSaveDraft"
+        >
+          <v-icon icon="mdi-content-save-outline" size="18" class="mr-1" />
+          Save Draft
+        </v-btn>
+        <v-btn variant="text" class="mr-2" @click="handleCancel">Cancel</v-btn>
+        <v-btn
+          color="primary"
+          :variant="formValid ? 'flat' : 'outlined'"
+          :loading="loading"
+          :disabled="!formValid"
+          @click="handleSubmit"
+        >
           {{ isEditing ? 'Update' : 'Create' }}
         </v-btn>
       </v-card-actions>
@@ -139,8 +157,13 @@ const recipesStore = useRecipesStore()
 const form = ref()
 const formValid = ref(false)
 const loading = ref(false)
+const savingDraft = ref(false)
 const errorMessage = ref('')
 const activeTab = ref('general')
+
+const canSaveDraft = computed(() => {
+  return formData.value.name?.trim().length > 0
+})
 
 // Dialog model
 const dialogModel = computed({
@@ -340,6 +363,88 @@ async function handleSubmit() {
 function handleCancel() {
   errorMessage.value = ''
   dialogModel.value = false
+}
+
+async function handleSaveDraft() {
+  if (!canSaveDraft.value) return
+
+  try {
+    savingDraft.value = true
+    errorMessage.value = ''
+
+    const validComponents = formData.value.components.filter(
+      (comp: any) => comp.componentId && comp.quantity > 0
+    )
+
+    if (props.type === 'preparation') {
+      const preparationData: any = {
+        name: formData.value.name,
+        code: formData.value.code || generateNextCode('preparation'),
+        type: formData.value.category || recipesStore.activePreparationCategories[0]?.id || '',
+        department: formData.value.department || 'kitchen',
+        description: formData.value.description,
+        outputQuantity: formData.value.outputQuantity || 1,
+        outputUnit: formData.value.outputUnit || 'gram',
+        preparationTime: formData.value.preparationTime || 0,
+        instructions: formData.value.instructions || '',
+        shelfLife: formData.value.shelfLife,
+        portionType: formData.value.portionType || 'weight',
+        portionSize:
+          formData.value.portionType === 'portion' ? formData.value.portionSize : undefined,
+        status: 'draft',
+        isActive: false,
+        recipe: validComponents.map((comp: any) => ({
+          type: comp.componentType || 'product',
+          id: comp.componentId,
+          quantity: comp.quantity,
+          unit: comp.unit,
+          useYieldPercentage: comp.useYieldPercentage,
+          notes: comp.notes
+        }))
+      }
+
+      const result = await recipesStore.createPreparation(preparationData)
+      emit('saved', result)
+    } else {
+      const recipeData: any = {
+        name: formData.value.name,
+        code: formData.value.code || generateNextCode('recipe'),
+        description: formData.value.description,
+        category: formData.value.category || recipesStore.activeRecipeCategories[0]?.id || '',
+        department: formData.value.department || 'kitchen',
+        portionSize: formData.value.portionSize || 1,
+        portionUnit: formData.value.portionUnit || 'portion',
+        prepTime: formData.value.preparationTime,
+        cookTime: formData.value.cookTime,
+        difficulty: formData.value.difficulty || 'easy',
+        tags: formData.value.tags || [],
+        status: 'draft',
+        isActive: false,
+        components: validComponents.map((comp: any) => ({
+          id: comp.id,
+          componentId: comp.componentId,
+          componentType: comp.componentType,
+          quantity: comp.quantity,
+          unit: comp.unit,
+          useYieldPercentage: comp.useYieldPercentage,
+          notes: comp.notes
+        }))
+      }
+
+      let result = await recipesStore.createRecipe(recipeData)
+      if (recipeData.components.length > 0) {
+        result = await recipesStore.updateRecipe(result.id, { components: recipeData.components })
+      }
+      emit('saved', result)
+    }
+
+    dialogModel.value = false
+  } catch (error: any) {
+    console.error(`Failed to save ${props.type} draft:`, error)
+    errorMessage.value = `Failed to save draft: ${error?.message || 'Unknown error'}`
+  } finally {
+    savingDraft.value = false
+  }
 }
 
 function resetForm() {

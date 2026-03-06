@@ -101,6 +101,8 @@ export function menuItemToSupabaseInsert(item: MenuItem): SupabaseMenuItemInsert
     // Status and ordering
     is_active: item.isActive,
     sort_order: item.sortOrder || 0,
+    status: item.status || 'active',
+    last_edited_at: item.lastEditedAt || null,
 
     // Media
     image_url: (item as any).imageUrl || null,
@@ -143,7 +145,9 @@ export function menuItemFromSupabase(row: SupabaseMenuItem): MenuItem {
 
     // Status and ordering
     isActive: row.is_active ?? true,
+    status: ((row as any).status as any) || (row.is_active === false ? 'draft' : 'active'),
     sortOrder: row.sort_order || 0,
+    lastEditedAt: (row as any).last_edited_at || undefined,
 
     // Complex JSONB fields (already parsed by Supabase client)
     modifierGroups: (row.modifier_groups as any) || [],

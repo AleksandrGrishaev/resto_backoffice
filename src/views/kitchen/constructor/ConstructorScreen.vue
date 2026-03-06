@@ -1,207 +1,281 @@
-<!-- src/views/kitchen/constructor/ConstructorScreen.vue -->
+<!-- Constructor Screen — Hub dashboard + standard dialogs -->
 <template>
   <div class="constructor-screen">
-    <!-- Step indicators -->
-    <div class="step-header">
-      <h2>CONSTRUCTOR</h2>
-      <div class="step-indicators">
-        <v-btn
-          v-for="s in steps"
-          :key="s.number"
-          :color="currentStep === s.number ? 'primary' : undefined"
-          :variant="currentStep === s.number ? 'flat' : 'outlined'"
-          size="small"
-          class="step-btn"
-          @click="currentStep = s.number"
-        >
-          {{ s.number }}. {{ s.label }}
-        </v-btn>
-      </div>
-    </div>
+    <ConstructorHub
+      @create-new="handleCreateNew"
+      @create-product="handleCreateProduct"
+      @create-category="showCategoryTypePicker = true"
+      @view-item="handleViewItem"
+      @clone-item="handleCloneItem"
+      @delete-item="handleDeleteItem"
+    />
 
-    <!-- Step content -->
-    <div class="step-content">
-      <StepBaseInfo
-        v-if="currentStep === 1"
-        v-model:name="wizardState.name"
-        v-model:department="wizardState.department"
-        v-model:category-id="wizardState.categoryId"
-        v-model:description="wizardState.description"
-        @next="currentStep = 2"
-      />
+    <!-- Standard edit/create dialogs -->
+    <MenuItemDialog v-model="showMenuDialog" :item="editMenuItem" @saved="handleDialogSaved" />
+    <UnifiedRecipeDialog
+      v-model="showRecipeDialog"
+      :type="editRecipeType"
+      :item="editRecipe"
+      tablet
+      @saved="handleDialogSaved"
+    />
+    <ProductDialog v-model="showProductDialog" :product="editProduct" @save="handleProductSave" />
 
-      <StepComposition
-        v-else-if="currentStep === 2"
-        v-model:ingredients="wizardState.ingredients"
-        v-model:modifier-groups="wizardState.modifierGroups"
-        @back="currentStep = 1"
-        @next="currentStep = 3"
-      />
+    <!-- Category dialogs -->
+    <MenuCategoryDialog v-model="showMenuCategoryDialog" @saved="handleDialogSaved" />
+    <RecipeCategoryDialog
+      v-model="showRecipeCategoryDialog"
+      :type="recipeCategoryType"
+      @save="handleRecipeCategorySave"
+    />
 
-      <StepPreview
-        v-else-if="currentStep === 3"
-        :wizard-state="wizardState"
-        :saving="saving"
-        @back="currentStep = 2"
-        @save="handleSave"
-        @save-draft="handleSaveDraft"
-      />
-    </div>
+    <!-- Category type picker -->
+    <v-dialog v-model="showCategoryTypePicker" max-width="400">
+      <v-card>
+        <v-card-title>Category for…</v-card-title>
+        <v-card-text class="create-options">
+          <div class="create-option" @click="openCategoryDialog('menu')">
+            <v-icon size="28" color="purple">mdi-silverware-variant</v-icon>
+            <div>
+              <div class="create-option-title">Menu</div>
+              <div class="create-option-desc">Category for menu items</div>
+            </div>
+          </div>
+          <div class="create-option" @click="openCategoryDialog('recipe')">
+            <v-icon size="28" color="green">mdi-book-open-variant</v-icon>
+            <div>
+              <div class="create-option-title">Recipe</div>
+              <div class="create-option-desc">Category for recipes</div>
+            </div>
+          </div>
+          <div class="create-option" @click="openCategoryDialog('preparation')">
+            <v-icon size="28" color="orange">mdi-flask-outline</v-icon>
+            <div>
+              <div class="create-option-title">Preparation</div>
+              <div class="create-option-desc">Category for semi-finished products</div>
+            </div>
+          </div>
+          <div class="create-option" @click="openCategoryDialog('product')">
+            <v-icon size="28" color="blue">mdi-package-variant</v-icon>
+            <div>
+              <div class="create-option-title">Product</div>
+              <div class="create-option-desc">Category for raw ingredients</div>
+            </div>
+          </div>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
+    <!-- Archive confirmation dialog -->
+    <v-dialog v-model="showDeleteConfirm" max-width="400">
+      <v-card>
+        <v-card-title>Archive "{{ deleteTarget?.name }}"?</v-card-title>
+        <v-card-text>
+          The item will be deactivated and hidden from active lists. You can restore it later.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showDeleteConfirm = false">Cancel</v-btn>
+          <v-btn color="warning" variant="flat" :loading="deleting" @click="confirmDelete">
+            Archive
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
 import { useSnackbar } from '@/composables/useSnackbar'
-import type { Department, ModifierGroup } from '@/stores/menu/types'
-import type { RecipeComponent } from '@/stores/recipes/types'
-import StepBaseInfo from './steps/StepBaseInfo.vue'
-import StepComposition from './steps/StepComposition.vue'
-import StepPreview from './steps/StepPreview.vue'
+import { useMenuStore } from '@/stores/menu'
+import { useRecipesStore } from '@/stores/recipes'
+import { useProductsStore } from '@/stores/productsStore'
+import ConstructorHub from './ConstructorHub.vue'
+import MenuItemDialog from '@/views/menu/components/MenuItemDialog.vue'
+import UnifiedRecipeDialog from '@/views/recipes/components/UnifiedRecipeDialog.vue'
+import ProductDialog from '@/views/products/components/ProductDialog.vue'
+import MenuCategoryDialog from '@/views/menu/components/MenuCategoryDialog.vue'
+import RecipeCategoryDialog from '@/views/recipes/components/CategoryDialog.vue'
+import type { CreateType, HubItemRef } from './ConstructorHub.vue'
+import type { Preparation, Recipe } from '@/stores/recipes/types'
+import type { MenuItem } from '@/stores/menu/types'
+import type { Product, CreateProductData, UpdateProductData } from '@/stores/productsStore/types'
 
-export interface WizardState {
-  name: string
-  department: Department
-  categoryId: string | null
-  description: string
-  ingredients: RecipeComponent[]
-  modifierGroups: ModifierGroup[]
-}
+const menuStore = useMenuStore()
+const recipesStore = useRecipesStore()
+const productsStore = useProductsStore()
 
-const steps = [
-  { number: 1, label: 'Base Info' },
-  { number: 2, label: 'Composition' },
-  { number: 3, label: 'Preview' }
-]
+// Dialog state
+const showMenuDialog = ref(false)
+const showRecipeDialog = ref(false)
+const showProductDialog = ref(false)
+const editMenuItem = ref<MenuItem | null>(null)
+const editRecipe = ref<Recipe | Preparation | null>(null)
+const editRecipeType = ref<'recipe' | 'preparation'>('recipe')
+const editProduct = ref<Product | null>(null)
 
-const currentStep = ref(1)
-const saving = ref(false)
+// Category dialog state
+const showCategoryTypePicker = ref(false)
+const showMenuCategoryDialog = ref(false)
+const showRecipeCategoryDialog = ref(false)
+const recipeCategoryType = ref<'recipe' | 'preparation'>('recipe')
+const categoryTargetType = ref<'menu' | 'recipe' | 'preparation' | 'product'>('menu')
 
-const wizardState = reactive<WizardState>({
-  name: '',
-  department: 'kitchen',
-  categoryId: null,
-  description: '',
-  ingredients: [],
-  modifierGroups: []
-})
+// Delete state
+const showDeleteConfirm = ref(false)
+const deleteTarget = ref<HubItemRef | null>(null)
+const deleting = ref(false)
 
-async function handleSave() {
-  await saveConstructorItem(true)
-}
-
-async function handleSaveDraft() {
-  await saveConstructorItem(false)
-}
-
-/**
- * Save flow:
- * 1. Build RecipeComponent[] from wizard ingredients
- * 2. Call recipesStore.createRecipe() -> get recipe.id
- * 3. Create MenuItem with variant composition: [{ type: 'recipe', id: recipe.id, quantity: 1, unit: 'portion' }]
- *
- * Category mapping:
- * - MenuItem.categoryId -> menu_categories UUID (user picks in Step 1)
- * - Recipe.category -> recipe_categories UUID (auto-inferred from department via key lookup)
- */
-async function saveConstructorItem(isActive: boolean) {
-  if (saving.value) return
-  saving.value = true
-
-  const { useRecipesStore } = await import('@/stores/recipes')
-  const { useMenuStore } = await import('@/stores/menu')
-  const recipesStore = useRecipesStore()
-  const menuStore = useMenuStore()
-  const { showSuccess, showError } = useSnackbar()
-
-  // Resolve recipe category UUID from department using recipe_categories table
-  const departmentToKey: Record<string, string> = {
-    kitchen: 'main_dish',
-    bar: 'beverage'
+// --- Create ---
+function handleCreateNew(type: CreateType) {
+  if (type === 'menu') {
+    editMenuItem.value = null
+    showMenuDialog.value = true
+  } else if (type === 'recipe') {
+    editRecipe.value = null
+    editRecipeType.value = 'recipe'
+    showRecipeDialog.value = true
+  } else if (type === 'preparation') {
+    editRecipe.value = null
+    editRecipeType.value = 'preparation'
+    showRecipeDialog.value = true
   }
-  const categoryKey = departmentToKey[wizardState.department] || 'main_dish'
-  const recipeCategory = (recipesStore.recipeCategories as any[]).find(
-    (c: any) => c.key === categoryKey
-  )
-  const recipeCategoryId = recipeCategory?.id || categoryKey // Fallback to key if not found
+}
 
-  let newRecipe: any = null
+function handleCreateProduct() {
+  editProduct.value = null
+  showProductDialog.value = true
+}
 
+// --- Category ---
+function openCategoryDialog(type: 'menu' | 'recipe' | 'preparation' | 'product') {
+  showCategoryTypePicker.value = false
+  categoryTargetType.value = type
+  if (type === 'menu') {
+    showMenuCategoryDialog.value = true
+  } else {
+    // Recipe, preparation and product categories all use the same dialog
+    recipeCategoryType.value = type === 'product' ? 'recipe' : type
+    showRecipeCategoryDialog.value = true
+  }
+}
+
+async function handleRecipeCategorySave(data: any) {
+  const { showSuccess, showError } = useSnackbar()
   try {
-    // Step 1: Create Recipe
-    const recipeData = {
-      name: wizardState.name,
-      code: '', // Auto-generated by store
-      description: wizardState.description || undefined,
-      category: recipeCategoryId,
-      department: wizardState.department,
-      portionSize: 1,
-      portionUnit: 'portion',
-      difficulty: 'medium' as const
-    }
-
-    newRecipe = await recipesStore.createRecipe(recipeData)
-    if (!newRecipe) throw new Error('Failed to create recipe')
-
-    // Step 1b: Add components via updateRecipe
-    if (wizardState.ingredients.length > 0) {
-      await recipesStore.updateRecipe(newRecipe.id, {
-        components: wizardState.ingredients
+    if (categoryTargetType.value === 'product') {
+      await productsStore.createProductCategory({
+        name: data.name,
+        key: data.key,
+        color: data.color,
+        icon: data.icon,
+        sortOrder: data.sortOrder
       })
+    } else if (categoryTargetType.value === 'preparation') {
+      await recipesStore.createPreparationCategory(data)
+    } else {
+      await recipesStore.createRecipeCategory(data)
     }
-
-    // Step 2: Create MenuItem with recipe reference in composition
-    const dishType = wizardState.modifierGroups.length > 0 ? 'modifiable' : 'simple'
-    const menuType = wizardState.department === 'kitchen' ? 'food' : 'beverage'
-
-    const menuItemData = {
-      name: wizardState.name,
-      categoryId: wizardState.categoryId || '',
-      type: menuType as 'food' | 'beverage',
-      department: wizardState.department,
-      dishType: dishType as 'simple' | 'modifiable',
-      variants: [
-        {
-          name: 'Standard',
-          price: 0, // Kitchen creates structure, admin sets price
-          composition: [
-            {
-              type: 'recipe' as const,
-              id: newRecipe.id,
-              quantity: 1,
-              unit: 'portion' as const
-            }
-          ],
-          isActive
-        }
-      ],
-      modifierGroups: wizardState.modifierGroups.length > 0 ? wizardState.modifierGroups : undefined
-    }
-
-    await menuStore.addMenuItem(menuItemData)
-
-    showSuccess(`"${wizardState.name}" created successfully`)
-
-    // Reset wizard
-    wizardState.name = ''
-    wizardState.description = ''
-    wizardState.ingredients = []
-    wizardState.modifierGroups = []
-    currentStep.value = 1
+    showSuccess(`Category "${data.name}" created`)
+    showRecipeCategoryDialog.value = false
   } catch (error) {
-    // Rollback: if recipe was created but menu item failed, clean up
-    if (newRecipe?.id) {
-      try {
-        await recipesStore.deleteRecipe(newRecipe.id)
-      } catch (rollbackError) {
-        console.error('Rollback failed — orphaned recipe:', newRecipe.id, rollbackError)
+    const msg = error instanceof Error ? error.message : 'Failed to create category'
+    showError(msg)
+  }
+}
+
+// --- View / Edit ---
+function handleViewItem(ref: { id: string; type: string; status: string }) {
+  openEditDialog(ref)
+}
+
+function openEditDialog(ref: { id: string; type: string }) {
+  if (ref.type === 'menu') {
+    editMenuItem.value = (menuStore.menuItems as MenuItem[]).find(m => m.id === ref.id) ?? null
+    if (editMenuItem.value) showMenuDialog.value = true
+  } else if (ref.type === 'recipe') {
+    editRecipe.value = recipesStore.getRecipeById(ref.id) as Recipe | null
+    editRecipeType.value = 'recipe'
+    if (editRecipe.value) showRecipeDialog.value = true
+  } else if (ref.type === 'preparation') {
+    editRecipe.value = recipesStore.getPreparationById(ref.id) as Preparation | null
+    editRecipeType.value = 'preparation'
+    if (editRecipe.value) showRecipeDialog.value = true
+  } else if (ref.type === 'product') {
+    editProduct.value = productsStore.getProductById(ref.id) as Product | null
+    if (editProduct.value) showProductDialog.value = true
+  }
+}
+
+function handleDialogSaved() {
+  // Stores update reactively, hub auto-refreshes
+}
+
+async function handleProductSave(data: CreateProductData | UpdateProductData, packages: any[]) {
+  const { showSuccess, showError } = useSnackbar()
+  try {
+    if ('id' in data) {
+      await productsStore.updateProduct(data)
+      for (const pkg of packages) {
+        if (pkg.id && !pkg.tempId) {
+          await productsStore.updatePackageOption(pkg)
+        } else if (pkg.tempId) {
+          const { tempId, ...packageData } = pkg
+          await productsStore.addPackageOption({ ...packageData, productId: data.id })
+        }
       }
+      showSuccess(`"${data.name}" updated`)
+    } else {
+      const newProduct = await productsStore.createProduct(data)
+      if (newProduct && packages.length > 0) {
+        for (const pkg of packages) {
+          const { tempId, ...packageData } = pkg
+          await productsStore.addPackageOption({ ...packageData, productId: newProduct.id })
+        }
+      }
+      showSuccess(`"${data.name}" created`)
     }
+  } catch (error) {
     const msg = error instanceof Error ? error.message : 'Save failed'
     showError(msg)
-    console.error('Constructor save failed:', error)
+  }
+  showProductDialog.value = false
+}
+
+// --- Clone ---
+function handleCloneItem(ref: HubItemRef) {
+  openEditDialog(ref)
+}
+
+// --- Delete (Archive) ---
+function handleDeleteItem(ref: HubItemRef) {
+  deleteTarget.value = ref
+  showDeleteConfirm.value = true
+}
+
+async function confirmDelete() {
+  if (!deleteTarget.value) return
+  deleting.value = true
+  const { showSuccess, showError } = useSnackbar()
+
+  try {
+    const archiveData = { status: 'archived', isActive: false }
+    if (deleteTarget.value.type === 'menu') {
+      await menuStore.updateMenuItem(deleteTarget.value.id, archiveData)
+    } else if (deleteTarget.value.type === 'recipe') {
+      await recipesStore.updateRecipe(deleteTarget.value.id, archiveData)
+    } else if (deleteTarget.value.type === 'preparation') {
+      await recipesStore.updatePreparation({ id: deleteTarget.value.id, ...archiveData } as any)
+    }
+    showSuccess(`"${deleteTarget.value.name}" archived`)
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Archive failed'
+    showError(msg)
   } finally {
-    saving.value = false
+    deleting.value = false
+    showDeleteConfirm.value = false
+    deleteTarget.value = null
   }
 }
 </script>
@@ -214,30 +288,36 @@ async function saveConstructorItem(isActive: boolean) {
   overflow: hidden;
 }
 
-.step-header {
-  padding: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+.create-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 16px 16px !important;
+}
 
-  h2 {
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin-bottom: 8px;
+.create-option {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.03);
+  transition: background 0.15s;
+
+  &:active {
+    background: rgba(255, 255, 255, 0.08);
   }
 }
 
-.step-indicators {
-  display: flex;
-  gap: 8px;
+.create-option-title {
+  font-weight: 600;
+  font-size: 0.95rem;
 }
 
-.step-btn {
-  text-transform: none;
-  font-weight: 500;
-}
-
-.step-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
+.create-option-desc {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 1px;
 }
 </style>

@@ -15,7 +15,8 @@ export interface ReplacementEntry {
 
 /**
  * Generate a unique key for replacement map
- * Format: "{recipeId}_{componentId}" or "variant_{componentId}"
+ * Format: "{recipeId}_{entityId}" or "variant_{entityId}"
+ * Uses stable entity IDs (product/preparation/recipe ID), not row UUIDs
  *
  * @param target - Target component to generate key for
  * @returns Unique key string
@@ -72,7 +73,7 @@ export function buildReplacementMap(
  * Check if a recipe component should be replaced
  *
  * @param recipeId - ID of the recipe
- * @param componentId - ID of the component within the recipe
+ * @param componentId - Stable entity ID (product/preparation/recipe ID), NOT row UUID
  * @param replacements - Replacement map
  * @returns ReplacementEntry if found, undefined otherwise
  */

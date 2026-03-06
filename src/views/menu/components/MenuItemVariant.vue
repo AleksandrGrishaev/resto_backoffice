@@ -41,18 +41,35 @@
           v-model="localVariant.portionMultiplier"
           label="Modifier Multiplier"
           :hide-details="'auto'"
-          placeholder="1.0"
+          placeholder="1"
           :rules="[v => !v || v > 0 || 'Must be positive']"
-          style="width: 140px"
+          style="width: 160px"
           :allow-decimal="true"
           @update:model-value="emitUpdate"
         >
           <template #append-inner>
-            <v-tooltip location="top">
+            <v-tooltip location="top" max-width="280">
               <template #activator="{ props: tooltipProps }">
                 <v-icon v-bind="tooltipProps" icon="mdi-help-circle-outline" size="18" />
               </template>
-              <span>Scales modifier quantities (e.g., 1.3 = 30% more)</span>
+              <div>
+                <div class="font-weight-bold mb-1">Modifier Multiplier</div>
+                <div>
+                  Scales ingredient quantities for this variant size. For example, if a modifier
+                  adds 50g of cheese:
+                </div>
+                <div class="mt-1">
+                  <strong>1.0</strong>
+                  = standard (50g)
+                  <br />
+                  <strong>1.5</strong>
+                  = large size (75g)
+                  <br />
+                  <strong>0.5</strong>
+                  = small size (25g)
+                </div>
+                <div class="mt-1 text-medium-emphasis">Default: 1 (no scaling)</div>
+              </div>
             </v-tooltip>
           </template>
         </NumericInputField>
