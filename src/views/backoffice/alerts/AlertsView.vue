@@ -33,6 +33,17 @@
       <!-- Actions -->
       <v-btn
         variant="tonal"
+        color="deep-purple"
+        prepend-icon="mdi-chart-line"
+        :loading="weeklyReportLoading"
+        class="me-2"
+        @click="handleWeeklyReport"
+      >
+        Weekly Report
+      </v-btn>
+
+      <v-btn
+        variant="tonal"
         color="primary"
         prepend-icon="mdi-refresh"
         :loading="loading"
@@ -179,6 +190,7 @@ import { useRouter } from 'vue-router'
 import { useAlertsStore } from '@/stores/alerts'
 import { useAuthStore } from '@/stores/auth'
 import { DebugUtils } from '@/utils'
+import { createWeeklyReport } from '@/core/watchdog'
 import type { OperationAlert, AlertCategory, AlertSeverity, AlertStatus } from '@/stores/alerts'
 import { ALERT_COLORS, ALERT_ICONS, ALERT_CATEGORY_LABELS } from '@/stores/alerts'
 import AlertCard from './components/AlertCard.vue'
@@ -199,6 +211,7 @@ const router = useRouter()
 // =============================================
 
 const loading = ref(false)
+const weeklyReportLoading = ref(false)
 const actionLoading = ref<string | null>(null)
 const allAlerts = ref<OperationAlert[]>([])
 
@@ -337,6 +350,18 @@ async function fetchAlerts() {
 
 async function handleRefresh() {
   await fetchAlerts()
+}
+
+async function handleWeeklyReport() {
+  weeklyReportLoading.value = true
+  try {
+    await createWeeklyReport()
+    await fetchAlerts()
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to generate weekly report', { error })
+  } finally {
+    weeklyReportLoading.value = false
+  }
 }
 
 async function handleMarkAllViewed() {

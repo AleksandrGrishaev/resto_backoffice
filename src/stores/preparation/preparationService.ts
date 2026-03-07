@@ -1581,6 +1581,22 @@ export class PreparationService {
         totalValue
       })
 
+      // Watchdog: check for prep cost spikes (non-blocking)
+      import('@/core/watchdog')
+        .then(({ onPreparationCreated }) =>
+          onPreparationCreated(
+            operationItems.map((oi: any) => ({
+              preparationId: oi.preparationId,
+              preparationName: oi.preparationName,
+              costPerUnit: oi.averageCostPerUnit,
+              unit: oi.unit,
+              quantity: oi.quantity
+            })),
+            data.responsiblePerson
+          )
+        )
+        .catch(err => DebugUtils.error(MODULE_NAME, 'Watchdog prep check failed', { error: err }))
+
       return operation
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to create preparation receipt', { error })

@@ -893,6 +893,27 @@ export class StorageService {
         totalValue
       })
 
+      // Watchdog: check for price spikes (non-blocking)
+      import('@/core/watchdog')
+        .then(({ onReceiptCreated }) =>
+          onReceiptCreated(
+            data.items.map(item => ({
+              itemId: item.itemId,
+              itemName: item.itemName,
+              costPerUnit: item.costPerUnit,
+              unit: item.unit,
+              quantity: item.quantity
+            })),
+            {
+              responsiblePerson: data.responsiblePerson,
+              supplierId: data.supplierId
+            }
+          )
+        )
+        .catch(err =>
+          DebugUtils.error(MODULE_NAME, 'Watchdog receipt check failed', { error: err })
+        )
+
       return {
         success: true,
         data: mapOperationFromDB(opData),

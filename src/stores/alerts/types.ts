@@ -33,6 +33,9 @@ export type ProductAlertType =
   | 'high_cancellation' // Many cancellations in a shift
   | 'write_off_threshold' // Write-off above normal
   | 'negative_inventory' // Negative stock detected
+  | 'price_spike' // Cost per unit jumped significantly vs historical average
+  | 'prep_cost_spike' // Preparation cost jumped significantly
+  | 'weekly_cost_report' // Weekly summary of all cost increases
 
 // Supplier-related alert types
 export type SupplierAlertType =
@@ -197,6 +200,9 @@ export const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   high_cancellation: 'High Cancellation Rate',
   write_off_threshold: 'Write-off Threshold',
   negative_inventory: 'Negative Inventory',
+  price_spike: 'Price Spike',
+  prep_cost_spike: 'Prep Cost Spike',
+  weekly_cost_report: 'Weekly Cost Report',
   // Supplier
   payment_discrepancy: 'Payment Discrepancy',
   overdue_delivery: 'Overdue Delivery',
