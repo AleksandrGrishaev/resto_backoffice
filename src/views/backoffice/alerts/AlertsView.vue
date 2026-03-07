@@ -33,10 +33,23 @@
       <!-- Actions -->
       <v-btn
         variant="tonal"
+        color="teal"
+        prepend-icon="mdi-calculator-variant"
+        :loading="recalcStatsLoading"
+        class="me-2"
+        size="small"
+        @click="handleRecalcStats"
+      >
+        Recalc Stats
+      </v-btn>
+
+      <v-btn
+        variant="tonal"
         color="deep-purple"
         prepend-icon="mdi-chart-line"
         :loading="weeklyReportLoading"
         class="me-2"
+        size="small"
         @click="handleWeeklyReport"
       >
         Weekly Report
@@ -47,6 +60,7 @@
         color="primary"
         prepend-icon="mdi-refresh"
         :loading="loading"
+        size="small"
         @click="handleRefresh"
       >
         Refresh
@@ -190,6 +204,7 @@ import { useRouter } from 'vue-router'
 import { useAlertsStore } from '@/stores/alerts'
 import { useAuthStore } from '@/stores/auth'
 import { DebugUtils } from '@/utils'
+import { supabase } from '@/supabase/client'
 import { createWeeklyReport } from '@/core/watchdog'
 import type { OperationAlert, AlertCategory, AlertSeverity, AlertStatus } from '@/stores/alerts'
 import { ALERT_COLORS, ALERT_ICONS, ALERT_CATEGORY_LABELS } from '@/stores/alerts'
@@ -212,6 +227,7 @@ const router = useRouter()
 
 const loading = ref(false)
 const weeklyReportLoading = ref(false)
+const recalcStatsLoading = ref(false)
 const actionLoading = ref<string | null>(null)
 const allAlerts = ref<OperationAlert[]>([])
 
@@ -350,6 +366,26 @@ async function fetchAlerts() {
 
 async function handleRefresh() {
   await fetchAlerts()
+}
+
+async function handleRecalcStats() {
+  recalcStatsLoading.value = true
+  try {
+    const { data, error } = await supabase.rpc('recalculate_consumption_stats', {
+      p_lookback_days: 30,
+      p_safety_factor: 1.5,
+      p_reorder_days: 7
+    })
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to recalculate consumption stats', { error })
+    } else {
+      DebugUtils.info(MODULE_NAME, 'Consumption stats recalculated', { result: data })
+    }
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'recalculate_consumption_stats RPC failed', { error })
+  } finally {
+    recalcStatsLoading.value = false
+  }
 }
 
 async function handleWeeklyReport() {

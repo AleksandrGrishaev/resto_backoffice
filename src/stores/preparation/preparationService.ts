@@ -153,7 +153,8 @@ export class PreparationService {
         shelfLife: preparation.shelfLife || 2, // preparations expire faster
         // ⭐ PHASE 2: Portion type support
         portionType: preparation.portionType || 'weight',
-        portionSize: preparation.portionSize
+        portionSize: preparation.portionSize,
+        avgDailyUsage: preparation.avgDailyUsage || 0
       }
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Error getting preparation info', { error, preparationId })
@@ -2164,6 +2165,8 @@ export class PreparationService {
               )[0].expiryDate!
             : ''
 
+        const avgDailyUsage = preparationInfo.avgDailyUsage || 0
+
         const balance: PreparationBalance = {
           preparationId,
           preparationName: preparationInfo.name,
@@ -2185,7 +2188,13 @@ export class PreparationService {
           // ⭐ PHASE 2: Portion type support for UI display
           portionType: preparationInfo.portionType,
           portionSize: preparationInfo.portionSize,
-          portionQuantity
+          portionQuantity,
+          // Consumption analytics
+          averageDailyUsage: avgDailyUsage > 0 ? avgDailyUsage : undefined,
+          daysOfStockRemaining:
+            avgDailyUsage > 0 && totalQuantity > 0
+              ? Math.round((totalQuantity / avgDailyUsage) * 10) / 10
+              : undefined
         }
 
         this.balances.push(balance)

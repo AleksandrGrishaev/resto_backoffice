@@ -94,7 +94,9 @@
           <!-- Catalog Screen -->
           <CatalogScreen
             v-else-if="currentScreen === 'catalog'"
+            :pending-item="pendingCatalogItem"
             @create-based="handleCreateBased"
+            @pending-item-consumed="pendingCatalogItem = null"
           />
 
           <!-- Constructor Screen -->
@@ -102,6 +104,7 @@
             v-else-if="currentScreen === 'constructor'"
             :pending-clone="pendingClone"
             @clone-consumed="pendingClone = null"
+            @view-in-catalog="handleViewInCatalog"
           />
         </div>
       </template>
@@ -184,6 +187,7 @@ const initError = ref<string | null>(null)
 const isInitialized = ref(false)
 const currentScreen = ref<KitchenScreenName>('orders')
 const pendingClone = ref<{ id: string; type: string; name: string } | null>(null)
+const pendingCatalogItem = ref<{ id: string; type: string } | null>(null)
 
 // Initialize selectedDepartment based on user role
 const getInitialDepartment = (): 'all' | 'kitchen' | 'bar' => {
@@ -293,6 +297,11 @@ const retryInitialization = async (): Promise<void> => {
 const handleCreateBased = (ref: { id: string; type: string; name: string }) => {
   pendingClone.value = ref
   currentScreen.value = 'constructor'
+}
+
+const handleViewInCatalog = (ref: { id: string; type: string }) => {
+  pendingCatalogItem.value = ref
+  currentScreen.value = 'catalog'
 }
 
 const handleScreenSelect = (screen: KitchenScreenName): void => {

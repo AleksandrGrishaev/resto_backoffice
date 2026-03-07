@@ -238,7 +238,7 @@ export class SupplierStorageIntegration {
       const consumptionMap = new Map<string, number>()
 
       // Call Supabase RPC function to get consumption stats
-      const { supabase } = await import('@/supabase')
+      const { supabase } = await import('@/supabase/client')
       const { data, error } = await supabase.rpc('get_products_consumption_stats', {
         days_back: 7
       })

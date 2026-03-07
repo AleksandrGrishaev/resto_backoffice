@@ -6,7 +6,8 @@
       @create-product="handleCreateProduct"
       @create-category="showCategoryTypePicker = true"
       @view-item="handleViewItem"
-      @clone-item="handleCloneItem"
+      @view-in-catalog="(ref: { id: string; type: string }) => emit('viewInCatalog', ref)"
+      @clone-item="handleCloneItemRequest"
       @delete-item="handleDeleteItem"
     />
 
@@ -66,6 +67,21 @@
       </v-card>
     </v-dialog>
 
+    <!-- Clone confirmation dialog -->
+    <v-dialog v-model="showCloneConfirm" max-width="400">
+      <v-card>
+        <v-card-title>Clone "{{ cloneTarget?.name }}"?</v-card-title>
+        <v-card-text>A copy will be created with all components and settings.</v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showCloneConfirm = false">Cancel</v-btn>
+          <v-btn color="primary" variant="flat" :loading="cloning" @click="confirmClone">
+            Clone
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Archive confirmation dialog -->
     <v-dialog v-model="showDeleteConfirm" max-width="400">
       <v-card>
@@ -108,6 +124,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   cloneConsumed: []
+  viewInCatalog: [ref: { id: string; type: string }]
 }>()
 
 const menuStore = useMenuStore()
@@ -129,6 +146,11 @@ const showMenuCategoryDialog = ref(false)
 const showRecipeCategoryDialog = ref(false)
 const recipeCategoryType = ref<'recipe' | 'preparation'>('recipe')
 const categoryTargetType = ref<'menu' | 'recipe' | 'preparation' | 'product'>('menu')
+
+// Clone state
+const showCloneConfirm = ref(false)
+const cloneTarget = ref<HubItemRef | null>(null)
+const cloning = ref(false)
 
 // Delete state
 const showDeleteConfirm = ref(false)
@@ -252,8 +274,16 @@ async function handleProductSave(data: CreateProductData | UpdateProductData, pa
 }
 
 // --- Clone ---
-async function handleCloneItem(ref: HubItemRef) {
+function handleCloneItemRequest(ref: HubItemRef) {
+  cloneTarget.value = ref
+  showCloneConfirm.value = true
+}
+
+async function confirmClone() {
+  if (!cloneTarget.value) return
+  cloning.value = true
   const { showSuccess, showError } = useSnackbar()
+  const ref = cloneTarget.value
   const newName = `Copy of ${ref.name}`
 
   try {
@@ -281,7 +311,16 @@ async function handleCloneItem(ref: HubItemRef) {
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Clone failed'
     showError(msg)
+  } finally {
+    cloning.value = false
+    showCloneConfirm.value = false
+    cloneTarget.value = null
   }
+}
+
+async function handleCloneItem(ref: HubItemRef) {
+  cloneTarget.value = ref
+  await confirmClone()
 }
 
 // --- Pending clone from Catalog ---

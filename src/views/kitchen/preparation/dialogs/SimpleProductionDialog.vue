@@ -183,6 +183,14 @@
       </v-card-actions>
     </v-card>
   </v-dialog>
+
+  <!-- Watchdog Confirmation Dialog -->
+  <WatchdogConfirmDialog
+    v-model="showWatchdogConfirm"
+    :result="watchdogResult"
+    @confirm="proceedWithSubmit"
+    @cancel="showWatchdogConfirm = false"
+  />
 </template>
 
 <script setup lang="ts">
@@ -195,6 +203,9 @@ import { useCostCalculation } from '@/stores/recipes/composables/useCostCalculat
 import type { CreatePreparationReceiptData } from '@/stores/preparation'
 import { DebugUtils, TimeUtils, formatIDR } from '@/utils'
 import { getUnitShortName } from '@/types/measurementUnits'
+import { preCheckPrepQuantity } from '@/core/watchdog'
+import type { PreCheckResult } from '@/core/watchdog'
+import WatchdogConfirmDialog from '@/core/watchdog/WatchdogConfirmDialog.vue'
 
 const MODULE_NAME = 'SimpleProductionDialog'
 
@@ -236,6 +247,15 @@ const selectedPreparationId = ref('')
 const quantity = ref(0)
 const portionInput = ref(0)
 const notes = ref('')
+
+// Watchdog pre-check state
+const showWatchdogConfirm = ref(false)
+const watchdogResult = ref<PreCheckResult>({
+  quantityWarnings: [],
+  priceWarnings: [],
+  hasWarnings: false,
+  hasCritical: false
+})
 
 // Computed - User department from role
 const userDepartment = computed<'kitchen' | 'bar'>(() => {
@@ -391,6 +411,33 @@ function formatCurrency(amount: number): string {
 
 async function handleSubmit() {
   if (!canSubmit.value || !selectedPreparation.value) return
+
+  // Run watchdog pre-check before saving
+  try {
+    const checkResult = await preCheckPrepQuantity([
+      {
+        preparationId: selectedPreparationId.value,
+        preparationName: selectedPreparation.value.name,
+        quantity: effectiveQuantity.value,
+        unit: selectedPreparation.value.outputUnit
+      }
+    ])
+
+    if (checkResult.hasWarnings) {
+      watchdogResult.value = checkResult
+      showWatchdogConfirm.value = true
+      return // Wait for user confirmation
+    }
+  } catch (err) {
+    DebugUtils.warn(MODULE_NAME, 'Pre-check failed, proceeding anyway', { error: err })
+  }
+
+  proceedWithSubmit()
+}
+
+/** Actually save after pre-check passed or user confirmed */
+function proceedWithSubmit() {
+  if (!selectedPreparation.value) return
 
   // Prepare data before closing dialog
   const expiryDate = calculatedExpiryDate.value

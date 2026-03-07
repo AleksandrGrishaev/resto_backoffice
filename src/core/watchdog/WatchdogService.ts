@@ -6,8 +6,10 @@ import { useAlertsStore } from '@/stores/alerts/alertsStore'
 import { formatIDR } from '@/utils'
 import { checkReceiptPrices } from './checkers/receiptChecker'
 import { checkPrepCosts } from './checkers/prepChecker'
+import { checkReceiptQuantities, checkPrepQuantities } from './checkers/quantityChecker'
 import { generateWeeklyCostReport } from './checkers/weeklyReportChecker'
 import type { PriceCheckResult, PrepCostCheckResult, WeeklyCostReport } from './types'
+import type { QuantityCheckResult } from './checkers/quantityChecker'
 
 const MODULE_NAME = 'WatchdogService'
 
@@ -39,11 +41,10 @@ export async function onReceiptCreated(
   context: WatchdogReceiptContext
 ): Promise<void> {
   try {
-    const spikes = await checkReceiptPrices(items, context)
-    if (spikes.length === 0) return
-
     const alertsStore = useAlertsStore()
 
+    // Check price spikes
+    const spikes = await checkReceiptPrices(items, context)
     for (const spike of spikes) {
       await alertsStore.createAlert({
         category: 'product',
@@ -66,7 +67,37 @@ export async function onReceiptCreated(
       })
     }
 
-    DebugUtils.info(MODULE_NAME, `Created ${spikes.length} price spike alert(s)`)
+    // Check quantity anomalies
+    const qtyAnomalies = await checkReceiptQuantities(items, context.responsiblePerson)
+    for (const anomaly of qtyAnomalies) {
+      await alertsStore.createAlert({
+        category: 'product',
+        type: 'quantity_anomaly',
+        severity: anomaly.severity,
+        title: `Quantity anomaly: ${anomaly.itemName} ${anomaly.multiplier}x average`,
+        description: buildQuantityAnomalyDescription(anomaly),
+        metadata: {
+          itemId: anomaly.itemId,
+          itemName: anomaly.itemName,
+          unit: anomaly.unit,
+          newQuantity: anomaly.newQuantity,
+          averageQuantity: anomaly.averageQuantity,
+          maxHistoricalQuantity: anomaly.maxHistoricalQuantity,
+          multiplier: anomaly.multiplier,
+          reason: anomaly.reason,
+          responsiblePerson: anomaly.responsiblePerson,
+          source: 'receipt'
+        }
+      })
+    }
+
+    const totalAlerts = spikes.length + qtyAnomalies.length
+    if (totalAlerts > 0) {
+      DebugUtils.info(MODULE_NAME, `Created ${totalAlerts} receipt alert(s)`, {
+        priceSpikes: spikes.length,
+        quantityAnomalies: qtyAnomalies.length
+      })
+    }
   } catch (err) {
     DebugUtils.error(MODULE_NAME, 'onReceiptCreated watchdog failed', { error: err })
   }
@@ -93,11 +124,10 @@ export async function onPreparationCreated(
   responsiblePerson?: string
 ): Promise<void> {
   try {
-    const spikes = await checkPrepCosts(items, responsiblePerson)
-    if (spikes.length === 0) return
-
     const alertsStore = useAlertsStore()
 
+    // Check cost spikes
+    const spikes = await checkPrepCosts(items, responsiblePerson)
     for (const spike of spikes) {
       await alertsStore.createAlert({
         category: 'product',
@@ -117,7 +147,45 @@ export async function onPreparationCreated(
       })
     }
 
-    DebugUtils.info(MODULE_NAME, `Created ${spikes.length} prep cost spike alert(s)`)
+    // Check quantity anomalies
+    const qtyAnomalies = await checkPrepQuantities(
+      items.map(i => ({
+        preparationId: i.preparationId,
+        preparationName: i.preparationName,
+        quantity: i.quantity,
+        unit: i.unit
+      })),
+      responsiblePerson
+    )
+    for (const anomaly of qtyAnomalies) {
+      await alertsStore.createAlert({
+        category: 'product',
+        type: 'quantity_anomaly',
+        severity: anomaly.severity,
+        title: `Quantity anomaly: ${anomaly.itemName} ${anomaly.multiplier}x average`,
+        description: buildQuantityAnomalyDescription(anomaly),
+        metadata: {
+          itemId: anomaly.itemId,
+          itemName: anomaly.itemName,
+          unit: anomaly.unit,
+          newQuantity: anomaly.newQuantity,
+          averageQuantity: anomaly.averageQuantity,
+          maxHistoricalQuantity: anomaly.maxHistoricalQuantity,
+          multiplier: anomaly.multiplier,
+          reason: anomaly.reason,
+          responsiblePerson: anomaly.responsiblePerson,
+          source: 'production'
+        }
+      })
+    }
+
+    const totalAlerts = spikes.length + qtyAnomalies.length
+    if (totalAlerts > 0) {
+      DebugUtils.info(MODULE_NAME, `Created ${totalAlerts} prep alert(s)`, {
+        costSpikes: spikes.length,
+        quantityAnomalies: qtyAnomalies.length
+      })
+    }
   } catch (err) {
     DebugUtils.error(MODULE_NAME, 'onPreparationCreated watchdog failed', { error: err })
   }
@@ -189,6 +257,18 @@ function buildPriceSpikeDescription(spike: PriceCheckResult): string {
   }
   if (spike.supplierName) {
     lines.push(`Supplier: ${spike.supplierName}`)
+  }
+  return lines.join('\n')
+}
+
+function buildQuantityAnomalyDescription(anomaly: QuantityCheckResult): string {
+  const lines = [
+    `"${anomaly.itemName}" quantity: ${anomaly.newQuantity}${anomaly.unit}`,
+    `Average: ${anomaly.averageQuantity}${anomaly.unit} | Max seen: ${anomaly.maxHistoricalQuantity}${anomaly.unit}`,
+    `${anomaly.multiplier}x the average quantity`
+  ]
+  if (anomaly.responsiblePerson) {
+    lines.push(`Responsible: ${anomaly.responsiblePerson}`)
   }
   return lines.join('\n')
 }

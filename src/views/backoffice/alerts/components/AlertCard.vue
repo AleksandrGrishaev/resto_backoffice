@@ -109,6 +109,15 @@
               (+{{ alert.metadata.percentChange }}%)
             </span>
           </template>
+          <template v-else-if="alert.type === 'quantity_anomaly' && alert.metadata">
+            {{ alert.metadata.itemName }}:
+            <span class="text-error font-weight-medium">
+              {{ alert.metadata.newQuantity }}{{ alert.metadata.unit }}
+            </span>
+            (avg: {{ alert.metadata.averageQuantity }}{{ alert.metadata.unit }},
+            <span class="text-error font-weight-medium">{{ alert.metadata.multiplier }}x</span>
+            )
+          </template>
           <template v-else-if="alert.type === 'weekly_cost_report' && alert.metadata">
             <span class="font-weight-medium">{{ alert.metadata.totalItemsAffected }} items</span>
             with cost increase
@@ -320,6 +329,50 @@
               <span class="detail-label">Change</span>
               <span class="detail-value font-weight-bold text-error">
                 +{{ alert.metadata.percentChange }}%
+              </span>
+            </div>
+            <div v-if="alert.metadata.responsiblePerson" class="detail-item">
+              <span class="detail-label">Responsible</span>
+              <span class="detail-value">{{ alert.metadata.responsiblePerson }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quantity Anomaly Details -->
+        <div v-else-if="alert.type === 'quantity_anomaly' && alert.metadata" class="alert-details">
+          <div class="details-grid mb-2">
+            <div class="detail-item">
+              <span class="detail-label">Item</span>
+              <span class="detail-value font-weight-medium">{{ alert.metadata.itemName }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Received / Produced</span>
+              <span class="detail-value font-weight-bold text-error">
+                {{ alert.metadata.newQuantity }}{{ alert.metadata.unit }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Average</span>
+              <span class="detail-value">
+                {{ alert.metadata.averageQuantity }}{{ alert.metadata.unit }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Max Historical</span>
+              <span class="detail-value">
+                {{ alert.metadata.maxHistoricalQuantity }}{{ alert.metadata.unit }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Multiplier</span>
+              <span class="detail-value font-weight-bold text-error">
+                {{ alert.metadata.multiplier }}x
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Source</span>
+              <span class="detail-value text-capitalize">
+                {{ alert.metadata.source || 'unknown' }}
               </span>
             </div>
             <div v-if="alert.metadata.responsiblePerson" class="detail-item">
@@ -609,6 +662,7 @@ const KNOWN_ALERT_TYPES = [
   'balance_correction',
   'price_spike',
   'prep_cost_spike',
+  'quantity_anomaly',
   'weekly_cost_report'
 ]
 

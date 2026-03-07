@@ -422,6 +422,14 @@
   </v-dialog>
 
   <!-- Deficit info dialog removed: auto-reconciliation handles deficits automatically -->
+
+  <!-- Watchdog Pre-Check Confirmation -->
+  <WatchdogConfirmDialog
+    v-model="showWatchdogConfirm"
+    :result="watchdogResult"
+    @confirm="proceedWithSubmit"
+    @cancel="showWatchdogConfirm = false"
+  />
 </template>
 
 <script setup lang="ts">
@@ -439,6 +447,9 @@ import type {
 } from '@/stores/preparation'
 import { DebugUtils, generateId } from '@/utils'
 import { getUnitShortName } from '@/types/measurementUnits'
+import { preCheckPrepQuantity } from '@/core/watchdog'
+import type { PreCheckResult } from '@/core/watchdog'
+import WatchdogConfirmDialog from '@/core/watchdog/WatchdogConfirmDialog.vue'
 
 const MODULE_NAME = 'DirectPreparationProductionDialog'
 
@@ -487,6 +498,13 @@ const { calculateDirectCost } = useCostCalculation() // ✅ NEW: For yield adjus
 const form = ref()
 const isFormValid = ref(false)
 const loading = ref(false)
+const showWatchdogConfirm = ref(false)
+const watchdogResult = ref<PreCheckResult>({
+  quantityWarnings: [],
+  priceWarnings: [],
+  hasWarnings: false,
+  hasCritical: false
+})
 const selectedPreparationId = ref('')
 const quantity = ref(0)
 
@@ -906,6 +924,58 @@ function clearQueue() {
 }
 
 async function handleSubmit() {
+  if (!canSubmit.value) return
+
+  // Build pre-check items from queue + current selection
+  const preCheckItems: {
+    preparationId: string
+    preparationName: string
+    quantity: number
+    unit: string
+  }[] = []
+
+  for (const queueItem of productionQueue.value) {
+    const prep = recipesStore.preparations.find(p => p.id === queueItem.preparationId)
+    preCheckItems.push({
+      preparationId: queueItem.preparationId,
+      preparationName: prep?.name || queueItem.preparationId,
+      quantity: queueItem.quantity,
+      unit: prep?.outputUnit || 'gram'
+    })
+  }
+
+  if (
+    selectedPreparationId.value &&
+    effectiveQuantity.value > 0 &&
+    !isInQueue(selectedPreparationId.value)
+  ) {
+    const prep = selectedPreparation.value
+    preCheckItems.push({
+      preparationId: selectedPreparationId.value,
+      preparationName: prep?.name || selectedPreparationId.value,
+      quantity: effectiveQuantity.value,
+      unit: prep?.outputUnit || 'gram'
+    })
+  }
+
+  // Watchdog pre-check
+  try {
+    if (preCheckItems.length > 0) {
+      const checkResult = await preCheckPrepQuantity(preCheckItems)
+      if (checkResult.hasWarnings) {
+        watchdogResult.value = checkResult
+        showWatchdogConfirm.value = true
+        return
+      }
+    }
+  } catch (err) {
+    DebugUtils.warn(MODULE_NAME, 'Watchdog pre-check failed, proceeding anyway', { error: err })
+  }
+
+  proceedWithSubmit()
+}
+
+async function proceedWithSubmit() {
   if (!canSubmit.value) return
 
   try {

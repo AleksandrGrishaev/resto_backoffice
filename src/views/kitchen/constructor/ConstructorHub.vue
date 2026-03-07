@@ -57,7 +57,9 @@
           density="compact"
           hide-details
           clearable
+          :autofocus="false"
           class="hub-search"
+          @vue:mounted="($el: any) => $el?.querySelector?.('input')?.blur()"
         />
       </div>
     </div>
@@ -121,7 +123,20 @@
                 <v-btn
                   icon
                   variant="text"
-                  size="x-small"
+                  size="small"
+                  @click.stop="
+                    emit('viewInCatalog', {
+                      id: item.id,
+                      type: item.type
+                    })
+                  "
+                >
+                  <v-icon size="18">mdi-file-tree-outline</v-icon>
+                </v-btn>
+                <v-btn
+                  icon
+                  variant="text"
+                  size="small"
                   @click.stop="
                     emit('cloneItem', {
                       id: item.id,
@@ -130,12 +145,12 @@
                     })
                   "
                 >
-                  <v-icon size="16">mdi-content-copy</v-icon>
+                  <v-icon size="18">mdi-content-copy</v-icon>
                 </v-btn>
                 <v-btn
                   icon
                   variant="text"
-                  size="x-small"
+                  size="small"
                   color="warning"
                   @click.stop="
                     emit('deleteItem', {
@@ -145,7 +160,7 @@
                     })
                   "
                 >
-                  <v-icon size="16">mdi-archive-outline</v-icon>
+                  <v-icon size="18">mdi-archive-outline</v-icon>
                 </v-btn>
               </div>
             </div>
@@ -231,6 +246,7 @@ const emit = defineEmits<{
   createProduct: []
   createCategory: []
   viewItem: [ref: { id: string; type: string; status: string }]
+  viewInCatalog: [ref: { id: string; type: string }]
   cloneItem: [ref: HubItemRef]
   deleteItem: [ref: HubItemRef]
 }>()
@@ -704,7 +720,7 @@ function handleCreateCategory() {
 
 .card-actions {
   display: flex;
-  gap: 2px;
+  gap: 6px;
   flex-shrink: 0;
 }
 

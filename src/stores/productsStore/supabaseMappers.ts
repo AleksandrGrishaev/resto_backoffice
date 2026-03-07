@@ -98,6 +98,7 @@ export function productFromSupabase(
     shelfLife: row.shelf_life || undefined,
     minStock: row.min_stock || undefined,
     maxStock: row.max_stock || undefined,
+    avgDailyUsage: (row as any).avg_daily_usage || undefined,
     leadTimeDays: row.lead_time_days || undefined,
     primarySupplierId: row.primary_supplier_id || undefined,
     tags: row.tags || undefined,

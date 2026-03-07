@@ -131,6 +131,8 @@ export function preparationFromSupabase(
     // ⭐ PHASE 2: Portion type support
     portionType: (row.portion_type as 'weight' | 'portion') || 'weight',
     portionSize: row.portion_size ? Number(row.portion_size) : undefined,
+    // Consumption analytics
+    avgDailyUsage: (row as any).avg_daily_usage ? Number((row as any).avg_daily_usage) : undefined,
     // Entity status
     status: ((row as any).status as any) || (row.is_active === false ? 'draft' : 'active'),
     lastEditedAt: (row as any).last_edited_at || undefined,

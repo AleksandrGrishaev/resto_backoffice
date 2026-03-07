@@ -118,6 +118,9 @@ export interface Preparation extends BaseEntity {
   portionType: PortionType // 'weight' (default) or 'portion'
   portionSize?: number // Size of one portion in grams (only for portionType='portion')
 
+  // Consumption analytics (from recalculate_consumption_stats RPC)
+  avgDailyUsage?: number
+
   // Entity status & last edited tracking
   status?: EntityStatus
   lastEditedAt?: string

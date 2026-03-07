@@ -285,6 +285,14 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Watchdog Pre-Check Confirmation -->
+    <WatchdogConfirmDialog
+      v-model="showWatchdogConfirm"
+      :result="watchdogResult"
+      @confirm="proceedWithComplete"
+      @cancel="showWatchdogConfirm = false"
+    />
   </v-dialog>
 </template>
 
@@ -304,6 +312,9 @@ import type {
 import EditableReceiptItemsWidget from './receipt-edit/EditableReceiptItemsWidget.vue'
 import QuickVerifyMode from '@/components/receipt/QuickVerifyMode.vue'
 import type { ReceiptItemInput, ReceiptItemOutput } from '@/composables/useQuickVerifyMode'
+import { preCheckReceiptItems } from '@/core/watchdog'
+import type { PreCheckResult } from '@/core/watchdog'
+import WatchdogConfirmDialog from '@/core/watchdog/WatchdogConfirmDialog.vue'
 
 const MODULE_NAME = 'BaseReceiptDialog'
 
@@ -354,6 +365,13 @@ const isSaving = ref(false)
 const isCompleting = ref(false)
 const showConfirmDialog = ref(false)
 const showQuickVerify = ref(false)
+const showWatchdogConfirm = ref(false)
+const watchdogResult = ref<PreCheckResult>({
+  quantityWarnings: [],
+  priceWarnings: [],
+  hasWarnings: false,
+  hasCritical: false
+})
 
 interface ReceiptFormItem extends ReceiptItem {
   unit?: string
@@ -766,6 +784,36 @@ async function saveReceipt() {
 
 async function confirmComplete() {
   if (!currentReceipt.value || !canComplete.value) return
+
+  // Watchdog pre-check before completing
+  try {
+    const checkItems = receiptForm.value.items
+      .filter(item => item.receivedQuantity > 0)
+      .map(item => ({
+        itemId: item.itemId,
+        itemName: item.itemName,
+        quantity: item.receivedQuantity,
+        costPerUnit: item.actualBaseCost || item.orderedBaseCost || 0,
+        unit: item.unit || 'gram'
+      }))
+
+    if (checkItems.length > 0) {
+      const checkResult = await preCheckReceiptItems(checkItems)
+      if (checkResult.hasWarnings) {
+        watchdogResult.value = checkResult
+        showWatchdogConfirm.value = true
+        return
+      }
+    }
+  } catch (err) {
+    DebugUtils.warn(MODULE_NAME, 'Watchdog pre-check failed, proceeding anyway', { error: err })
+  }
+
+  proceedWithComplete()
+}
+
+async function proceedWithComplete() {
+  if (!currentReceipt.value) return
 
   DebugUtils.info(MODULE_NAME, 'Completing receipt', {
     receiptId: currentReceipt.value.id,

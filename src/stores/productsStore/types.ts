@@ -92,6 +92,9 @@ export interface Product extends BaseEntity {
   // ✨ NEW: Last inventory count date
   lastCountedAt?: string
 
+  // Consumption analytics (from recalculate_consumption_stats RPC)
+  avgDailyUsage?: number
+
   // Entity status & last edited tracking
   status?: EntityStatus
   lastEditedAt?: string

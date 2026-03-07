@@ -301,50 +301,41 @@ function updateQuantity(newValue: string | number): void {
 // USAGE CALCULATIONS
 // =============================================
 
-function formatDailyUsage(suggestion: OrderSuggestion): string {
-  if (!product.value) return 'N/A'
+/**
+ * Get real daily usage from product.avgDailyUsage (populated by recalculate_consumption_stats RPC).
+ * Returns 0 if no data available — we show "N/A" instead of fake numbers.
+ */
+function getDailyUsage(): number {
+  if (!product.value) return 0
+  return product.value.avgDailyUsage || 0
+}
 
-  const dailyUsage = Math.max(
-    1,
-    Math.round(product.value.dailyConsumption || suggestion.suggestedQuantity / 10)
-  )
-  return formatQuantityInBestUnit(dailyUsage) + '/day'
+function formatDailyUsage(suggestion: OrderSuggestion): string {
+  const daily = getDailyUsage()
+  if (daily <= 0) return 'N/A'
+  return formatQuantityInBestUnit(Math.round(daily)) + '/day'
 }
 
 function formatWeeklyUsage(suggestion: OrderSuggestion): string {
-  if (!product.value) return 'N/A'
-
-  const dailyUsage = Math.max(
-    1,
-    Math.round(product.value.dailyConsumption || suggestion.suggestedQuantity / 10)
-  )
-  const weeklyUsage = dailyUsage * 7
-  return formatQuantityInBestUnit(weeklyUsage) + '/week'
+  const daily = getDailyUsage()
+  if (daily <= 0) return 'N/A'
+  return formatQuantityInBestUnit(Math.round(daily * 7)) + '/week'
 }
 
 function formatStockDuration(suggestion: OrderSuggestion): string {
-  if (!product.value) return 'N/A'
+  const daily = getDailyUsage()
+  if (daily <= 0) return 'N/A'
+  if (suggestion.currentStock <= 0) return '0 days'
 
-  const dailyUsage = Math.max(
-    1,
-    Math.round(product.value.dailyConsumption || suggestion.suggestedQuantity / 10)
-  )
-  const currentStock = suggestion.currentStock
-
-  if (currentStock <= 0) return '0 days'
-
-  const daysRemaining = Math.floor(currentStock / dailyUsage)
+  const daysRemaining = Math.floor(suggestion.currentStock / daily)
   return daysRemaining <= 1 ? `${daysRemaining} day` : `${daysRemaining} days`
 }
 
 function calculateDaysSupply(): number {
-  if (!product.value || !props.selectedQuantity) return 0
-
-  const dailyUsage = Math.max(
-    1,
-    Math.round(product.value.dailyConsumption || props.selectedQuantity / 10)
-  )
-  return Math.floor(props.selectedQuantity / dailyUsage)
+  if (!props.selectedQuantity) return 0
+  const daily = getDailyUsage()
+  if (daily <= 0) return 0
+  return Math.floor(props.selectedQuantity / daily)
 }
 
 function getShelfLife(suggestion: OrderSuggestion): string {
@@ -383,13 +374,10 @@ function getCurrentStockColor(suggestion: OrderSuggestion): string {
 }
 
 function getStockDurationColor(suggestion: OrderSuggestion): string {
-  if (!product.value) return 'text-medium-emphasis'
+  const daily = getDailyUsage()
+  if (daily <= 0) return 'text-medium-emphasis'
 
-  const dailyUsage = Math.max(
-    1,
-    Math.round(product.value.dailyConsumption || suggestion.suggestedQuantity / 10)
-  )
-  const daysRemaining = Math.floor(suggestion.currentStock / dailyUsage)
+  const daysRemaining = Math.floor(suggestion.currentStock / daily)
 
   if (daysRemaining <= 1) return 'text-error'
   if (daysRemaining <= 3) return 'text-warning'

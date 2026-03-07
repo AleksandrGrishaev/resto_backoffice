@@ -51,7 +51,9 @@
             density="compact"
             hide-details
             clearable
+            :autofocus="false"
             class="search-input"
+            @vue:mounted="($el: any) => $el?.querySelector?.('input')?.blur()"
           />
 
           <v-btn
@@ -178,7 +180,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useCatalogData } from './composables/useCatalogData'
 import type { CatalogItem } from './composables/useCatalogData'
 import ItemDetailScreen from './detail/ItemDetailScreen.vue'
@@ -202,8 +204,13 @@ interface BreadcrumbItem {
   categoryId?: string
 }
 
+const props = defineProps<{
+  pendingItem?: { id: string; type: string } | null
+}>()
+
 const emit = defineEmits<{
   createBased: [ref: { id: string; type: string; name: string }]
+  pendingItemConsumed: []
 }>()
 
 const recipesStore = useRecipesStore()
@@ -570,6 +577,59 @@ watch(activeDepartment, () => {
   selectedItem.value = null
   navStack.value = []
 })
+
+// Navigate to pending item from constructor
+function navigateToPendingItem() {
+  const pending = props.pendingItem
+  if (!pending) return
+
+  const allItems = [
+    ...menuCatalogItems.value,
+    ...recipeCatalogItems.value,
+    ...preparationCatalogItems.value,
+    ...productCatalogItems.value
+  ]
+  const found = allItems.find(i => i.id === pending.id && i.type === pending.type)
+  if (found) {
+    const sectionMap: Record<string, SectionId> = {
+      menu: 'menu',
+      recipe: 'recipes',
+      preparation: 'preps',
+      product: 'products'
+    }
+    const targetSection = sectionMap[found.type]
+    if (targetSection && activeSection.value !== targetSection) {
+      activeSection.value = targetSection
+    }
+    // Reset navigation state before opening detail
+    currentCategory.value = null
+    selectedItem.value = null
+    navStack.value = []
+    openDetail(found)
+    emit('pendingItemConsumed')
+    return true
+  }
+  return false
+}
+
+watch(
+  () => props.pendingItem,
+  pending => {
+    if (!pending) return
+    // Try immediately, then retry after renders settle
+    if (!navigateToPendingItem()) {
+      nextTick(() => {
+        if (!navigateToPendingItem()) {
+          // Final fallback — wait for async data
+          setTimeout(() => {
+            navigateToPendingItem()
+          }, 100)
+        }
+      })
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped lang="scss">
