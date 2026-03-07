@@ -494,32 +494,63 @@ function findRecipeComponentByTarget(
 }
 
 /**
- * Calculate cost of a single component
+ * Calculate cost of a single component — recursively computes from leaf products
+ * to avoid stale cached costs on recipes/preparations
  */
 function calculateComponentCost(
   type: string,
   id: string,
   quantity: number,
-  context: CostCalculationContext
+  context: CostCalculationContext,
+  visited?: Set<string>
 ): number {
   const { productsStore, recipesStore } = context
 
   if (type === 'product') {
     const product = productsStore.getProductById(id)
     return quantity * (product?.baseCostPerUnit || 0)
-  } else if (type === 'recipe') {
-    const recipeCost = recipesStore.getRecipeCostCalculation(id)
-    if (recipeCost?.costPerPortion) {
-      return quantity * recipeCost.costPerPortion
-    }
+  }
+
+  // Circular dependency guard
+  const key = `${type}:${id}`
+  const seen = visited ?? new Set<string>()
+  if (seen.has(key)) return 0
+  seen.add(key)
+
+  if (type === 'recipe') {
     const recipe = recipesStore.getRecipeById(id)
-    return quantity * (recipe?.cost || 0)
-  } else if (type === 'preparation') {
-    const prepCost = recipesStore.getPreparationCostCalculation(id)
-    if (prepCost?.costPerOutputUnit) {
-      return quantity * prepCost.costPerOutputUnit
+    if (recipe?.components?.length) {
+      const childrenSum = recipe.components.reduce((sum, comp) => {
+        return (
+          sum +
+          calculateComponentCost(
+            comp.componentType,
+            comp.componentId,
+            comp.quantity,
+            context,
+            new Set(seen)
+          )
+        )
+      }, 0)
+      if (childrenSum > 0 && recipe.portionSize && recipe.portionSize > 0) {
+        return Math.round((childrenSum / recipe.portionSize) * quantity)
+      }
     }
+    // Fallback to stored cost
+    return quantity * (recipe?.cost || 0)
+  }
+
+  if (type === 'preparation') {
     const prep = recipesStore.getPreparationById(id)
+    if (prep?.recipe?.length) {
+      const childrenSum = prep.recipe.reduce((sum, ing) => {
+        return sum + calculateComponentCost(ing.type, ing.id, ing.quantity, context, new Set(seen))
+      }, 0)
+      if (childrenSum > 0 && prep.outputQuantity && prep.outputQuantity > 0) {
+        return Math.round((childrenSum / prep.outputQuantity) * quantity)
+      }
+    }
+    // Fallback to stored cost
     return quantity * (prep?.lastKnownCost || prep?.costPerPortion || 0)
   }
 

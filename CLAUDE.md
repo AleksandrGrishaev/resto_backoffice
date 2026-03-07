@@ -999,3 +999,18 @@ interface ServiceResponse<T> {
 ```
 
 This enables consistent error handling and debugging across all stores.
+
+## System Architecture & Roadmap
+
+This project is part of a **two-project system** (backoffice + web-winter).
+
+**Key documentation files:**
+
+- **`src/About/Frontend/SYSTEM_OVERVIEW.md`** — Full system architecture, shared contracts between backoffice and web-winter
+- **`src/About/Frontend/BACKOFFICE_ROADMAP.md`** — Backoffice-specific roadmap, phases, and task list
+
+**Our role:** We OWN the database schema and all business logic.
+
+- All DB migrations live here (`src/supabase/migrations/`)
+- All RPC functions live here (`src/supabase/functions/`)
+- web-winter reads our data but never writes directly
