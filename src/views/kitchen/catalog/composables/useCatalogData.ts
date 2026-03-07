@@ -95,41 +95,45 @@ export function useCatalogData() {
 
   // --- Recipes as CatalogItems ---
   const recipeCatalogItems = computed<CatalogItem[]>(() =>
-    (recipesStore.recipes as Recipe[]).map(r => ({
-      id: r.id,
-      name: r.name,
-      type: 'recipe' as const,
-      isActive: r.isActive,
-      status: (r.status || (r.isActive ? 'active' : 'draft')) as EntityStatus,
-      department: r.department,
-      categoryId: r.category,
-      categoryName: recipesStore.getRecipeCategoryName(r.category),
-      code: r.code,
-      componentCount: r.components?.length ?? 0,
-      cost: r.cost,
-      costDisplay: r.cost ? `${formatIDR(r.cost)}/portion` : undefined
-    }))
+    (recipesStore.recipes as Recipe[]).map(r => {
+      const cost = resolveComponentCost('recipe', r.id, 1)
+      return {
+        id: r.id,
+        name: r.name,
+        type: 'recipe' as const,
+        isActive: r.isActive,
+        status: (r.status || (r.isActive ? 'active' : 'draft')) as EntityStatus,
+        department: r.department,
+        categoryId: r.category,
+        categoryName: recipesStore.getRecipeCategoryName(r.category),
+        code: r.code,
+        componentCount: r.components?.length ?? 0,
+        cost,
+        costDisplay: cost > 0 ? `${formatIDR(cost)}/portion` : undefined
+      }
+    })
   )
 
   // --- Preparations as CatalogItems ---
   const preparationCatalogItems = computed<CatalogItem[]>(() =>
-    (recipesStore.preparations as Preparation[]).map(p => ({
-      id: p.id,
-      name: p.name,
-      type: 'preparation' as const,
-      isActive: p.isActive,
-      status: (p.status || (p.isActive ? 'active' : 'draft')) as EntityStatus,
-      department: p.department,
-      categoryId: p.type,
-      categoryName: recipesStore.getPreparationCategoryName(p.type),
-      code: p.code,
-      unit: p.outputUnit,
-      componentCount: p.recipe?.length ?? 0,
-      cost: p.costPerPortion,
-      costDisplay: p.costPerPortion
-        ? `${formatIDR(p.costPerPortion)}/${getUnitShortName(p.outputUnit)}`
-        : undefined
-    }))
+    (recipesStore.preparations as Preparation[]).map(p => {
+      const cost = resolveComponentCost('preparation', p.id, 1)
+      return {
+        id: p.id,
+        name: p.name,
+        type: 'preparation' as const,
+        isActive: p.isActive,
+        status: (p.status || (p.isActive ? 'active' : 'draft')) as EntityStatus,
+        department: p.department,
+        categoryId: p.type,
+        categoryName: recipesStore.getPreparationCategoryName(p.type),
+        code: p.code,
+        unit: p.outputUnit,
+        componentCount: p.recipe?.length ?? 0,
+        cost,
+        costDisplay: cost > 0 ? `${formatIDR(cost)}/${getUnitShortName(p.outputUnit)}` : undefined
+      }
+    })
   )
 
   // --- Products as CatalogItems ---
@@ -348,7 +352,8 @@ export function useCatalogData() {
     type: string,
     id: string,
     quantity: number,
-    useYieldPercentage?: boolean
+    useYieldPercentage?: boolean,
+    visited?: Set<string>
   ): number {
     if (type === 'product') {
       const p = productsStore.getProductById(id) as Product | null
@@ -358,12 +363,55 @@ export function useCatalogData() {
       }
       return (p?.baseCostPerUnit ?? 0) * adjustedQuantity
     }
+
+    // Circular dependency guard
+    const key = `${type}:${id}`
+    const seen = visited ?? new Set<string>()
+    if (seen.has(key)) return 0
+    seen.add(key)
+
     if (type === 'preparation') {
       const p = recipesStore.getPreparationById(id) as Preparation | undefined
+      if (p?.recipe?.length) {
+        const childrenSum = p.recipe.reduce((sum, ing) => {
+          return (
+            sum +
+            resolveComponentCost(
+              ing.type,
+              ing.id,
+              ing.quantity,
+              ing.useYieldPercentage,
+              new Set(seen)
+            )
+          )
+        }, 0)
+        if (childrenSum > 0 && p.outputQuantity && p.outputQuantity > 0) {
+          return Math.round((childrenSum / p.outputQuantity) * quantity)
+        }
+      }
+      // Fallback to stored cost
       return (p?.costPerPortion ?? p?.lastKnownCost ?? 0) * quantity
     }
     if (type === 'recipe') {
       const r = recipesStore.getRecipeById(id) as Recipe | undefined
+      if (r?.components?.length) {
+        const childrenSum = r.components.reduce((sum, comp) => {
+          return (
+            sum +
+            resolveComponentCost(
+              comp.componentType,
+              comp.componentId,
+              comp.quantity,
+              comp.useYieldPercentage,
+              new Set(seen)
+            )
+          )
+        }, 0)
+        if (childrenSum > 0 && r.portionSize && r.portionSize > 0) {
+          return Math.round((childrenSum / r.portionSize) * quantity)
+        }
+      }
+      // Fallback to stored cost
       return (r?.cost ?? 0) * quantity
     }
     return 0

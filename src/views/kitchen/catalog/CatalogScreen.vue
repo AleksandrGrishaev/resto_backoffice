@@ -647,7 +647,7 @@ watch(activeDepartment, () => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
   min-width: 0;
 }
 
@@ -656,7 +656,6 @@ watch(activeDepartment, () => {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex-shrink: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -716,7 +715,6 @@ watch(activeDepartment, () => {
 
 .catalog-content {
   flex: 1;
-  overflow-y: auto;
   padding: 12px 16px;
 }
 

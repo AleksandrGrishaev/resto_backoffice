@@ -818,10 +818,8 @@ const usedInItems = computed<UsageItem[]>(() => {
 
 <style scoped lang="scss">
 .detail-screen {
-  height: 100%;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .detail-header {
@@ -830,7 +828,6 @@ const usedInItems = computed<UsageItem[]>(() => {
   gap: 8px;
   padding: 8px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  flex-shrink: 0;
 }
 
 .detail-title {
@@ -861,7 +858,6 @@ const usedInItems = computed<UsageItem[]>(() => {
 
 .detail-content {
   flex: 1;
-  overflow-y: auto;
   padding: 12px 16px;
 }
 
