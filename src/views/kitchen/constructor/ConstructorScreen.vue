@@ -86,7 +86,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useSnackbar } from '@/composables/useSnackbar'
 import { useMenuStore } from '@/stores/menu'
 import { useRecipesStore } from '@/stores/recipes'
@@ -101,6 +101,14 @@ import type { CreateType, HubItemRef } from './ConstructorHub.vue'
 import type { Preparation, Recipe } from '@/stores/recipes/types'
 import type { MenuItem } from '@/stores/menu/types'
 import type { Product, CreateProductData, UpdateProductData } from '@/stores/productsStore/types'
+
+const props = defineProps<{
+  pendingClone?: { id: string; type: string; name: string } | null
+}>()
+
+const emit = defineEmits<{
+  cloneConsumed: []
+}>()
 
 const menuStore = useMenuStore()
 const recipesStore = useRecipesStore()
@@ -244,9 +252,49 @@ async function handleProductSave(data: CreateProductData | UpdateProductData, pa
 }
 
 // --- Clone ---
-function handleCloneItem(ref: HubItemRef) {
-  openEditDialog(ref)
+async function handleCloneItem(ref: HubItemRef) {
+  const { showSuccess, showError } = useSnackbar()
+  const newName = `Copy of ${ref.name}`
+
+  try {
+    if (ref.type === 'menu') {
+      const cloned = await menuStore.duplicateMenuItem(ref.id, newName)
+      showSuccess(`"${newName}" created`)
+      if (cloned) {
+        editMenuItem.value =
+          (menuStore.menuItems as MenuItem[]).find(m => m.id === cloned.id) ?? null
+        if (editMenuItem.value) showMenuDialog.value = true
+      }
+    } else if (ref.type === 'recipe') {
+      const cloned = await recipesStore.duplicateRecipe(ref.id, newName)
+      showSuccess(`"${newName}" created`)
+      editRecipe.value = cloned
+      editRecipeType.value = 'recipe'
+      showRecipeDialog.value = true
+    } else if (ref.type === 'preparation') {
+      const cloned = await recipesStore.duplicatePreparation(ref.id, newName)
+      showSuccess(`"${newName}" created`)
+      editRecipe.value = cloned
+      editRecipeType.value = 'preparation'
+      showRecipeDialog.value = true
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Clone failed'
+    showError(msg)
+  }
 }
+
+// --- Pending clone from Catalog ---
+watch(
+  () => props.pendingClone,
+  clone => {
+    if (clone) {
+      handleCloneItem({ id: clone.id, type: clone.type as CreateType, name: clone.name })
+      emit('cloneConsumed')
+    }
+  },
+  { immediate: true }
+)
 
 // --- Delete (Archive) ---
 function handleDeleteItem(ref: HubItemRef) {

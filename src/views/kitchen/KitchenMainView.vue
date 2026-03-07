@@ -94,11 +94,15 @@
           <!-- Catalog Screen -->
           <CatalogScreen
             v-else-if="currentScreen === 'catalog'"
-            @create-based="() => (currentScreen = 'constructor')"
+            @create-based="handleCreateBased"
           />
 
           <!-- Constructor Screen -->
-          <ConstructorScreen v-else-if="currentScreen === 'constructor'" />
+          <ConstructorScreen
+            v-else-if="currentScreen === 'constructor'"
+            :pending-clone="pendingClone"
+            @clone-consumed="pendingClone = null"
+          />
         </div>
       </template>
     </KitchenLayout>
@@ -179,6 +183,7 @@ const isLoading = ref(false)
 const initError = ref<string | null>(null)
 const isInitialized = ref(false)
 const currentScreen = ref<KitchenScreenName>('orders')
+const pendingClone = ref<{ id: string; type: string; name: string } | null>(null)
 
 // Initialize selectedDepartment based on user role
 const getInitialDepartment = (): 'all' | 'kitchen' | 'bar' => {
@@ -285,6 +290,11 @@ const retryInitialization = async (): Promise<void> => {
  * Handle screen selection from sidebar
  * Triggers background data refresh for the target screen
  */
+const handleCreateBased = (ref: { id: string; type: string; name: string }) => {
+  pendingClone.value = ref
+  currentScreen.value = 'constructor'
+}
+
 const handleScreenSelect = (screen: KitchenScreenName): void => {
   currentScreen.value = screen
   DebugUtils.debug(MODULE_NAME, 'Screen selected', { screen })

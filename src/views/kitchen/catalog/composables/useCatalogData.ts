@@ -278,23 +278,25 @@ export function useCatalogData() {
       const p = recipesStore.getPreparationById(id) as Preparation | undefined
       const children = buildTree('preparation', id, new Set(visited))
       const childrenSum = children.reduce((sum, c) => sum + (c.cost ?? 0), 0)
-      // If stored cost is missing, derive from children: (childrenSum / outputQuantity) * quantity
+      // Prefer dynamically computed children cost (current prices) over stored cost (may be stale)
       let effectiveCost = cost
-      if (effectiveCost <= 0 && childrenSum > 0 && p?.outputQuantity && p.outputQuantity > 0) {
+      if (childrenSum > 0 && p?.outputQuantity && p.outputQuantity > 0) {
         effectiveCost = Math.round((childrenSum / p.outputQuantity) * effectiveQuantity)
       }
       // Determine display unit: use "portion" if caller specified portionSize, else prep's native unit
       const displayUnit =
         unit === 'portion' && portionSize
           ? 'portion'
-          : p?.portionType === 'portion'
+          : unit === 'portion' && p?.portionType === 'portion'
             ? 'portion'
-            : p?.outputUnit || unit
-      // Batch cost: prefer store-calculated cost (accounts for yield etc.), fallback to children sum
+            : unit || p?.outputUnit || 'gram'
+      // Batch cost: prefer children sum (dynamic), fallback to stored cost
       const batchCost =
-        cost > 0 && p?.outputQuantity
-          ? Math.round((cost / effectiveQuantity) * p.outputQuantity)
-          : childrenSum
+        childrenSum > 0
+          ? childrenSum
+          : cost > 0 && p?.outputQuantity
+            ? Math.round((cost / effectiveQuantity) * p.outputQuantity)
+            : 0
       return {
         id,
         name: p?.name ?? id,
@@ -313,13 +315,18 @@ export function useCatalogData() {
       const r = recipesStore.getRecipeById(id) as Recipe | undefined
       const children = buildTree('recipe', id, new Set(visited))
       const childrenSum = children.reduce((sum, c) => sum + (c.cost ?? 0), 0)
+      // Prefer dynamically computed children cost (current prices) over stored cost (may be stale)
       let effectiveCost = cost
-      if (effectiveCost <= 0 && childrenSum > 0 && r?.portionSize && r.portionSize > 0) {
+      if (childrenSum > 0 && r?.portionSize && r.portionSize > 0) {
         effectiveCost = Math.round((childrenSum / r.portionSize) * quantity)
       }
-      // Batch cost: prefer store-calculated cost (accounts for yield etc.), fallback to children sum
+      // Batch cost: prefer children sum (dynamic), fallback to stored cost
       const batchCost =
-        cost > 0 && r?.portionSize ? Math.round((cost / quantity) * r.portionSize) : childrenSum
+        childrenSum > 0
+          ? childrenSum
+          : cost > 0 && r?.portionSize
+            ? Math.round((cost / quantity) * r.portionSize)
+            : 0
       return {
         id,
         name: r?.name ?? id,
