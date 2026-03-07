@@ -720,10 +720,28 @@ export function calculateRevenueBreakdown(order: PosOrder): RevenueBreakdown {
   let taxBreakdown: TaxBreakdown[] = []
   let taxAdjustedRevenue = actualRevenue
 
-  if (order.channelId) {
+  // Resolve channel: prefer channelId, fallback to channelCode lookup
+  const resolvedChannelId =
+    order.channelId ||
+    (order.channelCode
+      ? (() => {
+          try {
+            const cs = useChannelsStore()
+            return cs.getChannelByCode(order.channelCode!)?.id
+          } catch {
+            return undefined
+          }
+        })()
+      : undefined)
+
+  if (resolvedChannelId) {
+    // Backfill channelId on the order so subsequent saves persist it
+    if (!order.channelId) {
+      order.channelId = resolvedChannelId
+    }
     try {
       const channelsStore = useChannelsStore()
-      const channel = channelsStore.getChannelById(order.channelId)
+      const channel = channelsStore.getChannelById(resolvedChannelId)
       if (channel?.taxes?.length) {
         if (channel.taxMode === 'inclusive') {
           // Inclusive: taxes are embedded in the price — extract them

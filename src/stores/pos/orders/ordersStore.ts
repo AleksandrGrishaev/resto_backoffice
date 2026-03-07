@@ -1850,11 +1850,23 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       }
 
       // Create new dine-in order on target table, preserving source channel info
+      // Fallback to dine_in channel if source has no channelId
+      let moveChannelId = sourceOrder.channelId
+      const moveChannelCode = sourceOrder.channelCode || 'dine_in'
+      if (!moveChannelId) {
+        try {
+          const { useChannelsStore } = await import('@/stores/channels')
+          const channelsStore = useChannelsStore()
+          moveChannelId = channelsStore.getChannelByCode(moveChannelCode)?.id
+        } catch {
+          /* channels store unavailable */
+        }
+      }
       const newOrderResponse = await ordersService.createOrder({
         type: 'dine_in',
         tableId: targetTableId,
-        channelId: sourceOrder.channelId,
-        channelCode: sourceOrder.channelCode
+        channelId: moveChannelId,
+        channelCode: moveChannelCode
       })
       if (!newOrderResponse.success || !newOrderResponse.data) {
         return {
