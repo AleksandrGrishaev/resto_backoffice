@@ -501,46 +501,46 @@ function toggleAll() {
 
 // --- Modifier section ---
 .modifier-section {
-  padding: 4px 14px 8px 56px;
+  padding: 0;
   background: rgba(255, 255, 255, 0.01);
   border-left: 3px solid rgba(var(--v-theme-purple, 156, 39, 176), 0.1);
 }
 
 .modifier-group {
-  margin-bottom: 6px;
-
-  &:last-child {
-    margin-bottom: 0;
+  &:not(:last-child) {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   }
 }
 
 .modifier-group-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 0;
+  gap: 8px;
+  padding: 9px 14px 9px 56px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .modifier-group-name {
-  font-size: 0.78rem;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .modifier-options {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  padding-left: 8px;
 }
 
 .modifier-option {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 0.76rem;
+  padding: 9px 14px 9px 72px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+
+  &:last-child {
+    border-bottom: none;
+  }
 
   &:hover {
     background: rgba(255, 255, 255, 0.03);
@@ -548,28 +548,30 @@ function toggleAll() {
 }
 
 .option-name {
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.92rem;
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .option-default {
-  font-size: 0.68rem;
-  color: rgba(255, 255, 255, 0.35);
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .option-costs {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   flex-shrink: 0;
 }
 
 .option-price {
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.92rem;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .option-cost {
+  font-size: 0.92rem;
   color: rgba(255, 255, 255, 0.4);
-  font-size: 0.72rem;
 }
 
 .empty-state {

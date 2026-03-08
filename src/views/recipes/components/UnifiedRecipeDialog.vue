@@ -27,6 +27,7 @@
             <v-tabs v-model="activeTab" color="primary" class="mb-4">
               <v-tab value="general">General</v-tab>
               <v-tab value="components">Components</v-tab>
+              <v-tab v-if="isEditing && props.item?.id" value="history">History</v-tab>
             </v-tabs>
 
             <v-tabs-window v-model="activeTab">
@@ -57,6 +58,13 @@
                   :item-id="formData.id"
                 />
               </v-tabs-window-item>
+
+              <v-tabs-window-item v-if="isEditing && props.item?.id" value="history">
+                <entity-history-tab
+                  :entity-type="type === 'preparation' ? 'preparation' : 'recipe'"
+                  :entity-id="props.item.id"
+                />
+              </v-tabs-window-item>
             </v-tabs-window>
           </template>
 
@@ -83,6 +91,16 @@
             />
 
             <used-in-widget v-if="isEditing && formData.id" :type="type" :item-id="formData.id" />
+
+            <!-- History section for desktop -->
+            <template v-if="isEditing && props.item?.id">
+              <v-divider class="my-4" />
+              <div class="text-subtitle-2 mb-2">Change History</div>
+              <entity-history-tab
+                :entity-type="type === 'preparation' ? 'preparation' : 'recipe'"
+                :entity-id="props.item.id"
+              />
+            </template>
           </template>
         </v-form>
       </v-card-text>
@@ -137,6 +155,7 @@ import RecipeBasicInfoWidget from './widgets/RecipeBasicInfoWidget.vue'
 import RecipeCostPreviewWidget from './widgets/RecipeCostPreviewWidget.vue'
 import RecipeComponentsEditorWidget from './widgets/RecipeComponentsEditorWidget.vue'
 import UsedInWidget from './widgets/UsedInWidget.vue' // ⭐ PHASE 1: Recipe Nesting
+import EntityHistoryTab from '@/views/kitchen/constructor/components/EntityHistoryTab.vue'
 
 interface Props {
   modelValue: boolean

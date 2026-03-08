@@ -10,8 +10,22 @@
       </v-btn>
     </div>
 
-    <!-- Filters row -->
-    <div class="hub-filters">
+    <!-- View toggle: Items / History -->
+    <div class="hub-view-toggle">
+      <v-btn-toggle v-model="viewMode" mandatory density="compact" color="primary">
+        <v-btn value="items" size="small">
+          <v-icon start size="16">mdi-view-list</v-icon>
+          Items
+        </v-btn>
+        <v-btn value="history" size="small">
+          <v-icon start size="16">mdi-history</v-icon>
+          History
+        </v-btn>
+      </v-btn-toggle>
+    </div>
+
+    <!-- Filters row (only in items mode) -->
+    <div v-if="viewMode === 'items'" class="hub-filters">
       <!-- Type filter (multi-select chips) -->
       <div class="type-chips">
         <v-chip
@@ -64,8 +78,144 @@
       </div>
     </div>
 
-    <!-- Timeline sections -->
-    <div class="hub-timeline">
+    <!-- Global Change History (history mode) -->
+    <div v-if="viewMode === 'history'" class="hub-timeline hub-history">
+      <div v-if="historyLoading" class="d-flex justify-center pa-8">
+        <v-progress-circular indeterminate color="primary" />
+      </div>
+      <template v-else-if="historyGroups.length > 0">
+        <section v-for="group in historyGroups" :key="group.date" class="timeline-group">
+          <div class="timeline-label">
+            <span>{{ group.label }}</span>
+            <span class="timeline-count">{{ group.entries.length }}</span>
+          </div>
+          <div class="history-entries">
+            <div
+              v-for="entry in group.entries"
+              :key="entry.id"
+              class="history-card"
+              :class="{ 'history-card--expanded': expandedEntries.has(entry.id) }"
+            >
+              <!-- Header row — click to expand -->
+              <div class="history-card-header" @click.stop="toggleExpand(entry.id)">
+                <v-chip
+                  :color="entry.entityType === 'recipe' ? 'green' : 'orange'"
+                  size="x-small"
+                  variant="flat"
+                  label
+                >
+                  {{ entry.entityType === 'recipe' ? 'Recipe' : 'Prep' }}
+                </v-chip>
+                <span class="history-card-name">{{ entry.entityName }}</span>
+                <v-chip
+                  :color="historyChangeColor(entry.changeType)"
+                  size="x-small"
+                  variant="tonal"
+                >
+                  {{ entry.changeType }}
+                </v-chip>
+                <v-icon v-if="hasChanges(entry)" size="16" class="expand-icon">
+                  {{ expandedEntries.has(entry.id) ? 'mdi-chevron-up' : 'mdi-chevron-down' }}
+                </v-icon>
+              </div>
+              <div class="history-card-meta">
+                <span class="history-card-time">{{ formatHistoryTime(entry.createdAt) }}</span>
+                <span class="history-card-author">by {{ entry.changedByName }}</span>
+                <span
+                  v-if="hasChanges(entry) && !expandedEntries.has(entry.id)"
+                  class="history-card-summary"
+                >
+                  {{ totalChanges(entry) }} change{{ totalChanges(entry) > 1 ? 's' : '' }}
+                </span>
+              </div>
+
+              <!-- Expanded details: was → became -->
+              <div
+                v-if="expandedEntries.has(entry.id) && hasChanges(entry)"
+                class="history-details"
+              >
+                <!-- Field changes -->
+                <div v-if="entry.changes.fields?.length" class="details-section">
+                  <div v-for="(f, i) in entry.changes.fields" :key="'f' + i" class="detail-row">
+                    <span class="detail-label">{{ getFieldLabel(f.field) }}</span>
+                    <span class="detail-old">{{ formatFieldVal(f.field, f.old) }}</span>
+                    <v-icon size="14" class="detail-arrow">mdi-arrow-right</v-icon>
+                    <span class="detail-new">{{ formatFieldVal(f.field, f.new) }}</span>
+                  </div>
+                </div>
+
+                <!-- Component changes -->
+                <div v-if="entry.changes.components?.length" class="details-section">
+                  <div class="details-section-title">Components</div>
+                  <div
+                    v-for="(c, i) in entry.changes.components"
+                    :key="'c' + i"
+                    class="detail-row detail-row--component"
+                  >
+                    <template v-if="c.action === 'added'">
+                      <v-icon size="14" color="success">mdi-plus-circle</v-icon>
+                      <span class="detail-comp-name text-success">{{ c.componentName }}</span>
+                      <span v-if="getCompQty(c, 'new')" class="detail-comp-qty">
+                        {{ getCompQty(c, 'new') }}
+                      </span>
+                    </template>
+                    <template v-else-if="c.action === 'removed'">
+                      <v-icon size="14" color="error">mdi-minus-circle</v-icon>
+                      <span class="detail-comp-name text-error text-decoration-line-through">
+                        {{ c.componentName }}
+                      </span>
+                      <span
+                        v-if="getCompQty(c, 'old')"
+                        class="detail-comp-qty text-medium-emphasis"
+                      >
+                        was {{ getCompQty(c, 'old') }}
+                      </span>
+                    </template>
+                    <template v-else-if="c.action === 'modified'">
+                      <v-icon size="14" color="warning">mdi-pencil-circle</v-icon>
+                      <span class="detail-comp-name">{{ c.componentName }}</span>
+                      <template v-for="(d, j) in c.details" :key="'d' + j">
+                        <span class="detail-old">{{ d.old }}</span>
+                        <v-icon size="12" class="detail-arrow">mdi-arrow-right</v-icon>
+                        <span class="detail-new">{{ d.new }}</span>
+                        <span v-if="d.field === 'unit'" class="detail-unit-label">
+                          ({{ d.field }})
+                        </span>
+                      </template>
+                    </template>
+                  </div>
+                </div>
+
+                <!-- Open entity button -->
+                <v-btn
+                  size="small"
+                  variant="text"
+                  color="primary"
+                  class="mt-1"
+                  @click.stop="
+                    emit('viewItem', {
+                      id: entry.entityId,
+                      type: entry.entityType,
+                      status: 'active'
+                    })
+                  "
+                >
+                  Open {{ entry.entityType === 'recipe' ? 'recipe' : 'preparation' }}
+                  <v-icon end size="14">mdi-open-in-new</v-icon>
+                </v-btn>
+              </div>
+            </div>
+          </div>
+        </section>
+      </template>
+      <div v-else class="empty-state">
+        <v-icon size="48" color="grey">mdi-history</v-icon>
+        <div>No changes recorded yet</div>
+      </div>
+    </div>
+
+    <!-- Timeline sections (items mode) -->
+    <div v-if="viewMode === 'items'" class="hub-timeline">
       <template v-for="group in timelineGroups" :key="group.label">
         <section v-if="group.items.length > 0" class="timeline-group">
           <div class="timeline-label">
@@ -222,11 +372,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useMenuStore } from '@/stores/menu'
 import { useRecipesStore } from '@/stores/recipes'
 import { useProductsStore } from '@/stores/productsStore'
 import { formatIDR } from '@/utils'
+import { changelogService, getFieldLabel, formatFieldValue } from '@/core/changelog'
+import type { ChangeLogEntry } from '@/core/changelog'
 import type { MenuItem, Category } from '@/stores/menu/types'
 import type { Preparation, Recipe } from '@/stores/recipes/types'
 import type { Product } from '@/stores/productsStore/types'
@@ -503,6 +655,117 @@ function handleCreateCategory() {
   showCreateDialog.value = false
   emit('createCategory')
 }
+
+// --- View Mode: Items / History ---
+const viewMode = ref<'items' | 'history'>('items')
+
+// --- Global History ---
+const historyEntries = ref<ChangeLogEntry[]>([])
+const historyLoading = ref(false)
+
+watch(viewMode, async mode => {
+  if (mode === 'history' && historyEntries.value.length === 0) {
+    historyLoading.value = true
+    try {
+      historyEntries.value = await changelogService.getRecentChanges(90, 200)
+    } finally {
+      historyLoading.value = false
+    }
+  }
+})
+
+interface HistoryGroup {
+  label: string
+  date: string
+  entries: ChangeLogEntry[]
+}
+
+const historyGroups = computed<HistoryGroup[]>(() => {
+  const dayMap = new Map<string, ChangeLogEntry[]>()
+
+  for (const entry of historyEntries.value) {
+    const d = new Date(entry.createdAt)
+    const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    if (!dayMap.has(dayKey)) dayMap.set(dayKey, [])
+    dayMap.get(dayKey)!.push(entry)
+  }
+
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const yd = new Date(Date.now() - 86400000)
+  const yesterday = `${yd.getFullYear()}-${String(yd.getMonth() + 1).padStart(2, '0')}-${String(yd.getDate()).padStart(2, '0')}`
+
+  const groups: HistoryGroup[] = []
+  for (const [dayKey, entries] of dayMap) {
+    let label: string
+    if (dayKey === today) label = 'Today'
+    else if (dayKey === yesterday) label = 'Yesterday'
+    else
+      label = new Date(dayKey + 'T00:00:00').toLocaleDateString('en-US', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      })
+    groups.push({ label, date: dayKey, entries })
+  }
+
+  return groups
+})
+
+function formatHistoryTime(isoStr: string): string {
+  return new Date(isoStr).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+}
+
+function historyChangeColor(type: string): string {
+  switch (type) {
+    case 'created':
+      return 'success'
+    case 'updated':
+      return 'primary'
+    case 'archived':
+      return 'error'
+    case 'restored':
+      return 'info'
+    case 'cloned':
+      return 'secondary'
+    default:
+      return 'grey'
+  }
+}
+
+function hasChanges(entry: ChangeLogEntry): boolean {
+  return (entry.changes.fields?.length || 0) > 0 || (entry.changes.components?.length || 0) > 0
+}
+
+function totalChanges(entry: ChangeLogEntry): number {
+  return (entry.changes.fields?.length || 0) + (entry.changes.components?.length || 0)
+}
+
+// --- Expand/collapse ---
+const expandedEntries = ref(new Set<string>())
+
+function toggleExpand(id: string) {
+  if (expandedEntries.value.has(id)) {
+    expandedEntries.value.delete(id)
+  } else {
+    expandedEntries.value.add(id)
+  }
+  // Trigger reactivity
+  expandedEntries.value = new Set(expandedEntries.value)
+}
+
+function formatFieldVal(field: string, value: any): string {
+  return formatFieldValue(field, value)
+}
+
+function getCompQty(comp: any, which: 'old' | 'new'): string {
+  const qty = comp.details?.find((d: any) => d.field === 'quantity')
+  const unit = comp.details?.find((d: any) => d.field === 'unit')
+  const q = qty?.[which]
+  const u = unit?.[which]
+  if (q != null) return `${q}${u ? ' ' + u : ''}`
+  return ''
+}
 </script>
 
 <style scoped lang="scss">
@@ -767,5 +1030,147 @@ function handleCreateCategory() {
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.5);
   margin-top: 2px;
+}
+
+// --- View toggle ---
+.hub-view-toggle {
+  padding: 0 16px 8px;
+}
+
+// --- History mode ---
+.hub-history {
+  .history-entries {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0 4px;
+  }
+}
+
+.history-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.history-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history-card-name {
+  font-weight: 500;
+  font-size: 0.9rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-card-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 4px;
+}
+
+.history-card-changes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.history-card--expanded {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.history-card-header {
+  cursor: pointer;
+}
+
+.expand-icon {
+  opacity: 0.5;
+  margin-left: auto;
+}
+
+.history-card-summary {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+// --- Expanded details ---
+.history-details {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.details-section {
+  margin-bottom: 8px;
+}
+
+.details-section-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 4px;
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 0.8rem;
+}
+
+.detail-row--component {
+  padding: 4px 0;
+}
+
+.detail-label {
+  color: rgba(255, 255, 255, 0.6);
+  min-width: 80px;
+  font-weight: 500;
+}
+
+.detail-old {
+  color: #f44336;
+  text-decoration: line-through;
+}
+
+.detail-new {
+  color: #4caf50;
+  font-weight: 500;
+}
+
+.detail-arrow {
+  opacity: 0.4;
+  flex-shrink: 0;
+}
+
+.detail-comp-name {
+  font-weight: 500;
+}
+
+.detail-comp-qty {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.detail-unit-label {
+  font-size: 0.7rem;
+  opacity: 0.5;
 }
 </style>

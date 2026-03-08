@@ -57,6 +57,9 @@
         <v-tab value="info">Info</v-tab>
         <v-tab value="cost">Cost</v-tab>
         <v-tab value="used-in">Used In</v-tab>
+        <v-tab v-if="item.type === 'recipe' || item.type === 'preparation'" value="history">
+          History
+        </v-tab>
       </template>
     </v-tabs>
 
@@ -424,6 +427,11 @@
           </div>
         </div>
       </div>
+
+      <!-- History Tab (recipes & preparations only) -->
+      <div v-if="activeTab === 'history'" class="tab-content">
+        <EntityHistoryTab :entity-type="historyEntityType" :entity-id="item.id" />
+      </div>
     </div>
   </div>
 </template>
@@ -440,6 +448,7 @@ import type { CatalogItem, ModifierGroupDisplay } from '../composables/useCatalo
 import { calculateFoodCostRange } from '@/core/cost/modifierCostCalculator'
 import type { FoodCostRange } from '@/core/cost/modifierCostCalculator'
 import DependencyTree from './DependencyTree.vue'
+import EntityHistoryTab from '@/views/kitchen/constructor/components/EntityHistoryTab.vue'
 import type { TreeNode } from './DependencyTree.vue'
 import type { Product } from '@/stores/productsStore/types'
 import type { Preparation, Recipe } from '@/stores/recipes/types'
@@ -474,6 +483,7 @@ const { buildTree, buildModifierDisplayData } = useCatalogData()
 
 const defaultTab = (type: CatalogItem['type']) => (type === 'product' ? 'used-in' : 'tree')
 const activeTab = ref(defaultTab(props.item.type))
+const historyEntityType = computed(() => props.item.type as 'recipe' | 'preparation')
 
 // Reset to default tab when navigating to a different item
 watch(
