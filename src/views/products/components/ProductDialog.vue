@@ -42,7 +42,6 @@
                     counter="100"
                     maxlength="100"
                     placeholder="Enter product name"
-                    autofocus
                   />
                 </v-col>
 
@@ -331,7 +330,8 @@
         <v-btn
           color="primary"
           :variant="formValid ? 'flat' : 'outlined'"
-          :loading="loading"
+          :loading="loading || saving"
+          :disabled="saving"
           @click="saveProduct"
         >
           {{ isEdit ? 'Save' : 'Create' }}
@@ -409,6 +409,7 @@ const activeTab = ref('general')
 const packageDialogOpen = ref(false)
 const editingPackage = ref<PackageOption | undefined>(undefined)
 const editingPackageIndex = ref<number | null>(null)
+const saving = ref(false)
 const localPackageOptions = ref<LocalPackage[]>([])
 const departmentOptions = [
   { value: 'kitchen' as Department, title: 'Kitchen' },
@@ -559,6 +560,7 @@ watch(
   () => props.modelValue,
   isOpen => {
     if (isOpen) {
+      saving.value = false
       activeTab.value = 'general'
       nextTick(() => {
         if (formRef.value) {
@@ -575,6 +577,7 @@ const closeDialog = (): void => {
 }
 
 const saveProduct = async (): Promise<void> => {
+  if (saving.value) return
   try {
     if (!formRef.value) return
 
@@ -584,6 +587,7 @@ const saveProduct = async (): Promise<void> => {
       return
     }
 
+    saving.value = true
     DebugUtils.info(MODULE_NAME, 'Saving product', { isEdit: isEdit.value })
 
     const { id, ...productData } = formData.value
@@ -604,6 +608,8 @@ const saveProduct = async (): Promise<void> => {
     }
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Error saving product', { error })
+  } finally {
+    saving.value = false
   }
 }
 

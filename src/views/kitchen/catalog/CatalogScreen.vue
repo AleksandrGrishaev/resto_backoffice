@@ -56,6 +56,21 @@
             @vue:mounted="($el: any) => $el?.querySelector?.('input')?.blur()"
           />
 
+          <!-- View mode toggle -->
+          <v-btn
+            icon
+            variant="text"
+            size="small"
+            @click="viewMode = viewMode === 'grid' ? 'tree' : 'grid'"
+          >
+            <v-icon>
+              {{ viewMode === 'grid' ? 'mdi-file-tree-outline' : 'mdi-view-grid-outline' }}
+            </v-icon>
+            <v-tooltip activator="parent" location="bottom">
+              {{ viewMode === 'grid' ? 'Tree view' : 'Grid view' }}
+            </v-tooltip>
+          </v-btn>
+
           <v-btn
             v-if="hasFilters"
             icon
@@ -113,6 +128,15 @@
         <ItemsList
           v-else-if="currentCategory"
           :items="categoryItems"
+          :section="activeSection"
+          @select="openDetail"
+        />
+
+        <!-- Tree view -->
+        <TreeView
+          v-else-if="viewMode === 'tree'"
+          :items="currentSectionItems"
+          :categories="visibleCategories"
           :section="activeSection"
           @select="openDetail"
         />
@@ -187,6 +211,7 @@ import ItemDetailScreen from './detail/ItemDetailScreen.vue'
 import SearchResults from './components/SearchResults.vue'
 import CategoriesGrid from './components/CategoriesGrid.vue'
 import ItemsList from './components/ItemsList.vue'
+import TreeView from './components/TreeView.vue'
 import MenuItemDialog from '@/views/menu/components/MenuItemDialog.vue'
 import UnifiedRecipeDialog from '@/views/recipes/components/UnifiedRecipeDialog.vue'
 import ProductDialog from '@/views/products/components/ProductDialog.vue'
@@ -245,6 +270,7 @@ const activeDepartment = ref<'kitchen' | 'bar'>('kitchen')
 const searchQuery = ref('')
 const currentCategory = ref<{ id: string; name: string } | null>(null)
 const selectedItem = ref<CatalogItem | null>(null)
+const viewMode = ref<'grid' | 'tree'>('grid')
 const showFilterDialog = ref(false)
 
 // Filters (in dialog)

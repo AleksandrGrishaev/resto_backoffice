@@ -75,7 +75,6 @@
                   :rules="[v => !!v || 'Required field']"
                   hide-details="auto"
                   class="mb-5"
-                  autofocus
                 />
 
                 <!-- Category -->

@@ -17,7 +17,6 @@
                 required
                 variant="outlined"
                 density="comfortable"
-                autofocus
                 @update:model-value="updateField('name', $event)"
               />
             </v-col>

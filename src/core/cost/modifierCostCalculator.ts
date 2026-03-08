@@ -392,7 +392,7 @@ function calculateOptionFoodCostImpact(
 /**
  * Calculate cost of option's composition
  */
-function calculateOptionCompositionCost(
+export function calculateOptionCompositionCost(
   option: ModifierOption,
   portionMultiplier: number,
   context: CostCalculationContext
@@ -424,7 +424,7 @@ function calculateOptionCompositionCost(
 /**
  * Calculate total cost of replaced components
  */
-function calculateReplacedComponentsCost(
+export function calculateReplacedComponentsCost(
   targetComponents: TargetComponent[],
   context: CostCalculationContext
 ): number {
@@ -668,4 +668,4 @@ function buildCombinationResult(
 // Utility Exports
 // =============================================
 
-export { calculateVariantBaseCost, calculateComponentCost, calculateOptionCompositionCost }
+export { calculateVariantBaseCost, calculateComponentCost }
