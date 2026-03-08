@@ -402,10 +402,19 @@ function calculateOptionCompositionCost(
   let totalCost = 0
   for (const comp of option.composition) {
     // When unit is "portion" with portionSize, convert to base units for cost calculation
-    const effectiveQuantity =
-      comp.unit === 'portion' && comp.portionSize
-        ? (comp.quantity || 1) * comp.portionSize
-        : comp.quantity || 1
+    // BUT: for portion-type preparations, outputQuantity is already in portions,
+    // so we must NOT multiply by portionSize (would mix grams with portions)
+    let effectiveQuantity = comp.quantity || 1
+    if (comp.unit === 'portion' && comp.portionSize) {
+      if (comp.type === 'preparation') {
+        const prep = context.recipesStore.getPreparationById(comp.id)
+        if (prep?.portionType !== 'portion') {
+          effectiveQuantity = (comp.quantity || 1) * comp.portionSize
+        }
+      } else {
+        effectiveQuantity = (comp.quantity || 1) * comp.portionSize
+      }
+    }
     const compCost = calculateComponentCost(comp.type, comp.id, effectiveQuantity, context)
     totalCost += compCost * portionMultiplier
   }
@@ -567,10 +576,18 @@ function calculateVariantBaseCost(
   let totalCost = 0
 
   for (const comp of variant.composition || []) {
-    const effectiveQuantity =
-      comp.unit === 'portion' && comp.portionSize
-        ? (comp.quantity || 1) * comp.portionSize
-        : comp.quantity || 1
+    // For portion-type preparations, don't multiply by portionSize — outputQuantity is in portions
+    let effectiveQuantity = comp.quantity || 1
+    if (comp.unit === 'portion' && comp.portionSize) {
+      if (comp.type === 'preparation') {
+        const prep = context.recipesStore.getPreparationById(comp.id)
+        if (prep?.portionType !== 'portion') {
+          effectiveQuantity = (comp.quantity || 1) * comp.portionSize
+        }
+      } else {
+        effectiveQuantity = (comp.quantity || 1) * comp.portionSize
+      }
+    }
     totalCost += calculateComponentCost(comp.type, comp.id, effectiveQuantity, context)
   }
 

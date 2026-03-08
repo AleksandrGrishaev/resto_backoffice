@@ -257,7 +257,19 @@ export function useCatalogData() {
     portionSize?: number
   ): TreeNode {
     // When unit is "portion" and portionSize is set, convert to base units for cost
-    const effectiveQuantity = unit === 'portion' && portionSize ? quantity * portionSize : quantity
+    // BUT: for portion-type preparations, outputQuantity is already in portions,
+    // so we must NOT multiply by portionSize (would mix grams with portions)
+    let effectiveQuantity = quantity
+    if (unit === 'portion' && portionSize) {
+      if (type === 'preparation') {
+        const prep = recipesStore.getPreparationById(id) as Preparation | undefined
+        if (prep?.portionType !== 'portion') {
+          effectiveQuantity = quantity * portionSize
+        }
+      } else {
+        effectiveQuantity = quantity * portionSize
+      }
+    }
     const cost = resolveComponentCost(type, id, effectiveQuantity, useYieldPercentage)
 
     if (type === 'product') {
