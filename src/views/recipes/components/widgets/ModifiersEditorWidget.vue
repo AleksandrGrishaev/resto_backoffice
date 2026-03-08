@@ -208,6 +208,52 @@
                     <span class="option-card__number">#{{ optionIndex + 1 }}</span>
                     <span class="option-card__name">{{ option.name || 'Unnamed' }}</span>
                     <v-spacer />
+                    <!-- Food Cost display -->
+                    <template v-if="group.type === 'addon'">
+                      <span class="option-card__cost">
+                        {{ formatIDR(getOptionFcDisplay(option, group).cost) }}
+                      </span>
+                      <span
+                        v-if="option.priceAdjustment"
+                        class="option-card__fc"
+                        :class="{
+                          'text-success':
+                            getOptionFcDisplay(option, group).fc !== null &&
+                            getOptionFcDisplay(option, group).fc! <= 35,
+                          'text-warning':
+                            getOptionFcDisplay(option, group).fc !== null &&
+                            getOptionFcDisplay(option, group).fc! > 35 &&
+                            getOptionFcDisplay(option, group).fc! <= 50,
+                          'text-error':
+                            getOptionFcDisplay(option, group).fc !== null &&
+                            getOptionFcDisplay(option, group).fc! > 50
+                        }"
+                      >
+                        FC {{ getOptionFcDisplay(option, group).fc?.toFixed(0) }}%
+                      </span>
+                    </template>
+                    <template v-else-if="group.type === 'replacement'">
+                      <span class="option-card__cost-detail">
+                        <span class="text-medium-emphasis">
+                          cost {{ formatIDR(getOptionFcDisplay(option, group).cost) }}
+                        </span>
+                        <span class="mx-1">·</span>
+                        <span class="text-medium-emphasis">
+                          replaced {{ formatIDR(getOptionFcDisplay(option, group).replacedCost) }}
+                        </span>
+                        <span class="mx-1">·</span>
+                        <span
+                          :class="{
+                            'text-success': getOptionFcDisplay(option, group).netCost < 0,
+                            'text-error': getOptionFcDisplay(option, group).netCost > 0,
+                            'text-medium-emphasis': getOptionFcDisplay(option, group).netCost === 0
+                          }"
+                        >
+                          {{ getOptionFcDisplay(option, group).netCost >= 0 ? '+' : ''
+                          }}{{ formatIDR(getOptionFcDisplay(option, group).netCost) }}
+                        </span>
+                      </span>
+                    </template>
                     <span v-if="option.priceAdjustment" class="option-card__price">
                       {{ option.priceAdjustment > 0 ? '+' : ''
                       }}{{ option.priceAdjustment.toLocaleString() }} IDR
@@ -447,6 +493,13 @@ import type {
 } from '@/stores/menu/types'
 import type { Recipe, RecipeComponent } from '@/stores/recipes/types'
 import { useRecipesStore } from '@/stores/recipes'
+import { useProductsStore } from '@/stores/productsStore'
+import {
+  calculateOptionCompositionCost,
+  calculateReplacedComponentsCost
+} from '@/core/cost/modifierCostCalculator'
+import type { CostCalculationContext } from '@/core/cost/modifierCostCalculator'
+import { formatIDR } from '@/utils'
 import { NumericInputField } from '@/components/input'
 import DishSearchWidget from '@/views/menu/components/widgets/DishSearchWidget.vue'
 import ProductSearchWidget from '@/views/menu/components/widgets/ProductSearchWidget.vue'
@@ -468,6 +521,54 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const recipesStore = useRecipesStore()
+const productsStore = useProductsStore()
+
+const costContext = computed<CostCalculationContext>(() => ({
+  productsStore,
+  recipesStore
+}))
+
+function getOptionCost(option: ModifierOption): number {
+  return calculateOptionCompositionCost(option, 1, costContext.value)
+}
+
+function getReplacedCost(group: ModifierGroup): number {
+  if (group.type !== 'replacement' || !group.targetComponents?.length) return 0
+  return calculateReplacedComponentsCost(group.targetComponents, costContext.value)
+}
+
+function getOptionFcDisplay(
+  option: ModifierOption,
+  group: ModifierGroup
+): { cost: number; replacedCost: number; netCost: number; fc: number | null; label: string } {
+  const cost = getOptionCost(option)
+
+  if (group.type === 'addon') {
+    const price = option.priceAdjustment || 0
+    const fc = price > 0 ? (cost / price) * 100 : null
+    return {
+      cost,
+      replacedCost: 0,
+      netCost: cost,
+      fc,
+      label: fc !== null ? `FC ${fc.toFixed(0)}%` : ''
+    }
+  }
+
+  if (group.type === 'replacement') {
+    const replacedCost = getReplacedCost(group)
+    const netCost = cost - replacedCost
+    return {
+      cost,
+      replacedCost,
+      netCost,
+      fc: null,
+      label: ''
+    }
+  }
+
+  return { cost: 0, replacedCost: 0, netCost: 0, fc: null, label: '' }
+}
 
 const emit = defineEmits<{
   'update:modifierGroups': [groups: ModifierGroup[]]
@@ -910,6 +1011,26 @@ function resolveCompositionUnit(comp: MenuComposition): string {
   &__name {
     font-weight: 600;
     font-size: 14px;
+  }
+
+  &__cost {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    white-space: nowrap;
+  }
+
+  &__fc {
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  &__cost-detail {
+    font-size: 11px;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 2px;
   }
 
   &__price {
