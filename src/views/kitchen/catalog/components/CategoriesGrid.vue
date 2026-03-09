@@ -12,6 +12,16 @@
         <span class="cat-name">{{ cat.name }}</span>
         <span class="cat-count">{{ cat.count }} items</span>
       </div>
+      <v-btn
+        v-if="cat.id !== '__uncategorized__'"
+        icon
+        variant="text"
+        size="x-small"
+        class="cat-edit"
+        @click.stop="emit('edit', cat)"
+      >
+        <v-icon size="16">mdi-pencil-outline</v-icon>
+      </v-btn>
       <v-icon size="20" class="cat-chevron">mdi-chevron-right</v-icon>
     </div>
 
@@ -33,6 +43,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [cat: { id: string; name: string }]
+  edit: [cat: { id: string; name: string }]
 }>()
 
 const sectionClass = computed(() => `section-${props.section}`)
@@ -96,6 +107,16 @@ const sectionClass = computed(() => `section-${props.section}`)
 .cat-count {
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.45);
+}
+
+.cat-edit {
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+
+  .category-card:hover & {
+    opacity: 0.6;
+  }
 }
 
 .cat-chevron {

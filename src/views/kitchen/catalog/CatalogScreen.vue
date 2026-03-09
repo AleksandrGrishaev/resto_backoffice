@@ -160,6 +160,7 @@
           :categories="visibleCategories"
           :section="activeSection"
           @select="selectCategory"
+          @edit="editCategory"
         />
       </div>
     </div>
@@ -220,6 +221,27 @@
       </v-card>
     </v-dialog>
 
+    <!-- Category dialogs -->
+    <MenuCategoryDialog
+      v-model="showMenuCategoryDialog"
+      :category="editMenuCategory"
+      @saved="handleMenuCategorySaved"
+    />
+
+    <RecipeCategoryDialog
+      v-model="showRecipeCategoryDialog"
+      :type="editCategoryType"
+      :category="editRecipePrepCategory"
+      @save="handleRecipePrepCategorySave"
+    />
+
+    <RecipeCategoryDialog
+      v-model="showProductCategoryDialog"
+      type="preparation"
+      :category="editProductCategoryAsRecipe"
+      @save="handleProductCategorySave"
+    />
+
     <!-- Filter dialog -->
     <v-dialog v-model="showFilterDialog" max-width="400">
       <v-card>
@@ -272,12 +294,25 @@ import TreeView from './components/TreeView.vue'
 import MenuItemDialog from '@/views/menu/components/MenuItemDialog.vue'
 import UnifiedRecipeDialog from '@/views/recipes/components/UnifiedRecipeDialog.vue'
 import ProductDialog from '@/views/products/components/ProductDialog.vue'
+import MenuCategoryDialog from '@/views/menu/components/MenuCategoryDialog.vue'
+import RecipeCategoryDialog from '@/views/recipes/components/CategoryDialog.vue'
 import { useRecipesStore } from '@/stores/recipes'
 import { useMenuStore } from '@/stores/menu'
 import { useProductsStore } from '@/stores/productsStore'
-import type { Recipe, Preparation } from '@/stores/recipes/types'
+import type {
+  Recipe,
+  Preparation,
+  PreparationCategory,
+  RecipeCategory
+} from '@/stores/recipes/types'
 import type { MenuItem } from '@/stores/menu'
-import type { Product, UpdateProductData, CreateProductData } from '@/stores/productsStore'
+import type { Category } from '@/stores/menu/types'
+import type {
+  Product,
+  UpdateProductData,
+  CreateProductData,
+  ProductCategory
+} from '@/stores/productsStore'
 
 type SectionId = 'menu' | 'recipes' | 'preps' | 'products'
 
@@ -307,6 +342,16 @@ const editMenuItem = ref<MenuItem | null>(null)
 const editRecipe = ref<Recipe | Preparation | null>(null)
 const editRecipeType = ref<'recipe' | 'preparation'>('recipe')
 const editProduct = ref<Product | null>(null)
+
+// Category dialog state
+const showMenuCategoryDialog = ref(false)
+const showRecipeCategoryDialog = ref(false)
+const showProductCategoryDialog = ref(false)
+const editMenuCategory = ref<Category | null>(null)
+const editRecipePrepCategory = ref<PreparationCategory | RecipeCategory | null>(null)
+const editCategoryType = ref<'preparation' | 'recipe'>('recipe')
+const editProductCategoryAsRecipe = ref<PreparationCategory | null>(null)
+const editProductCategoryOriginal = ref<ProductCategory | null>(null)
 
 const {
   menuCatalogItems,
@@ -674,6 +719,92 @@ function handleRecipeConverted(payload: { newId: string; newType: 'recipe' | 'pr
   if (editRecipe.value) {
     showRecipeDialog.value = true
   }
+}
+
+// --- Category editing ---
+function editCategory(cat: { id: string; name: string }) {
+  if (activeSection.value === 'menu') {
+    editMenuCategory.value = menuStore.categories.find(c => c.id === cat.id) ?? null
+    if (editMenuCategory.value) showMenuCategoryDialog.value = true
+  } else if (activeSection.value === 'recipes') {
+    editRecipePrepCategory.value =
+      recipesStore.activeRecipeCategories.find(c => c.id === cat.id) ?? null
+    editCategoryType.value = 'recipe'
+    if (editRecipePrepCategory.value) showRecipeCategoryDialog.value = true
+  } else if (activeSection.value === 'preps') {
+    editRecipePrepCategory.value =
+      recipesStore.activePreparationCategories.find(c => c.id === cat.id) ?? null
+    editCategoryType.value = 'preparation'
+    if (editRecipePrepCategory.value) showRecipeCategoryDialog.value = true
+  } else if (activeSection.value === 'products') {
+    const prodCat = productsStore.activeCategories.find(c => c.id === cat.id) ?? null
+    if (prodCat) {
+      editProductCategoryOriginal.value = prodCat
+      // Map ProductCategory to RecipeCategory-like shape for the dialog
+      editProductCategoryAsRecipe.value = {
+        id: prodCat.id,
+        key: prodCat.key,
+        name: prodCat.name,
+        color: prodCat.color || 'primary',
+        emoji: prodCat.icon || '',
+        icon: prodCat.icon || '',
+        description: '',
+        sortOrder: prodCat.sortOrder,
+        isActive: prodCat.isActive,
+        createdAt: prodCat.createdAt,
+        updatedAt: prodCat.updatedAt
+      } as any
+      showProductCategoryDialog.value = true
+    }
+  }
+}
+
+function handleMenuCategorySaved() {
+  showMenuCategoryDialog.value = false
+  editMenuCategory.value = null
+}
+
+async function handleRecipePrepCategorySave(data: any) {
+  showRecipeCategoryDialog.value = false
+  const catId = editRecipePrepCategory.value?.id
+  if (catId) {
+    // Update existing
+    if (editCategoryType.value === 'recipe') {
+      await recipesStore.updateRecipeCategory(catId, {
+        name: data.name,
+        description: data.description,
+        color: data.color,
+        emoji: data.emoji,
+        icon: data.icon || data.emoji,
+        isActive: data.isActive
+      })
+    } else {
+      await recipesStore.updatePreparationCategory(catId, {
+        name: data.name,
+        description: data.description,
+        color: data.color,
+        emoji: data.emoji,
+        icon: data.icon || data.emoji,
+        isActive: data.isActive
+      })
+    }
+  }
+  editRecipePrepCategory.value = null
+}
+
+async function handleProductCategorySave(data: any) {
+  showProductCategoryDialog.value = false
+  const catId = editProductCategoryOriginal.value?.id
+  if (catId) {
+    await productsStore.updateProductCategory(catId, {
+      name: data.name,
+      color: data.color,
+      icon: data.icon || data.emoji,
+      isActive: data.isActive
+    })
+  }
+  editProductCategoryOriginal.value = null
+  editProductCategoryAsRecipe.value = null
 }
 
 async function handleArchiveMenuItem(item: MenuItem) {
