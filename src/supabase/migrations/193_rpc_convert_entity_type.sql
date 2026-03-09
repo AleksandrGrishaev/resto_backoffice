@@ -171,7 +171,7 @@ BEGIN
       v_entity_name,
       COALESCE(p_new_fields->>'code', 'R-CNV'),
       v_entity_description,
-      COALESCE(p_new_fields->>'category', ''),                   -- recipe category (user must select)
+      COALESCE((p_new_fields->>'category')::uuid, NULL),           -- recipe category UUID (user must select)
       v_entity_department,
       COALESCE(v_prep.output_quantity, 1),                       -- portionSize = outputQuantity
       COALESCE(v_prep.output_unit, 'portion'),                   -- portionUnit = outputUnit

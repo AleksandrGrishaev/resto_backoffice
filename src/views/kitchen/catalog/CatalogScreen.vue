@@ -94,6 +94,12 @@
           >
             <v-icon>mdi-filter-variant</v-icon>
           </v-btn>
+
+          <!-- Manage categories -->
+          <v-btn icon variant="text" size="small" @click="showCategoryListDialog = true">
+            <v-icon>mdi-folder-cog-outline</v-icon>
+            <v-tooltip activator="parent" location="bottom">Manage Categories</v-tooltip>
+          </v-btn>
         </div>
 
         <!-- Breadcrumb -->
@@ -160,7 +166,6 @@
           :categories="visibleCategories"
           :section="activeSection"
           @select="selectCategory"
-          @edit="editCategory"
         />
       </div>
     </div>
@@ -241,6 +246,60 @@
       :category="editProductCategoryAsRecipe"
       @save="handleProductCategorySave"
     />
+
+    <!-- Manage Categories dialog -->
+    <v-dialog v-model="showCategoryListDialog" max-width="440" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center pa-4">
+          <span>{{ currentSectionLabel }} Categories</span>
+          <v-spacer />
+          <v-btn variant="text" size="small" @click="showCategoryListDialog = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-0" style="max-height: 60vh">
+          <v-list density="compact">
+            <v-list-item
+              v-for="cat in allSectionCategories"
+              :key="cat.id"
+              :class="{ 'text-medium-emphasis': !cat.isActive }"
+            >
+              <template #prepend>
+                <v-icon v-if="cat.emoji" size="20" class="mr-1">
+                  {{ cat.emoji }}
+                </v-icon>
+                <v-icon v-else size="18" :color="cat.color || undefined" class="mr-1">
+                  mdi-folder
+                </v-icon>
+              </template>
+              <v-list-item-title>
+                {{ cat.name }}
+                <v-chip
+                  v-if="!cat.isActive"
+                  size="x-small"
+                  color="grey"
+                  variant="outlined"
+                  class="ml-2"
+                >
+                  inactive
+                </v-chip>
+              </v-list-item-title>
+              <template #append>
+                <v-btn icon variant="text" size="small" @click="editCategoryFromList(cat)">
+                  <v-icon size="18">mdi-pencil-outline</v-icon>
+                </v-btn>
+              </template>
+            </v-list-item>
+            <v-list-item v-if="allSectionCategories.length === 0">
+              <v-list-item-title class="text-medium-emphasis text-center">
+                No categories
+              </v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
 
     <!-- Filter dialog -->
     <v-dialog v-model="showFilterDialog" max-width="400">
@@ -342,6 +401,9 @@ const editMenuItem = ref<MenuItem | null>(null)
 const editRecipe = ref<Recipe | Preparation | null>(null)
 const editRecipeType = ref<'recipe' | 'preparation'>('recipe')
 const editProduct = ref<Product | null>(null)
+
+// Category management state
+const showCategoryListDialog = ref(false)
 
 // Category dialog state
 const showMenuCategoryDialog = ref(false)
@@ -527,6 +589,46 @@ const sectionCategories = computed(() => {
       return preparationCategories.value
     case 'products':
       return productCategories.value
+    default:
+      return []
+  }
+})
+
+// Full category objects for manage dialog (includes inactive, color, emoji)
+const allSectionCategories = computed(() => {
+  switch (activeSection.value) {
+    case 'menu':
+      return (menuStore.categories as Category[]).map(c => ({
+        id: c.id,
+        name: c.name,
+        isActive: c.isActive,
+        color: '',
+        emoji: ''
+      }))
+    case 'recipes':
+      return recipesStore.recipeCategories.map(c => ({
+        id: c.id,
+        name: c.name,
+        isActive: c.isActive,
+        color: c.color || '',
+        emoji: ('emoji' in c ? (c as any).emoji : c.icon) || ''
+      }))
+    case 'preps':
+      return recipesStore.preparationCategories.map(c => ({
+        id: c.id,
+        name: c.name,
+        isActive: c.isActive,
+        color: c.color || '',
+        emoji: ('emoji' in c ? (c as any).emoji : '') || ''
+      }))
+    case 'products':
+      return productsStore.categories.map(c => ({
+        id: c.id,
+        name: c.name,
+        isActive: c.isActive,
+        color: c.color || '',
+        emoji: c.icon || ''
+      }))
     default:
       return []
   }
@@ -722,6 +824,11 @@ function handleRecipeConverted(payload: { newId: string; newType: 'recipe' | 'pr
 }
 
 // --- Category editing ---
+function editCategoryFromList(cat: { id: string; name: string }) {
+  showCategoryListDialog.value = false
+  editCategory(cat)
+}
+
 function editCategory(cat: { id: string; name: string }) {
   if (activeSection.value === 'menu') {
     editMenuCategory.value = menuStore.categories.find(c => c.id === cat.id) ?? null
