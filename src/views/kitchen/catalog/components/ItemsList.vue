@@ -29,6 +29,7 @@
       </div>
       <div class="item-right">
         <span v-if="item.costDisplay" class="item-cost">{{ item.costDisplay }}</span>
+        <span v-if="item.variantCount" class="item-variants">{{ item.variantCount }} var.</span>
         <span v-if="item.componentCount" class="item-comp">{{ item.componentCount }} comp.</span>
       </div>
       <v-icon size="18" class="item-chevron">mdi-chevron-right</v-icon>
@@ -145,6 +146,11 @@ const sectionClass = computed(() => `section-${props.section}`)
   font-weight: 500;
   font-size: 0.85rem;
   white-space: nowrap;
+}
+
+.item-variants {
+  font-size: 0.72rem;
+  color: rgba(156, 39, 176, 0.7);
 }
 
 .item-comp {

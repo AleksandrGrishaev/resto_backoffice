@@ -49,6 +49,7 @@ export interface CatalogItem {
   costDisplay?: string
   cost?: number
   componentCount?: number
+  variantCount?: number
 }
 
 // Search result grouped by type
@@ -87,6 +88,7 @@ export function useCatalogData() {
         categoryId: mi.categoryId,
         categoryName: cat?.name,
         componentCount: variant?.composition?.length ?? 0,
+        variantCount: (mi.variants?.length ?? 0) > 1 ? mi.variants!.length : undefined,
         cost,
         costDisplay: cost > 0 ? formatIDR(cost) : undefined
       }
@@ -198,7 +200,12 @@ export function useCatalogData() {
   }
 
   // --- Build dependency tree for any entity ---
-  function buildTree(type: CatalogItem['type'], id: string, visited?: Set<string>): TreeNode[] {
+  function buildTree(
+    type: CatalogItem['type'],
+    id: string,
+    visited?: Set<string>,
+    variantIndex?: number
+  ): TreeNode[] {
     const seen = visited ?? new Set<string>()
     const key = `${type}:${id}`
     if (seen.has(key)) return [] // circular dependency guard
@@ -209,7 +216,7 @@ export function useCatalogData() {
     if (type === 'menu') {
       const mi = (menuStore.menuItems as MenuItem[]).find(m => m.id === id)
       if (!mi) return []
-      const variant = mi.variants?.[0]
+      const variant = mi.variants?.[variantIndex ?? 0]
       if (!variant?.composition?.length) return []
       nodes = variant.composition.map(comp =>
         buildCompositionNode(

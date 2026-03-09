@@ -67,23 +67,53 @@
     <div class="detail-content">
       <!-- Tree Tab -->
       <div v-if="activeTab === 'tree'" class="tab-content">
-        <!-- Output summary for recipes/preparations -->
-        <div v-if="outputDisplay && treeNodes.length > 0" class="tree-output-header">
-          <span class="tree-output-label">Output:</span>
-          <span class="tree-output-value">{{ outputDisplay }}</span>
-          <span class="tree-output-sep">|</span>
-          <span class="tree-output-label">Cost:</span>
-          <span class="tree-output-value">{{ totalCostDisplay }}</span>
-          <span v-if="costPerUnit" class="tree-output-per-unit">({{ costPerUnit }})</span>
-        </div>
-        <DependencyTree
-          v-if="treeNodes.length > 0"
-          :tree="treeNodes"
-          :default-expand-depth="2"
-          @navigate="handleTreeNavigate"
-          @edit="target => emit('edit', target)"
-        />
-        <div v-else class="empty-state">No components</div>
+        <!-- Multiple variants: show each as a section -->
+        <template v-if="hasMultipleVariants">
+          <div
+            v-for="(vData, idx) in variantTreeData"
+            :key="vData.variant.id"
+            class="variant-tree-section"
+          >
+            <div class="variant-tree-header">
+              <span class="variant-tree-name">
+                {{ vData.variant.name || `Variant ${idx + 1}` }}
+              </span>
+              <span class="variant-tree-price">{{ formatIDR(vData.variant.price) }}</span>
+              <span class="variant-tree-sep">|</span>
+              <span class="variant-tree-cost">
+                Cost: {{ vData.totalCost > 0 ? formatIDR(vData.totalCost) : '-' }}
+              </span>
+            </div>
+            <DependencyTree
+              v-if="vData.nodes.length > 0"
+              :tree="vData.nodes"
+              :default-expand-depth="1"
+              @navigate="handleTreeNavigate"
+              @edit="target => emit('edit', target)"
+            />
+            <div v-else class="empty-state-sm">No components</div>
+          </div>
+        </template>
+
+        <!-- Single variant or non-menu: original behavior -->
+        <template v-else>
+          <div v-if="outputDisplay && treeNodes.length > 0" class="tree-output-header">
+            <span class="tree-output-label">Output:</span>
+            <span class="tree-output-value">{{ outputDisplay }}</span>
+            <span class="tree-output-sep">|</span>
+            <span class="tree-output-label">Cost:</span>
+            <span class="tree-output-value">{{ totalCostDisplay }}</span>
+            <span v-if="costPerUnit" class="tree-output-per-unit">({{ costPerUnit }})</span>
+          </div>
+          <DependencyTree
+            v-if="treeNodes.length > 0"
+            :tree="treeNodes"
+            :default-expand-depth="2"
+            @navigate="handleTreeNavigate"
+            @edit="target => emit('edit', target)"
+          />
+          <div v-else class="empty-state">No components</div>
+        </template>
       </div>
 
       <!-- Modifiers Tab -->
@@ -232,7 +262,10 @@
             <InfoRow label="Category" :value="item.categoryName" />
             <InfoRow label="Type" :value="menuItem.type" />
             <InfoRow label="Dish Type" :value="menuItem.dishType" />
-            <InfoRow label="Variants" :value="String(menuItem.variants?.length ?? 0)" />
+            <InfoRow
+              label="Variants"
+              :value="(menuItem.variants ?? []).map(v => v.name || 'Default').join(', ') || '0'"
+            />
             <InfoRow
               label="Status"
               :value="menuItem.status || (menuItem.isActive ? 'Active' : 'Draft')"
@@ -299,9 +332,9 @@
 
       <!-- Cost Tab -->
       <div v-if="activeTab === 'cost'" class="tab-content">
-        <div class="cost-summary">
-          <!-- Product-specific cost with yield -->
-          <template v-if="item.type === 'product' && product">
+        <!-- Product-specific cost -->
+        <template v-if="item.type === 'product' && product">
+          <div class="cost-summary">
             <div class="cost-line">
               <span class="cost-label">Purchase Cost</span>
               <span class="cost-value">
@@ -323,11 +356,69 @@
                 }}/{{ product.baseUnit }}
               </span>
             </div>
-          </template>
+          </div>
+        </template>
 
-          <!-- Non-product items -->
-          <template v-else>
-            <!-- Food cost range for modifiable menu items -->
+        <!-- Multi-variant menu items: show all variants -->
+        <template v-else-if="hasMultipleVariants">
+          <div
+            v-for="(vData, idx) in variantTreeData"
+            :key="vData.variant.id"
+            class="variant-cost-card"
+          >
+            <div class="variant-cost-header">
+              <span class="variant-cost-name">
+                {{ vData.variant.name || `Variant ${idx + 1}` }}
+              </span>
+              <span class="variant-cost-price">{{ formatIDR(vData.variant.price) }}</span>
+            </div>
+            <div class="cost-summary">
+              <div class="cost-line">
+                <span class="cost-label">Cost</span>
+                <span class="cost-value">
+                  {{ vData.totalCost > 0 ? formatIDR(vData.totalCost) : '-' }}
+                </span>
+              </div>
+              <div v-if="vData.variant.price > 0 && vData.totalCost > 0" class="cost-line">
+                <span class="cost-label">Food Cost %</span>
+                <span
+                  class="cost-value"
+                  :class="{ 'text-red': vData.fcPercent > 35, 'text-green': vData.fcPercent <= 30 }"
+                >
+                  {{ vData.fcPercent.toFixed(1) }}%
+                </span>
+              </div>
+            </div>
+            <!-- Breakdown -->
+            <div v-if="vData.sortedNodes.length > 0" class="cost-breakdown cost-breakdown--compact">
+              <div
+                v-for="node in vData.sortedNodes"
+                :key="node.id + node.type"
+                class="breakdown-row"
+              >
+                <v-chip
+                  :color="typeColorFor(node.type)"
+                  size="x-small"
+                  variant="flat"
+                  label
+                  class="breakdown-badge"
+                >
+                  {{ node.type.charAt(0).toUpperCase() }}
+                </v-chip>
+                <span class="breakdown-name">{{ node.name }}</span>
+                <span class="breakdown-dots" />
+                <span v-if="node.quantity" class="breakdown-qty">
+                  {{ node.quantity }} {{ node.unit }}
+                </span>
+                <span class="breakdown-cost">{{ node.cost ? formatIDR(node.cost) : '-' }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Single variant / recipe / preparation -->
+        <template v-else>
+          <div class="cost-summary">
             <template v-if="foodCostRange">
               <div class="cost-line">
                 <span class="cost-label">Base Cost</span>
@@ -348,7 +439,6 @@
               </div>
             </template>
             <template v-else>
-              <!-- Output info for recipes/preparations -->
               <div v-if="outputDisplay" class="cost-line">
                 <span class="cost-label">Output</span>
                 <span class="cost-value">{{ outputDisplay }}</span>
@@ -362,7 +452,6 @@
                 <span class="cost-value">{{ costPerUnit }}</span>
               </div>
             </template>
-            <!-- Rec. price and food cost only for non-modifiable menu items and recipes -->
             <template v-if="!foodCostRange && (item.type === 'menu' || item.type === 'recipe')">
               <div v-if="recommendedPrice > 0" class="cost-line">
                 <span class="cost-label">Rec. Price (35% FC)</span>
@@ -373,30 +462,30 @@
                 <span class="cost-value">35%</span>
               </div>
             </template>
-          </template>
-        </div>
-
-        <!-- Cost breakdown from tree (sorted by cost descending) -->
-        <div v-if="treeNodes.length > 0" class="cost-breakdown">
-          <h4>Cost Breakdown</h4>
-          <div v-for="node in sortedTreeNodes" :key="node.id + node.type" class="breakdown-row">
-            <v-chip
-              :color="typeColorFor(node.type)"
-              size="x-small"
-              variant="flat"
-              label
-              class="breakdown-badge"
-            >
-              {{ node.type.charAt(0).toUpperCase() }}
-            </v-chip>
-            <span class="breakdown-name">{{ node.name }}</span>
-            <span class="breakdown-dots" />
-            <span v-if="node.quantity" class="breakdown-qty">
-              {{ node.quantity }} {{ node.unit }}
-            </span>
-            <span class="breakdown-cost">{{ node.cost ? formatIDR(node.cost) : '-' }}</span>
           </div>
-        </div>
+
+          <!-- Cost breakdown from tree (sorted by cost descending) -->
+          <div v-if="treeNodes.length > 0" class="cost-breakdown">
+            <h4>Cost Breakdown</h4>
+            <div v-for="node in sortedTreeNodes" :key="node.id + node.type" class="breakdown-row">
+              <v-chip
+                :color="typeColorFor(node.type)"
+                size="x-small"
+                variant="flat"
+                label
+                class="breakdown-badge"
+              >
+                {{ node.type.charAt(0).toUpperCase() }}
+              </v-chip>
+              <span class="breakdown-name">{{ node.name }}</span>
+              <span class="breakdown-dots" />
+              <span v-if="node.quantity" class="breakdown-qty">
+                {{ node.quantity }} {{ node.unit }}
+              </span>
+              <span class="breakdown-cost">{{ node.cost ? formatIDR(node.cost) : '-' }}</span>
+            </div>
+          </div>
+        </template>
       </div>
 
       <!-- Used In Tab -->
@@ -556,9 +645,10 @@ function modifierTypeColor(type: string): string {
   }
 }
 
-// Food cost range for modifiable items
+// Food cost range for modifiable items (single-variant path only)
 const foodCostRange = computed<FoodCostRange | null>(() => {
   if (!menuItem.value || !menuItem.value.modifierGroups?.length) return null
+  if (hasMultipleVariants.value) return null
   const variant = menuItem.value.variants?.[0]
   if (!variant) return null
   return calculateFoodCostRange(variant, menuItem.value, {
@@ -599,7 +689,36 @@ function typeColorFor(type: string) {
   }
 }
 
-// Build tree
+// Variants
+const variants = computed(() => menuItem.value?.variants ?? [])
+const hasMultipleVariants = computed(() => variants.value.length > 1)
+
+// Per-variant tree data (for multi-variant display)
+interface VariantTreeItem {
+  variant: { id: string; name: string; price: number }
+  nodes: TreeNode[]
+  sortedNodes: TreeNode[]
+  totalCost: number
+  fcPercent: number
+}
+
+const variantTreeData = computed<VariantTreeItem[]>(() => {
+  if (!hasMultipleVariants.value) return []
+  return variants.value.map((v, idx) => {
+    const nodes = buildTree('menu', props.item.id, undefined, idx)
+    const totalCost = nodes.reduce((sum, n) => sum + (n.cost ?? 0), 0)
+    const fcPercent = v.price > 0 && totalCost > 0 ? (totalCost / v.price) * 100 : 0
+    return {
+      variant: { id: v.id, name: v.name, price: v.price },
+      nodes,
+      sortedNodes: [...nodes].sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0)),
+      totalCost,
+      fcPercent
+    }
+  })
+})
+
+// Build tree (single variant / non-menu fallback uses variant 0)
 const treeNodes = computed<TreeNode[]>(() => buildTree(props.item.type, props.item.id))
 
 // Sorted by cost descending for the Cost tab
@@ -875,6 +994,104 @@ const usedInItems = computed<UsageItem[]>(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+// Variant tree sections (Tree tab)
+.variant-tree-section {
+  margin-bottom: 16px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.variant-tree-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(156, 39, 176, 0.08);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  font-size: 0.85rem;
+}
+
+.variant-tree-name {
+  font-weight: 600;
+  color: rgb(206, 147, 216);
+}
+
+.variant-tree-price {
+  font-weight: 500;
+}
+
+.variant-tree-sep {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.variant-tree-cost {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.empty-state-sm {
+  padding: 12px 16px;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 0.85rem;
+}
+
+// Variant cost cards (Cost tab)
+.variant-cost-card {
+  margin-bottom: 16px;
+  border: 1px solid rgba(156, 39, 176, 0.15);
+  border-radius: 10px;
+  overflow: hidden;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  .cost-summary {
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .cost-breakdown {
+    margin-top: 0;
+    padding: 0 12px 8px;
+  }
+}
+
+.variant-cost-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(156, 39, 176, 0.1);
+}
+
+.variant-cost-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: rgb(206, 147, 216);
+}
+
+.variant-cost-price {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.text-red {
+  color: rgb(var(--v-theme-error));
+}
+
+.text-green {
+  color: rgb(var(--v-theme-success));
+}
+
+.cost-breakdown--compact {
+  h4 {
+    display: none;
+  }
 }
 
 .tree-output-header {
