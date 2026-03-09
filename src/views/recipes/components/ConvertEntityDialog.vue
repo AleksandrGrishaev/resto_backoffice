@@ -55,33 +55,56 @@
           <template v-if="checkResult.canConvert">
             <div class="text-subtitle-2 mb-2 mt-2">Conversion Settings</div>
 
-            <!-- Recipe → Preparation: select preparation category -->
-            <v-select
-              v-if="fromType === 'recipe'"
-              v-model="newFields.type"
-              :items="preparationCategories"
-              item-title="name"
-              item-value="id"
-              label="Preparation Category"
-              :rules="[v => !!v || 'Required']"
-              density="compact"
-              variant="outlined"
-              class="mb-2"
-            />
+            <!-- Recipe → Preparation fields -->
+            <template v-if="fromType === 'recipe'">
+              <v-select
+                v-model="newFields.type"
+                :items="preparationCategories"
+                item-title="name"
+                item-value="id"
+                label="Preparation Category"
+                :rules="[v => !!v || 'Required']"
+                density="compact"
+                variant="outlined"
+                class="mb-2"
+              />
+              <v-text-field
+                v-model.number="newFields.shelfLife"
+                label="Shelf Life (days)"
+                type="number"
+                :min="1"
+                :rules="[v => (v && v > 0) || 'Required']"
+                density="compact"
+                variant="outlined"
+                class="mb-2"
+              />
+            </template>
 
-            <!-- Preparation → Recipe: select recipe category -->
-            <v-select
-              v-if="fromType === 'preparation'"
-              v-model="newFields.category"
-              :items="recipeCategories"
-              item-title="name"
-              item-value="id"
-              label="Recipe Category"
-              :rules="[v => !!v || 'Required']"
-              density="compact"
-              variant="outlined"
-              class="mb-2"
-            />
+            <!-- Preparation → Recipe fields -->
+            <template v-if="fromType === 'preparation'">
+              <v-select
+                v-model="newFields.category"
+                :items="recipeCategories"
+                item-title="name"
+                item-value="id"
+                label="Recipe Category"
+                :rules="[v => !!v || 'Required']"
+                density="compact"
+                variant="outlined"
+                class="mb-2"
+              />
+              <v-select
+                v-model="newFields.difficulty"
+                :items="difficultyOptions"
+                item-title="text"
+                item-value="value"
+                label="Difficulty"
+                :rules="[v => !!v || 'Required']"
+                density="compact"
+                variant="outlined"
+                class="mb-2"
+              />
+            </template>
 
             <!-- Summary of what will happen -->
             <div class="text-body-2 text-medium-emphasis mt-2">
@@ -179,10 +202,22 @@ const title = computed(() =>
 const preparationCategories = computed(() => recipesStore.activePreparationCategories)
 const recipeCategories = computed(() => recipesStore.activeRecipeCategories)
 
+const difficultyOptions = [
+  { value: 'easy', text: 'Easy' },
+  { value: 'medium', text: 'Medium' },
+  { value: 'hard', text: 'Hard' }
+]
+
 const canProceed = computed(() => {
   if (!checkResult.value.canConvert) return false
-  if (props.fromType === 'recipe' && !newFields.value.type) return false
-  if (props.fromType === 'preparation' && !newFields.value.category) return false
+  if (props.fromType === 'recipe') {
+    if (!newFields.value.type) return false
+    if (!newFields.value.shelfLife || newFields.value.shelfLife <= 0) return false
+  }
+  if (props.fromType === 'preparation') {
+    if (!newFields.value.category) return false
+    if (!newFields.value.difficulty) return false
+  }
   return true
 })
 
@@ -196,16 +231,18 @@ watch(dialogModel, async val => {
   try {
     if (props.fromType === 'recipe') {
       checkResult.value = await checkRecipeToPreparation(props.item as Recipe)
-      // Pre-select first category
+      // Pre-select defaults
       if (preparationCategories.value.length > 0) {
         newFields.value.type = preparationCategories.value[0].id
       }
+      newFields.value.shelfLife = 2
     } else {
       checkResult.value = await checkPreparationToRecipe(props.item as Preparation)
-      // Pre-select first category
+      // Pre-select defaults
       if (recipeCategories.value.length > 0) {
         newFields.value.category = recipeCategories.value[0].id
       }
+      newFields.value.difficulty = 'medium'
     }
   } catch (err) {
     checkResult.value = {
