@@ -98,12 +98,12 @@
 
         <!-- Receipt Information (если есть) -->
         <div v-if="order.status === 'delivered'" class="pa-4 border-b">
-          <OrderReceiptWidget :order="order" />
+          <OrderReceiptWidget :order="order" @view-receipt="handleViewReceipt" />
         </div>
 
         <!-- Items List - NEW WIDGET -->
         <div class="pa-4 border-b">
-          <OrderItemsWidget :items="order.items" />
+          <OrderItemsWidget :items="order.items" :receipt="receiptForOrder" />
         </div>
       </v-card-text>
 
@@ -574,6 +574,7 @@ interface Emits {
   (e: 'send-order', order: PurchaseOrder): void
   (e: 'start-receipt', order: PurchaseOrder): void
   (e: 'edit-receipt', receipt: Receipt): void
+  (e: 'view-receipt', receipt: Receipt): void
   (e: 'order-updated'): void
 }
 
@@ -695,11 +696,15 @@ const activeBills = computed(() =>
 // RECEIPT RELATED COMPUTED
 // =============================================
 
+// Get receipt for current order
+const receiptForOrder = computed((): Receipt | undefined => {
+  if (!props.order) return undefined
+  return getReceiptByOrderId(props.order.id)
+})
+
 // Get draft receipt for current order (if exists)
 const draftReceiptForOrder = computed((): Receipt | undefined => {
-  if (!props.order) return undefined
-  const receipt = getReceiptByOrderId(props.order.id)
-  return receipt?.status === 'draft' ? receipt : undefined
+  return receiptForOrder.value?.status === 'draft' ? receiptForOrder.value : undefined
 })
 
 // Check if delivered amount differs from original
@@ -976,6 +981,13 @@ function startReceipt(order: PurchaseOrder) {
 function editReceipt(receipt: Receipt) {
   emits('edit-receipt', receipt)
   isOpen.value = false
+}
+
+function handleViewReceipt() {
+  if (receiptForOrder.value) {
+    emits('view-receipt', receiptForOrder.value)
+    isOpen.value = false
+  }
 }
 
 function canStartReceipt(order: PurchaseOrder): boolean {

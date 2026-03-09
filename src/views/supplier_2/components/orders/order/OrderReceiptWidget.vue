@@ -21,22 +21,33 @@
             Completed {{ formatDate(order.receiptCompletedAt) }}
           </div>
         </div>
-        <v-chip
-          :color="order.hasReceiptDiscrepancies ? 'warning' : 'success'"
-          size="small"
-          variant="flat"
-        >
-          <v-icon
-            :icon="order.hasReceiptDiscrepancies ? 'mdi-alert-triangle' : 'mdi-check'"
-            size="14"
-            class="mr-1"
-          />
-          {{
-            order.hasReceiptDiscrepancies
-              ? `${order.receiptDiscrepancies?.length || 0} issues`
-              : 'OK'
-          }}
-        </v-chip>
+        <div class="d-flex align-center gap-2">
+          <v-btn
+            size="small"
+            variant="tonal"
+            color="purple"
+            prepend-icon="mdi-eye-outline"
+            @click="$emit('view-receipt')"
+          >
+            View Receipt
+          </v-btn>
+          <v-chip
+            :color="order.hasReceiptDiscrepancies ? 'warning' : 'success'"
+            size="small"
+            variant="flat"
+          >
+            <v-icon
+              :icon="order.hasReceiptDiscrepancies ? 'mdi-alert-triangle' : 'mdi-check'"
+              size="14"
+              class="mr-1"
+            />
+            {{
+              order.hasReceiptDiscrepancies
+                ? `${order.receiptDiscrepancies?.length || 0} issues`
+                : 'OK'
+            }}
+          </v-chip>
+        </div>
       </div>
 
       <!-- Amount Comparison (only if there are discrepancies) -->
@@ -99,6 +110,9 @@ interface Props {
 }
 
 defineProps<Props>()
+defineEmits<{
+  'view-receipt': []
+}>()
 
 // =============================================
 // ФОРМАТИРОВАНИЕ С ИСПОЛЬЗОВАНИЕМ УТИЛИТ

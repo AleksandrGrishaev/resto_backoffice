@@ -286,6 +286,7 @@
       @send-order="sendOrder"
       @start-receipt="startReceipt"
       @edit-receipt="editReceipt"
+      @view-receipt="viewReceipt"
     />
 
     <!-- Export Options Dialog -->
@@ -324,6 +325,7 @@ interface Emits {
   (e: 'send-order', order: PurchaseOrder): void
   (e: 'start-receipt', order: PurchaseOrder): void
   (e: 'edit-receipt', receipt: Receipt): void
+  (e: 'view-receipt', receipt: Receipt): void
   (e: 'load-more'): void
 }
 
@@ -508,6 +510,10 @@ function startReceipt(order: PurchaseOrder) {
 
 function editReceipt(receipt: Receipt) {
   emits('edit-receipt', receipt)
+}
+
+function viewReceipt(receipt: Receipt) {
+  emits('view-receipt', receipt)
 }
 
 function duplicateOrder(order: PurchaseOrder) {
