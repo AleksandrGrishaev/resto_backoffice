@@ -919,8 +919,13 @@ watch(
 
 watch(
   () => props.modelValue,
-  isOpen => {
+  async isOpen => {
     if (isOpen) {
+      // Lazy-init channels store (may not be loaded in backoffice/kitchen contexts)
+      if (!channelsStore.initialized) {
+        await channelsStore.initialize()
+      }
+
       if (props.item) {
         const hasMods = (props.item.modifierGroups?.length || 0) > 0
         const isOnlyMods =

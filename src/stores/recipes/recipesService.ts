@@ -1071,7 +1071,7 @@ export class RecipesService {
 
       // Clear cache and return updated recipe
       localStorage.removeItem('recipes_cache')
-      return await this.getRecipeById(id)
+      return (await this.getRecipeById(id)) ?? updatedRecipe
     } catch (error) {
       DebugUtils.error(MODULE_NAME, '❌ Error in updateRecipe:', extractErrorDetails(error))
       throw error
