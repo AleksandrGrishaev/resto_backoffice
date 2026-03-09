@@ -175,7 +175,7 @@
                 </div>
                 <v-btn
                   color="deep-purple"
-                  variant="tonal"
+                  variant="flat"
                   size="default"
                   height="36"
                   @click="addOption(groupIndex)"
