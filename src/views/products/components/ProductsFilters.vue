@@ -215,7 +215,7 @@ const categoryOptions = computed(() => [
 const statusOptions = computed(() => [
   { title: 'All', value: 'all' },
   { title: 'Active', value: true },
-  { title: 'Inactive', value: false }
+  { title: 'Archived', value: false }
 ])
 
 // Check for active filters
@@ -296,7 +296,7 @@ const getCategoryLabel = (category: string | 'all'): string => {
 
 const getStatusLabel = (status: boolean | 'all'): string => {
   if (status === 'all') return 'All'
-  return status ? 'Active' : 'Inactive'
+  return status ? 'Active' : 'Archived'
 }
 
 // Department filter methods helper для иконок

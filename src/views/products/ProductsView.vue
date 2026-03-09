@@ -108,6 +108,7 @@
       :product="selectedProduct"
       :loading="operationLoading"
       @save="handleProductSave"
+      @archive="handleArchiveProduct"
       @add-package="handleAddPackage"
       @update-package="handleUpdatePackage"
       @delete-package="handleDeactivatePackage"
@@ -279,6 +280,11 @@ const toggleProductActive = async (product: Product): Promise<void> => {
   } finally {
     operationLoading.value = false
   }
+}
+
+const handleArchiveProduct = async (product: Product): Promise<void> => {
+  dialogs.value.product = false
+  await toggleProductActive(product)
 }
 
 const handleProductSave = async (

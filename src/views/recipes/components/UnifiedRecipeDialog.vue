@@ -107,7 +107,17 @@
 
       <v-divider />
 
-      <v-card-actions class="pa-4 justify-end">
+      <v-card-actions class="pa-4">
+        <v-btn
+          v-if="isEditing && props.item"
+          :color="props.item.isActive ? 'warning' : 'success'"
+          variant="outlined"
+          :prepend-icon="props.item.isActive ? 'mdi-archive-arrow-down' : 'mdi-archive-arrow-up'"
+          @click="handleArchive"
+        >
+          {{ props.item.isActive ? 'Archive' : 'Restore' }}
+        </v-btn>
+        <v-spacer />
         <v-btn
           v-if="!isEditing"
           variant="outlined"
@@ -167,6 +177,7 @@ interface Props {
 interface Emits {
   (e: 'update:modelValue', value: boolean): void
   (e: 'saved', item: Recipe | Preparation): void
+  (e: 'archive', item: Recipe | Preparation): void
 }
 
 const props = defineProps<Props>()
@@ -376,6 +387,13 @@ async function handleSubmit() {
     errorMessage.value = `Failed to save ${props.type}: ${errorMsg}`
   } finally {
     loading.value = false
+  }
+}
+
+function handleArchive() {
+  if (props.item) {
+    emit('archive', props.item)
+    dialogModel.value = false
   }
 }
 

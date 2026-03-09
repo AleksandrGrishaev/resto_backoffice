@@ -30,7 +30,7 @@ export const useProductsStore = defineStore('products', {
     selectedProduct: null,
     filters: {
       category: 'all',
-      isActive: 'all',
+      isActive: true as boolean | 'all',
       canBeSold: 'all',
       search: '',
       department: 'all',

@@ -288,7 +288,12 @@
       @saved="handleCategorySaved"
     />
 
-    <menu-item-dialog v-model="dialogs.item" :item="editingItem" @saved="handleItemSaved" />
+    <menu-item-dialog
+      v-model="dialogs.item"
+      :item="editingItem"
+      @saved="handleItemSaved"
+      @archive="handleArchiveFromDialog"
+    />
 
     <!-- Duplicate dialog -->
     <v-dialog v-model="dialogs.duplicate" max-width="400px">
@@ -553,6 +558,12 @@ function duplicateItem(item: MenuItem) {
 function viewItem(item: MenuItem) {
   viewingItem.value = item
   dialogs.value.view = true
+}
+
+async function handleArchiveFromDialog(item: MenuItem) {
+  dialogs.value.item = false
+  editingItem.value = null
+  await toggleItemStatus(item)
 }
 
 async function toggleItemStatus(item: MenuItem) {

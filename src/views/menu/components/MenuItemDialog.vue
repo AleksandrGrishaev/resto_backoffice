@@ -124,24 +124,21 @@
                   class="mb-5"
                 />
 
-                <!-- Status (edit only) -->
+                <!-- Status indicator (edit only) -->
                 <div v-if="isEdit">
                   <div class="section-label mb-2">Status</div>
-                  <v-btn-toggle
-                    v-model="formData.isActive"
-                    mandatory
-                    rounded="lg"
-                    class="w-100 status-toggle"
+                  <v-chip
+                    :color="formData.isActive ? 'success' : 'warning'"
+                    variant="flat"
+                    size="default"
                   >
-                    <v-btn :value="true" class="flex-grow-1" height="48" color="success">
-                      <v-icon icon="mdi-check-circle" size="20" class="mr-2" />
-                      Active
-                    </v-btn>
-                    <v-btn :value="false" class="flex-grow-1" height="48" color="error">
-                      <v-icon icon="mdi-close-circle" size="20" class="mr-2" />
-                      Inactive
-                    </v-btn>
-                  </v-btn-toggle>
+                    <v-icon
+                      :icon="formData.isActive ? 'mdi-check-circle' : 'mdi-archive'"
+                      size="18"
+                      class="mr-1"
+                    />
+                    {{ formData.isActive ? 'Active' : 'Archived' }}
+                  </v-chip>
                 </div>
 
                 <!-- Channel Availability -->
@@ -260,7 +257,18 @@
 
       <v-divider />
 
-      <v-card-actions class="pa-4 base-dialog-card__actions justify-end">
+      <v-card-actions class="pa-4 base-dialog-card__actions">
+        <v-btn
+          v-if="isEdit"
+          :color="formData.isActive ? 'warning' : 'success'"
+          variant="outlined"
+          height="44"
+          :prepend-icon="formData.isActive ? 'mdi-archive-arrow-down' : 'mdi-archive-arrow-up'"
+          @click="handleArchive"
+        >
+          {{ formData.isActive ? 'Archive' : 'Restore' }}
+        </v-btn>
+        <v-spacer />
         <v-btn
           v-if="!isEdit"
           variant="outlined"
@@ -326,6 +334,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   'update:modelValue': [boolean]
   saved: []
+  archive: [item: MenuItem]
 }>()
 
 // Stores
@@ -647,6 +656,13 @@ function resetForm() {
 function enableAdvancedTab() {
   showAdvancedTab.value = true
   currentTab.value = 'modifiers'
+}
+
+function handleArchive() {
+  if (props.item) {
+    emit('archive', props.item)
+    dialogModel.value = false
+  }
 }
 
 function handleCancel() {

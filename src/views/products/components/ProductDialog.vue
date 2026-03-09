@@ -163,12 +163,13 @@
                 </v-col>
 
                 <v-col v-if="isEdit" cols="12" md="4" class="d-flex align-center">
-                  <v-switch
-                    v-model="formData.isActive"
-                    label="Active"
-                    color="success"
-                    hide-details
-                  />
+                  <v-chip
+                    :color="formData.isActive ? 'success' : 'warning'"
+                    variant="flat"
+                    size="small"
+                  >
+                    {{ formData.isActive ? 'Active' : 'Archived' }}
+                  </v-chip>
                 </v-col>
 
                 <!-- Description -->
@@ -325,7 +326,17 @@
 
       <!-- Actions -->
       <v-divider />
-      <v-card-actions class="px-6 py-3 d-flex justify-end">
+      <v-card-actions class="px-6 py-3">
+        <v-btn
+          v-if="isEdit"
+          :color="formData.isActive ? 'warning' : 'success'"
+          variant="outlined"
+          :prepend-icon="formData.isActive ? 'mdi-archive-arrow-down' : 'mdi-archive-arrow-up'"
+          @click="$emit('archive', props.product!)"
+        >
+          {{ formData.isActive ? 'Archive' : 'Restore' }}
+        </v-btn>
+        <v-spacer />
         <v-btn variant="text" @click="closeDialog">Cancel</v-btn>
         <v-btn
           color="primary"
@@ -389,6 +400,7 @@ const props = withDefaults(defineProps<Props>(), {
 interface Emits {
   (e: 'update:modelValue', value: boolean): void
   (e: 'save', data: CreateProductData | UpdateProductData, packages: LocalPackage[]): void
+  (e: 'archive', product: Product): void
 }
 
 const emit = defineEmits<Emits>()

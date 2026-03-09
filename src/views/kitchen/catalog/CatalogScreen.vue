@@ -165,7 +165,12 @@
     </div>
 
     <!-- Edit dialogs -->
-    <MenuItemDialog v-model="showMenuDialog" :item="editMenuItem" @saved="handleDialogSaved" />
+    <MenuItemDialog
+      v-model="showMenuDialog"
+      :item="editMenuItem"
+      @saved="handleDialogSaved"
+      @archive="handleArchiveMenuItem"
+    />
 
     <UnifiedRecipeDialog
       v-model="showRecipeDialog"
@@ -173,9 +178,15 @@
       :item="editRecipe"
       tablet
       @saved="handleDialogSaved"
+      @archive="handleArchiveRecipe"
     />
 
-    <ProductDialog v-model="showProductDialog" :product="editProduct" @save="handleProductSave" />
+    <ProductDialog
+      v-model="showProductDialog"
+      :product="editProduct"
+      @save="handleProductSave"
+      @archive="handleArchiveProduct"
+    />
 
     <!-- Recalculate costs dialog -->
     <v-dialog v-model="showRecalculateDialog" max-width="420">
@@ -231,10 +242,11 @@
           <div class="filter-group">
             <div class="filter-label">Status</div>
             <v-chip-group v-model="filterStatus" selected-class="bg-secondary">
-              <v-chip value="" variant="outlined">All</v-chip>
-              <v-chip value="draft" variant="outlined">Draft</v-chip>
+              <v-chip value="" variant="outlined">Active + Draft</v-chip>
               <v-chip value="active" variant="outlined">Active</v-chip>
+              <v-chip value="draft" variant="outlined">Draft</v-chip>
               <v-chip value="archived" variant="outlined">Archived</v-chip>
+              <v-chip value="all" variant="outlined">All</v-chip>
             </v-chip-group>
           </div>
         </v-card-text>
@@ -381,7 +393,7 @@ const currentSectionLabel = computed(
 const hasDepartments = computed(() => activeSection.value !== 'products')
 
 // --- Filters logic ---
-const hasFilters = computed(() => activeSection.value === 'recipes' || !!filterStatus.value)
+const hasFilters = computed(() => true)
 
 const isFilterActive = computed(() => !!filterNesting.value || !!filterStatus.value)
 
@@ -414,8 +426,13 @@ function applyCommonFilters(items: CatalogItem[]): CatalogItem[] {
     )
   }
 
-  if (filterStatus.value) {
+  if (filterStatus.value === 'all') {
+    // Show everything including archived
+  } else if (filterStatus.value) {
     result = result.filter(i => i.status === filterStatus.value)
+  } else {
+    // Default: exclude archived
+    result = result.filter(i => i.status !== 'archived')
   }
   return result
 }
@@ -517,7 +534,19 @@ const categoryItems = computed<CatalogItem[]>(() => {
 
 // --- Search ---
 const isSearching = computed(() => searchQuery.value.length >= 2)
-const searchResults = computed(() => search(searchQuery.value))
+const searchResults = computed(() => {
+  const results = search(searchQuery.value)
+  // Apply status filter to search results
+  if (filterStatus.value === 'all') return results
+  return results
+    .map(group => ({
+      ...group,
+      items: group.items.filter(i =>
+        filterStatus.value ? i.status === filterStatus.value : i.status !== 'archived'
+      )
+    }))
+    .filter(group => group.items.length > 0)
+})
 
 // --- Breadcrumb ---
 const breadcrumb = computed<BreadcrumbItem[]>(() => {
@@ -627,6 +656,26 @@ function handleEdit(target: { id: string; type: string }) {
 function handleDialogSaved() {
   // MenuItemDialog and UnifiedRecipeDialog update stores internally.
   // Computed catalog items auto-refresh reactively.
+}
+
+async function handleArchiveMenuItem(item: MenuItem) {
+  showMenuDialog.value = false
+  await menuStore.toggleMenuItemActive(item.id, !item.isActive)
+}
+
+async function handleArchiveRecipe(item: Recipe | Preparation) {
+  showRecipeDialog.value = false
+  if ('components' in item) {
+    await recipesStore.toggleRecipeStatus(item.id)
+  } else {
+    await recipesStore.togglePreparationStatus(item.id)
+  }
+}
+
+async function handleArchiveProduct(product: Product) {
+  showProductDialog.value = false
+  const updateData: UpdateProductData = { id: product.id, isActive: !product.isActive }
+  await productsStore.updateProduct(updateData)
 }
 
 async function handleProductSave(data: CreateProductData | UpdateProductData, packages: any[]) {

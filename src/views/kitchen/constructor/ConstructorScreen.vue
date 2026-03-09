@@ -12,15 +12,26 @@
     />
 
     <!-- Standard edit/create dialogs -->
-    <MenuItemDialog v-model="showMenuDialog" :item="editMenuItem" @saved="handleDialogSaved" />
+    <MenuItemDialog
+      v-model="showMenuDialog"
+      :item="editMenuItem"
+      @saved="handleDialogSaved"
+      @archive="handleArchiveMenuItem"
+    />
     <UnifiedRecipeDialog
       v-model="showRecipeDialog"
       :type="editRecipeType"
       :item="editRecipe"
       tablet
       @saved="handleDialogSaved"
+      @archive="handleArchiveRecipe"
     />
-    <ProductDialog v-model="showProductDialog" :product="editProduct" @save="handleProductSave" />
+    <ProductDialog
+      v-model="showProductDialog"
+      :product="editProduct"
+      @save="handleProductSave"
+      @archive="handleArchiveProduct"
+    />
 
     <!-- Category dialogs -->
     <MenuCategoryDialog v-model="showMenuCategoryDialog" @saved="handleDialogSaved" />
@@ -240,6 +251,26 @@ function openEditDialog(ref: { id: string; type: string }) {
 
 function handleDialogSaved() {
   // Stores update reactively, hub auto-refreshes
+}
+
+async function handleArchiveMenuItem(item: MenuItem) {
+  showMenuDialog.value = false
+  await menuStore.toggleMenuItemActive(item.id, !item.isActive)
+}
+
+async function handleArchiveRecipe(item: any) {
+  showRecipeDialog.value = false
+  if ('components' in item) {
+    await recipesStore.toggleRecipeStatus(item.id)
+  } else {
+    await recipesStore.togglePreparationStatus(item.id)
+  }
+}
+
+async function handleArchiveProduct(product: Product) {
+  showProductDialog.value = false
+  const updateData: UpdateProductData = { id: product.id, isActive: !product.isActive }
+  await productsStore.updateProduct(updateData)
 }
 
 async function handleProductSave(data: CreateProductData | UpdateProductData, packages: any[]) {

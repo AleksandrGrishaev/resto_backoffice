@@ -391,6 +391,7 @@
       :type="activeTab === 'recipes' ? 'recipe' : 'preparation'"
       :item="editingItem"
       @saved="handleItemSaved"
+      @archive="handleArchiveFromDialog"
     />
 
     <unified-view-dialog
@@ -989,6 +990,12 @@ async function toggleStatus(item: Recipe | Preparation) {
     showSnackbar('Failed to update status', 'error')
     DebugUtils.error(MODULE_NAME, 'Failed to toggle status', error)
   }
+}
+
+async function handleArchiveFromDialog(item: Recipe | Preparation) {
+  dialogs.value.create = false
+  editingItem.value = null
+  await toggleStatus(item)
 }
 
 async function handleItemSaved(item: Recipe | Preparation) {

@@ -6,6 +6,13 @@ import type { EntityDiff } from './entityDiff'
 
 const MODULE_NAME = 'ChangelogService'
 
+/** PostgREST returns 404 when the table doesn't exist in the schema cache */
+function isTableMissing(error: any): boolean {
+  if (!error) return false
+  const msg = String(error.message || '')
+  return error.code === '42P01' || msg.includes('relation') || msg.includes('Not Found')
+}
+
 // =============================================
 // TYPES
 // =============================================
@@ -84,12 +91,11 @@ export const changelogService = {
         changes: diff
       })
 
-      if (error) {
+      if (error && !isTableMissing(error)) {
         DebugUtils.error(MODULE_NAME, 'Failed to write changelog', { error, params })
       }
     } catch (err) {
       // Non-blocking — don't throw, just log
-      DebugUtils.error(MODULE_NAME, 'Changelog write error', { err })
     }
   },
 
@@ -111,7 +117,9 @@ export const changelogService = {
         .limit(limit)
 
       if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to fetch history', { error })
+        if (!isTableMissing(error)) {
+          DebugUtils.error(MODULE_NAME, 'Failed to fetch history', { error })
+        }
         return []
       }
 
@@ -138,7 +146,9 @@ export const changelogService = {
         .limit(limit)
 
       if (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to fetch recent changes', { error })
+        if (!isTableMissing(error)) {
+          DebugUtils.error(MODULE_NAME, 'Failed to fetch recent changes', { error })
+        }
         return []
       }
 
