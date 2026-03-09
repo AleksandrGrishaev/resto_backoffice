@@ -426,13 +426,23 @@
         <template v-else>
           <div class="cost-summary">
             <template v-if="foodCostRange">
+              <div v-if="singleVariantPrice > 0" class="cost-line">
+                <span class="cost-label">Price</span>
+                <span class="cost-value">{{ formatIDR(singleVariantPrice) }}</span>
+              </div>
               <div class="cost-line">
                 <span class="cost-label">Base Cost</span>
                 <span class="cost-value">{{ formatIDR(foodCostRange.baseCost) }}</span>
               </div>
               <div v-if="foodCostRange.defaultCombination" class="cost-line">
                 <span class="cost-label">Default FC%</span>
-                <span class="cost-value">
+                <span
+                  class="cost-value"
+                  :class="{
+                    'text-red': foodCostRange.defaultCombination.foodCostPercent > 35,
+                    'text-green': foodCostRange.defaultCombination.foodCostPercent <= 30
+                  }"
+                >
                   {{ foodCostRange.defaultCombination.foodCostPercent.toFixed(1) }}%
                 </span>
               </div>
@@ -441,6 +451,12 @@
                 <span class="cost-value">
                   {{ foodCostRange.minFoodCostPercent.toFixed(1) }}% —
                   {{ foodCostRange.maxFoodCostPercent.toFixed(1) }}%
+                </span>
+              </div>
+              <div class="cost-line">
+                <span class="cost-label">Rec. Price (35% FC)</span>
+                <span class="cost-value">
+                  {{ formatIDR(Math.round(foodCostRange.baseCost / 0.35)) }}
                 </span>
               </div>
             </template>
