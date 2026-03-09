@@ -388,6 +388,12 @@
                   {{ vData.fcPercent.toFixed(1) }}%
                 </span>
               </div>
+              <div v-if="vData.totalCost > 0" class="cost-line">
+                <span class="cost-label">Rec. Price (35% FC)</span>
+                <span class="cost-value">
+                  {{ formatIDR(Math.round(vData.totalCost / 0.35)) }}
+                </span>
+              </div>
             </div>
             <!-- Breakdown -->
             <div v-if="vData.sortedNodes.length > 0" class="cost-breakdown cost-breakdown--compact">
@@ -439,12 +445,16 @@
               </div>
             </template>
             <template v-else>
+              <div v-if="singleVariantPrice > 0" class="cost-line">
+                <span class="cost-label">Price</span>
+                <span class="cost-value">{{ formatIDR(singleVariantPrice) }}</span>
+              </div>
               <div v-if="outputDisplay" class="cost-line">
                 <span class="cost-label">Output</span>
                 <span class="cost-value">{{ outputDisplay }}</span>
               </div>
               <div class="cost-line">
-                <span class="cost-label">Total Cost</span>
+                <span class="cost-label">Cost</span>
                 <span class="cost-value">{{ totalCostDisplay }}</span>
               </div>
               <div v-if="costPerUnit" class="cost-line">
@@ -453,13 +463,21 @@
               </div>
             </template>
             <template v-if="!foodCostRange && (item.type === 'menu' || item.type === 'recipe')">
+              <div v-if="singleVariantPrice > 0 && totalCost > 0" class="cost-line">
+                <span class="cost-label">Food Cost %</span>
+                <span
+                  class="cost-value"
+                  :class="{
+                    'text-red': actualFoodCostPercent > 35,
+                    'text-green': actualFoodCostPercent <= 30
+                  }"
+                >
+                  {{ actualFoodCostPercent.toFixed(1) }}%
+                </span>
+              </div>
               <div v-if="recommendedPrice > 0" class="cost-line">
                 <span class="cost-label">Rec. Price (35% FC)</span>
                 <span class="cost-value">{{ formatIDR(recommendedPrice) }}</span>
-              </div>
-              <div v-if="totalCost > 0 && recommendedPrice > 0" class="cost-line">
-                <span class="cost-label">Food Cost %</span>
-                <span class="cost-value">35%</span>
               </div>
             </template>
           </div>
@@ -772,6 +790,18 @@ const costPerUnit = computed<string | null>(() => {
     return `${formatIDR(perUnit)}/${getUnitShortName(unit)}`
   }
   return null
+})
+
+const singleVariantPrice = computed(() => {
+  if (props.item.type === 'menu') return variants.value[0]?.price ?? 0
+  return 0
+})
+
+const actualFoodCostPercent = computed(() => {
+  if (singleVariantPrice.value > 0 && totalCost.value > 0) {
+    return (totalCost.value / singleVariantPrice.value) * 100
+  }
+  return 0
 })
 
 const recommendedPrice = computed(() =>
