@@ -392,6 +392,7 @@
       :item="editingItem"
       @saved="handleItemSaved"
       @archive="handleArchiveFromDialog"
+      @converted="handleConverted"
     />
 
     <unified-view-dialog
@@ -996,6 +997,31 @@ async function handleArchiveFromDialog(item: Recipe | Preparation) {
   dialogs.value.create = false
   editingItem.value = null
   await toggleStatus(item)
+}
+
+function handleConverted(payload: { newId: string; newType: 'recipe' | 'preparation' }) {
+  dialogs.value.create = false
+  editingItem.value = null
+
+  // Open the newly created entity in edit mode
+  const newType = payload.newType
+  if (newType === 'recipe') {
+    activeTab.value = 'recipes'
+    const newRecipe = store.getRecipeById(payload.newId)
+    if (newRecipe) {
+      editingItem.value = newRecipe
+      dialogs.value.create = true
+    }
+  } else {
+    activeTab.value = 'preparations'
+    const newPrep = store.getPreparationById(payload.newId)
+    if (newPrep) {
+      editingItem.value = newPrep
+      dialogs.value.create = true
+    }
+  }
+
+  showSnackbar(`Converted to ${newType} successfully`, 'success')
 }
 
 async function handleItemSaved(item: Recipe | Preparation) {

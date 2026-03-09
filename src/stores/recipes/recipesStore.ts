@@ -977,6 +977,62 @@ export const useRecipesStore = defineStore('recipes', () => {
   }
 
   // =============================================
+  // ENTITY CONVERSION
+  // =============================================
+
+  async function convertEntity(
+    entityId: string,
+    fromType: 'recipe' | 'preparation',
+    newFields: Record<string, any>
+  ): Promise<{ newId: string }> {
+    try {
+      loading.value = true
+
+      const result = await recipesService.convertEntityType(entityId, fromType, newFields)
+
+      DebugUtils.info(MODULE_NAME, 'Entity converted, refreshing stores...', {
+        oldId: entityId,
+        newId: result.newId,
+        fromType,
+        updatedMenuItems: result.updatedMenuItems
+      })
+
+      // Invalidate caches and reload both recipes and preparations
+      invalidateCache('preparations')
+      invalidateCache('recipes')
+      localStorage.removeItem('preparations_cache')
+      localStorage.removeItem('recipes_cache')
+
+      await Promise.all([
+        preparationsComposable.initializePreparations(),
+        recipesComposable.initializeRecipes()
+      ])
+
+      // Refresh menu store if menu items were updated
+      if (result.updatedMenuItems > 0) {
+        try {
+          const { useMenuStore } = await import('@/stores/menu')
+          const menuStore = useMenuStore()
+          if (menuStore.initialized) {
+            await menuStore.refresh()
+          }
+        } catch (err) {
+          DebugUtils.warn(MODULE_NAME, 'Failed to refresh menu store after conversion', { err })
+        }
+      }
+
+      return { newId: result.newId }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to convert entity'
+      error.value = message
+      DebugUtils.error(MODULE_NAME, message, { err })
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // =============================================
   // INTEGRATION METHODS
   // =============================================
 
@@ -1084,6 +1140,9 @@ export const useRecipesStore = defineStore('recipes', () => {
     createRecipeCategory,
     updateRecipeCategory,
     deleteRecipeCategory,
+
+    // Entity conversion
+    convertEntity,
 
     // Preparation actions
     fetchPreparations,

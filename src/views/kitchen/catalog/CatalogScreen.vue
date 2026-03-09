@@ -179,6 +179,7 @@
       tablet
       @saved="handleDialogSaved"
       @archive="handleArchiveRecipe"
+      @converted="handleRecipeConverted"
     />
 
     <ProductDialog
@@ -656,6 +657,23 @@ function handleEdit(target: { id: string; type: string }) {
 function handleDialogSaved() {
   // MenuItemDialog and UnifiedRecipeDialog update stores internally.
   // Computed catalog items auto-refresh reactively.
+}
+
+function handleRecipeConverted(payload: { newId: string; newType: 'recipe' | 'preparation' }) {
+  showRecipeDialog.value = false
+  editRecipe.value = null
+
+  // Open the new entity in edit mode
+  if (payload.newType === 'recipe') {
+    editRecipe.value = recipesStore.getRecipeById(payload.newId) ?? null
+    editRecipeType.value = 'recipe'
+  } else {
+    editRecipe.value = recipesStore.getPreparationById(payload.newId) ?? null
+    editRecipeType.value = 'preparation'
+  }
+  if (editRecipe.value) {
+    showRecipeDialog.value = true
+  }
 }
 
 async function handleArchiveMenuItem(item: MenuItem) {

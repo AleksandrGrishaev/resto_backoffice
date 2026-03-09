@@ -1143,6 +1143,67 @@ export class RecipesService {
   }
 
   // =============================================
+  // ENTITY CONVERSION
+  // =============================================
+
+  /**
+   * Convert a recipe to preparation or vice versa via atomic RPC
+   */
+  async convertEntityType(
+    entityId: string,
+    fromType: 'recipe' | 'preparation',
+    newFields: Record<string, any>
+  ): Promise<{
+    newId: string
+    oldId: string
+    updatedMenuItems: number
+    updatedParentRecipes: number
+    archivedBatches: number
+  }> {
+    try {
+      if (!isSupabaseAvailable()) {
+        throw new Error('Supabase not available')
+      }
+
+      const toType = fromType === 'recipe' ? 'preparation' : 'recipe'
+
+      const { data, error } = await supabase.rpc('convert_entity_type', {
+        p_entity_id: entityId,
+        p_from_type: fromType,
+        p_to_type: toType,
+        p_new_fields: newFields
+      })
+
+      if (error) throw error
+
+      const result = data as any
+      if (!result?.success) {
+        throw new Error(result?.error || 'Conversion failed')
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Entity converted', {
+        oldId: entityId,
+        newId: result.new_id,
+        fromType,
+        toType,
+        updatedMenuItems: result.updated_menu_items_count,
+        updatedParentRecipes: result.updated_parent_recipes_count
+      })
+
+      return {
+        newId: result.new_id,
+        oldId: result.old_id,
+        updatedMenuItems: result.updated_menu_items_count,
+        updatedParentRecipes: result.updated_parent_recipes_count,
+        archivedBatches: result.archived_batches_count || 0
+      }
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Failed to convert entity', { err, entityId, fromType })
+      throw err
+    }
+  }
+
+  // =============================================
   // LEGACY RECIPE WRITE OPERATIONS (TODO: Remove when migration complete)
   // =============================================
   // Future implementation for recipe write operations

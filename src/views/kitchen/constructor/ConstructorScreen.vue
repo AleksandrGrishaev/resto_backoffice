@@ -25,6 +25,7 @@
       tablet
       @saved="handleDialogSaved"
       @archive="handleArchiveRecipe"
+      @converted="handleRecipeConverted"
     />
     <ProductDialog
       v-model="showProductDialog"
@@ -251,6 +252,23 @@ function openEditDialog(ref: { id: string; type: string }) {
 
 function handleDialogSaved() {
   // Stores update reactively, hub auto-refreshes
+}
+
+function handleRecipeConverted(payload: { newId: string; newType: 'recipe' | 'preparation' }) {
+  showRecipeDialog.value = false
+  editRecipe.value = null
+
+  // Open the new entity in edit mode
+  if (payload.newType === 'recipe') {
+    editRecipe.value = recipesStore.getRecipeById(payload.newId) as Recipe | null
+    editRecipeType.value = 'recipe'
+  } else {
+    editRecipe.value = recipesStore.getPreparationById(payload.newId) as Preparation | null
+    editRecipeType.value = 'preparation'
+  }
+  if (editRecipe.value) {
+    showRecipeDialog.value = true
+  }
 }
 
 async function handleArchiveMenuItem(item: MenuItem) {
