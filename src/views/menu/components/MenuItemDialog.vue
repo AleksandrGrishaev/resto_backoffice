@@ -173,7 +173,25 @@
             <!-- ====== VARIANTS TAB ====== -->
             <v-window-item value="variants">
               <div class="tab-content">
+                <!-- Only Modifiers toggle — on tab level -->
                 <div class="d-flex align-center mb-4">
+                  <v-switch
+                    v-model="formData.onlyModifiers"
+                    label="Only Modifiers"
+                    hide-details
+                    density="compact"
+                    color="primary"
+                    @update:model-value="handleOnlyModifiersToggle"
+                  />
+                  <span
+                    v-if="formData.onlyModifiers"
+                    class="text-caption text-medium-emphasis ml-3"
+                  >
+                    Base price is 0 — final price comes from selected modifiers
+                  </span>
+                </div>
+
+                <div v-if="!formData.onlyModifiers" class="d-flex align-center mb-4">
                   <div class="section-title text-info">
                     <v-icon icon="mdi-format-list-bulleted" size="22" class="mr-2" color="info" />
                     Dish Variants
@@ -191,7 +209,7 @@
                   </v-btn>
                 </div>
 
-                <div class="variants-list">
+                <div v-if="!formData.onlyModifiers" class="variants-list">
                   <menu-item-variant-component
                     v-for="(variant, index) in formData.variants"
                     :key="variant.id"
@@ -204,6 +222,7 @@
                     :product-options="productOptions"
                     :unit-options="unitOptions"
                     :role-options="roleOptions"
+                    :only-modifiers="formData.onlyModifiers"
                     class="mb-4"
                     @update:variant="updateVariant(index, $event)"
                     @delete="removeVariant(index)"
@@ -374,7 +393,8 @@ const formData = ref({
   variants: [createDefaultVariant()],
   modifierGroups: [] as any[],
   templates: [] as any[],
-  channelIds: [] as string[]
+  channelIds: [] as string[],
+  onlyModifiers: false
 })
 
 // Computed
@@ -588,16 +608,38 @@ const modifierCount = computed(() => formData.value.modifierGroups?.length || 0)
 const templateCount = computed(() => formData.value.templates?.length || 0)
 
 const isFormValid = computed(() => {
+  const hasVariants = formData.value.onlyModifiers || formData.value.variants.length > 0
+  const variantsValid =
+    formData.value.onlyModifiers || formData.value.variants.every(v => v.price > 0)
   return (
     isValid.value &&
     formData.value.name.trim().length > 0 &&
     formData.value.categoryId &&
-    formData.value.variants.length > 0 &&
-    formData.value.variants.every(v => v.price > 0)
+    hasVariants &&
+    variantsValid
   )
 })
 
 // Methods
+function handleOnlyModifiersToggle(value: boolean | null) {
+  if (value) {
+    // Create a single system variant with price 0
+    const systemVariant = {
+      ...createDefaultVariant(),
+      price: 0,
+      onlyModifiers: true,
+      composition: []
+    }
+    formData.value.variants = [systemVariant]
+  } else {
+    // Reset to normal variant
+    formData.value.variants = formData.value.variants.map(v => ({
+      ...v,
+      onlyModifiers: false
+    }))
+  }
+}
+
 function addVariant() {
   formData.value.variants.push({
     ...createDefaultVariant(),
@@ -647,7 +689,8 @@ function resetForm() {
     templates: [],
     channelIds: channelsStore.activeChannels
       .filter(c => c.type !== 'delivery_platform')
-      .map(c => c.id)
+      .map(c => c.id),
+    onlyModifiers: false
   }
   currentTab.value = 'basic'
   showAdvancedTab.value = false
@@ -710,6 +753,7 @@ async function handleSaveDraft() {
         isActive: v.isActive,
         sortOrder: v.sortOrder,
         portionMultiplier: v.portionMultiplier,
+        onlyModifiers: v.onlyModifiers,
         composition: v.composition
       }))
     }
@@ -764,6 +808,7 @@ async function handleSubmit() {
       isActive: variant.isActive ?? true,
       sortOrder: index,
       portionMultiplier: variant.portionMultiplier,
+      onlyModifiers: variant.onlyModifiers || false,
       composition:
         variant.composition?.map(comp => ({
           type: comp.type,
@@ -790,6 +835,7 @@ async function handleSubmit() {
         isActive: v.isActive,
         sortOrder: v.sortOrder,
         portionMultiplier: v.portionMultiplier,
+        onlyModifiers: v.onlyModifiers,
         composition: v.composition
       }))
     }
@@ -838,6 +884,15 @@ watch(
   () => props.item,
   newItem => {
     if (newItem) {
+      const hasModifiers = (newItem.modifierGroups?.length || 0) > 0
+      // Detect onlyModifiers: either explicitly set, or legacy items with price=0 + empty composition + has modifiers
+      const isOnlyModifiers =
+        newItem.variants.length > 0 &&
+        newItem.variants.every(
+          v =>
+            v.onlyModifiers ||
+            (hasModifiers && v.price === 0 && (!v.composition || v.composition.length === 0))
+        )
       formData.value = {
         categoryId: newItem.categoryId,
         name: newItem.name,
@@ -852,7 +907,8 @@ watch(
         })),
         modifierGroups: newItem.modifierGroups || [],
         templates: newItem.templates || [],
-        channelIds: channelsStore.getMenuItemChannelIds(newItem.id)
+        channelIds: channelsStore.getMenuItemChannelIds(newItem.id),
+        onlyModifiers: isOnlyModifiers
       }
     } else {
       resetForm()
@@ -866,6 +922,14 @@ watch(
   isOpen => {
     if (isOpen) {
       if (props.item) {
+        const hasMods = (props.item.modifierGroups?.length || 0) > 0
+        const isOnlyMods =
+          props.item.variants.length > 0 &&
+          props.item.variants.every(
+            v =>
+              v.onlyModifiers ||
+              (hasMods && v.price === 0 && (!v.composition || v.composition.length === 0))
+          )
         formData.value = {
           categoryId: props.item.categoryId,
           name: props.item.name,
@@ -880,7 +944,8 @@ watch(
           })),
           modifierGroups: props.item.modifierGroups || [],
           templates: props.item.templates || [],
-          channelIds: channelsStore.getMenuItemChannelIds(props.item.id)
+          channelIds: channelsStore.getMenuItemChannelIds(props.item.id),
+          onlyModifiers: isOnlyMods
         }
         // Show modifiers tab if item has modifiers or templates
         showAdvancedTab.value =

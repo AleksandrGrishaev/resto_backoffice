@@ -32,8 +32,9 @@
           label="Price"
           :hide-details="'auto'"
           suffix="IDR"
-          :rules="[v => v > 0 || 'Price must be greater than 0']"
-          required
+          :rules="onlyModifiers ? [] : [v => v > 0 || 'Price must be greater than 0']"
+          :required="!onlyModifiers"
+          :disabled="onlyModifiers"
           style="width: 150px"
           @update:model-value="emitUpdate"
         />
@@ -75,8 +76,8 @@
         </NumericInputField>
       </div>
 
-      <!-- Композиция -->
-      <div class="composition-section">
+      <!-- Композиция (hidden for modifier-only variants) -->
+      <div v-if="!onlyModifiers" class="composition-section">
         <div class="d-flex align-center mb-2">
           <div class="text-subtitle-2">Dish Composition</div>
           <v-spacer />
@@ -254,6 +255,7 @@ interface Props {
   canDelete: boolean
   itemName: string
   dishType: DishType // ✨ NEW: тип блюда
+  onlyModifiers?: boolean // цена = 0, композиция скрыта
   dishOptions: Array<{
     id: string
     name: string

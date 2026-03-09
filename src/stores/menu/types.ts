@@ -62,6 +62,7 @@ export interface MenuItemVariant {
 
   // Дополнительные поля
   portionMultiplier?: number // для масштабирования количества в композиции и модификаторах
+  onlyModifiers?: boolean // цена формируется только из модификаторов, базовая цена = 0
   notes?: string
 
   // ❌ УДАЛЕНО: modifierGroups и templates перенесены на уровень MenuItem
@@ -236,6 +237,7 @@ export interface CreateMenuItemVariantDto {
   price: number
   composition: MenuComposition[]
   portionMultiplier?: number
+  onlyModifiers?: boolean
   isActive?: boolean
   sortOrder?: number
   notes?: string
