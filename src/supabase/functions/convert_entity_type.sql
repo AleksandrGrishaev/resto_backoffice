@@ -113,7 +113,7 @@ BEGIN
       ) VALUES (
         gen_random_uuid(),
         v_new_id,
-        v_comp.component_id,
+        v_comp.component_id::uuid,   -- component_id is text, ingredient_id is uuid
         v_comp.component_type,  -- 'product' or 'preparation'
         v_comp.quantity,
         v_comp.unit,
@@ -196,7 +196,7 @@ BEGIN
       ) VALUES (
         gen_random_uuid(),
         v_new_id,
-        v_comp.ingredient_id,
+        v_comp.ingredient_id::text,   -- ingredient_id is uuid, component_id is text
         v_comp.type,  -- 'product' or 'preparation'
         v_comp.quantity,
         v_comp.unit,
@@ -307,9 +307,9 @@ BEGIN
   -- ============================================
   -- Other recipes referencing old entity → point to new entity with new type
   UPDATE recipe_components SET
-    component_id = v_new_id,
+    component_id = v_new_id::text,
     component_type = p_to_type
-  WHERE component_id = p_entity_id AND component_type = p_from_type;
+  WHERE component_id = p_entity_id::text AND component_type = p_from_type;
 
   GET DIAGNOSTICS v_updated_parent_recipes = ROW_COUNT;
 
