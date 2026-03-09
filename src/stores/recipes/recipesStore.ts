@@ -734,7 +734,19 @@ export const useRecipesStore = defineStore('recipes', () => {
       // Update preparations
       for (const [preparationId, cost] of preparationCosts) {
         try {
-          await recipesService.updatePreparationCost(preparationId, cost.costPerOutputUnit)
+          // ✅ FIX: Normalize per-portion to per-gram for portion-type preparations
+          // costPerOutputUnit is per-portion when outputUnit='portion' — normalize to per-gram
+          let costForDb = cost.costPerOutputUnit
+          const preparation = preparationsComposable.getPreparationById(preparationId)
+          if (
+            preparation &&
+            preparation.portionType === 'portion' &&
+            preparation.portionSize &&
+            preparation.portionSize > 0
+          ) {
+            costForDb = cost.costPerOutputUnit / preparation.portionSize
+          }
+          await recipesService.updatePreparationCost(preparationId, costForDb)
           preparationsUpdated++
         } catch (err) {
           errors.push(

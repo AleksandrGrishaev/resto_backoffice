@@ -339,7 +339,8 @@ export class DecompositionEngine {
 
     // Calculate quantity with optional portion conversion
     let totalQuantity = comp.quantity * quantity
-    let outputUnit = preparation.outputUnit
+    // Use the recipe's unit by default — only override when convertPortionToGrams succeeds
+    let outputUnit = comp.unit
 
     // 🐛 DEBUG: Log input values before conversion
     DebugUtils.debug(MODULE_NAME, '📦 Processing preparation', {

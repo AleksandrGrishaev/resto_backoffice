@@ -67,7 +67,7 @@
       <v-card-text>
         <v-data-table
           :headers="headers"
-          :items="transactions"
+          :items="sortableTransactions"
           :loading="loading"
           :items-per-page="25"
           density="compact"
@@ -437,6 +437,17 @@ const actualCostItems = computed(() => {
 
   return items
 })
+
+// Enrich transactions with sortable computed values
+const sortableTransactions = computed(() =>
+  transactions.value.map(tx => ({
+    ...tx,
+    cost: tx.profitCalculation?.ingredientsCost ?? 0,
+    profit: getNetProfit(tx.profitCalculation),
+    margin: tx.profitCalculation?.netProfitMargin ?? tx.profitCalculation?.profitMargin ?? 0,
+    finalRevenue: getNetRevenue(tx.profitCalculation)
+  }))
+)
 
 // Filters
 const filters = ref<SalesFilters>({
