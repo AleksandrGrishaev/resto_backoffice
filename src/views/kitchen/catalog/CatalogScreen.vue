@@ -71,6 +71,19 @@
             </v-tooltip>
           </v-btn>
 
+          <!-- Recalculate menu costs -->
+          <v-btn
+            v-if="activeSection === 'menu'"
+            icon
+            variant="text"
+            size="small"
+            :loading="isRecalculating"
+            @click="showRecalculateDialog = true"
+          >
+            <v-icon>mdi-calculator-variant</v-icon>
+            <v-tooltip activator="parent" location="bottom">Recalculate All Costs</v-tooltip>
+          </v-btn>
+
           <v-btn
             v-if="hasFilters"
             icon
@@ -163,6 +176,37 @@
     />
 
     <ProductDialog v-model="showProductDialog" :product="editProduct" @save="handleProductSave" />
+
+    <!-- Recalculate costs dialog -->
+    <v-dialog v-model="showRecalculateDialog" max-width="420">
+      <v-card>
+        <v-card-title>Recalculate Menu Costs</v-card-title>
+        <v-card-text>
+          <p>
+            This will recalculate the cost for all
+            <strong>{{ menuCatalogItems.length }}</strong>
+            menu items based on current product prices, preparation costs, and recipe compositions.
+          </p>
+          <p class="mt-2 text-medium-emphasis">Results will be saved to the database.</p>
+          <v-alert v-if="recalculateResult" type="success" variant="tonal" class="mt-3">
+            Updated: {{ recalculateResult.updated }} items, Skipped:
+            {{ recalculateResult.skipped }} (no composition)
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showRecalculateDialog = false">Close</v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            :loading="isRecalculating"
+            @click="handleRecalculateCosts"
+          >
+            Recalculate Now
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Filter dialog -->
     <v-dialog v-model="showFilterDialog" max-width="400">
@@ -272,6 +316,23 @@ const currentCategory = ref<{ id: string; name: string } | null>(null)
 const selectedItem = ref<CatalogItem | null>(null)
 const viewMode = ref<'grid' | 'tree'>('grid')
 const showFilterDialog = ref(false)
+
+// Recalculate costs
+const showRecalculateDialog = ref(false)
+const isRecalculating = ref(false)
+const recalculateResult = ref<{ updated: number; skipped: number } | null>(null)
+
+async function handleRecalculateCosts() {
+  isRecalculating.value = true
+  recalculateResult.value = null
+  try {
+    recalculateResult.value = await menuStore.recalculateAllMenuItemCosts()
+  } catch (e) {
+    console.error('Failed to recalculate costs:', e)
+  } finally {
+    isRecalculating.value = false
+  }
+}
 
 // Filters (in dialog)
 const filterNesting = ref<string>('')

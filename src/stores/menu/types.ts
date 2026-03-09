@@ -42,6 +42,9 @@ export interface MenuItem extends BaseEntity {
   modifierGroups?: ModifierGroup[]
   templates?: VariantTemplate[]
 
+  // Cost (calculated from composition, persisted to DB)
+  cost?: number
+
   // Entity status & last edited tracking
   status?: EntityStatus
   lastEditedAt?: string
