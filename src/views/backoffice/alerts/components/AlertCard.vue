@@ -88,6 +88,49 @@
             </span>
             difference
           </template>
+          <template v-else-if="alert.type === 'price_spike' && alert.metadata">
+            {{ alert.metadata.itemName }}: {{ formatCurrency(alert.metadata.averageCostPerUnit) }} →
+            <span class="text-error font-weight-medium">
+              {{ formatCurrency(alert.metadata.newCostPerUnit) }}
+            </span>
+            /{{ alert.metadata.unit }}
+            <span class="text-error font-weight-medium ms-1">
+              (+{{ alert.metadata.percentChange }}%)
+            </span>
+          </template>
+          <template v-else-if="alert.type === 'prep_cost_spike' && alert.metadata">
+            {{ alert.metadata.preparationName }}:
+            {{ formatCurrency(alert.metadata.previousCostPerUnit) }} →
+            <span class="text-error font-weight-medium">
+              {{ formatCurrency(alert.metadata.newCostPerUnit) }}
+            </span>
+            /{{ alert.metadata.unit }}
+            <span class="text-error font-weight-medium ms-1">
+              (+{{ alert.metadata.percentChange }}%)
+            </span>
+          </template>
+          <template v-else-if="alert.type === 'quantity_anomaly' && alert.metadata">
+            {{ alert.metadata.itemName }}:
+            <span class="text-error font-weight-medium">
+              {{ alert.metadata.newQuantity }}{{ alert.metadata.unit }}
+            </span>
+            (avg: {{ alert.metadata.averageQuantity }}{{ alert.metadata.unit }},
+            <span class="text-error font-weight-medium">{{ alert.metadata.multiplier }}x</span>
+            )
+          </template>
+          <template v-else-if="alert.type === 'weekly_cost_report' && alert.metadata">
+            <span class="font-weight-medium">{{ alert.metadata.totalItemsAffected }} items</span>
+            with cost increase
+            <v-chip
+              v-if="alert.metadata.criticalCount > 0"
+              size="x-small"
+              color="error"
+              variant="tonal"
+              class="ms-1"
+            >
+              {{ alert.metadata.criticalCount }} critical
+            </v-chip>
+          </template>
         </div>
         <!-- Toggle Button -->
         <v-btn
@@ -213,6 +256,222 @@
           <div v-if="alert.metadata.reason" class="reason-text">
             <v-icon icon="mdi-message-text-outline" size="14" class="me-1" />
             {{ alert.metadata.reason }}
+          </div>
+        </div>
+
+        <!-- Price Spike Details -->
+        <div v-else-if="alert.type === 'price_spike' && alert.metadata" class="alert-details">
+          <div class="details-grid mb-2">
+            <div class="detail-item">
+              <span class="detail-label">Product</span>
+              <span class="detail-value font-weight-medium">{{ alert.metadata.itemName }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Average Price</span>
+              <span class="detail-value">
+                {{ formatCurrency(alert.metadata.averageCostPerUnit) }}/{{ alert.metadata.unit }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">New Price</span>
+              <span class="detail-value font-weight-bold text-error">
+                {{ formatCurrency(alert.metadata.newCostPerUnit) }}/{{ alert.metadata.unit }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Change</span>
+              <span class="detail-value font-weight-bold text-error">
+                +{{ alert.metadata.percentChange }}%
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Compared against</span>
+              <span class="detail-value">{{ alert.metadata.batchCount }} batches</span>
+            </div>
+            <div v-if="alert.metadata.responsiblePerson" class="detail-item">
+              <span class="detail-label">Responsible</span>
+              <span class="detail-value">{{ alert.metadata.responsiblePerson }}</span>
+            </div>
+            <div
+              v-if="alert.metadata.supplierName || alert.metadata.supplierId"
+              class="detail-item"
+            >
+              <span class="detail-label">Supplier</span>
+              <span class="detail-value">
+                {{ alert.metadata.supplierName || alert.metadata.supplierId }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Prep Cost Spike Details -->
+        <div v-else-if="alert.type === 'prep_cost_spike' && alert.metadata" class="alert-details">
+          <div class="details-grid mb-2">
+            <div class="detail-item">
+              <span class="detail-label">Preparation</span>
+              <span class="detail-value font-weight-medium">
+                {{ alert.metadata.preparationName }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Previous Cost</span>
+              <span class="detail-value">
+                {{ formatCurrency(alert.metadata.previousCostPerUnit) }}/{{ alert.metadata.unit }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">New Cost</span>
+              <span class="detail-value font-weight-bold text-error">
+                {{ formatCurrency(alert.metadata.newCostPerUnit) }}/{{ alert.metadata.unit }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Change</span>
+              <span class="detail-value font-weight-bold text-error">
+                +{{ alert.metadata.percentChange }}%
+              </span>
+            </div>
+            <div v-if="alert.metadata.responsiblePerson" class="detail-item">
+              <span class="detail-label">Responsible</span>
+              <span class="detail-value">{{ alert.metadata.responsiblePerson }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quantity Anomaly Details -->
+        <div v-else-if="alert.type === 'quantity_anomaly' && alert.metadata" class="alert-details">
+          <div class="details-grid mb-2">
+            <div class="detail-item">
+              <span class="detail-label">Item</span>
+              <span class="detail-value font-weight-medium">{{ alert.metadata.itemName }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Received / Produced</span>
+              <span class="detail-value font-weight-bold text-error">
+                {{ alert.metadata.newQuantity }}{{ alert.metadata.unit }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Average</span>
+              <span class="detail-value">
+                {{ alert.metadata.averageQuantity }}{{ alert.metadata.unit }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Max Historical</span>
+              <span class="detail-value">
+                {{ alert.metadata.maxHistoricalQuantity }}{{ alert.metadata.unit }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Multiplier</span>
+              <span class="detail-value font-weight-bold text-error">
+                {{ alert.metadata.multiplier }}x
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Source</span>
+              <span class="detail-value text-capitalize">
+                {{ alert.metadata.source || 'unknown' }}
+              </span>
+            </div>
+            <div v-if="alert.metadata.responsiblePerson" class="detail-item">
+              <span class="detail-label">Responsible</span>
+              <span class="detail-value">{{ alert.metadata.responsiblePerson }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Weekly Cost Report Details -->
+        <div
+          v-else-if="alert.type === 'weekly_cost_report' && alert.metadata"
+          class="alert-details"
+        >
+          <!-- Products -->
+          <div v-if="alert.metadata.products?.length" class="mb-3">
+            <div class="text-caption text-medium-emphasis mb-1 font-weight-bold">
+              Products ({{ alert.metadata.products.length }})
+            </div>
+            <div
+              v-for="item in alert.metadata.products.slice(0, 10)"
+              :key="item.itemId"
+              class="d-flex align-center gap-2 py-1"
+              style="border-bottom: 1px solid rgba(0, 0, 0, 0.05)"
+            >
+              <span class="text-body-2 flex-grow-1">{{ item.itemName }}</span>
+              <span class="text-caption text-medium-emphasis">
+                {{ formatCurrency(item.previousCost) }}
+              </span>
+              <v-icon icon="mdi-arrow-right" size="12" />
+              <span class="text-body-2 font-weight-medium">
+                {{ formatCurrency(item.currentCost) }}
+              </span>
+              <v-chip
+                :color="item.severity === 'critical' ? 'error' : 'warning'"
+                size="x-small"
+                variant="tonal"
+              >
+                +{{ item.percentChange }}%
+              </v-chip>
+            </div>
+          </div>
+
+          <!-- Preparations -->
+          <div v-if="alert.metadata.preparations?.length" class="mb-3">
+            <div class="text-caption text-medium-emphasis mb-1 font-weight-bold">
+              Preparations ({{ alert.metadata.preparations.length }})
+            </div>
+            <div
+              v-for="item in alert.metadata.preparations.slice(0, 10)"
+              :key="item.itemId"
+              class="d-flex align-center gap-2 py-1"
+              style="border-bottom: 1px solid rgba(0, 0, 0, 0.05)"
+            >
+              <span class="text-body-2 flex-grow-1">{{ item.itemName }}</span>
+              <span class="text-caption text-medium-emphasis">
+                {{ formatCurrency(item.previousCost) }}
+              </span>
+              <v-icon icon="mdi-arrow-right" size="12" />
+              <span class="text-body-2 font-weight-medium">
+                {{ formatCurrency(item.currentCost) }}
+              </span>
+              <v-chip
+                :color="item.severity === 'critical' ? 'error' : 'warning'"
+                size="x-small"
+                variant="tonal"
+              >
+                +{{ item.percentChange }}%
+              </v-chip>
+            </div>
+          </div>
+
+          <!-- Menu Items -->
+          <div v-if="alert.metadata.menuItems?.length">
+            <div class="text-caption text-medium-emphasis mb-1 font-weight-bold">
+              Menu Items ({{ alert.metadata.menuItems.length }})
+            </div>
+            <div
+              v-for="item in alert.metadata.menuItems.slice(0, 10)"
+              :key="item.itemId"
+              class="d-flex align-center gap-2 py-1"
+              style="border-bottom: 1px solid rgba(0, 0, 0, 0.05)"
+            >
+              <span class="text-body-2 flex-grow-1">{{ item.itemName }}</span>
+              <span class="text-caption text-medium-emphasis">
+                {{ formatCurrency(item.previousCost) }}
+              </span>
+              <v-icon icon="mdi-arrow-right" size="12" />
+              <span class="text-body-2 font-weight-medium">
+                {{ formatCurrency(item.currentCost) }}
+              </span>
+              <v-chip
+                :color="item.severity === 'critical' ? 'error' : 'warning'"
+                size="x-small"
+                variant="tonal"
+              >
+                +{{ item.percentChange }}%
+              </v-chip>
+            </div>
           </div>
         </div>
 
@@ -400,7 +659,11 @@ const KNOWN_ALERT_TYPES = [
   'manual_correction',
   'large_refund',
   'pre_bill_modified',
-  'balance_correction'
+  'balance_correction',
+  'price_spike',
+  'prep_cost_spike',
+  'quantity_anomaly',
+  'weekly_cost_report'
 ]
 
 // =============================================

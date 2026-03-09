@@ -55,10 +55,11 @@
                       <span class="text-caption">
                         {{ item.raw.code }} &bull;
                         <template v-if="item.raw.portionType === 'portion'">
-                          {{ item.raw.portionSize }}{{ item.raw.outputUnit }}/portion
+                          {{ item.raw.portionSize
+                          }}{{ getUnitShortName(item.raw.outputUnit) }}/portion
                         </template>
                         <template v-else>
-                          {{ item.raw.outputQuantity }} {{ item.raw.outputUnit }}
+                          {{ item.raw.outputQuantity }} {{ getUnitShortName(item.raw.outputUnit) }}
                         </template>
                       </span>
                     </template>
@@ -74,11 +75,11 @@
                     <div class="text-body-1 font-weight-medium">
                       <template v-if="isPortionType">
                         1 portion ({{ selectedPreparation.portionSize
-                        }}{{ selectedPreparation.outputUnit }})
+                        }}{{ getUnitShortName(selectedPreparation.outputUnit) }})
                       </template>
                       <template v-else>
                         {{ selectedPreparation.outputQuantity }}
-                        {{ selectedPreparation.outputUnit }}
+                        {{ getUnitShortName(selectedPreparation.outputUnit) }}
                       </template>
                     </div>
                   </div>
@@ -117,7 +118,7 @@
                 density="compact"
                 suffix="pcs"
                 prepend-inner-icon="mdi-food-variant"
-                :hint="`= ${effectiveQuantity}${selectedPreparation.outputUnit}`"
+                :hint="`= ${effectiveQuantity}${getUnitShortName(selectedPreparation.outputUnit)}`"
                 persistent-hint
                 :error-messages="!portionInput || portionInput <= 0 ? 'Required' : ''"
               />
@@ -132,7 +133,7 @@
                 :allow-decimal="false"
                 variant="outlined"
                 density="compact"
-                :suffix="selectedPreparation?.outputUnit || 'g'"
+                :suffix="getUnitShortName(selectedPreparation?.outputUnit)"
                 prepend-inner-icon="mdi-scale"
                 :hint="quantityHint"
                 persistent-hint
@@ -182,6 +183,14 @@
       </v-card-actions>
     </v-card>
   </v-dialog>
+
+  <!-- Watchdog Confirmation Dialog -->
+  <WatchdogConfirmDialog
+    v-model="showWatchdogConfirm"
+    :result="watchdogResult"
+    @confirm="proceedWithSubmit"
+    @cancel="showWatchdogConfirm = false"
+  />
 </template>
 
 <script setup lang="ts">
@@ -193,6 +202,10 @@ import { useAuthStore } from '@/stores/auth'
 import { useCostCalculation } from '@/stores/recipes/composables/useCostCalculation'
 import type { CreatePreparationReceiptData } from '@/stores/preparation'
 import { DebugUtils, TimeUtils, formatIDR } from '@/utils'
+import { getUnitShortName } from '@/types/measurementUnits'
+import { preCheckPrepQuantity } from '@/core/watchdog'
+import type { PreCheckResult } from '@/core/watchdog'
+import WatchdogConfirmDialog from '@/core/watchdog/WatchdogConfirmDialog.vue'
 
 const MODULE_NAME = 'SimpleProductionDialog'
 
@@ -234,6 +247,15 @@ const selectedPreparationId = ref('')
 const quantity = ref(0)
 const portionInput = ref(0)
 const notes = ref('')
+
+// Watchdog pre-check state
+const showWatchdogConfirm = ref(false)
+const watchdogResult = ref<PreCheckResult>({
+  quantityWarnings: [],
+  priceWarnings: [],
+  hasWarnings: false,
+  hasCritical: false
+})
 
 // Computed - User department from role
 const userDepartment = computed<'kitchen' | 'bar'>(() => {
@@ -314,9 +336,9 @@ const quantityHint = computed(() => {
   if (!selectedPreparation.value) return ''
   const recipeOutput = selectedPreparation.value.outputQuantity
   if (!quantity.value || quantity.value === recipeOutput) {
-    return `Standard batch: ${recipeOutput} ${selectedPreparation.value.outputUnit}`
+    return `Standard batch: ${recipeOutput} ${getUnitShortName(selectedPreparation.value.outputUnit)}`
   }
-  return `${multiplier.value.toFixed(2)}x recipe (standard: ${recipeOutput} ${selectedPreparation.value.outputUnit})`
+  return `${multiplier.value.toFixed(2)}x recipe (standard: ${recipeOutput} ${getUnitShortName(selectedPreparation.value.outputUnit)})`
 })
 
 const calculatedExpiryDate = computed(() => {
@@ -389,6 +411,33 @@ function formatCurrency(amount: number): string {
 
 async function handleSubmit() {
   if (!canSubmit.value || !selectedPreparation.value) return
+
+  // Run watchdog pre-check before saving
+  try {
+    const checkResult = await preCheckPrepQuantity([
+      {
+        preparationId: selectedPreparationId.value,
+        preparationName: selectedPreparation.value.name,
+        quantity: effectiveQuantity.value,
+        unit: selectedPreparation.value.outputUnit
+      }
+    ])
+
+    if (checkResult.hasWarnings) {
+      watchdogResult.value = checkResult
+      showWatchdogConfirm.value = true
+      return // Wait for user confirmation
+    }
+  } catch (err) {
+    DebugUtils.warn(MODULE_NAME, 'Pre-check failed, proceeding anyway', { error: err })
+  }
+
+  proceedWithSubmit()
+}
+
+/** Actually save after pre-check passed or user confirmed */
+function proceedWithSubmit() {
+  if (!selectedPreparation.value) return
 
   // Prepare data before closing dialog
   const expiryDate = calculatedExpiryDate.value

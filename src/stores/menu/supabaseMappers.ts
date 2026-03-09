@@ -83,7 +83,7 @@ export function menuItemToSupabaseInsert(item: MenuItem): SupabaseMenuItemInsert
 
     // Pricing: Use first variant price as base price
     price: item.variants?.[0]?.price || 0,
-    cost: calculateMenuItemCost(item),
+    cost: item.cost ?? 0,
 
     // Dish type
     dish_type: item.dishType || 'simple',
@@ -101,6 +101,8 @@ export function menuItemToSupabaseInsert(item: MenuItem): SupabaseMenuItemInsert
     // Status and ordering
     is_active: item.isActive,
     sort_order: item.sortOrder || 0,
+    status: item.status || 'active',
+    last_edited_at: item.lastEditedAt || null,
 
     // Media
     image_url: (item as any).imageUrl || null,
@@ -143,11 +145,16 @@ export function menuItemFromSupabase(row: SupabaseMenuItem): MenuItem {
 
     // Status and ordering
     isActive: row.is_active ?? true,
+    status: ((row as any).status as any) || (row.is_active === false ? 'draft' : 'active'),
     sortOrder: row.sort_order || 0,
+    lastEditedAt: (row as any).last_edited_at || undefined,
 
     // Complex JSONB fields (already parsed by Supabase client)
     modifierGroups: (row.modifier_groups as any) || [],
     variants: (row.variants as any) || [],
+
+    // Cost (calculated from composition)
+    cost: (row as any).cost ?? undefined,
 
     // Optional fields
     preparationTime: undefined, // Not stored in Supabase yet
@@ -165,19 +172,6 @@ export function menuItemFromSupabase(row: SupabaseMenuItem): MenuItem {
 // =============================================
 // HELPER FUNCTIONS
 // =============================================
-
-/**
- * Calculate menu item cost based on composition
- * For now, returns 0 (cost calculation requires Products/Recipes integration)
- */
-function calculateMenuItemCost(item: MenuItem): number {
-  // TODO: Implement cost calculation when Products Store is integrated
-  // Will need to:
-  // 1. Get all composition items (products, recipes, preparations)
-  // 2. Calculate total cost based on quantities
-  // 3. Add modifier costs
-  return 0
-}
 
 // Helper functions removed - using explicit database columns instead of inference
 

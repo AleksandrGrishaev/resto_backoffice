@@ -392,7 +392,7 @@ function calculateOptionFoodCostImpact(
 /**
  * Calculate cost of option's composition
  */
-function calculateOptionCompositionCost(
+export function calculateOptionCompositionCost(
   option: ModifierOption,
   portionMultiplier: number,
   context: CostCalculationContext
@@ -401,7 +401,21 @@ function calculateOptionCompositionCost(
 
   let totalCost = 0
   for (const comp of option.composition) {
-    const compCost = calculateComponentCost(comp.type, comp.id, comp.quantity || 1, context)
+    // When unit is "portion" with portionSize, convert to base units for cost calculation
+    // BUT: for portion-type preparations, outputQuantity is already in portions,
+    // so we must NOT multiply by portionSize (would mix grams with portions)
+    let effectiveQuantity = comp.quantity || 1
+    if (comp.unit === 'portion' && comp.portionSize) {
+      if (comp.type === 'preparation') {
+        const prep = context.recipesStore.getPreparationById(comp.id)
+        if (prep?.portionType !== 'portion') {
+          effectiveQuantity = (comp.quantity || 1) * comp.portionSize
+        }
+      } else {
+        effectiveQuantity = (comp.quantity || 1) * comp.portionSize
+      }
+    }
+    const compCost = calculateComponentCost(comp.type, comp.id, effectiveQuantity, context)
     totalCost += compCost * portionMultiplier
   }
   return totalCost
@@ -410,7 +424,7 @@ function calculateOptionCompositionCost(
 /**
  * Calculate total cost of replaced components
  */
-function calculateReplacedComponentsCost(
+export function calculateReplacedComponentsCost(
   targetComponents: TargetComponent[],
   context: CostCalculationContext
 ): number {
@@ -429,14 +443,13 @@ function calculateReplacedComponentsCost(
  * Get cost of a target component (from recipe)
  */
 function getTargetComponentCost(target: TargetComponent, context: CostCalculationContext): number {
-  const { recipesStore } = context
+  const { recipesStore, productsStore } = context
 
   if (target.sourceType === 'recipe' && target.recipeId) {
-    // Find the recipe and get the component
     const recipe = recipesStore.getRecipeById(target.recipeId)
     if (!recipe?.components) return 0
 
-    const component = recipe.components.find(c => c.id === target.componentId)
+    const component = findRecipeComponentByTarget(recipe.components, target, context)
     if (!component) return 0
 
     return calculateComponentCost(
@@ -451,32 +464,102 @@ function getTargetComponentCost(target: TargetComponent, context: CostCalculatio
 }
 
 /**
- * Calculate cost of a single component
+ * Find recipe component matching a target (handles stale IDs)
+ * Target componentId can become stale when recipe is re-saved with new component IDs
+ */
+function findRecipeComponentByTarget(
+  components: { id: string; componentId: string; componentType: string; quantity: number }[],
+  target: TargetComponent,
+  context: CostCalculationContext
+) {
+  // 1. Exact row ID match
+  const byRowId = components.find(c => c.id === target.componentId)
+  if (byRowId) return byRowId
+
+  // 2. Match by type + entity ID
+  const byEntityId = components.find(
+    c => c.componentType === target.componentType && c.componentId === target.componentId
+  )
+  if (byEntityId) return byEntityId
+
+  // 3. Match by type + entity name (most resilient)
+  const { recipesStore, productsStore } = context
+  const sameType = components.filter(c => c.componentType === target.componentType)
+  for (const comp of sameType) {
+    let entityName: string | undefined
+    if (comp.componentType === 'recipe') {
+      entityName = recipesStore.getRecipeById(comp.componentId)?.name
+    } else if (comp.componentType === 'preparation') {
+      entityName = recipesStore.getPreparationById(comp.componentId)?.name
+    } else if (comp.componentType === 'product') {
+      entityName = productsStore.getProductById(comp.componentId)?.name
+    }
+    if (entityName && entityName === target.componentName) {
+      return comp
+    }
+  }
+
+  return undefined
+}
+
+/**
+ * Calculate cost of a single component — recursively computes from leaf products
+ * to avoid stale cached costs on recipes/preparations
  */
 function calculateComponentCost(
   type: string,
   id: string,
   quantity: number,
-  context: CostCalculationContext
+  context: CostCalculationContext,
+  visited?: Set<string>
 ): number {
   const { productsStore, recipesStore } = context
 
   if (type === 'product') {
     const product = productsStore.getProductById(id)
     return quantity * (product?.baseCostPerUnit || 0)
-  } else if (type === 'recipe') {
-    const recipeCost = recipesStore.getRecipeCostCalculation(id)
-    if (recipeCost?.costPerPortion) {
-      return quantity * recipeCost.costPerPortion
-    }
+  }
+
+  // Circular dependency guard
+  const key = `${type}:${id}`
+  const seen = visited ?? new Set<string>()
+  if (seen.has(key)) return 0
+  seen.add(key)
+
+  if (type === 'recipe') {
     const recipe = recipesStore.getRecipeById(id)
-    return quantity * (recipe?.costPerPortion || 0)
-  } else if (type === 'preparation') {
-    const prepCost = recipesStore.getPreparationCostCalculation(id)
-    if (prepCost?.costPerOutputUnit) {
-      return quantity * prepCost.costPerOutputUnit
+    if (recipe?.components?.length) {
+      const childrenSum = recipe.components.reduce((sum, comp) => {
+        return (
+          sum +
+          calculateComponentCost(
+            comp.componentType,
+            comp.componentId,
+            comp.quantity,
+            context,
+            new Set(seen)
+          )
+        )
+      }, 0)
+      if (childrenSum > 0 && recipe.portionSize && recipe.portionSize > 0) {
+        return Math.round((childrenSum / recipe.portionSize) * quantity)
+      }
     }
+    // Fallback to stored cost
+    return quantity * (recipe?.cost || 0)
+  }
+
+  if (type === 'preparation') {
     const prep = recipesStore.getPreparationById(id)
+    if (prep?.recipe?.length) {
+      const childrenSum = prep.recipe.reduce((sum, ing) => {
+        return sum + calculateComponentCost(ing.type, ing.id, ing.quantity, context, new Set(seen))
+      }, 0)
+      if (childrenSum > 0 && prep.outputQuantity && prep.outputQuantity > 0) {
+        return Math.round((childrenSum / prep.outputQuantity) * quantity)
+      }
+    }
+    // Fallback to stored cost
     return quantity * (prep?.lastKnownCost || prep?.costPerPortion || 0)
   }
 
@@ -493,7 +576,19 @@ function calculateVariantBaseCost(
   let totalCost = 0
 
   for (const comp of variant.composition || []) {
-    totalCost += calculateComponentCost(comp.type, comp.id, comp.quantity || 1, context)
+    // For portion-type preparations, don't multiply by portionSize — outputQuantity is in portions
+    let effectiveQuantity = comp.quantity || 1
+    if (comp.unit === 'portion' && comp.portionSize) {
+      if (comp.type === 'preparation') {
+        const prep = context.recipesStore.getPreparationById(comp.id)
+        if (prep?.portionType !== 'portion') {
+          effectiveQuantity = (comp.quantity || 1) * comp.portionSize
+        }
+      } else {
+        effectiveQuantity = (comp.quantity || 1) * comp.portionSize
+      }
+    }
+    totalCost += calculateComponentCost(comp.type, comp.id, effectiveQuantity, context)
   }
 
   return totalCost
@@ -573,4 +668,4 @@ function buildCombinationResult(
 // Utility Exports
 // =============================================
 
-export { calculateVariantBaseCost, calculateComponentCost, calculateOptionCompositionCost }
+export { calculateVariantBaseCost, calculateComponentCost }

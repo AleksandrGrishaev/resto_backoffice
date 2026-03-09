@@ -527,9 +527,12 @@ export class StorageService {
         })
       }
 
-      // Add data from active batches
+      // Add data from active batches (skip zero-quantity and transit ghosts)
       for (const batch of batches) {
         if (!batch.isActive || batch.status !== 'active') continue
+        // Skip batches with zero quantity — they shouldn't affect balance/averageCost
+        // This also catches ghost transit batches (qty=0 but total_value>0)
+        if (batch.currentQuantity === 0) continue
 
         let balance = balanceMap.get(batch.itemId)
 
@@ -621,10 +624,17 @@ export class StorageService {
           }
         }
 
-        // Check low stock
+        // Check low stock + populate consumption data
         const product = productsStore.products.find(p => p.id === balance.itemId)
         if (product?.minStock && balance.totalQuantity <= product.minStock) {
           balance.belowMinStock = true
+        }
+        if (product?.avgDailyUsage && product.avgDailyUsage > 0) {
+          balance.averageDailyUsage = product.avgDailyUsage
+          balance.daysOfStockRemaining =
+            balance.totalQuantity > 0
+              ? Math.round((balance.totalQuantity / product.avgDailyUsage) * 10) / 10
+              : 0
         }
       }
 
@@ -892,6 +902,27 @@ export class StorageService {
         itemsCount: data.items.length,
         totalValue
       })
+
+      // Watchdog: check for price spikes (non-blocking)
+      import('@/core/watchdog')
+        .then(({ onReceiptCreated }) =>
+          onReceiptCreated(
+            data.items.map(item => ({
+              itemId: item.itemId,
+              itemName: item.itemName,
+              costPerUnit: item.costPerUnit,
+              unit: item.unit,
+              quantity: item.quantity
+            })),
+            {
+              responsiblePerson: data.responsiblePerson,
+              supplierId: data.supplierId
+            }
+          )
+        )
+        .catch(err =>
+          DebugUtils.error(MODULE_NAME, 'Watchdog receipt check failed', { error: err })
+        )
 
       return {
         success: true,

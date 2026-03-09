@@ -40,8 +40,62 @@ import {
 } from './supabaseMappers'
 // ⭐ PHASE 1: Cycle detection for nested preparations
 import { detectCycle, formatCyclePath } from './composables/usePreparationGraph'
+// 📋 Changelog: audit log for manual edits
+import {
+  computeRecipeDiff,
+  computePreparationDiff,
+  changelogService,
+  setCurrentUserProvider
+} from '@/core/changelog'
+import { useAuthStore } from '@/stores/auth/authStore'
 
 const MODULE_NAME = 'RecipesService'
+
+// 📋 Changelog: user provider (lazy init on first changelog write)
+let _changelogUserProviderSet = false
+function ensureChangelogUserProvider() {
+  if (_changelogUserProviderSet) return
+  _changelogUserProviderSet = true
+  setCurrentUserProvider(() => {
+    try {
+      const authStore = useAuthStore()
+      const user = authStore.currentUser
+      if (user) return { id: user.id, name: user.name }
+    } catch {
+      /* store not ready */
+    }
+    return null
+  })
+}
+
+// 📋 Resolve component name — cached with 60s TTL
+let _componentNameCache = new Map<string, string>()
+let _nameCacheExpiry = 0
+
+function resolveComponentName(id: string, _type: string): string {
+  return _componentNameCache.get(id) || id
+}
+
+async function populateNameCache(): Promise<void> {
+  // Skip if cache is still fresh (60s TTL)
+  if (Date.now() < _nameCacheExpiry && _componentNameCache.size > 0) return
+
+  const cache = new Map<string, string>()
+  try {
+    const [{ data: products }, { data: preps }, { data: recipes }] = await Promise.all([
+      supabase.from('products').select('id, name'),
+      supabase.from('preparations').select('id, name'),
+      supabase.from('recipes').select('id, name')
+    ])
+    for (const p of products || []) cache.set(p.id, p.name)
+    for (const p of preps || []) cache.set(p.id, p.name)
+    for (const r of recipes || []) cache.set(r.id, r.name)
+    _componentNameCache = cache
+    _nameCacheExpiry = Date.now() + 60_000 // 60s TTL
+  } catch {
+    /* fallback to existing cache or IDs */
+  }
+}
 
 // Helper: Check if Supabase is available
 function isSupabaseAvailable(): boolean {
@@ -395,6 +449,8 @@ export class RecipesService {
         code,
         recipe: data.recipe || [],
         isActive: data.isActive ?? true,
+        status: (data as any).status || 'active',
+        lastEditedAt: now,
         lastKnownCost: lastKnownCost,
         createdAt: now,
         updatedAt: now
@@ -459,6 +515,18 @@ export class RecipesService {
         ingredientsCount: newPreparation.recipe.length
       })
 
+      // 📋 Changelog: log creation (non-blocking)
+      ensureChangelogUserProvider()
+      changelogService
+        .logChange({
+          entityType: 'preparation',
+          entityId: newPreparation.id,
+          entityName: newPreparation.name,
+          changeType: 'created',
+          changes: {}
+        })
+        .catch(err => DebugUtils.warn(MODULE_NAME, 'Changelog write failed', { err }))
+
       // Invalidate cache to force fresh read
       localStorage.removeItem('preparations_cache')
 
@@ -487,11 +555,13 @@ export class RecipesService {
       }
 
       const { id, recipe, ...updateData } = data
+      const now = TimeUtils.getCurrentLocalISO()
       const updatedPreparation: Preparation = {
         ...existingPreparation,
         ...updateData,
         recipe: recipe || existingPreparation.recipe,
-        updatedAt: TimeUtils.getCurrentLocalISO()
+        lastEditedAt: now,
+        updatedAt: now
       }
 
       // ⭐ PHASE 1: Cycle detection for nested preparations
@@ -571,6 +641,25 @@ export class RecipesService {
       }
 
       DebugUtils.info(MODULE_NAME, '✅ Preparation updated in Supabase', { id })
+
+      // 📋 Changelog: compute diff and log (non-blocking)
+      ensureChangelogUserProvider()
+      populateNameCache()
+        .then(() => {
+          const diff = computePreparationDiff(existingPreparation, data, resolveComponentName)
+          if (diff.hasChanges) {
+            changelogService
+              .logChange({
+                entityType: 'preparation',
+                entityId: id,
+                entityName: data.name || existingPreparation.name,
+                changeType: 'updated',
+                changes: diff
+              })
+              .catch(err => DebugUtils.warn(MODULE_NAME, 'Changelog write failed', { err }))
+          }
+        })
+        .catch(err => DebugUtils.warn(MODULE_NAME, 'Changelog diff failed', { err }))
 
       // Invalidate cache
       localStorage.removeItem('preparations_cache')
@@ -761,6 +850,8 @@ export class RecipesService {
         components: data.components || [],
         steps: data.steps || [],
         isActive: data.isActive ?? true,
+        status: (data as any).status || 'active',
+        lastEditedAt: now,
         createdAt: now,
         updatedAt: now
       })
@@ -831,6 +922,18 @@ export class RecipesService {
         code: newRecipe.code
       })
 
+      // 📋 Changelog: log creation (non-blocking)
+      ensureChangelogUserProvider()
+      changelogService
+        .logChange({
+          entityType: 'recipe',
+          entityId: newRecipe.id,
+          entityName: newRecipe.name,
+          changeType: 'created',
+          changes: {}
+        })
+        .catch(err => DebugUtils.warn(MODULE_NAME, 'Changelog write failed', { err }))
+
       // Return complete recipe with components and steps
       return await this.getRecipeById(newRecipe.id)
     } catch (error) {
@@ -857,12 +960,14 @@ export class RecipesService {
       }
 
       const { id, components, steps, ...updateData } = data
+      const now = TimeUtils.getCurrentLocalISO()
       const updatedRecipe: Recipe = {
         ...existingRecipe,
         ...updateData,
         components: components || existingRecipe.components,
         steps: steps || existingRecipe.steps,
-        updatedAt: TimeUtils.getCurrentLocalISO()
+        lastEditedAt: now,
+        updatedAt: now
       }
 
       // Update recipe in Supabase
@@ -945,9 +1050,28 @@ export class RecipesService {
         name: updatedRecipe.name
       })
 
+      // 📋 Changelog: compute diff and log (non-blocking)
+      ensureChangelogUserProvider()
+      populateNameCache()
+        .then(() => {
+          const diff = computeRecipeDiff(existingRecipe, data, resolveComponentName)
+          if (diff.hasChanges) {
+            changelogService
+              .logChange({
+                entityType: 'recipe',
+                entityId: id,
+                entityName: data.name || existingRecipe.name,
+                changeType: 'updated',
+                changes: diff
+              })
+              .catch(err => DebugUtils.warn(MODULE_NAME, 'Changelog write failed', { err }))
+          }
+        })
+        .catch(err => DebugUtils.warn(MODULE_NAME, 'Changelog diff failed', { err }))
+
       // Clear cache and return updated recipe
       localStorage.removeItem('recipes_cache')
-      return await this.getRecipeById(id)
+      return (await this.getRecipeById(id)) ?? updatedRecipe
     } catch (error) {
       DebugUtils.error(MODULE_NAME, '❌ Error in updateRecipe:', extractErrorDetails(error))
       throw error

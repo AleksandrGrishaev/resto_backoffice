@@ -156,6 +156,17 @@ export function useNotifications() {
       return null
     }
 
+    // Play sound if enabled and not silent (independent of notification support)
+    if (state.value.soundEnabled && !options.silent) {
+      await playSound()
+    }
+
+    // Vibrate if enabled
+    if (state.value.vibrationEnabled && options.vibrate !== undefined) {
+      vibrate(options.vibrate || DEFAULT_VIBRATION_PATTERN)
+    }
+
+    // Try to show native notification (may fail on iOS/some WebViews)
     try {
       const notification = new Notification(options.title, {
         body: options.body,
@@ -164,26 +175,17 @@ export function useNotifications() {
         tag: options.tag,
         vibrate:
           options.vibrate || (state.value.vibrationEnabled ? DEFAULT_VIBRATION_PATTERN : undefined),
-        silent: options.silent ?? !state.value.soundEnabled,
+        silent: true, // Sound already handled above
         requireInteraction: options.requireInteraction ?? true,
         data: options.data
       })
 
-      // Play sound if enabled and not silent
-      if (state.value.soundEnabled && !options.silent) {
-        await playSound()
-      }
-
-      // Vibrate if enabled
-      if (state.value.vibrationEnabled && options.vibrate !== undefined) {
-        vibrate(options.vibrate || DEFAULT_VIBRATION_PATTERN)
-      }
-
       DebugUtils.debug(MODULE_NAME, 'Notification shown', { title: options.title })
 
       return notification
-    } catch (err) {
-      DebugUtils.error(MODULE_NAME, 'Failed to show notification', { error: err })
+    } catch {
+      // Notification constructor fails on iOS Safari and some WebViews
+      // Sound and vibration still work above — just skip native notification
       return null
     }
   }

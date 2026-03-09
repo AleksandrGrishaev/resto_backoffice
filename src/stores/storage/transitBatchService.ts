@@ -244,7 +244,7 @@ export class TransitBatchService {
         }
 
         if (receivedItem) {
-          // ✅ Update quantity if different
+          // Update quantity if different
           if (receivedItem.receivedQuantity !== batch.currentQuantity) {
             DebugUtils.debug(MODULE_NAME, 'Updating batch quantity', {
               batchId: batch.id,
@@ -256,7 +256,7 @@ export class TransitBatchService {
             updateData.initial_quantity = receivedItem.receivedQuantity
           }
 
-          // ✅ Update price if provided (actualPrice = cost per unit / BaseCost)
+          // Update price if provided (actualPrice = cost per unit / BaseCost)
           if (receivedItem.actualPrice && receivedItem.actualPrice > 0) {
             DebugUtils.debug(MODULE_NAME, 'Updating batch price', {
               batchId: batch.id,
@@ -266,19 +266,19 @@ export class TransitBatchService {
             })
             updateData.cost_per_unit = receivedItem.actualPrice
           }
-
-          // Recalculate total value
-          const finalQty = (updateData.current_quantity as number) || batch.currentQuantity
-          const finalPrice = (updateData.cost_per_unit as number) || batch.costPerUnit
-          updateData.total_value = finalQty * finalPrice
-
-          DebugUtils.debug(MODULE_NAME, 'Batch update calculated', {
-            batchId: batch.id,
-            finalQty,
-            finalPrice,
-            totalValue: updateData.total_value
-          })
         }
+
+        // Always recalculate total_value to ensure consistency
+        const finalQty = (updateData.current_quantity as number) ?? batch.currentQuantity
+        const finalPrice = (updateData.cost_per_unit as number) ?? batch.costPerUnit
+        updateData.total_value = finalQty * finalPrice
+
+        DebugUtils.debug(MODULE_NAME, 'Batch update calculated', {
+          batchId: batch.id,
+          finalQty,
+          finalPrice,
+          totalValue: updateData.total_value
+        })
 
         // 3. Update batch in database
         const { data, error } = await supabase

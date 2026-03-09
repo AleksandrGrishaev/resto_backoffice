@@ -218,6 +218,29 @@
 
       <!-- Actions -->
       <v-card-actions class="pa-4 border-t">
+        <!-- Correction buttons for completed receipts -->
+        <v-btn
+          v-if="receipt.status === 'completed'"
+          color="info"
+          variant="outlined"
+          size="small"
+          prepend-icon="mdi-history"
+          @click="showCorrectionHistory = true"
+        >
+          History
+        </v-btn>
+
+        <v-btn
+          v-if="receipt.status === 'completed'"
+          color="warning"
+          variant="outlined"
+          size="small"
+          prepend-icon="mdi-pencil-box-outline"
+          @click="showCorrectionDialog = true"
+        >
+          Correct
+        </v-btn>
+
         <v-spacer />
 
         <v-btn
@@ -246,20 +269,39 @@
 
     <!-- Discrepancies Dialog -->
     <receipt-discrepancies-dialog v-model="showDiscrepanciesDialog" :receipt="receipt" />
+
+    <!-- Correction Dialog -->
+    <receipt-correction-dialog
+      v-model="showCorrectionDialog"
+      :receipt="receipt"
+      :order="relatedOrder"
+      @correction-applied="onCorrectionApplied"
+    />
+
+    <!-- Correction History Dialog -->
+    <receipt-correction-history-dialog
+      v-model="showCorrectionHistory"
+      :receipt-id="receipt?.id ?? null"
+      :receipt-number="receipt?.receiptNumber ?? ''"
+    />
   </v-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { Receipt, ReceiptItem } from '@/stores/supplier_2/types'
+import type { Receipt, ReceiptItem, PurchaseOrder } from '@/stores/supplier_2/types'
 import { useProductsStore } from '@/stores/productsStore'
+import { useSupplierStore } from '@/stores/supplier_2/supplierStore'
 import ReceiptDiscrepanciesDialog from './ReceiptDiscrepanciesDialog.vue'
+import ReceiptCorrectionDialog from './ReceiptCorrectionDialog.vue'
+import ReceiptCorrectionHistoryDialog from './ReceiptCorrectionHistoryDialog.vue'
 
 // =============================================
 // STORES
 // =============================================
 
 const productsStore = useProductsStore()
+const supplierStore = useSupplierStore()
 
 // =============================================
 // PROPS & EMITS
@@ -275,6 +317,7 @@ interface Emits {
   (e: 'edit-receipt', receipt: Receipt): void
   (e: 'complete-receipt', receipt: Receipt): void
   (e: 'view-storage', operationId: string): void
+  (e: 'receipt-updated'): void
 }
 
 const props = defineProps<Props>()
@@ -290,6 +333,17 @@ const isOpen = computed({
 })
 
 const showDiscrepanciesDialog = ref(false)
+const showCorrectionDialog = ref(false)
+const showCorrectionHistory = ref(false)
+
+const relatedOrder = computed((): PurchaseOrder | null => {
+  if (!props.receipt) return null
+  return supplierStore.state.orders.find(o => o.id === props.receipt!.purchaseOrderId) ?? null
+})
+
+function onCorrectionApplied() {
+  emits('receipt-updated')
+}
 
 // =============================================
 // TABLE CONFIGURATION

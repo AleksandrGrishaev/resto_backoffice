@@ -57,6 +57,9 @@ export function productToSupabaseInsert(product: Product): SupabaseProductInsert
     current_stock: null, // Managed by storage system
     image_url: null, // Not tracked yet
 
+    // Entity status
+    status: (product as any).status || 'active',
+    last_edited_at: (product as any).lastEditedAt || null,
     updated_at: product.updatedAt
   }
 }
@@ -95,12 +98,16 @@ export function productFromSupabase(
     shelfLife: row.shelf_life || undefined,
     minStock: row.min_stock || undefined,
     maxStock: row.max_stock || undefined,
+    avgDailyUsage: (row as any).avg_daily_usage || undefined,
     leadTimeDays: row.lead_time_days || undefined,
     primarySupplierId: row.primary_supplier_id || undefined,
     tags: row.tags || undefined,
     recommendedPackageId: row.recommended_package_id || undefined,
     packageOptions, // Passed from JOIN or secondary query
     lastCountedAt: (row as any).last_counted_at || undefined, // Inventory tracking
+    // Entity status
+    status: ((row as any).status as any) || (row.is_active === false ? 'draft' : 'active'),
+    lastEditedAt: (row as any).last_edited_at || undefined,
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || new Date().toISOString()
   }

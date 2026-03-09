@@ -1,6 +1,6 @@
 // src/stores/productsStore/types.ts - UPDATED version with PackageOption
 
-import type { BaseEntity } from '@/types/common'
+import type { BaseEntity, EntityStatus } from '@/types/common'
 import type { MeasurementUnit } from '@/types/measurementUnits'
 
 // ✅ NEW: Department Type
@@ -91,6 +91,13 @@ export interface Product extends BaseEntity {
 
   // ✨ NEW: Last inventory count date
   lastCountedAt?: string
+
+  // Consumption analytics (from recalculate_consumption_stats RPC)
+  avgDailyUsage?: number
+
+  // Entity status & last edited tracking
+  status?: EntityStatus
+  lastEditedAt?: string
 }
 
 // ✅ НОВЫЕ DTO для CRUD операций с упаковками

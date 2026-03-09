@@ -225,27 +225,30 @@ export function useStockRecommendations() {
     let dailyUsage = 1 // Default fallback
     let basedOnDays = 0 // Estimated
 
-    // 🔧 Use fallback consumption estimates
-    // In the future, this will be replaced with real consumption data from Supabase
-    DebugUtils.debug(MODULE_NAME, '📊 Using fallback consumption estimates', {
-      productId: product.id,
-      category: product.category
-    })
-
-    const categoryEstimates: Record<string, number> = {
-      beverages: product.canBeSold ? 15 : 1,
-      meat: 2.5,
-      vegetables: 3.0,
-      dairy: 1.0,
-      spices: 0.1,
-      seafood: 1.5,
-      fruits: 2.0,
-      cereals: 1.0,
-      other: 1.0
+    // Use real consumption data from DB if available (populated by recalculate_consumption_stats RPC)
+    if (product.avgDailyUsage && product.avgDailyUsage > 0) {
+      dailyUsage = product.avgDailyUsage
+      basedOnDays = 30 // Data-driven (from RPC lookback period)
+      DebugUtils.debug(MODULE_NAME, 'Using real consumption data', {
+        productId: product.id,
+        avgDailyUsage: product.avgDailyUsage
+      })
+    } else {
+      // Fallback to category-based estimates
+      const categoryEstimates: Record<string, number> = {
+        beverages: product.canBeSold ? 15 : 1,
+        meat: 2.5,
+        vegetables: 3.0,
+        dairy: 1.0,
+        spices: 0.1,
+        seafood: 1.5,
+        fruits: 2.0,
+        cereals: 1.0,
+        other: 1.0
+      }
+      dailyUsage = categoryEstimates[product.category] || 1.0
+      basedOnDays = 0 // Estimated
     }
-
-    dailyUsage = categoryEstimates[product.category] || 1.0
-    basedOnDays = 0 // Estimated
 
     // 🔧 ИСПРАВЛЕНО: Убеждаемся что значение валидное
     if (isNaN(dailyUsage) || dailyUsage <= 0) {

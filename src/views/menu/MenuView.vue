@@ -282,12 +282,6 @@
     </div>
 
     <!-- Dialogs -->
-    <!-- ✨ NEW: Dish Type Selection Dialog -->
-    <dish-type-selection-dialog
-      v-model="dialogs.dishTypeSelection"
-      @selected="handleDishTypeSelected"
-    />
-
     <menu-category-dialog
       v-model="dialogs.category"
       :category="editingCategory"
@@ -297,8 +291,8 @@
     <menu-item-dialog
       v-model="dialogs.item"
       :item="editingItem"
-      :dish-type="selectedDishType"
       @saved="handleItemSaved"
+      @archive="handleArchiveFromDialog"
     />
 
     <!-- Duplicate dialog -->
@@ -385,7 +379,6 @@ import { buildMenuItemExportData, type CostCalculationContext } from '@/core/exp
 import MenuCategoryDialog from './components/MenuCategoryDialog.vue'
 import MenuItemDialog from './components/MenuItemDialog.vue'
 import MenuItemComponent from './components/MenuItem.vue'
-import DishTypeSelectionDialog from './components/DishTypeSelectionDialog.vue'
 import MenuItemViewDialog from './components/dialogs/MenuItemViewDialog.vue'
 import ConvertDishTypeDialog from './components/dialogs/ConvertDishTypeDialog.vue'
 
@@ -402,7 +395,6 @@ const filterTypes = ref<Array<'food' | 'beverage' | 'archive'>>(['food', 'bevera
 
 // Dialogs state
 const dialogs = ref({
-  dishTypeSelection: false, // ✨ NEW: Диалог выбора типа блюда
   category: false,
   item: false,
   duplicate: false, // ✨ NEW: Диалог дублирования
@@ -413,7 +405,6 @@ const dialogs = ref({
 const editingCategory = ref<Category | null>(null)
 const editingItem = ref<MenuItem | null>(null)
 const viewingItem = ref<MenuItem | null>(null) // Item being viewed
-const selectedDishType = ref<DishType | null>(null) // ✨ NEW: Выбранный тип блюда
 const duplicatingItem = ref<MenuItem | null>(null) // ✨ NEW: Дублируемое блюдо
 const duplicateName = ref('') // ✨ NEW: Новое имя для дубликата
 const convertingItem = ref<MenuItem | null>(null) // ✨ NEW: Блюдо для конвертации типа
@@ -545,18 +536,7 @@ function showCategoryDialog() {
 
 function showItemDialog() {
   editingItem.value = null
-  selectedDishType.value = null
-  dialogs.value.dishTypeSelection = true // ✨ CHANGED: Сначала выбор типа блюда
-}
-
-// ✨ NEW: Handler для выбора типа блюда
-function handleDishTypeSelected(dishType: DishType) {
-  console.log('🎯 [MenuView] DishType selected:', dishType)
-  selectedDishType.value = dishType
-  console.log('📦 [MenuView] selectedDishType set to:', selectedDishType.value)
-  dialogs.value.dishTypeSelection = false
-  dialogs.value.item = true // Открыть основной диалог создания блюда
-  console.log('✅ [MenuView] Opening MenuItemDialog with dishType:', selectedDishType.value)
+  dialogs.value.item = true
 }
 
 function editCategory(category: Category) {
@@ -578,6 +558,12 @@ function duplicateItem(item: MenuItem) {
 function viewItem(item: MenuItem) {
   viewingItem.value = item
   dialogs.value.view = true
+}
+
+async function handleArchiveFromDialog(item: MenuItem) {
+  dialogs.value.item = false
+  editingItem.value = null
+  await toggleItemStatus(item)
 }
 
 async function toggleItemStatus(item: MenuItem) {

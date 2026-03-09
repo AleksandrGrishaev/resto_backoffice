@@ -27,43 +27,57 @@
           bg-color="surface"
           @update:model-value="emitUpdate"
         />
-        <v-text-field
-          v-model.number="localVariant.price"
-          type="number"
+        <NumericInputField
+          v-model="localVariant.price"
           label="Price"
-          hide-details="auto"
+          :hide-details="'auto'"
           suffix="IDR"
-          :rules="[v => v > 0 || 'Price must be greater than 0']"
-          required
+          :rules="onlyModifiers ? [] : [v => v > 0 || 'Price must be greater than 0']"
+          :required="!onlyModifiers"
+          :disabled="onlyModifiers"
           style="width: 150px"
-          bg-color="surface"
           @update:model-value="emitUpdate"
         />
-        <v-text-field
-          v-model.number="localVariant.portionMultiplier"
-          type="number"
+        <NumericInputField
+          v-model="localVariant.portionMultiplier"
           label="Modifier Multiplier"
-          hide-details="auto"
-          placeholder="1.0"
+          :hide-details="'auto'"
+          placeholder="1"
           :rules="[v => !v || v > 0 || 'Must be positive']"
-          style="width: 140px"
-          bg-color="surface"
-          step="0.1"
+          style="width: 160px"
+          :allow-decimal="true"
           @update:model-value="emitUpdate"
         >
           <template #append-inner>
-            <v-tooltip location="top">
+            <v-tooltip location="top" max-width="280">
               <template #activator="{ props: tooltipProps }">
                 <v-icon v-bind="tooltipProps" icon="mdi-help-circle-outline" size="18" />
               </template>
-              <span>Scales modifier quantities (e.g., 1.3 = 30% more)</span>
+              <div>
+                <div class="font-weight-bold mb-1">Modifier Multiplier</div>
+                <div>
+                  Scales ingredient quantities for this variant size. For example, if a modifier
+                  adds 50g of cheese:
+                </div>
+                <div class="mt-1">
+                  <strong>1.0</strong>
+                  = standard (50g)
+                  <br />
+                  <strong>1.5</strong>
+                  = large size (75g)
+                  <br />
+                  <strong>0.5</strong>
+                  = small size (25g)
+                </div>
+                <div class="mt-1 text-medium-emphasis">Default: 1 (no scaling)</div>
+              </div>
             </v-tooltip>
           </template>
-        </v-text-field>
+        </NumericInputField>
       </div>
 
-      <!-- Композиция -->
-      <div class="composition-section">
+      <!-- Композиция (hidden for modifier-only variants) -->
+      <div v-if="!onlyModifiers" class="composition-section">
         <div class="d-flex align-center mb-2">
           <div class="text-subtitle-2">Dish Composition</div>
           <v-spacer />
@@ -127,13 +141,12 @@
                 </div>
 
                 <!-- Количество -->
-                <v-text-field
-                  v-model.number="component.quantity"
-                  type="number"
+                <NumericInputField
+                  v-model="component.quantity"
                   label="Qty"
-                  hide-details="auto"
-                  bg-color="background"
+                  :hide-details="'auto'"
                   style="width: 100px"
+                  :allow-decimal="true"
                   @update:model-value="emitUpdate"
                 />
 
@@ -232,6 +245,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { MenuItemVariant, MenuComposition, DishType } from '@/stores/menu'
+import { NumericInputField } from '@/components/input'
 import DishSearchWidget from './widgets/DishSearchWidget.vue'
 import ProductSearchWidget from './widgets/ProductSearchWidget.vue'
 
@@ -241,6 +255,7 @@ interface Props {
   canDelete: boolean
   itemName: string
   dishType: DishType // ✨ NEW: тип блюда
+  onlyModifiers?: boolean // цена = 0, композиция скрыта
   dishOptions: Array<{
     id: string
     name: string

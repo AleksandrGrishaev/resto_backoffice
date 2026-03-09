@@ -222,6 +222,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
 
+  // ===== ADMIN ROUTES =====
+  {
+    path: '/admin',
+    name: 'admin',
+    component: () => import('@/views/admin/AdminMainView.vue'),
+    meta: {
+      requiresAuth: true,
+      allowedRoles: ['admin', 'manager'],
+      title: 'Admin Panel'
+    }
+  },
+
   // ===== BACKOFFICE ROUTES =====
   {
     path: '/',
@@ -531,6 +543,14 @@ const routes: RouteRecordRaw[] = [
             component: () => import('@/views/backoffice/analytics/DailyWriteOffReportView.vue'),
             meta: {
               title: 'Daily Write-Off Report'
+            }
+          },
+          {
+            path: 'channel-profitability',
+            name: 'channel-profitability',
+            component: () => import('@/views/backoffice/analytics/ChannelProfitabilityView.vue'),
+            meta: {
+              title: 'Channel Profitability'
             }
           }
         ]

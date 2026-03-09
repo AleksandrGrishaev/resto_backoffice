@@ -382,6 +382,14 @@
       :product-id="form.items[currentItemIndexForPackage]?.productId"
       @package-created="handlePackageCreated"
     />
+
+    <!-- Watchdog Confirmation Dialog -->
+    <WatchdogConfirmDialog
+      v-model="showWatchdogConfirm"
+      :result="watchdogResult"
+      @confirm="proceedWithSave"
+      @cancel="showWatchdogConfirm = false"
+    />
   </v-dialog>
 </template>
 
@@ -397,8 +405,11 @@ import { supabase } from '@/supabase/client'
 import { TimeUtils } from '@/utils/time'
 import { DebugUtils, formatIDR } from '@/utils'
 import { extractErrorDetails } from '@/utils/errors'
+import { preCheckReceiptItems } from '@/core/watchdog'
+import type { PreCheckResult } from '@/core/watchdog'
 import type { Receipt, PurchaseOrder, ReceiptItem, OrderItem } from '@/stores/supplier_2/types'
 import QuickAddPackageDialog from '../shared/package/QuickAddPackageDialog.vue'
+import WatchdogConfirmDialog from '@/core/watchdog/WatchdogConfirmDialog.vue'
 import { NumericInputField } from '@/components/input'
 
 const MODULE_NAME = 'QuickReceiptDialog'
@@ -443,6 +454,15 @@ const isOpen = computed({
 const formRef = ref<any>(null)
 const isSaving = ref(false)
 const isInitializing = ref(false)
+
+// Watchdog pre-check state
+const showWatchdogConfirm = ref(false)
+const watchdogResult = ref<PreCheckResult>({
+  quantityWarnings: [],
+  priceWarnings: [],
+  hasWarnings: false,
+  hasCritical: false
+})
 
 // Package dialog state
 const showPackageDialog = ref(false)
@@ -920,6 +940,37 @@ async function saveReceipt() {
     emits('error', 'Supplier not found')
     return
   }
+
+  // Run watchdog pre-check before saving
+  try {
+    const itemsToCheck = form.value.items
+      .filter((item: QuickReceiptItem) => item.productId && item.quantity > 0)
+      .map((item: QuickReceiptItem) => ({
+        itemId: item.productId,
+        itemName: item.productName || 'Unknown',
+        quantity: item.quantity,
+        costPerUnit: item.baseCost || 0,
+        unit: item.unit || 'g'
+      }))
+
+    if (itemsToCheck.length > 0) {
+      const checkResult = await preCheckReceiptItems(itemsToCheck)
+      if (checkResult.hasWarnings) {
+        watchdogResult.value = checkResult
+        showWatchdogConfirm.value = true
+        return // Wait for user confirmation
+      }
+    }
+  } catch (err) {
+    DebugUtils.warn(MODULE_NAME, 'Pre-check failed, proceeding anyway', { error: err })
+  }
+
+  await proceedWithSave()
+}
+
+async function proceedWithSave() {
+  const supplier = selectedSupplier.value
+  if (!supplier) return
 
   DebugUtils.info(MODULE_NAME, '🚀 Creating quick receipt via RPC', {
     supplierId: form.value.supplierId,

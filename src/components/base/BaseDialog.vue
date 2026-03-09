@@ -5,8 +5,8 @@
     :persistent="persistent"
     @click:outside="handleCancel"
   >
-    <v-card>
-      <v-card-title class="d-flex align-center pa-4">
+    <v-card class="base-dialog-card">
+      <v-card-title class="d-flex align-center pa-4 base-dialog-card__title">
         <template #default>
           <span class="text-h5">{{ title }}</span>
           <v-spacer />
@@ -14,7 +14,7 @@
         </template>
       </v-card-title>
 
-      <v-card-text class="pa-4">
+      <v-card-text class="pa-4 base-dialog-card__content">
         <v-alert
           v-if="error"
           type="error"
@@ -30,7 +30,7 @@
 
       <v-divider />
 
-      <v-card-actions class="pa-4">
+      <v-card-actions class="pa-4 base-dialog-card__actions">
         <slot name="actions">
           <div class="actions-wrapper w-100">
             <v-btn
@@ -121,6 +121,26 @@ function handleCancel() {
 :deep(.v-card) {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
+}
+
+.base-dialog-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+
+  &__title {
+    flex-shrink: 0;
+  }
+
+  &__content {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  &__actions {
+    flex-shrink: 0;
+  }
 }
 
 .actions-wrapper {

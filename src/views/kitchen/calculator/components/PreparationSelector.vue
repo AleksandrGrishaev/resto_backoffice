@@ -68,6 +68,7 @@
 import { ref, computed } from 'vue'
 import { useRecipesStore } from '@/stores/recipes/recipesStore'
 import type { Preparation } from '@/stores/recipes/types'
+import { getUnitShortName } from '@/types/measurementUnits'
 
 // =============================================
 // PROPS & EMITS
@@ -176,7 +177,7 @@ const handleSelect = (preparationId: string) => {
 }
 
 const formatOutput = (prep: Preparation): string => {
-  const unitLabel = prep.outputUnit === 'ml' ? 'ml' : 'g'
+  const unitLabel = getUnitShortName(prep.outputUnit)
 
   if (prep.portionType === 'portion' && prep.portionSize) {
     const portions = Math.round(prep.outputQuantity / prep.portionSize)

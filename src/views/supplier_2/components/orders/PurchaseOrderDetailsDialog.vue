@@ -98,12 +98,12 @@
 
         <!-- Receipt Information (если есть) -->
         <div v-if="order.status === 'delivered'" class="pa-4 border-b">
-          <OrderReceiptWidget :order="order" />
+          <OrderReceiptWidget :order="order" @view-receipt="handleViewReceipt" />
         </div>
 
         <!-- Items List - NEW WIDGET -->
         <div class="pa-4 border-b">
-          <OrderItemsWidget :items="order.items" />
+          <OrderItemsWidget :items="order.items" :receipt="receiptForOrder" />
         </div>
       </v-card-text>
 
@@ -113,11 +113,47 @@
         <v-btn
           variant="tonal"
           color="primary"
+          size="small"
           prepend-icon="mdi-eye-outline"
           :loading="isPrinting"
           @click="handlePrintOrder"
         >
-          Preview Order
+          Preview
+        </v-btn>
+
+        <!-- Order Management Actions (left side) -->
+        <v-btn
+          v-if="canChangeSupplier(order)"
+          variant="outlined"
+          color="info"
+          size="small"
+          prepend-icon="mdi-truck-outline"
+          @click="showChangeSupplierDialog = true"
+        >
+          Supplier
+        </v-btn>
+
+        <v-btn
+          v-if="canRevertToDraft(order)"
+          variant="outlined"
+          color="warning"
+          size="small"
+          prepend-icon="mdi-undo"
+          :loading="orderActionLoading"
+          @click="handleRevertToDraft"
+        >
+          To Draft
+        </v-btn>
+
+        <v-btn
+          v-if="canCancelOrder(order)"
+          variant="outlined"
+          color="error"
+          size="small"
+          prepend-icon="mdi-cancel"
+          @click="showCancelConfirmDialog = true"
+        >
+          Cancel
         </v-btn>
 
         <v-spacer />
@@ -320,6 +356,133 @@
     <!-- Order Preview Dialog -->
     <OrderPreviewDialog v-model="showPreviewDialog" :order-data="previewData" />
 
+    <!-- Cancel Order Confirmation -->
+    <v-dialog v-model="showCancelConfirmDialog" max-width="450px">
+      <v-card>
+        <v-card-title class="d-flex align-center text-error">
+          <v-icon icon="mdi-cancel" class="mr-2" />
+          Cancel Order
+        </v-card-title>
+        <v-card-text>
+          <p>
+            Are you sure you want to cancel order
+            <strong>{{ order?.orderNumber }}</strong>
+            ?
+          </p>
+          <v-alert v-if="order?.status === 'sent'" type="warning" variant="tonal" class="mt-3">
+            This order has been sent. Transit batches will be removed.
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showCancelConfirmDialog = false">No</v-btn>
+          <v-btn
+            color="error"
+            variant="flat"
+            :loading="orderActionLoading"
+            @click="handleCancelOrder"
+          >
+            Cancel Order
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Revert to Draft Confirmation -->
+    <v-dialog v-model="showRevertConfirmDialog" max-width="450px">
+      <v-card>
+        <v-card-title class="d-flex align-center text-warning">
+          <v-icon icon="mdi-undo" class="mr-2" />
+          Revert to Draft
+        </v-card-title>
+        <v-card-text>
+          <p>
+            Revert order
+            <strong>{{ order?.orderNumber }}</strong>
+            back to draft?
+          </p>
+          <v-alert type="info" variant="tonal" class="mt-3">
+            Transit batches will be removed. You can then edit and re-send the order.
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showRevertConfirmDialog = false">No</v-btn>
+          <v-btn
+            color="warning"
+            variant="flat"
+            :loading="orderActionLoading"
+            @click="confirmRevertToDraft"
+          >
+            Revert to Draft
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Revert Blocked by Payments -->
+    <v-dialog v-model="revertBlockedByPayments" max-width="450px">
+      <v-card>
+        <v-card-title class="d-flex align-center text-error">
+          <v-icon icon="mdi-lock" class="mr-2" />
+          Cannot Revert
+        </v-card-title>
+        <v-card-text>
+          <p>
+            Order
+            <strong>{{ order?.orderNumber }}</strong>
+            has linked payments.
+          </p>
+          <v-alert type="error" variant="tonal" class="mt-3">
+            Remove all payments from this order before reverting to draft.
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="revertBlockedByPayments = false">OK</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Change Supplier Dialog -->
+    <v-dialog v-model="showChangeSupplierDialog" max-width="450px">
+      <v-card>
+        <v-card-title class="d-flex align-center text-info">
+          <v-icon icon="mdi-truck-outline" class="mr-2" />
+          Change Supplier
+        </v-card-title>
+        <v-card-text>
+          <div class="text-body-2 mb-3">
+            Current:
+            <strong>{{ order?.supplierName }}</strong>
+          </div>
+          <v-autocomplete
+            v-model="newSupplierId"
+            :items="supplierOptions"
+            item-title="displayName"
+            item-value="id"
+            label="New Supplier"
+            variant="outlined"
+            density="compact"
+            hide-details
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showChangeSupplierDialog = false">Cancel</v-btn>
+          <v-btn
+            color="info"
+            variant="flat"
+            :disabled="!newSupplierId"
+            :loading="orderActionLoading"
+            @click="handleChangeSupplier"
+          >
+            Change
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Unlink Payment Confirmation Dialog -->
     <v-dialog v-model="showUnlinkConfirmDialog" max-width="500px" persistent>
       <v-card>
@@ -387,6 +550,7 @@ import { usePurchaseOrderExport } from '@/stores/supplier_2/composables/usePurch
 import { useReceipts } from '@/stores/supplier_2/composables/useReceipts'
 import { useAlertsStore } from '@/stores/alerts'
 import { useAuthStore } from '@/stores/auth'
+import { useCounteragentsStore } from '@/stores/counteragents'
 import type { PurchaseOrder, Receipt } from '@/stores/supplier_2/types'
 import type { PendingPayment } from '@/stores/account/types'
 import OrderItemsWidget from './order/OrderItemsWidget.vue'
@@ -410,6 +574,8 @@ interface Emits {
   (e: 'send-order', order: PurchaseOrder): void
   (e: 'start-receipt', order: PurchaseOrder): void
   (e: 'edit-receipt', receipt: Receipt): void
+  (e: 'view-receipt', receipt: Receipt): void
+  (e: 'order-updated'): void
 }
 
 const props = defineProps<Props>()
@@ -419,8 +585,20 @@ const emits = defineEmits<Emits>()
 // COMPOSABLES
 // =============================================
 
-const { formatCurrency, getStatusColor, canSendOrder, canReceiveOrder, isReadyForReceipt } =
-  usePurchaseOrders()
+const {
+  formatCurrency,
+  getStatusColor,
+  canSendOrder,
+  canReceiveOrder,
+  isReadyForReceipt,
+  canCancelOrder,
+  canRevertToDraft,
+  canChangeSupplier,
+  cancelOrder,
+  revertToDraft,
+  changeSupplier,
+  getOrderPaymentStatus
+} = usePurchaseOrders()
 
 const {
   paymentState,
@@ -447,6 +625,23 @@ const previewData = ref<any>(null)
 const showAttachBillDialog = ref(false)
 const showCreateBillDialog = ref(false)
 const showUnlinkConfirmDialog = ref(false)
+const showChangeSupplierDialog = ref(false)
+const showCancelConfirmDialog = ref(false)
+const showRevertConfirmDialog = ref(false)
+const orderActionLoading = ref(false)
+const revertBlockedByPayments = ref(false)
+const newSupplierId = ref('')
+
+const counteragentsStore = useCounteragentsStore()
+const supplierOptions = computed(() =>
+  counteragentsStore.counteragents
+    .filter(c => c.type === 'supplier' && c.isActive && c.id !== props.order?.supplierId)
+    .map(c => ({ id: c.id, displayName: c.displayName || c.name }))
+)
+const selectedSupplierName = computed(() => {
+  const s = supplierOptions.value.find(s => s.id === newSupplierId.value)
+  return s?.displayName || ''
+})
 
 // Unlink dialog state
 const unlinkDialogData = reactive<{
@@ -501,11 +696,15 @@ const activeBills = computed(() =>
 // RECEIPT RELATED COMPUTED
 // =============================================
 
+// Get receipt for current order
+const receiptForOrder = computed((): Receipt | undefined => {
+  if (!props.order) return undefined
+  return getReceiptByOrderId(props.order.id)
+})
+
 // Get draft receipt for current order (if exists)
 const draftReceiptForOrder = computed((): Receipt | undefined => {
-  if (!props.order) return undefined
-  const receipt = getReceiptByOrderId(props.order.id)
-  return receipt?.status === 'draft' ? receipt : undefined
+  return receiptForOrder.value?.status === 'draft' ? receiptForOrder.value : undefined
 })
 
 // Check if delivered amount differs from original
@@ -687,6 +886,70 @@ async function confirmUnlink() {
   }
 }
 
+async function handleCancelOrder() {
+  if (!props.order) return
+  orderActionLoading.value = true
+  try {
+    await cancelOrder(props.order.id)
+    emits('order-updated')
+    showCancelConfirmDialog.value = false
+    isOpen.value = false
+  } catch (error) {
+    console.error('Failed to cancel order:', error)
+  } finally {
+    orderActionLoading.value = false
+  }
+}
+
+async function handleRevertToDraft() {
+  if (!props.order) return
+  orderActionLoading.value = true
+  revertBlockedByPayments.value = false
+  try {
+    // Check for linked payments first
+    const paymentStatus = await getOrderPaymentStatus(props.order.id)
+    if (paymentStatus.hasBills) {
+      revertBlockedByPayments.value = true
+      return
+    }
+    showRevertConfirmDialog.value = true
+  } catch (error) {
+    console.error('Failed to check payment status:', error)
+  } finally {
+    orderActionLoading.value = false
+  }
+}
+
+async function confirmRevertToDraft() {
+  if (!props.order) return
+  orderActionLoading.value = true
+  try {
+    await revertToDraft(props.order.id)
+    emits('order-updated')
+    showRevertConfirmDialog.value = false
+    isOpen.value = false
+  } catch (error) {
+    console.error('Failed to revert to draft:', error)
+  } finally {
+    orderActionLoading.value = false
+  }
+}
+
+async function handleChangeSupplier() {
+  if (!props.order || !newSupplierId.value) return
+  orderActionLoading.value = true
+  try {
+    await changeSupplier(props.order.id, newSupplierId.value, selectedSupplierName.value)
+    emits('order-updated')
+    showChangeSupplierDialog.value = false
+    newSupplierId.value = ''
+  } catch (error) {
+    console.error('Failed to change supplier:', error)
+  } finally {
+    orderActionLoading.value = false
+  }
+}
+
 function sendOrder(order: PurchaseOrder) {
   emits('send-order', order)
   isOpen.value = false
@@ -718,6 +981,13 @@ function startReceipt(order: PurchaseOrder) {
 function editReceipt(receipt: Receipt) {
   emits('edit-receipt', receipt)
   isOpen.value = false
+}
+
+function handleViewReceipt() {
+  if (receiptForOrder.value) {
+    emits('view-receipt', receiptForOrder.value)
+    isOpen.value = false
+  }
 }
 
 function canStartReceipt(order: PurchaseOrder): boolean {

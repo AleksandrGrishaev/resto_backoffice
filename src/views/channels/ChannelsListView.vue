@@ -17,6 +17,11 @@ const isLoading = computed(() => channelsStore.isLoading)
 const availableTaxes = computed(() => channelsStore.availableTaxes)
 const availablePaymentMethods = computed(() => paymentSettingsStore.activePaymentMethods)
 
+const linkableChannels = computed(() => {
+  const editId = editingChannel.value?.id
+  return channels.value.filter(c => c.id !== editId).map(c => ({ id: c.id, name: c.name }))
+})
+
 const computedTotalTax = computed(() => {
   return availableTaxes.value
     .filter(t => selectedTaxIds.value.includes(t.id))
@@ -29,6 +34,7 @@ const headers = [
   { title: 'Type', key: 'type' },
   { title: 'Tax', key: 'taxPercent', align: 'end' as const },
   { title: 'Commission %', key: 'commissionPercent', align: 'end' as const },
+  { title: 'Linked', key: 'linkedChannelId' },
   { title: 'Status', key: 'isActive', align: 'center' as const },
   { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const }
 ]
@@ -119,12 +125,28 @@ async function saveChannel() {
     editingChannel.value.taxPercent = computedTotalTax.value
 
     if ('id' in editingChannel.value && editingChannel.value.id) {
-      await channelsStore.updateChannel(editingChannel.value.id, editingChannel.value)
-      await channelsStore.setChannelTaxes(editingChannel.value.id, selectedTaxIds.value)
-      await channelsStore.setChannelPaymentMethods(
-        editingChannel.value.id,
-        selectedPaymentMethodIds.value
-      )
+      const channelId = editingChannel.value.id
+
+      // Manage bidirectional link
+      const oldChannel = channels.value.find(c => c.id === channelId)
+      const oldLinkedId = oldChannel?.linkedChannelId
+      const newLinkedId = editingChannel.value.linkedChannelId || null
+
+      await channelsStore.updateChannel(channelId, editingChannel.value)
+      await channelsStore.setChannelTaxes(channelId, selectedTaxIds.value)
+      await channelsStore.setChannelPaymentMethods(channelId, selectedPaymentMethodIds.value)
+
+      // If link changed, update the other side too
+      if (oldLinkedId !== newLinkedId) {
+        // Unlink old partner
+        if (oldLinkedId) {
+          await channelsStore.updateChannel(oldLinkedId, { linkedChannelId: null } as any)
+        }
+        // Link new partner back to this channel
+        if (newLinkedId) {
+          await channelsStore.updateChannel(newLinkedId, { linkedChannelId: channelId } as any)
+        }
+      }
     } else {
       const created = await channelsStore.createChannel(editingChannel.value as any)
       await channelsStore.setChannelTaxes(created.id, selectedTaxIds.value)
@@ -189,6 +211,14 @@ async function toggleChannelActive(channel: SalesChannel) {
                 {{ item.commissionPercent }}%
               </span>
               <span v-else class="text-medium-emphasis">0%</span>
+            </template>
+
+            <template #[`item.linkedChannelId`]="{ item }">
+              <span v-if="item.linkedChannelId" class="text-info">
+                <v-icon size="14" class="mr-1">mdi-link</v-icon>
+                {{ channels.find(c => c.id === item.linkedChannelId)?.name || '—' }}
+              </span>
+              <span v-else class="text-medium-emphasis">—</span>
             </template>
 
             <template #[`item.isActive`]="{ item }">
@@ -282,6 +312,19 @@ async function toggleChannelActive(channel: SalesChannel) {
             class="mb-3"
             hint="Which payment methods are available for this channel"
             persistent-hint
+          />
+
+          <!-- Linked Channel -->
+          <v-select
+            v-model="editingChannel.linkedChannelId"
+            :items="linkableChannels"
+            item-title="name"
+            item-value="id"
+            label="Link to Channel"
+            hint="Linked channels share availability and pricing changes"
+            persistent-hint
+            clearable
+            class="mb-3"
           />
 
           <v-text-field

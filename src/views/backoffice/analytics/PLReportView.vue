@@ -428,13 +428,30 @@
                     </td>
                   </tr>
                   <!-- Dynamic loop over OPEX categories -->
-                  <tr v-for="(amount, code) in report.opex.byCategory" :key="code">
-                    <td class="pl-8">{{ getCategoryName(code as string) }}</td>
-                    <td class="text-right">{{ formatIDR(amount) }}</td>
-                    <td class="text-right">
-                      {{ calculatePercentage(amount, report.revenue.total) }}
-                    </td>
-                  </tr>
+                  <template v-for="(amount, code) in report.opex.byCategory" :key="code">
+                    <tr>
+                      <td class="pl-8">{{ getCategoryName(code as string) }}</td>
+                      <td class="text-right">{{ formatIDR(amount) }}</td>
+                      <td class="text-right">
+                        {{ calculatePercentage(amount, report.revenue.total) }}
+                      </td>
+                    </tr>
+                    <!-- Subcategory breakdown (e.g., Marketing → Cafe, GoJek, Grab) -->
+                    <tr
+                      v-for="(subAmount, subCode) in report.opex.bySubcategory?.[code as string] ||
+                      {}"
+                      :key="subCode"
+                      class="text-caption"
+                    >
+                      <td class="pl-14 text-medium-emphasis">
+                        {{ getCategoryName(subCode as string) }}
+                      </td>
+                      <td class="text-right text-medium-emphasis">{{ formatIDR(subAmount) }}</td>
+                      <td class="text-right text-medium-emphasis">
+                        {{ calculatePercentage(subAmount, report.revenue.total) }}
+                      </td>
+                    </tr>
+                  </template>
                   <!-- Empty state when no OPEX -->
                   <tr v-if="Object.keys(report.opex.byCategory).length === 0">
                     <td class="pl-8 text-medium-emphasis" colspan="3">No operating expenses</td>

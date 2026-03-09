@@ -240,13 +240,14 @@
                 @click="handlePrintOrder(item)"
               />
 
-              <v-divider v-if="canDeleteOrder(item)" />
+              <v-divider v-if="canCancelOrder(item)" />
 
               <v-list-item
-                v-if="canDeleteOrder(item)"
-                prepend-icon="mdi-delete"
-                title="Delete"
-                @click="deleteOrder(item)"
+                v-if="canCancelOrder(item)"
+                prepend-icon="mdi-cancel"
+                title="Cancel Order"
+                base-color="error"
+                @click="handleCancelOrder(item)"
               />
             </v-list>
           </v-menu>
@@ -285,6 +286,7 @@
       @send-order="sendOrder"
       @start-receipt="startReceipt"
       @edit-receipt="editReceipt"
+      @view-receipt="viewReceipt"
     />
 
     <!-- Export Options Dialog -->
@@ -323,6 +325,7 @@ interface Emits {
   (e: 'send-order', order: PurchaseOrder): void
   (e: 'start-receipt', order: PurchaseOrder): void
   (e: 'edit-receipt', receipt: Receipt): void
+  (e: 'view-receipt', receipt: Receipt): void
   (e: 'load-more'): void
 }
 
@@ -345,6 +348,8 @@ const {
   getStatusColor,
   canEditOrder,
   canDeleteOrder,
+  canCancelOrder,
+  cancelOrder,
   canSendOrder,
   canReceiveOrder,
   isReadyForReceipt,
@@ -507,6 +512,10 @@ function editReceipt(receipt: Receipt) {
   emits('edit-receipt', receipt)
 }
 
+function viewReceipt(receipt: Receipt) {
+  emits('view-receipt', receipt)
+}
+
 function duplicateOrder(order: PurchaseOrder) {
   console.log('Duplicate order:', order.id)
 }
@@ -531,8 +540,12 @@ async function handlePrintWithOptions(options: { includePrices: boolean }) {
   printingOrder.value = null
 }
 
-function deleteOrder(order: PurchaseOrder) {
-  console.log('Delete order:', order.id)
+async function handleCancelOrder(order: PurchaseOrder) {
+  try {
+    await cancelOrder(order.id)
+  } catch (error) {
+    console.error('Failed to cancel order:', error)
+  }
 }
 
 // =============================================

@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { categoryService, menuItemService } from './menuService'
 import { DebugUtils, generateId, invalidateCache } from '@/utils'
+import { supabase } from '@/supabase/client'
 import type {
   Category,
   MenuItem,
@@ -541,6 +542,127 @@ export const useMenuStore = defineStore('menu', () => {
   }
 
   /**
+   * Recalculate costs for all menu items based on their composition.
+   * Uses products, preparations, and recipes stores for cost resolution.
+   * Returns { updated, skipped } counts.
+   */
+  async function recalculateAllMenuItemCosts(): Promise<{ updated: number; skipped: number }> {
+    const { useProductsStore } = await import('@/stores/productsStore')
+    const { useRecipesStore } = await import('@/stores/recipes')
+    const productsStore = useProductsStore()
+    const recipesStore = useRecipesStore()
+
+    // Inline cost resolver (same logic as useCatalogData.resolveComponentCost)
+    function resolveComponentCost(
+      type: string,
+      id: string,
+      quantity: number,
+      useYieldPercentage?: boolean,
+      visited?: Set<string>
+    ): number {
+      if (type === 'product') {
+        const p = productsStore.getProductById(id)
+        let adjustedQuantity = quantity
+        if (useYieldPercentage && p?.yieldPercentage && p.yieldPercentage < 100) {
+          adjustedQuantity = quantity / (p.yieldPercentage / 100)
+        }
+        return (p?.baseCostPerUnit ?? 0) * adjustedQuantity
+      }
+
+      const key = `${type}:${id}`
+      const seen = visited ?? new Set<string>()
+      if (seen.has(key)) return 0
+      seen.add(key)
+
+      if (type === 'preparation') {
+        const p = recipesStore.getPreparationById(id) as any
+        if (p?.recipe?.length) {
+          const childrenSum = p.recipe.reduce((sum: number, ing: any) => {
+            return (
+              sum +
+              resolveComponentCost(
+                ing.type,
+                ing.id,
+                ing.quantity,
+                ing.useYieldPercentage,
+                new Set(seen)
+              )
+            )
+          }, 0)
+          if (childrenSum > 0 && p.outputQuantity > 0) {
+            return Math.round((childrenSum / p.outputQuantity) * quantity)
+          }
+        }
+        return (p?.costPerPortion ?? p?.lastKnownCost ?? 0) * quantity
+      }
+
+      if (type === 'recipe') {
+        const r = recipesStore.getRecipeById(id) as any
+        if (r?.components?.length) {
+          const childrenSum = r.components.reduce((sum: number, comp: any) => {
+            return (
+              sum +
+              resolveComponentCost(
+                comp.componentType,
+                comp.componentId,
+                comp.quantity,
+                comp.useYieldPercentage,
+                new Set(seen)
+              )
+            )
+          }, 0)
+          if (childrenSum > 0 && r.portionSize > 0) {
+            return Math.round((childrenSum / r.portionSize) * quantity)
+          }
+        }
+        return (r?.cost ?? 0) * quantity
+      }
+      return 0
+    }
+
+    let updated = 0
+    let skipped = 0
+    const updates: Array<{ id: string; cost: number }> = []
+
+    for (const mi of state.value.menuItems) {
+      const variant = mi.variants?.[0]
+      if (!variant?.composition?.length) {
+        skipped++
+        continue
+      }
+
+      const cost = variant.composition.reduce((sum, comp) => {
+        const qty =
+          comp.unit === 'portion' && comp.portionSize
+            ? comp.quantity * comp.portionSize
+            : comp.quantity
+        return sum + resolveComponentCost(comp.type, comp.id, qty, comp.useYieldPercentage)
+      }, 0)
+
+      const roundedCost = Math.round(cost)
+      mi.cost = roundedCost
+      updates.push({ id: mi.id, cost: roundedCost })
+      updated++
+    }
+
+    // Batch update DB
+    if (updates.length > 0) {
+      const BATCH_SIZE = 50
+      for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+        const batch = updates.slice(i, i + BATCH_SIZE)
+        const promises = batch.map(({ id, cost }) =>
+          supabase.from('menu_items').update({ cost }).eq('id', id)
+        )
+        await Promise.all(promises)
+      }
+      DebugUtils.info(MODULE_NAME, '✅ Menu item costs saved to DB', { count: updates.length })
+    }
+
+    DebugUtils.info(MODULE_NAME, '✅ Menu item costs recalculated', { updated, skipped })
+    return { updated, skipped }
+  }
+
+  /**
    * ✅ Sprint 8: Force refresh menu from server
    * Invalidates cache and reloads categories + items from Supabase
    */
@@ -621,6 +743,7 @@ export const useMenuStore = defineStore('menu', () => {
     setSelectedCategory,
     clearError,
     initialize,
-    refresh
+    refresh,
+    recalculateAllMenuItemCosts
   }
 })

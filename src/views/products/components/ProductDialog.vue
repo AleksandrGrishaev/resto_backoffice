@@ -3,367 +3,346 @@
   <v-dialog v-model="localModelValue" max-width="800px" persistent scrollable>
     <v-card>
       <!-- Header -->
-      <v-card-title class="d-flex align-center">
-        <v-icon start color="primary">
-          {{ isEdit ? 'mdi-pencil' : 'mdi-plus' }}
-        </v-icon>
-        <span>{{ isEdit ? 'Edit Product' : 'New Product' }}</span>
+      <v-card-title class="d-flex align-center pa-4 pb-0">
+        <span class="text-h6">{{ isEdit ? 'Edit Product' : 'New Product' }}</span>
         <v-spacer />
         <v-btn icon="mdi-close" variant="text" size="small" @click="closeDialog" />
       </v-card-title>
 
+      <!-- Tabs -->
+      <v-tabs v-model="activeTab" color="primary" class="px-4">
+        <v-tab value="general">General</v-tab>
+        <v-tab value="packages">
+          Packages
+          <v-badge
+            v-if="localPackageOptions.length"
+            :content="localPackageOptions.length"
+            color="primary"
+            inline
+            class="ml-1"
+          />
+        </v-tab>
+      </v-tabs>
       <v-divider />
 
-      <!-- Form -->
+      <!-- Tab Content -->
       <v-card-text class="pa-6">
         <v-form ref="formRef" v-model="formValid">
-          <v-row>
-            <!-- Product Name -->
-            <v-col cols="12">
-              <v-text-field
-                v-model="formData.name"
-                label="Product Name *"
-                variant="outlined"
-                :rules="nameRules"
-                prepend-inner-icon="mdi-food"
-                counter="100"
-                maxlength="100"
-                placeholder="Enter product name"
-              />
-            </v-col>
+          <v-tabs-window v-model="activeTab">
+            <!-- === General Tab === -->
+            <v-tabs-window-item value="general">
+              <v-row>
+                <!-- Product Name -->
+                <v-col cols="12">
+                  <v-text-field
+                    v-model="formData.name"
+                    label="Product Name *"
+                    variant="outlined"
+                    :rules="nameRules"
+                    counter="100"
+                    maxlength="100"
+                    placeholder="Enter product name"
+                  />
+                </v-col>
 
-            <!-- ✅ ДОБАВИТЬ: Department Selection -->
+                <!-- Department + Category -->
+                <v-col cols="12" md="6">
+                  <v-select
+                    v-model="formData.usedInDepartments"
+                    :items="departmentOptions"
+                    label="Used in Departments *"
+                    multiple
+                    chips
+                    closable-chips
+                    variant="outlined"
+                    density="comfortable"
+                    :rules="[v => (v && v.length > 0) || 'Select at least one department']"
+                    hint="Select where this product is used"
+                    persistent-hint
+                  >
+                    <template #chip="{ item, props }">
+                      <v-chip
+                        v-bind="props"
+                        :color="getDepartmentColor(item.value)"
+                        :prepend-icon="getDepartmentIcon(item.value)"
+                        size="small"
+                      >
+                        {{ item.title }}
+                      </v-chip>
+                    </template>
+                  </v-select>
+                </v-col>
 
-            <v-col cols="12" md="6">
-              <v-select
-                v-model="formData.usedInDepartments"
-                :items="departmentOptions"
-                label="Used in Departments *"
-                multiple
-                chips
-                closable-chips
-                variant="outlined"
-                density="comfortable"
-                :rules="[v => (v && v.length > 0) || 'Select at least one department']"
-                hint="Select where this product is used"
-                persistent-hint
-                class="mb-4"
-              >
-                <template #chip="{ item, props }">
+                <v-col cols="12" md="6">
+                  <v-select
+                    v-model="formData.category"
+                    :items="categoryOptions"
+                    label="Category *"
+                    variant="outlined"
+                    :rules="categoryRules"
+                    attach
+                  />
+                </v-col>
+
+                <!-- Base Unit + Cost -->
+                <v-col cols="12" md="6">
+                  <v-select
+                    v-model="formData.baseUnit"
+                    :items="baseUnitOptions"
+                    label="Base Unit *"
+                    variant="outlined"
+                    :rules="baseUnitRules"
+                    :hint="getBaseUnitHint()"
+                    persistent-hint
+                    attach
+                  />
+                </v-col>
+
+                <v-col cols="12" md="6">
+                  <NumericInputField
+                    v-model="formData.baseCostPerUnit"
+                    label="Base Cost Per Unit *"
+                    variant="outlined"
+                    :rules="costRules"
+                    suffix="IDR"
+                    :min="0"
+                  >
+                    <template #append-inner>
+                      <v-tooltip location="top">
+                        <template #activator="{ props: tooltipProps }">
+                          <v-icon v-bind="tooltipProps" color="info" size="small">
+                            mdi-help-circle
+                          </v-icon>
+                        </template>
+                        <div>
+                          Purchase price per {{ getBaseUnitName() }}
+                          <br />
+                          (cost only, selling price is set in menu)
+                        </div>
+                      </v-tooltip>
+                    </template>
+                  </NumericInputField>
+                </v-col>
+
+                <!-- Yield + Switches -->
+                <v-col cols="12" md="4">
+                  <NumericInputField
+                    v-model="formData.yieldPercentage"
+                    label="Yield *"
+                    variant="outlined"
+                    :rules="yieldRules"
+                    suffix="%"
+                    :min="1"
+                    :max="100"
+                    :allow-decimal="true"
+                  >
+                    <template #append-inner>
+                      <v-tooltip location="top">
+                        <template #activator="{ props: tooltipProps }">
+                          <v-icon v-bind="tooltipProps" color="info" size="small">
+                            mdi-help-circle
+                          </v-icon>
+                        </template>
+                        <div>
+                          Percentage of finished product after processing
+                          <br />
+                          (accounts for waste during cleaning, cutting, etc.)
+                        </div>
+                      </v-tooltip>
+                    </template>
+                  </NumericInputField>
+                </v-col>
+
+                <v-col cols="12" md="4" class="d-flex align-center">
+                  <v-switch
+                    v-model="formData.canBeSold"
+                    label="Can Be Sold"
+                    color="primary"
+                    hide-details
+                  />
+                </v-col>
+
+                <v-col v-if="isEdit" cols="12" md="4" class="d-flex align-center">
                   <v-chip
-                    v-bind="props"
-                    :color="getDepartmentColor(item.value)"
-                    :prepend-icon="getDepartmentIcon(item.value)"
+                    :color="formData.isActive ? 'success' : 'warning'"
+                    variant="flat"
                     size="small"
                   >
-                    {{ item.title }}
+                    {{ formData.isActive ? 'Active' : 'Archived' }}
                   </v-chip>
-                </template>
-              </v-select>
-            </v-col>
+                </v-col>
 
-            <!-- Category and Base Unit -->
-            <v-col cols="12" md="6">
-              <v-select
-                v-model="formData.category"
-                :items="categoryOptions"
-                label="Category *"
-                variant="outlined"
-                :rules="categoryRules"
-                prepend-inner-icon="mdi-tag"
-                attach
-              />
-            </v-col>
+                <!-- Description -->
+                <v-col cols="12">
+                  <v-textarea
+                    v-model="formData.description"
+                    label="Description (optional)"
+                    variant="outlined"
+                    rows="2"
+                    counter="500"
+                    maxlength="500"
+                    placeholder="Product description"
+                  />
+                </v-col>
 
-            <v-col cols="12" md="6">
-              <v-select
-                v-model="formData.baseUnit"
-                :items="baseUnitOptions"
-                label="Base Unit *"
-                variant="outlined"
-                :rules="baseUnitRules"
-                prepend-inner-icon="mdi-scale"
-                :hint="getBaseUnitHint()"
-                persistent-hint
-                attach
-              />
-            </v-col>
-
-            <!-- Base Cost Per Unit -->
-            <v-col cols="12" md="6">
-              <v-text-field
-                v-model.number="formData.baseCostPerUnit"
-                label="Base Cost Per Unit *"
-                variant="outlined"
-                type="number"
-                :rules="costRules"
-                prepend-inner-icon="mdi-currency-usd"
-                suffix="IDR"
-                min="0"
-                step="1"
-              >
-                <template #append-inner>
-                  <v-tooltip location="top">
-                    <template #activator="{ props: tooltipProps }">
-                      <v-icon v-bind="tooltipProps" color="info" size="small">
-                        mdi-help-circle
-                      </v-icon>
-                    </template>
-                    <div>
-                      Purchase price per {{ getBaseUnitName() }}
-                      <br />
-                      (cost only, selling price is set in menu)
-                    </div>
-                  </v-tooltip>
-                </template>
-              </v-text-field>
-            </v-col>
-
-            <!-- Yield Percentage -->
-            <v-col cols="12" md="6">
-              <v-text-field
-                v-model.number="formData.yieldPercentage"
-                label="Yield Percentage *"
-                variant="outlined"
-                type="number"
-                :rules="yieldRules"
-                prepend-inner-icon="mdi-percent"
-                suffix="%"
-                min="1"
-                max="100"
-                step="0.1"
-              >
-                <template #append-inner>
-                  <v-tooltip location="top">
-                    <template #activator="{ props: tooltipProps }">
-                      <v-icon v-bind="tooltipProps" color="info" size="small">
-                        mdi-help-circle
-                      </v-icon>
-                    </template>
-                    <div>
-                      Percentage of finished product after processing
-                      <br />
-                      (accounts for waste during cleaning, cutting, etc.)
-                    </div>
-                  </v-tooltip>
-                </template>
-              </v-text-field>
-            </v-col>
-
-            <!-- Can Be Sold Switch -->
-            <v-col cols="12" md="6" class="d-flex align-center">
-              <v-switch
-                v-model="formData.canBeSold"
-                label="Can Be Sold"
-                color="primary"
-                hide-details
-              />
-              <v-tooltip location="top">
-                <template #activator="{ props: tooltipProps }">
-                  <v-icon v-bind="tooltipProps" color="info" size="small" class="ml-2">
-                    mdi-help-circle
-                  </v-icon>
-                </template>
-                <div>Enable if this product can be sold directly to customers</div>
-              </v-tooltip>
-            </v-col>
-
-            <!-- Active Switch -->
-            <v-col cols="12" md="6" class="d-flex align-center">
-              <v-switch
-                v-model="formData.isActive"
-                label="Active"
-                color="success"
-                :prepend-icon="formData.isActive ? 'mdi-check-circle' : 'mdi-pause-circle'"
-                hide-details
-              />
-            </v-col>
-
-            <!-- Description -->
-            <v-col cols="12">
-              <v-textarea
-                v-model="formData.description"
-                label="Description"
-                variant="outlined"
-                rows="3"
-                counter="500"
-                maxlength="500"
-                prepend-inner-icon="mdi-text"
-                placeholder="Product description (optional)"
-              />
-            </v-col>
-
-            <!-- Advanced Settings -->
-            <v-col cols="12">
-              <v-expansion-panels variant="accordion">
-                <v-expansion-panel>
-                  <v-expansion-panel-title>
-                    <v-icon start>mdi-cog</v-icon>
-                    Additional Parameters
-                  </v-expansion-panel-title>
-                  <v-expansion-panel-text>
-                    <v-row>
-                      <!-- Storage Conditions -->
-                      <v-col cols="12">
+                <!-- Storage section -->
+                <v-col cols="12">
+                  <div class="storage-section pa-3 rounded-lg">
+                    <div class="text-subtitle-2 text-medium-emphasis mb-3">Storage</div>
+                    <v-row dense>
+                      <v-col cols="12" md="4">
                         <v-text-field
                           v-model="formData.storageConditions"
                           label="Storage Conditions"
                           variant="outlined"
-                          prepend-inner-icon="mdi-thermometer"
-                          placeholder="E.g.: Refrigerator +2°C to +4°C"
-                          counter="200"
+                          density="compact"
+                          placeholder="+2°C to +4°C"
                           maxlength="200"
                         />
                       </v-col>
-
-                      <!-- Shelf Life -->
-                      <v-col cols="12" md="6">
-                        <v-text-field
-                          v-model.number="formData.shelfLife"
+                      <v-col cols="12" md="4">
+                        <NumericInputField
+                          v-model="formData.shelfLife"
                           label="Shelf Life"
                           variant="outlined"
-                          type="number"
-                          prepend-inner-icon="mdi-calendar-clock"
+                          density="compact"
                           suffix="days"
-                          min="1"
-                          placeholder="Number of days"
+                          :min="1"
                         />
                       </v-col>
-
-                      <!-- Minimum Stock -->
-                      <v-col cols="12" md="6">
-                        <v-text-field
-                          v-model.number="formData.minStock"
+                      <v-col cols="12" md="4">
+                        <NumericInputField
+                          v-model="formData.minStock"
                           label="Minimum Stock"
                           variant="outlined"
-                          type="number"
-                          prepend-inner-icon="mdi-package-down"
+                          density="compact"
                           :suffix="getBaseUnitName()"
-                          min="0"
-                          step="0.1"
-                          placeholder="For notifications"
+                          :min="0"
+                          :allow-decimal="true"
                         />
                       </v-col>
                     </v-row>
-                  </v-expansion-panel-text>
-                </v-expansion-panel>
-              </v-expansion-panels>
-            </v-col>
+                  </div>
+                </v-col>
+              </v-row>
+            </v-tabs-window-item>
 
-            <!-- Package Options Section (for both create and edit) -->
-            <v-col cols="12">
-              <v-divider class="my-4" />
-
+            <!-- === Packages Tab === -->
+            <v-tabs-window-item value="packages">
               <!-- Info alert for new products -->
               <v-alert v-if="!isEdit" type="info" variant="tonal" density="compact" class="mb-4">
-                <v-icon start>mdi-information</v-icon>
                 A default package will be created automatically. You can add more packages now or
                 after creating the product.
               </v-alert>
 
-              <!-- Local packages list -->
-              <div class="packages-section">
-                <div class="d-flex justify-space-between align-center mb-3">
-                  <h4>Packages</h4>
-                  <v-btn
-                    size="small"
-                    color="primary"
-                    variant="outlined"
-                    @click="openPackageDialog()"
-                  >
-                    <v-icon start>mdi-plus</v-icon>
-                    Add Package
-                  </v-btn>
+              <div class="d-flex justify-space-between align-center mb-4">
+                <div class="text-subtitle-2">
+                  {{ localPackageOptions.length }} package{{
+                    localPackageOptions.length !== 1 ? 's' : ''
+                  }}
                 </div>
+                <v-btn size="small" color="primary" variant="tonal" @click="openPackageDialog()">
+                  <v-icon start>mdi-plus</v-icon>
+                  Add Package
+                </v-btn>
+              </div>
 
-                <div v-if="!localPackageOptions.length" class="text-center text-grey py-4">
-                  No additional packages. A default package will be created.
-                </div>
+              <div
+                v-if="!localPackageOptions.length"
+                class="text-center text-medium-emphasis py-8"
+                style="
+                  border: 1px dashed var(--color-border, rgba(255, 255, 255, 0.12));
+                  border-radius: 8px;
+                "
+              >
+                <v-icon icon="mdi-package-variant" size="40" class="mb-2 text-medium-emphasis" />
+                <div>No packages added yet</div>
+                <div class="text-caption">A default package will be created automatically</div>
+              </div>
 
-                <div v-else>
-                  <v-card
-                    v-for="(pkg, index) in localPackageOptions"
-                    :key="pkg.tempId || pkg.id"
-                    class="mb-2"
-                    variant="outlined"
-                    :color="index === 0 ? 'primary' : undefined"
-                  >
-                    <v-card-text class="py-2">
-                      <div class="d-flex justify-space-between align-center">
-                        <div class="flex-grow-1">
-                          <div class="d-flex align-center gap-2">
-                            <strong>{{ pkg.packageName }}</strong>
-                            <v-chip
-                              v-if="pkg.brandName"
-                              size="x-small"
-                              color="info"
-                              variant="tonal"
-                            >
-                              {{ pkg.brandName }}
-                            </v-chip>
-                            <v-chip
-                              v-if="index === 0"
-                              size="x-small"
-                              color="success"
-                              variant="tonal"
-                            >
-                              Default
-                            </v-chip>
-                          </div>
-
-                          <div class="text-body-2 text-grey-darken-1 mt-1">
-                            {{ pkg.packageSize }} {{ getBaseUnitName() }}
-                            <span v-if="pkg.packagePrice">
-                              • {{ formatPrice(pkg.packagePrice) }} per package
-                            </span>
-                            • {{ formatPrice(pkg.baseCostPerUnit) }}/{{ getBaseUnitName() }}
-                          </div>
-
-                          <div v-if="pkg.notes" class="text-caption text-grey-darken-2 mt-1">
-                            {{ pkg.notes }}
-                          </div>
+              <div v-else class="d-flex flex-column gap-2">
+                <v-card
+                  v-for="(pkg, index) in localPackageOptions"
+                  :key="pkg.tempId || pkg.id"
+                  variant="outlined"
+                  :color="index === 0 ? 'primary' : undefined"
+                >
+                  <v-card-text class="py-3 px-4">
+                    <div class="d-flex justify-space-between align-center">
+                      <div class="flex-grow-1">
+                        <div class="d-flex align-center gap-2">
+                          <strong>{{ pkg.packageName }}</strong>
+                          <v-chip v-if="pkg.brandName" size="x-small" color="info" variant="tonal">
+                            {{ pkg.brandName }}
+                          </v-chip>
+                          <v-chip v-if="index === 0" size="x-small" color="success" variant="tonal">
+                            Default
+                          </v-chip>
                         </div>
 
-                        <div class="d-flex align-center gap-1">
-                          <v-btn
-                            size="x-small"
-                            variant="text"
-                            color="primary"
-                            @click="openPackageDialog(pkg, index)"
-                          >
-                            <v-icon>mdi-pencil</v-icon>
-                          </v-btn>
+                        <div class="text-body-2 text-medium-emphasis mt-1">
+                          {{ pkg.packageSize }} {{ getBaseUnitName() }}
+                          <span v-if="pkg.packagePrice">
+                            &middot; {{ formatPrice(pkg.packagePrice) }} per package
+                          </span>
+                          &middot; {{ formatPrice(pkg.baseCostPerUnit) }}/{{ getBaseUnitName() }}
+                        </div>
 
-                          <v-btn
-                            v-if="localPackageOptions.length > 1"
-                            size="x-small"
-                            variant="text"
-                            color="error"
-                            @click="deleteLocalPackage(index)"
-                          >
-                            <v-icon>mdi-delete</v-icon>
-                          </v-btn>
+                        <div v-if="pkg.notes" class="text-caption text-medium-emphasis mt-1">
+                          {{ pkg.notes }}
                         </div>
                       </div>
-                    </v-card-text>
-                  </v-card>
-                </div>
+
+                      <div class="d-flex align-center gap-1">
+                        <v-btn
+                          size="x-small"
+                          variant="text"
+                          color="primary"
+                          icon
+                          @click="openPackageDialog(pkg, index)"
+                        >
+                          <v-icon>mdi-pencil</v-icon>
+                        </v-btn>
+
+                        <v-btn
+                          v-if="localPackageOptions.length > 1"
+                          size="x-small"
+                          variant="text"
+                          color="error"
+                          icon
+                          @click="deleteLocalPackage(index)"
+                        >
+                          <v-icon>mdi-delete</v-icon>
+                        </v-btn>
+                      </div>
+                    </div>
+                  </v-card-text>
+                </v-card>
               </div>
-            </v-col>
-          </v-row>
+            </v-tabs-window-item>
+          </v-tabs-window>
         </v-form>
       </v-card-text>
 
       <!-- Actions -->
       <v-divider />
-      <v-card-actions class="px-6 py-4">
+      <v-card-actions class="px-6 py-3">
+        <v-btn
+          v-if="isEdit"
+          :color="formData.isActive ? 'warning' : 'success'"
+          variant="outlined"
+          :prepend-icon="formData.isActive ? 'mdi-archive-arrow-down' : 'mdi-archive-arrow-up'"
+          @click="$emit('archive', props.product!)"
+        >
+          {{ formData.isActive ? 'Archive' : 'Restore' }}
+        </v-btn>
         <v-spacer />
         <v-btn variant="text" @click="closeDialog">Cancel</v-btn>
         <v-btn
           color="primary"
-          variant="elevated"
-          :loading="loading"
-          :disabled="!formValid"
+          :variant="formValid ? 'flat' : 'outlined'"
+          :loading="loading || saving"
+          :disabled="saving"
           @click="saveProduct"
         >
           {{ isEdit ? 'Save' : 'Create' }}
@@ -400,6 +379,7 @@ import type {
 import { useProductsStore } from '@/stores/productsStore'
 import { DebugUtils } from '@/utils'
 import PackageOptionDialog from './package/PackageOptionDialog.vue'
+import { NumericInputField } from '@/components/input'
 
 const MODULE_NAME = 'ProductDialog'
 const productsStore = useProductsStore()
@@ -420,6 +400,7 @@ const props = withDefaults(defineProps<Props>(), {
 interface Emits {
   (e: 'update:modelValue', value: boolean): void
   (e: 'save', data: CreateProductData | UpdateProductData, packages: LocalPackage[]): void
+  (e: 'archive', product: Product): void
 }
 
 const emit = defineEmits<Emits>()
@@ -436,9 +417,11 @@ interface LocalPackage extends Omit<PackageOption, 'id' | 'productId' | 'created
 // Refs
 const formRef = ref()
 const formValid = ref(false)
+const activeTab = ref('general')
 const packageDialogOpen = ref(false)
 const editingPackage = ref<PackageOption | undefined>(undefined)
 const editingPackageIndex = ref<number | null>(null)
+const saving = ref(false)
 const localPackageOptions = ref<LocalPackage[]>([])
 const departmentOptions = [
   { value: 'kitchen' as Department, title: 'Kitchen' },
@@ -589,6 +572,8 @@ watch(
   () => props.modelValue,
   isOpen => {
     if (isOpen) {
+      saving.value = false
+      activeTab.value = 'general'
       nextTick(() => {
         if (formRef.value) {
           formRef.value.resetValidation()
@@ -604,6 +589,7 @@ const closeDialog = (): void => {
 }
 
 const saveProduct = async (): Promise<void> => {
+  if (saving.value) return
   try {
     if (!formRef.value) return
 
@@ -613,6 +599,7 @@ const saveProduct = async (): Promise<void> => {
       return
     }
 
+    saving.value = true
     DebugUtils.info(MODULE_NAME, 'Saving product', { isEdit: isEdit.value })
 
     const { id, ...productData } = formData.value
@@ -633,6 +620,8 @@ const saveProduct = async (): Promise<void> => {
     }
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Error saving product', { error })
+  } finally {
+    saving.value = false
   }
 }
 
@@ -692,15 +681,16 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.packages-section {
-  min-height: 150px;
+.storage-section {
+  background: rgba(var(--v-theme-info), 0.06);
+  border: 1px solid rgba(var(--v-theme-info), 0.15);
+}
+
+.gap-2 {
+  gap: 8px;
 }
 
 /* Fix z-index for selects inside dialog */
-:deep(.v-overlay-container) {
-  z-index: 9999 !important;
-}
-
 :deep(.v-select__content) {
   z-index: 9999 !important;
 }

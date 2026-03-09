@@ -123,9 +123,8 @@ const estimatedCost = computed(() => {
   let totalCost = 0
   let costPerUnit = 0
 
-  // ✅ FIX: Ensure stores are loaded
+  // Stores load asynchronously in onMounted — return zero until ready
   if (!productsStore.value || !recipesStore.value) {
-    DebugUtils.warn('RecipeCostPreviewWidget', 'Stores not loaded yet')
     return { totalCost: 0, costPerUnit: 0 }
   }
 

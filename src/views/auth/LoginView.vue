@@ -28,6 +28,10 @@
               <v-icon class="mr-2">mdi-chef-hat</v-icon>
               Kitchen
             </v-tab>
+            <v-tab value="admin" class="auth-tab">
+              <v-icon class="mr-2">mdi-shield-crown-outline</v-icon>
+              Admin
+            </v-tab>
           </v-tabs>
 
           <v-card-text>
@@ -176,6 +180,83 @@
                   </div>
                 </div>
               </v-window-item>
+
+              <!-- ADMIN Email Authentication (Tablet Admin) -->
+              <v-window-item value="admin">
+                <div class="auth-form">
+                  <p class="text-center text-body-2 mb-4 auth-description">
+                    Tablet admin for managers
+                  </p>
+
+                  <v-form ref="adminFormRef" @submit.prevent="handleAdminLogin">
+                    <v-text-field
+                      v-model="adminEmail"
+                      label="Email"
+                      type="email"
+                      prepend-inner-icon="mdi-email-outline"
+                      variant="outlined"
+                      density="comfortable"
+                      :rules="emailRules"
+                      :disabled="isLoading"
+                      class="mb-3"
+                      autocomplete="email"
+                      @input="clearError"
+                    />
+
+                    <v-text-field
+                      v-model="adminPassword"
+                      label="Password"
+                      :type="showAdminPassword ? 'text' : 'password'"
+                      prepend-inner-icon="mdi-lock-outline"
+                      :append-inner-icon="showAdminPassword ? 'mdi-eye-off' : 'mdi-eye'"
+                      variant="outlined"
+                      density="comfortable"
+                      :rules="passwordRules"
+                      :disabled="isLoading"
+                      class="mb-4"
+                      autocomplete="current-password"
+                      @click:append-inner="showAdminPassword = !showAdminPassword"
+                      @input="clearError"
+                    />
+
+                    <v-btn
+                      type="submit"
+                      color="primary"
+                      size="large"
+                      block
+                      :loading="isLoading"
+                      class="auth-button"
+                    >
+                      <v-icon class="mr-2">mdi-login</v-icon>
+                      Login
+                    </v-btn>
+                  </v-form>
+
+                  <!-- Test credentials (dev only) -->
+                  <div v-if="showDevHelpers" class="mt-4">
+                    <v-divider class="mb-3" />
+                    <p class="text-caption text-center mb-2 text-medium-emphasis">
+                      Test Credentials (Dev Only)
+                    </p>
+                    <div class="d-flex gap-2 justify-center flex-wrap">
+                      <v-chip
+                        size="small"
+                        variant="outlined"
+                        @click="fillAdminCredentials('admin@resto.local', 'Admin123!')"
+                      >
+                        Admin
+                      </v-chip>
+                      <v-chip
+                        size="small"
+                        variant="outlined"
+                        @click="fillAdminCredentials('manager@resto.local', 'Manager123!')"
+                      >
+                        Manager
+                      </v-chip>
+                    </div>
+                  </div>
+                </div>
+              </v-window-item>
             </v-window>
 
             <!-- Error Alert -->
@@ -212,7 +293,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 
 // ===== STATE =====
-const activeTab = ref<'email' | 'pos' | 'kitchen'>('pos') // Default to POS for quick access
+const activeTab = ref<'email' | 'pos' | 'kitchen' | 'admin'>('pos') // Default to POS for quick access
 const isLoading = ref(false)
 const error = ref('')
 
@@ -221,6 +302,12 @@ const email = ref('')
 const password = ref('')
 const showPassword = ref(false)
 const emailFormRef = ref()
+
+// Admin form state
+const adminEmail = ref('')
+const adminPassword = ref('')
+const showAdminPassword = ref(false)
+const adminFormRef = ref()
 
 // ===== VALIDATION RULES =====
 const emailRules = [
@@ -332,6 +419,36 @@ const handleKitchenPinLogin = async (pin: string) => {
 }
 
 /**
+ * Handle Admin email login (redirects to /admin tablet UI)
+ */
+const handleAdminLogin = async () => {
+  const { valid } = await adminFormRef.value.validate()
+  if (!valid) return
+
+  try {
+    isLoading.value = true
+    error.value = ''
+
+    DebugUtils.info(MODULE_NAME, 'Admin login attempt', { email: adminEmail.value })
+
+    const success = await authStore.loginWithEmail(adminEmail.value, adminPassword.value)
+
+    if (success) {
+      DebugUtils.info(MODULE_NAME, 'Admin login successful')
+      await router.push('/admin')
+    } else {
+      throw new Error(authStore.state.error || 'Login failed')
+    }
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Login failed'
+    error.value = errorMessage
+    DebugUtils.error(MODULE_NAME, 'Admin login failed', { error: errorMessage })
+  } finally {
+    isLoading.value = false
+  }
+}
+
+/**
  * Clear error message
  */
 const clearError = () => {
@@ -346,6 +463,17 @@ const fillEmailCredentials = (testEmail: string, testPassword: string) => {
     email.value = testEmail
     password.value = testPassword
     DebugUtils.info(MODULE_NAME, 'Test credentials filled', { email: testEmail })
+  }
+}
+
+/**
+ * Fill admin credentials (dev only)
+ */
+const fillAdminCredentials = (testEmail: string, testPassword: string) => {
+  if (import.meta.env.DEV) {
+    adminEmail.value = testEmail
+    adminPassword.value = testPassword
+    DebugUtils.info(MODULE_NAME, 'Admin test credentials filled', { email: testEmail })
   }
 }
 

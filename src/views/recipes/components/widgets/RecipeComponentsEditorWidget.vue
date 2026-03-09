@@ -170,11 +170,21 @@
                       mandatory
                       @update:model-value="handleComponentTypeChange(index, $event)"
                     >
-                      <v-chip value="product" variant="outlined" size="small">
+                      <v-chip
+                        value="product"
+                        :variant="component.componentType === 'product' ? 'flat' : 'tonal'"
+                        size="small"
+                        color="blue"
+                      >
                         <v-icon start size="14">mdi-food-apple</v-icon>
                         Product
                       </v-chip>
-                      <v-chip value="preparation" variant="outlined" size="small">
+                      <v-chip
+                        value="preparation"
+                        :variant="component.componentType === 'preparation' ? 'flat' : 'tonal'"
+                        size="small"
+                        color="orange"
+                      >
                         <v-icon start size="14">mdi-chef-hat</v-icon>
                         Preparation
                       </v-chip>
@@ -182,8 +192,9 @@
                       <v-chip
                         v-if="type === 'recipe'"
                         value="recipe"
-                        variant="outlined"
+                        :variant="component.componentType === 'recipe' ? 'flat' : 'tonal'"
                         size="small"
+                        color="green"
                       >
                         <v-icon start size="14">mdi-book-open-variant</v-icon>
                         Recipe
@@ -287,12 +298,10 @@
                 <!-- Quantity and Notes -->
                 <v-row class="mb-2">
                   <v-col cols="4">
-                    <v-text-field
+                    <NumericInputField
                       :model-value="component.quantity"
                       label="Quantity"
-                      type="number"
-                      step="0.1"
-                      min="0"
+                      :allow-decimal="true"
                       variant="outlined"
                       density="comfortable"
                       :rules="[validateRequired, validatePositiveNumber]"
@@ -462,6 +471,7 @@ import { computed, ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { MeasurementUnit } from '@/stores/recipes/types'
 import { formatIDR } from '@/utils/currency'
+import { NumericInputField } from '@/components/input'
 // ✅ ИСПРАВЛЕНО: Используем правильный импорт для единиц измерения
 import { useMeasurementUnits } from '@/composables/useMeasurementUnits'
 // ✅ NEW: Import search widgets
@@ -472,7 +482,12 @@ import RecipeSearchWidget from './RecipeSearchWidget.vue' // ⭐ PHASE 1: Recipe
 import { detectCycle, formatCyclePath } from '@/stores/recipes/composables/usePreparationGraph'
 // ⭐ PHASE 1: Recipe nesting - cycle detection and depth validation
 import { useRecipeGraph } from '@/stores/recipes/composables/useRecipeGraph'
-import type { PreparationIngredient, Preparation, Recipe } from '@/stores/recipes/types'
+import type {
+  PreparationIngredient,
+  Preparation,
+  Recipe,
+  PreparationOutputUnit
+} from '@/stores/recipes/types'
 
 // ===== TYPES =====
 interface Component {
@@ -502,7 +517,7 @@ interface PreparationItem {
   id: string
   code: string
   name: string
-  outputUnit: string
+  outputUnit: PreparationOutputUnit
   type?: string // Category/type of preparation
   portionType?: 'weight' | 'portion' // ✅ NEW: How quantities are measured
 }
@@ -654,7 +669,7 @@ const cycleDetectionResult = computed(() => {
     id: p.id,
     name: p.name,
     code: p.code,
-    outputUnit: p.outputUnit as any,
+    outputUnit: p.outputUnit,
     outputQuantity: 1,
     preparationTime: 0,
     instructions: '',
@@ -755,7 +770,7 @@ function getFixedUnit(component: Component): string {
     if ((prep as any).portionType === 'portion') {
       return 'portion'
     }
-    return prep.outputUnit || 'g'
+    return getUnitShortName(prep.outputUnit)
   }
 
   if (component.componentType === 'recipe') {
@@ -807,7 +822,7 @@ function getBaseUnitInfo(component: Component): string {
   if ((prep as any).portionType === 'portion') {
     return 'portion'
   }
-  return prep.outputUnit || 'g'
+  return getUnitShortName(prep.outputUnit)
 }
 
 // ===== DIALOG METHODS =====
@@ -921,7 +936,7 @@ function getPreparationOutputDisplay(prep: { portionType?: string; outputUnit?: 
   if (prep.portionType === 'portion') {
     return 'portions'
   }
-  return prep.outputUnit || 'g'
+  return getUnitShortName(prep.outputUnit)
 }
 
 // ===== ACCORDION METHODS =====

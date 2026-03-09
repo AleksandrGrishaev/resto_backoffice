@@ -334,7 +334,14 @@ const performTableSelect = async (table: PosTable): Promise<void> => {
 
     if (table.status === 'free') {
       // Создаем новый заказ для стола с auto-assigned channel
+      // Ensure channels are loaded before creating order
+      if (!channelsStore.initialized) {
+        await channelsStore.initialize()
+      }
       const dineInChannel = channelsStore.getChannelByCode('dine_in')
+      if (!dineInChannel) {
+        console.error('❌ dine_in channel not found! Channels:', channelsStore.channels.length)
+      }
       const result = await ordersStore.createOrder({
         type: 'dine_in',
         tableId: table.id,

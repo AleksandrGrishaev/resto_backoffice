@@ -229,16 +229,33 @@ export class DecompositionEngine {
       return []
     }
 
+    // Scale factor: comp.quantity represents how many portions of this recipe are needed,
+    // recipe.portionSize is how many portions one batch produces.
+    // E.g., recipe makes 2 pieces (portionSize=2), we need 2 pieces (comp.quantity=2) → scale=1
+    // If we need 1 piece → scale=0.5 (half the ingredients)
+    const portionSize = recipe.portionSize || 1
+    const recipeScale = comp.quantity / portionSize
+    const effectiveQuantity = quantity * recipeScale
+
     DebugUtils.debug(MODULE_NAME, 'Decomposing recipe', {
       name: recipe.name,
-      components: recipe.components.length
+      components: recipe.components.length,
+      compQuantity: comp.quantity,
+      portionSize,
+      recipeScale,
+      effectiveQuantity
     })
 
     const results: DecomposedNode[] = []
 
     for (const recipeComp of recipe.components) {
       // Check if this component should be replaced
-      const replacementEntry = getReplacementForComponent(recipe.id, recipeComp.id, replacements)
+      // Use stable entity ID (componentId) instead of row UUID (id) for matching
+      const replacementEntry = getReplacementForComponent(
+        recipe.id,
+        recipeComp.componentId,
+        replacements
+      )
 
       if (replacementEntry) {
         const { modifier, isCompositionTarget } = replacementEntry
@@ -253,13 +270,25 @@ export class DecompositionEngine {
           for (const replComp of modifier.composition) {
             const items = await this.traverseComposition(
               replComp,
-              quantity,
+              effectiveQuantity,
               options,
               replacements,
               options.includePath ? [...path, recipe.name, `→${modifier.optionName}`] : []
             )
             results.push(...items)
           }
+        } else if (isCompositionTarget && !modifier.composition?.length) {
+          // Replacement target but no composition — ingredient removed without replacement
+          DebugUtils.warn(
+            MODULE_NAME,
+            'Replacement modifier has no composition — ingredient excluded without replacement',
+            {
+              excluded: recipeComp.name || recipeComp.componentId,
+              modifier: modifier.optionName,
+              groupName: modifier.groupName,
+              hint: 'Add composition to the modifier option in Menu Item settings'
+            }
+          )
         } else {
           // Not composition target: just skip (exclude) this component
           DebugUtils.debug(MODULE_NAME, 'Excluding component (multi-target)', {
@@ -279,7 +308,7 @@ export class DecompositionEngine {
 
         const items = await this.traverseComposition(
           menuComp,
-          quantity,
+          effectiveQuantity,
           options,
           replacements,
           options.includePath ? [...path, recipe.name] : []
@@ -310,7 +339,8 @@ export class DecompositionEngine {
 
     // Calculate quantity with optional portion conversion
     let totalQuantity = comp.quantity * quantity
-    let outputUnit = preparation.outputUnit
+    // Use the recipe's unit by default — only override when convertPortionToGrams succeeds
+    let outputUnit = comp.unit
 
     // 🐛 DEBUG: Log input values before conversion
     DebugUtils.debug(MODULE_NAME, '📦 Processing preparation', {

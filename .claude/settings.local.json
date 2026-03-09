@@ -86,9 +86,11 @@
       "Bash(git commit:*)",
       "Bash(git merge:*)",
       "mcp__supabase_prod__apply_migration",
-      "mcp__supabase_dev__apply_migration"
+      "mcp__supabase_dev__apply_migration",
+      "mcp__supabase_prod__list_tables",
+      "Bash(curl:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": ["playwright", "supabase"]
+  "enabledMcpjsonServers": ["playwright", "supabase", "supabase_dev", "supabase_prod"]
 }

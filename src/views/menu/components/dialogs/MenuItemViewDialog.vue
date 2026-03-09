@@ -208,6 +208,13 @@
                   </v-chip>
                 </div>
               </div>
+              <!-- Replacement: show replaced cost once -->
+              <div
+                v-if="group.type === 'replacement' && getModReplacedCost(group) > 0"
+                class="modifier-replaced-cost"
+              >
+                Replaced cost: {{ formatCurrency(getModReplacedCost(group)) }}
+              </div>
               <div class="modifier-options">
                 <span
                   v-for="(opt, oIdx) in group.options"
@@ -216,6 +223,36 @@
                   :class="{ default: opt.isDefault }"
                 >
                   {{ opt.name }}
+                  <span v-if="getModOptionCost(opt) > 0" class="option-cost">
+                    {{ formatCurrency(getModOptionCost(opt)) }}
+                  </span>
+                  <span
+                    v-if="
+                      group.type === 'replacement' &&
+                      getModOptionCost(opt) - getModReplacedCost(group) !== 0
+                    "
+                    class="option-delta"
+                    :class="{
+                      'text-success': getModOptionCost(opt) - getModReplacedCost(group) < 0,
+                      'text-error': getModOptionCost(opt) - getModReplacedCost(group) > 0
+                    }"
+                  >
+                    ({{ getModOptionCost(opt) - getModReplacedCost(group) >= 0 ? '+' : ''
+                    }}{{ formatCurrency(getModOptionCost(opt) - getModReplacedCost(group)) }})
+                  </span>
+                  <span
+                    v-if="group.type === 'addon' && opt.priceAdjustment"
+                    class="option-fc"
+                    :class="{
+                      'text-success': (getModOptionCost(opt) / opt.priceAdjustment) * 100 <= 35,
+                      'text-warning':
+                        (getModOptionCost(opt) / opt.priceAdjustment) * 100 > 35 &&
+                        (getModOptionCost(opt) / opt.priceAdjustment) * 100 <= 50,
+                      'text-error': (getModOptionCost(opt) / opt.priceAdjustment) * 100 > 50
+                    }"
+                  >
+                    FC {{ ((getModOptionCost(opt) / opt.priceAdjustment) * 100).toFixed(0) }}%
+                  </span>
                   <span v-if="opt.priceAdjustment !== 0" class="price-adj">
                     {{ opt.priceAdjustment > 0 ? '+' : ''
                     }}{{ formatCurrency(opt.priceAdjustment) }}
@@ -264,7 +301,13 @@ import type {
   MenuComposition,
   ModifierOption
 } from '@/stores/menu/types'
-import { calculateFoodCostRange, type FoodCostRange } from '@/core/cost/modifierCostCalculator'
+import {
+  calculateFoodCostRange,
+  calculateOptionCompositionCost,
+  calculateReplacedComponentsCost,
+  type FoodCostRange,
+  type CostCalculationContext as ModCostContext
+} from '@/core/cost/modifierCostCalculator'
 import { useMenuStore } from '@/stores/menu'
 import { useProductsStore } from '@/stores/productsStore'
 import { useRecipesStore } from '@/stores/recipes/recipesStore'
@@ -371,6 +414,20 @@ function formatCurrency(amount: number): string {
     currency: 'IDR',
     minimumFractionDigits: 0
   }).format(amount)
+}
+
+const modCostCtx = computed<ModCostContext>(() => ({
+  productsStore,
+  recipesStore
+}))
+
+function getModOptionCost(opt: ModifierOption): number {
+  return calculateOptionCompositionCost(opt, 1, modCostCtx.value)
+}
+
+function getModReplacedCost(group: { type: string; targetComponents?: any[] }): number {
+  if (group.type !== 'replacement' || !group.targetComponents?.length) return 0
+  return calculateReplacedComponentsCost(group.targetComponents, modCostCtx.value)
 }
 
 function getDishTypeLabel(type: string): string {
@@ -1337,6 +1394,34 @@ watch(
     background: rgba(var(--v-theme-primary), 0.1);
     border: 1px solid rgba(var(--v-theme-primary), 0.3);
   }
+}
+
+.modifier-replaced-cost {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  background: rgba(255, 183, 77, 0.08);
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.option-cost {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-left: 4px;
+}
+
+.option-delta {
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-left: 2px;
+}
+
+.option-fc {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-left: 4px;
 }
 
 .price-adj {

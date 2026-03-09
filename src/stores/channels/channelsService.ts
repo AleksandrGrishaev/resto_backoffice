@@ -229,6 +229,29 @@ export class ChannelsService {
     }
   }
 
+  async bulkSetMenuItemChannels(
+    menuItemId: string,
+    channelAvailability: { channelId: string; isAvailable: boolean }[]
+  ): Promise<ChannelMenuItem[]> {
+    const rows = channelAvailability.map(ca => ({
+      channel_id: ca.channelId,
+      menu_item_id: menuItemId,
+      is_available: ca.isAvailable
+    }))
+
+    const { data, error } = await supabase
+      .from('channel_menu_items')
+      .upsert(rows, { onConflict: 'channel_id,menu_item_id' })
+      .select()
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to bulk set menu item channels', { error })
+      throw error
+    }
+
+    return (data || []).map(mapChannelMenuItemFromDb)
+  }
+
   async upsertChannelMenuItem(
     channelId: string,
     menuItemId: string,

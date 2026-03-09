@@ -32,16 +32,35 @@ const alertsStore = useAlertsStore()
 // COMPUTED
 // =============================================
 
-const hasAlerts = computed(() => alertsStore.alertCounts.total > 0)
+// Only count NEW (unread) alerts for the navigation badge
+const newCountsByCategory = computed(() => {
+  const counts: Record<AlertCategory, number> = {
+    shift: 0,
+    account: 0,
+    product: 0,
+    supplier: 0
+  }
+  for (const alert of alertsStore.newAlerts) {
+    if (counts[alert.category] !== undefined) {
+      counts[alert.category]++
+    }
+  }
+  return counts
+})
 
-const activeCategories = computed(() => alertsStore.activeCategories)
+const hasAlerts = computed(() => alertsStore.newAlerts.length > 0)
+
+const activeCategories = computed(() => {
+  const categories: AlertCategory[] = ['shift', 'account', 'product', 'supplier']
+  return categories.filter(cat => newCountsByCategory.value[cat] > 0)
+})
 
 // =============================================
 // METHODS
 // =============================================
 
 function getCategoryCount(category: AlertCategory): number {
-  return alertsStore.alertCounts[category]?.total || 0
+  return newCountsByCategory.value[category] || 0
 }
 
 // =============================================

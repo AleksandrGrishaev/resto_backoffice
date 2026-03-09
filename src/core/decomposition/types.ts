@@ -103,7 +103,7 @@ export interface DecomposedPreparationNode extends DecomposedNodeBase {
   type: 'preparation'
   preparationId: string
   preparationName: string
-  /** Output unit from preparation definition (always gram/ml - base unit) */
+  /** Output unit from preparation definition (gram/ml/piece/portion) */
   outputUnit: string
 }
 

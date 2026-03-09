@@ -1441,7 +1441,10 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         })
 
         // Merge all bills from moving order into target order
-        const mergeResult = await mergeBillsIntoOrder(orderToMove.bills, targetOrder.id)
+        const mergeResult = await mergeBillsIntoOrder(orderToMove.bills, targetOrder.id, {
+          channelId: orderToMove.channelId,
+          channelCode: orderToMove.channelCode
+        })
         if (!mergeResult.success) {
           return mergeResult
         }
@@ -1523,6 +1526,64 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
    * @param tableId - Table ID to assign
    * @returns Service response with success status
    */
+
+  /**
+   * Re-resolve channel-specific prices for all items in given bills.
+   * Called when bills/orders move between channels (e.g., GoJek → dine_in).
+   */
+  async function repriceItemsForChannel(bills: PosBill[], targetChannelId: string): Promise<void> {
+    const { useMenuStore } = await import('@/stores/menu')
+    const { useChannelsStore } = await import('@/stores/channels')
+    const menuStore = useMenuStore()
+    const channelsStore = useChannelsStore()
+
+    for (const bill of bills) {
+      for (const item of bill.items) {
+        if (item.status === 'cancelled') continue
+
+        const menuItem = menuStore.menuItems.find(m => m.id === item.menuItemId)
+        const variant = menuItem?.variants.find(v => v.id === item.variantId)
+        if (!variant) continue
+
+        const cp = channelsStore.getChannelPrice(
+          targetChannelId,
+          item.menuItemId,
+          item.variantId || '',
+          variant.price
+        )
+
+        item.unitPrice = cp.netPrice
+        item.totalPrice = (cp.netPrice + (item.modifiersTotal || 0)) * item.quantity
+        item.updatedAt = new Date().toISOString()
+      }
+    }
+  }
+
+  async function getUnavailableItemsForChannel(
+    bills: PosBill[],
+    targetChannelId: string
+  ): Promise<{ billId: string; itemName: string; itemId: string }[]> {
+    const { useChannelsStore } = await import('@/stores/channels')
+    const channelsStore = useChannelsStore()
+
+    const unavailable: { billId: string; itemName: string; itemId: string }[] = []
+
+    for (const bill of bills) {
+      for (const item of bill.items) {
+        if (item.status === 'cancelled') continue
+        if (!channelsStore.isMenuItemAvailable(targetChannelId, item.menuItemId)) {
+          unavailable.push({
+            billId: bill.id,
+            itemName: item.name,
+            itemId: item.id
+          })
+        }
+      }
+    }
+
+    return unavailable
+  }
+
   async function convertOrderToDineIn(
     orderId: string,
     tableId: string
@@ -1577,8 +1638,16 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
           billsToMerge: orderToConvert.bills.length
         })
 
+        // Reprice items if moving between different channels (e.g., GoJek → dine_in)
+        if (orderToConvert.channelId !== targetOrder.channelId && targetOrder.channelId) {
+          await repriceItemsForChannel(orderToConvert.bills, targetOrder.channelId)
+        }
+
         // Merge all bills from converting order into target order
-        const mergeResult = await mergeBillsIntoOrder(orderToConvert.bills, targetOrder.id)
+        const mergeResult = await mergeBillsIntoOrder(orderToConvert.bills, targetOrder.id, {
+          channelId: orderToConvert.channelId,
+          channelCode: orderToConvert.channelCode
+        })
         if (!mergeResult.success) {
           return mergeResult
         }
@@ -1612,9 +1681,35 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       // Case 2: Target table is free → Convert order type and assign table
       console.log('📍 [ordersStore] Target table is free, converting order type')
 
-      // Convert order type to dine_in
+      // Convert order type to dine_in and update channel
       orderToConvert.type = 'dine_in'
       orderToConvert.tableId = tableId
+
+      // Update channel to dine_in so taxes are recalculated correctly
+      const { useChannelsStore } = await import('@/stores/channels')
+      const channelsStore = useChannelsStore()
+      const dineInChannel = channelsStore.getChannelByCode('dine_in')
+
+      // Check for items unavailable on dine_in channel
+      if (dineInChannel) {
+        const unavailable = await getUnavailableItemsForChannel(
+          orderToConvert.bills,
+          dineInChannel.id
+        )
+        if (unavailable.length > 0) {
+          const names = [...new Set(unavailable.map(u => u.itemName))].join(', ')
+          return {
+            success: false,
+            error: `Cannot convert to dine-in: these items are not available on dine-in channel: ${names}`
+          }
+        }
+      }
+      if (dineInChannel) {
+        orderToConvert.channelId = dineInChannel.id
+        orderToConvert.channelCode = 'dine_in'
+        // Reprice all items for dine_in channel
+        await repriceItemsForChannel(orderToConvert.bills, dineInChannel.id)
+      }
 
       // Update order status if needed (ensure it's valid for dine_in)
       if (orderToConvert.status === 'collected' || orderToConvert.status === 'delivered') {
@@ -1714,6 +1809,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
         console.log('🔀 [ordersStore] Target table occupied, merging bill into existing order')
 
+        // Reprice bill items if moving between different channels
+        if (sourceOrder.channelId !== targetOrder.channelId && targetOrder.channelId) {
+          await repriceItemsForChannel([sourceBill], targetOrder.channelId)
+        }
+
         // Remove bill from source order
         const billIndex = sourceOrder.bills.findIndex(b => b.id === billId)
         if (billIndex !== -1) {
@@ -1721,7 +1821,10 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         }
 
         // Merge bill into target order
-        const mergeResult = await mergeBillsIntoOrder([sourceBill], targetOrder.id)
+        const mergeResult = await mergeBillsIntoOrder([sourceBill], targetOrder.id, {
+          channelId: sourceOrder.channelId,
+          channelCode: sourceOrder.channelCode
+        })
         if (!mergeResult.success) {
           return mergeResult
         }
@@ -1746,8 +1849,25 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         sourceOrder.bills.splice(billIndex, 1)
       }
 
-      // Create new dine-in order on target table
-      const newOrderResponse = await ordersService.createOrder('dine_in', targetTableId)
+      // Create new dine-in order on target table, preserving source channel info
+      // Fallback to dine_in channel if source has no channelId
+      let moveChannelId = sourceOrder.channelId
+      const moveChannelCode = sourceOrder.channelCode || 'dine_in'
+      if (!moveChannelId) {
+        try {
+          const { useChannelsStore } = await import('@/stores/channels')
+          const channelsStore = useChannelsStore()
+          moveChannelId = channelsStore.getChannelByCode(moveChannelCode)?.id
+        } catch {
+          /* channels store unavailable */
+        }
+      }
+      const newOrderResponse = await ordersService.createOrder({
+        type: 'dine_in',
+        tableId: targetTableId,
+        channelId: moveChannelId,
+        channelCode: moveChannelCode
+      })
       if (!newOrderResponse.success || !newOrderResponse.data) {
         return {
           success: false,
@@ -1804,7 +1924,8 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
    */
   async function mergeBillsIntoOrder(
     billsToMerge: PosBill[],
-    targetOrderId: string
+    targetOrderId: string,
+    sourceChannelInfo?: { channelId?: string; channelCode?: string }
   ): Promise<ServiceResponse<PosOrder>> {
     try {
       // Find target order
@@ -1814,6 +1935,18 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       }
 
       const targetOrder = orders.value[targetOrderIndex]
+
+      // Log cross-channel merge (taxes will be recalculated with target's channel)
+      if (
+        sourceChannelInfo?.channelId &&
+        targetOrder.channelId &&
+        sourceChannelInfo.channelId !== targetOrder.channelId
+      ) {
+        console.warn('⚠️ [ordersStore] Cross-channel bill merge: taxes will be recalculated', {
+          sourceChannel: sourceChannelInfo.channelCode,
+          targetChannel: targetOrder.channelCode
+        })
+      }
 
       console.log('🔀 [ordersStore] Merging bills into order:', {
         targetOrderId,
@@ -2305,6 +2438,8 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     convertOrderToDineIn,
     moveBillToTable,
     mergeBillsIntoOrder,
+    repriceItemsForChannel,
+    getUnavailableItemsForChannel,
 
     // Discount Methods (Sprint 7)
     applyItemDiscount,

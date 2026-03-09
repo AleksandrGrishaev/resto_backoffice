@@ -171,7 +171,13 @@
               <v-expansion-panel-title>
                 <div class="category-header">
                   <span class="category-header__name">
-                    <v-icon :icon="category.icon" size="20" class="mr-2" />
+                    <v-icon
+                      v-if="category.icon?.startsWith('mdi-')"
+                      :icon="category.icon"
+                      size="20"
+                      class="mr-2"
+                    />
+                    <span v-else class="mr-2" style="font-size: 1.1rem">{{ category.icon }}</span>
                     {{ category.text }}
                   </span>
                   <div class="d-flex align-center ga-2">
@@ -284,7 +290,15 @@
               <v-expansion-panel-title>
                 <div class="category-header">
                   <span class="category-header__name">
-                    <v-icon :icon="type.icon" size="20" class="mr-2" />
+                    <v-icon
+                      v-if="type.icon?.startsWith('mdi-')"
+                      :icon="type.icon"
+                      size="20"
+                      class="mr-2"
+                    />
+                    <span v-else class="mr-2" style="font-size: 1.1rem">
+                      {{ type.icon || type.emoji }}
+                    </span>
                     {{ type.text }}
                   </span>
                   <div class="d-flex align-center ga-2">
@@ -377,6 +391,7 @@
       :type="activeTab === 'recipes' ? 'recipe' : 'preparation'"
       :item="editingItem"
       @saved="handleItemSaved"
+      @archive="handleArchiveFromDialog"
     />
 
     <unified-view-dialog
@@ -977,6 +992,12 @@ async function toggleStatus(item: Recipe | Preparation) {
   }
 }
 
+async function handleArchiveFromDialog(item: Recipe | Preparation) {
+  dialogs.value.create = false
+  editingItem.value = null
+  await toggleStatus(item)
+}
+
 async function handleItemSaved(item: Recipe | Preparation) {
   dialogs.value.create = false
   editingItem.value = null
@@ -1104,7 +1125,7 @@ async function handleExportPdf(options: { department: DepartmentFilter }) {
               category: prep.type,
               portionType: (prep.portionType || 'weight') as 'weight' | 'portion',
               outputQuantity: prep.outputQuantity || 1,
-              outputUnit: prep.outputUnit || 'unit',
+              outputUnit: prep.outputUnit || 'gram',
               costPerUnit: costCalc?.costPerOutputUnit || 0,
               totalCost: costCalc?.totalCost || 0,
               components: (prep.recipe || []).map((comp: PreparationIngredient) => {
