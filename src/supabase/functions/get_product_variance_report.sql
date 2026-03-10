@@ -1,6 +1,6 @@
 -- Function: get_product_variance_report_v4
 -- Description: Product Variance Report with full stock movement tracking
--- Version: v4.2 (2026-03-10)
+-- Version: v4.3 (2026-03-10)
 --
 -- CHANGELOG:
 -- v3.0: Initial version with theoretical sales from orders
@@ -21,6 +21,12 @@
 --   - Formula: Expected = Opening(raw+inPreps) + Received - Sales - Loss + Gain
 --   - Detail dialog shows opening breakdown: rawStock + inPreparations (with per-prep detail)
 --   - Detail version bumped to v3.3
+-- v4.3: Snapshot InPreps — prefer exact data stored during Shift Close
+--   - inventory_snapshots extended: in_preps_quantity, in_preps_cost columns (NULL = pre-migration)
+--   - Trigger updated: stores InPreps per product at shift close via calc_opening_inpreps_bulk
+--   - COALESCE pattern: snapshot InPreps → estimation fallback → 0
+--   - Report v4.3, Detail v3.4
+--   - Migration: src/supabase/migrations/198_snapshot_inpreps_columns.sql
 --
 -- Key formulas:
 -- - Expected = Opening(raw+inPreps) + Received - Sales - Loss + Gain
