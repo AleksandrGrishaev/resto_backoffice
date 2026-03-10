@@ -789,17 +789,6 @@
                   Production: {{ formatQty(detail.actualWriteOffs.productionConsumption.quantity) }}
                   {{ detail.product.unit }}
                 </v-chip>
-                <v-chip
-                  v-if="detail.actualWriteOffs.corrections.quantity !== 0"
-                  size="small"
-                  variant="tonal"
-                  :color="detail.actualWriteOffs.corrections.quantity > 0 ? 'success' : 'error'"
-                >
-                  Corrections:
-                  {{ detail.actualWriteOffs.corrections.quantity > 0 ? '+' : '' }}
-                  {{ formatQty(detail.actualWriteOffs.corrections.quantity) }}
-                  {{ detail.product.unit }}
-                </v-chip>
               </div>
 
               <!-- Sales Consumption Details -->
@@ -874,50 +863,8 @@
                 </v-table>
               </div>
 
-              <!-- Inventory Corrections Details -->
-              <div
-                v-if="
-                  detail.actualWriteOffs.corrections.details &&
-                  detail.actualWriteOffs.corrections.details.length > 0
-                "
-              >
-                <div class="text-subtitle-2 mb-2">Inventory Corrections</div>
-                <v-table density="compact" class="elevation-0">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th class="text-right">Adjustment</th>
-                      <th class="text-right">Amount</th>
-                      <th>Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="(item, idx) in detail.actualWriteOffs.corrections.details"
-                      :key="idx"
-                    >
-                      <td>{{ formatDate(item.date) }}</td>
-                      <td
-                        class="text-right"
-                        :class="item.quantity > 0 ? 'text-success' : 'text-error'"
-                      >
-                        {{ item.quantity > 0 ? '+' : '' }}{{ formatQty(item.quantity) }}
-                        {{ detail.product.unit }}
-                      </td>
-                      <td class="text-right">{{ formatIDR(item.amount) }}</td>
-                      <td class="text-caption text-truncate" style="max-width: 200px">
-                        {{ formatCorrectionNotes(item.notes) }}
-                      </td>
-                    </tr>
-                  </tbody>
-                </v-table>
-              </div>
-
               <v-alert
-                v-if="
-                  detail.actualWriteOffs.total.quantity === 0 &&
-                  detail.actualWriteOffs.corrections.quantity === 0
-                "
+                v-if="detail.actualWriteOffs.total.quantity === 0"
                 type="info"
                 variant="tonal"
                 density="compact"
