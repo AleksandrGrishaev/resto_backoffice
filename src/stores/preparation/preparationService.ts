@@ -3,6 +3,7 @@ import { DebugUtils, TimeUtils } from '@/utils'
 import { useRecipesStore } from '@/stores/recipes'
 import { storageService } from '@/stores/storage/storageService' // ✨ NEW: For auto write-off
 import { useProductsStore } from '@/stores/productsStore' // ✨ NEW: For product names
+import { isUnitDivisible } from '@/types/measurementUnits'
 import { supabase } from '@/supabase/client'
 import {
   batchFromSupabase,
@@ -1363,8 +1364,11 @@ export class PreparationService {
               }
             }
 
-            // Round to whole units (1g, 1ml) to avoid fractional quantities from division
-            finalQuantity = Math.round(finalQuantity)
+            // Round to whole units only for weight/volume (1g, 1ml) — not for piece units
+            // Piece units support fractional quantities (e.g. 0.5 bread for 5 slices from 10-slice recipe)
+            if (isUnitDivisible(finalUnit)) {
+              finalQuantity = Math.round(finalQuantity)
+            }
 
             return {
               itemId: ingredient.id,
