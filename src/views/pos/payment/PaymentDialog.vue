@@ -17,6 +17,47 @@
         </div>
       </v-card-title>
 
+      <!-- Loyalty Banner: only shown when customer/card is attached -->
+      <div
+        v-if="customerId || stampCardInfo"
+        class="loyalty-banner d-flex align-center gap-2 px-6 py-2"
+      >
+        <!-- Customer chip with balance & detach -->
+        <v-chip
+          v-if="customerName"
+          color="blue"
+          variant="tonal"
+          size="small"
+          closable
+          @click:close="emit('update:customer', null)"
+        >
+          <v-icon start size="14">mdi-account-star</v-icon>
+          {{ customerName }}
+          <span v-if="customerBalance > 0" class="ml-1">— {{ formatPrice(customerBalance) }}</span>
+        </v-chip>
+        <!-- Stamp card chip with detach -->
+        <v-chip
+          v-if="stampCardInfo"
+          color="amber-darken-2"
+          variant="tonal"
+          size="small"
+          closable
+          @click:close="emit('update:card', null)"
+        >
+          <v-icon start size="14">mdi-stamper</v-icon>
+          #{{ stampCardInfo.cardNumber }} — {{ stampCardInfo.stamps }}/{{
+            stampCardInfo.stampsPerCycle
+          }}
+          <span v-if="stampCardInfo.activeReward" class="ml-1 text-success">
+            ({{ stampCardInfo.activeReward.category }})
+          </span>
+        </v-chip>
+        <!-- Edit button opens external loyalty dialog -->
+        <v-btn icon size="x-small" variant="text" @click="emit('open-loyalty', 'customer')">
+          <v-icon size="16">mdi-pencil</v-icon>
+        </v-btn>
+      </div>
+
       <v-card-text class="pt-4 pb-2">
         <v-row>
           <!-- LEFT COLUMN: Items List -->
@@ -72,11 +113,72 @@
 
               <v-divider class="my-2" />
 
+              <!-- Points Redemption -->
+              <template v-if="effectivePointsRedeem > 0">
+                <div class="summary-row-compact">
+                  <span class="text-body-2 text-deep-purple">
+                    <v-icon size="12" class="mr-1">mdi-wallet</v-icon>
+                    Points Used:
+                  </span>
+                  <span class="text-body-2 text-success">
+                    -{{ formatPrice(effectivePointsRedeem) }}
+                  </span>
+                </div>
+              </template>
+
               <div class="summary-row-compact">
                 <span class="text-h6 font-weight-bold">Total:</span>
                 <span class="text-h6 font-weight-bold text-primary">
                   {{ formatPrice(totalAmount) }}
                 </span>
+              </div>
+            </div>
+
+            <!-- Use Points Section -->
+            <div v-if="customerId && customerBalance > 0" class="use-points mb-4">
+              <div class="d-flex align-center justify-space-between">
+                <div class="d-flex align-center gap-2">
+                  <v-icon size="18" color="deep-purple">mdi-wallet</v-icon>
+                  <span class="text-body-2 font-weight-medium">
+                    {{ customerName || 'Customer' }} — {{ formatPrice(customerBalance) }}
+                  </span>
+                </div>
+                <v-switch
+                  v-model="usePoints"
+                  color="deep-purple"
+                  density="compact"
+                  hide-details
+                  label="Use Points"
+                />
+              </div>
+              <div v-if="usePoints" class="mt-2">
+                <v-text-field
+                  v-model.number="pointsToRedeem"
+                  type="number"
+                  label="Points to redeem (IDR)"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                  :min="0"
+                  :max="Math.min(customerBalance, amountAfterDiscount + totalTaxAmount)"
+                  prefix="Rp"
+                >
+                  <template #append-inner>
+                    <v-btn
+                      size="small"
+                      variant="text"
+                      color="deep-purple"
+                      @click="
+                        pointsToRedeem = Math.min(
+                          customerBalance,
+                          amountAfterDiscount + totalTaxAmount
+                        )
+                      "
+                    >
+                      MAX
+                    </v-btn>
+                  </template>
+                </v-text-field>
               </div>
             </div>
 
@@ -196,17 +298,64 @@
           <template v-else>Pre-Bill</template>
         </v-btn>
 
-        <!-- Add/Update Discount Button -->
-        <v-btn
-          v-if="currentBill"
-          variant="outlined"
-          color="primary"
-          prepend-icon="mdi-tag-percent"
-          class="ml-2"
-          @click="handleOpenDiscountDialog"
-        >
-          {{ localDiscount > 0 ? 'Update Discount' : 'Add Discount' }}
-        </v-btn>
+        <!-- Discount Menu (3 options) -->
+        <v-menu v-if="currentBill" location="top start">
+          <template #activator="{ props: menuProps }">
+            <v-btn
+              variant="outlined"
+              color="primary"
+              prepend-icon="mdi-tag-percent"
+              class="ml-2"
+              v-bind="menuProps"
+            >
+              {{ localDiscount > 0 || effectivePointsRedeem > 0 ? 'Discount' : 'Add Discount' }}
+            </v-btn>
+          </template>
+
+          <v-list density="compact" min-width="220">
+            <!-- Customer / Card -->
+            <v-list-item prepend-icon="mdi-account-star" @click="emit('open-loyalty', 'customer')">
+              <v-list-item-title>
+                {{ customerId ? 'Change Customer / Card' : 'Add Customer / Card' }}
+              </v-list-item-title>
+              <v-list-item-subtitle v-if="customerName">{{ customerName }}</v-list-item-subtitle>
+              <v-list-item-subtitle v-else>Loyalty, stamps, points</v-list-item-subtitle>
+            </v-list-item>
+
+            <v-divider class="my-1" />
+
+            <!-- Manual Discount -->
+            <v-list-item prepend-icon="mdi-pencil" @click="handleOpenDiscountDialog">
+              <v-list-item-title>Manual Discount</v-list-item-title>
+              <v-list-item-subtitle>Custom amount or %</v-list-item-subtitle>
+            </v-list-item>
+
+            <!-- Stamp Card Reward (only if card has active reward) -->
+            <v-list-item
+              v-if="stampCardInfo?.activeReward"
+              prepend-icon="mdi-gift"
+              @click="handleStampCardReward"
+            >
+              <v-list-item-title>Stamp Card Reward</v-list-item-title>
+              <v-list-item-subtitle>
+                {{ stampCardInfo.activeReward.category }} — up to
+                {{ formatPrice(stampCardInfo.activeReward.maxDiscount) }}
+              </v-list-item-subtitle>
+            </v-list-item>
+
+            <!-- Points / Cashback (only if customer with balance) -->
+            <v-list-item
+              v-if="customerId && customerBalance > 0"
+              prepend-icon="mdi-wallet"
+              @click="handleTogglePoints"
+            >
+              <v-list-item-title>Use Points</v-list-item-title>
+              <v-list-item-subtitle>
+                Balance: {{ formatPrice(customerBalance) }}
+              </v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+        </v-menu>
 
         <v-spacer />
         <v-btn variant="text" @click="handleClose">Cancel</v-btn>
@@ -229,6 +378,7 @@
       v-model="showBillDiscountDialog"
       :bill="currentBill"
       :apply-to-order="false"
+      :stamp-card-reward="stampCardInfo?.activeReward || null"
       @success="handleDiscountSuccess"
       @cancel="handleDiscountCancel"
     />
@@ -238,6 +388,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import type { PosBillItem, PosBill, PreBillSnapshot } from '@/stores/pos/types'
+import type { StampCardInfo } from '@/stores/loyalty'
 import type { ReceiptData, ReceiptItem } from '@/core/printing/types'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
@@ -249,6 +400,7 @@ import { createPreBillSnapshot } from '@/stores/pos/utils/preBillTracking'
 import PaymentItemsList from './widgets/PaymentItemsList.vue'
 import PrinterStatus from './widgets/PrinterStatus.vue'
 import BillDiscountDialog from '../order/dialogs/BillDiscountDialog.vue'
+import type { Customer } from '@/stores/customers'
 
 interface Props {
   modelValue: boolean
@@ -260,6 +412,10 @@ interface Props {
   orderId?: string
   items?: PosBillItem[]
   channelId?: string
+  customerId?: string | null
+  customerBalance?: number
+  customerName?: string
+  stampCardInfo?: StampCardInfo | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -269,7 +425,11 @@ const props = withDefaults(defineProps<Props>(), {
   billIds: () => [],
   orderId: '',
   items: () => [],
-  channelId: ''
+  channelId: '',
+  customerId: null,
+  customerBalance: 0,
+  customerName: '',
+  stampCardInfo: null
 })
 
 // Stores
@@ -291,7 +451,14 @@ interface PaymentData {
     reason: string
     type: string
     value: number
+    stampCardReward?: {
+      stamps: number
+      category: string
+      categoryIds: string[]
+      maxDiscount: number
+    }
   }
+  pointsRedeemed?: number
 }
 
 interface PreBillPrintedData {
@@ -305,6 +472,9 @@ const emit = defineEmits<{
   confirm: [data: PaymentData]
   cancel: []
   'pre-bill-printed': [data: PreBillPrintedData]
+  'update:customer': [customer: Customer | null]
+  'update:card': [card: StampCardInfo | null]
+  'open-loyalty': [tab: 'card' | 'customer']
 }>()
 
 // State
@@ -315,6 +485,9 @@ const localDiscount = ref<number>(0) // Temporary bill discount (not saved to or
 const localDiscountReason = ref<string>('') // Reason for bill discount
 const showBillDiscountDialog = ref(false)
 const preBillPrinted = ref(false) // Track if pre-bill was printed in this session
+const usePoints = ref(false) // Whether to apply loyalty points
+const pointsToRedeem = ref<number>(0) // Amount of points to redeem
+let resetTimer: ReturnType<typeof setTimeout> | null = null // L2: cancellable reset timer
 
 // Payment Methods — filtered by channel if available
 const availablePaymentMethods = computed(() => {
@@ -448,8 +621,15 @@ const totalTaxAmount = computed(() => {
   return taxBreakdown.value.reduce((sum, t) => sum + t.amount, 0)
 })
 
+const effectivePointsRedeem = computed(() => {
+  if (!usePoints.value || pointsToRedeem.value <= 0) return 0
+  const subtotalWithTax = amountAfterDiscount.value + totalTaxAmount.value
+  // Cannot redeem more than balance or more than the total
+  return Math.min(pointsToRedeem.value, props.customerBalance, subtotalWithTax)
+})
+
 const totalAmount = computed(() => {
-  return amountAfterDiscount.value + totalTaxAmount.value
+  return amountAfterDiscount.value + totalTaxAmount.value - effectivePointsRedeem.value
 })
 
 const change = computed(() => {
@@ -506,19 +686,29 @@ const handleConfirm = () => {
     paymentData.billDiscount = {
       amount: localDiscount.value,
       reason: localDiscountReason.value,
-      type: 'bill', // Mark as bill-level discount
-      value: localDiscount.value // For now, store the calculated amount
+      type: 'bill',
+      value: localDiscount.value
+    }
+
+    // Include stamp card reward metadata for post-payment consumption
+    if (localStampCardReward.value) {
+      paymentData.billDiscount.stampCardReward = { ...localStampCardReward.value }
     }
 
     console.log('💰 Bill discount included in payment:', paymentData.billDiscount)
   }
 
+  // Include points redemption if used
+  if (effectivePointsRedeem.value > 0) {
+    paymentData.pointsRedeemed = effectivePointsRedeem.value
+  }
+
   emit('confirm', paymentData)
 
-  // Reset form (will be closed by parent)
-  setTimeout(() => {
+  // L2 FIX: Reset only after dialog actually closes (watcher handles it)
+  // Just clear processing flag with a short delay
+  resetTimer = setTimeout(() => {
     processing.value = false
-    resetForm()
   }, 500)
 }
 
@@ -528,7 +718,10 @@ const resetForm = () => {
   cashReceived.value = 0
   localDiscount.value = 0
   localDiscountReason.value = ''
+  localStampCardReward.value = null
   preBillPrinted.value = false
+  usePoints.value = false
+  pointsToRedeem.value = 0
 }
 
 const handleOpenDiscountDialog = () => {
@@ -539,14 +732,45 @@ const handleOpenDiscountDialog = () => {
   showBillDiscountDialog.value = true
 }
 
-const handleDiscountSuccess = async (discountData: { amount: number; reason: string }) => {
+const handleStampCardReward = () => {
+  // Opens BillDiscountDialog with stamp card reward auto-selected
+  // The dialog will auto-configure via its stampCardReward prop
+  handleOpenDiscountDialog()
+}
+
+const handleTogglePoints = () => {
+  usePoints.value = !usePoints.value
+  if (usePoints.value && pointsToRedeem.value <= 0) {
+    // Default to max available
+    pointsToRedeem.value = Math.min(
+      props.customerBalance,
+      amountAfterDiscount.value + totalTaxAmount.value
+    )
+  }
+}
+
+// Store stampCardReward data from BillDiscountDialog for post-payment consumption
+const localStampCardReward = ref<{
+  stamps: number
+  category: string
+  categoryIds: string[]
+  maxDiscount: number
+} | null>(null)
+
+const handleDiscountSuccess = async (discountData: {
+  amount: number
+  reason: string
+  stampCardReward?: { stamps: number; category: string; categoryIds: string[]; maxDiscount: number }
+}) => {
   // Bill discount applied successfully via BillDiscountDialog
   // Store temporarily in PaymentDialog (NOT saved to order yet)
   localDiscount.value = discountData.amount
   localDiscountReason.value = discountData.reason
+  localStampCardReward.value = discountData.stampCardReward || null
   console.log('💰 Temporary bill discount set in PaymentDialog:', {
     amount: localDiscount.value,
-    reason: localDiscountReason.value
+    reason: localDiscountReason.value,
+    stampCardReward: localStampCardReward.value
   })
   showBillDiscountDialog.value = false
 }
@@ -692,6 +916,12 @@ watch(
   () => props.modelValue,
   async newValue => {
     if (newValue) {
+      // L2 FIX: Cancel any pending reset timer from previous confirm
+      if (resetTimer) {
+        clearTimeout(resetTimer)
+        resetTimer = null
+      }
+      processing.value = false
       // Ensure payment methods are loaded when dialog opens
       await ensurePaymentMethodsLoaded()
       // Reset form when dialog opens (selects first available method)
@@ -708,6 +938,12 @@ watch(
 </script>
 
 <style scoped>
+/* Loyalty banner */
+.loyalty-banner {
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  background: rgba(var(--v-theme-on-surface), 0.05);
+}
+
 /* Two-column layout */
 .items-column {
   max-height: 450px;

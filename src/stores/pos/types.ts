@@ -161,6 +161,10 @@ export interface PosOrder extends BaseEntity {
   channelCode?: string
   externalOrderId?: string
   externalStatus?: string
+
+  // Loyalty tracking
+  stampCardId?: string
+  guestCount?: number
 }
 
 // ===== BILL TYPES =====
@@ -181,6 +185,11 @@ export interface PosBill extends BaseEntity {
   paymentStatus: 'unpaid' | 'partial' | 'paid'
   paidAmount: number
   notes?: string
+
+  // Per-bill loyalty (different customers per bill at same table)
+  customerId?: string
+  customerName?: string
+  stampCardId?: string
 
   // Pre-bill tracking (fraud protection)
   preBillPrintedAt?: string // When pre-bill was printed
@@ -213,6 +222,7 @@ export interface PosBillItem extends BaseEntity {
   billId: string
   menuItemId: string
   menuItemName: string
+  categoryId?: string // menu_categories UUID (for reward category filtering)
   variantId?: string
   variantName?: string
   quantity: number

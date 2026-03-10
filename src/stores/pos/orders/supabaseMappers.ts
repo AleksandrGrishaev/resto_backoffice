@@ -34,6 +34,10 @@ interface BillMetadata {
   paymentStatus: 'unpaid' | 'partial' | 'paid'
   paidAmount: number
   notes?: string
+  // Loyalty
+  customerId?: string
+  customerName?: string
+  stampCardId?: string
   createdAt: string
   updatedAt: string
 }
@@ -63,6 +67,9 @@ export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
     paymentStatus: bill.paymentStatus,
     paidAmount: bill.paidAmount,
     notes: bill.notes,
+    customerId: bill.customerId,
+    customerName: bill.customerName,
+    stampCardId: bill.stampCardId,
     createdAt: bill.createdAt,
     updatedAt: bill.updatedAt
   }))
@@ -81,6 +88,9 @@ export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
     table_id: order.tableId || null,
     shift_id: null, // TODO: Add shiftId to PosOrder type
     customer_name: order.customerName || null,
+    customer_id: order.customerId || null,
+    stamp_card_id: order.stampCardId || null,
+    guest_count: order.guestCount || 1,
 
     // Bills metadata (without items)
     bills: billsMetadata as any,
@@ -176,6 +186,9 @@ export function fromSupabase(supabaseOrder: SupabaseOrder, items?: PosBillItem[]
     paymentStatus: meta.paymentStatus,
     paidAmount: meta.paidAmount,
     notes: meta.notes,
+    customerId: meta.customerId,
+    customerName: meta.customerName,
+    stampCardId: meta.stampCardId,
     createdAt: meta.createdAt,
     updatedAt: meta.updatedAt
   }))
@@ -200,8 +213,10 @@ export function fromSupabase(supabaseOrder: SupabaseOrder, items?: PosBillItem[]
 
     // Links
     tableId: supabaseOrder.table_id || undefined,
-    customerId: undefined,
+    customerId: supabaseOrder.customer_id || undefined,
     customerName: supabaseOrder.customer_name || undefined,
+    stampCardId: supabaseOrder.stamp_card_id || undefined,
+    guestCount: supabaseOrder.guest_count || 1,
 
     // Reconstructed bills with items
     bills,

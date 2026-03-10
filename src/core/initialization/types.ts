@@ -48,6 +48,8 @@ export type StoreName =
   | 'channels'
   | 'gobiz'
   | 'menuCollections'
+  | 'customers'
+  | 'loyalty'
   | 'debug'
 
 /**

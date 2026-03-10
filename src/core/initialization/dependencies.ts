@@ -58,6 +58,10 @@ export const STORE_DEPENDENCIES: Record<StoreName, StoreName[]> = {
   // Menu collections (depends on menu for item references)
   menuCollections: ['menu'],
 
+  // Loyalty program
+  customers: [],
+  loyalty: ['customers'],
+
   // Debug system
   debug: []
 }
@@ -150,6 +154,10 @@ export const STORE_CATEGORIES: Record<StoreName, StoreCategory> = {
   // Menu collections (backoffice / admin)
   menuCollections: 'backoffice',
 
+  // Loyalty program (needed by both backoffice and POS)
+  customers: 'backoffice',
+  loyalty: 'backoffice',
+
   // Опциональные
   debug: 'optional'
 }
@@ -232,6 +240,8 @@ export function getStoresForContext(context: AppContext, userRoles: UserRole[]):
       stores.add('pos')
       stores.add('sales')
       stores.add('writeOff')
+      stores.add('customers') // loyalty program
+      stores.add('loyalty') // loyalty program
       break
 
     case 'kitchen':
@@ -253,6 +263,9 @@ export function getStoresForContext(context: AppContext, userRoles: UserRole[]):
       stores.add('discounts')
       // Sales channels
       stores.add('channels')
+      // Loyalty program
+      stores.add('customers')
+      stores.add('loyalty')
       break
   }
 

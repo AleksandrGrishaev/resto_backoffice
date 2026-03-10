@@ -54,6 +54,7 @@ const emit = defineEmits<{
 const screens = [
   { id: 'menu' as AdminScreenName, label: 'Menu', icon: 'mdi-book-open-variant' },
   { id: 'channels' as AdminScreenName, label: 'Channels', icon: 'mdi-store' },
+  { id: 'loyalty' as AdminScreenName, label: 'Loyalty', icon: 'mdi-star-circle' },
   { id: 'dashboard' as AdminScreenName, label: 'Dashboard', icon: 'mdi-chart-box-outline' }
 ]
 </script>

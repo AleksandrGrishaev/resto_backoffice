@@ -36,6 +36,8 @@ import { useDiscountsStore } from '@/stores/discounts'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import { useChannelsStore } from '@/stores/channels'
 import { useGobizStore } from '@/stores/gobiz'
+import { useCustomersStore } from '@/stores/customers'
+import { useLoyaltyStore } from '@/stores/loyalty'
 
 const MODULE_NAME = 'DevInitStrategy'
 
@@ -314,6 +316,10 @@ export class DevInitializationStrategy implements InitializationStrategy {
         return this.loadGobiz()
       case 'menuCollections':
         return this.loadMenuCollections()
+      case 'customers':
+        return this.loadCustomers()
+      case 'loyalty':
+        return this.loadLoyalty()
       default:
         DebugUtils.warn(MODULE_NAME, `Unknown store: ${storeName}`)
         return null
@@ -736,6 +742,12 @@ export class DevInitializationStrategy implements InitializationStrategy {
     if (!this.loadedStores.has('gobiz')) {
       parallelPromises.push(this.loadGobiz())
     }
+    if (!this.loadedStores.has('customers')) {
+      parallelPromises.push(this.loadCustomers())
+    }
+    if (!this.loadedStores.has('loyalty')) {
+      parallelPromises.push(this.loadLoyalty())
+    }
 
     if (parallelPromises.length > 0) {
       const parallelResults = await Promise.all(parallelPromises)
@@ -991,6 +1003,69 @@ export class DevInitializationStrategy implements InitializationStrategy {
 
       return {
         name: 'discounts',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  // ===== LOYALTY STORES =====
+
+  private async loadCustomers(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useCustomersStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading customers...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'customers',
+        success: true,
+        count: store.customers.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load customers'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [DEV] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'customers',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadLoyalty(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useLoyaltyStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading loyalty settings...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'loyalty',
+        success: true,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load loyalty'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [DEV] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'loyalty',
         success: false,
         error: message,
         duration: Date.now() - start

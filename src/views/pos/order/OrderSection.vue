@@ -45,6 +45,8 @@
             @cancel-item="handleCancelItem"
             @add-note="handleAddNote"
             @apply-discount="handleApplyDiscount"
+            @open-loyalty="handleOpenBillLoyalty"
+            @detach-loyalty="handleDetachBillLoyalty"
             @send-to-kitchen="handleSendToKitchen"
             @move-items="handleMoveItems"
             @checkout="handleCheckout"
@@ -124,9 +126,40 @@
       :order-id="paymentDialogData.orderId"
       :items="paymentDialogData.items"
       :channel-id="paymentDialogData.channelId"
+      :customer-id="paymentBillCustomerId"
+      :customer-balance="paymentBillCustomerBalance"
+      :customer-name="paymentBillCustomerName"
+      :stamp-card-info="paymentBillLoyaltyCard"
       @confirm="handlePaymentConfirm"
       @cancel="handlePaymentCancel"
       @pre-bill-printed="handlePreBillPrinted"
+      @update:customer="handlePaymentLoyaltyCustomer"
+      @update:card="handlePaymentLoyaltyCard"
+      @open-loyalty="handlePaymentOpenLoyalty"
+    />
+
+    <!-- Loyalty Dialog (per-bill: search/attach customer or stamp card) -->
+    <LoyaltyDialog
+      v-model="showLoyaltyDialog"
+      :order-id="currentOrder?.id"
+      :customer-id="loyaltyDialogBill?.customerId"
+      :stamp-card-id="loyaltyDialogBill?.stampCardId"
+      :initial-tab="loyaltyDialogTab"
+      @update:customer="handleLoyaltyCustomer"
+      @update:card="handleLoyaltyCard"
+      @convert-card="handleConvertCard"
+    />
+
+    <!-- Convert Card Dialog -->
+    <ConvertCardDialog
+      v-model="showConvertCardDialog"
+      :card-number="loyaltyCard?.cardNumber || ''"
+      :customer-id="convertCardCustomerId"
+      :customer-name="convertCardCustomerName"
+      :stamps="loyaltyCard?.stamps || 0"
+      :cashback-pct="convertCardCustomerId ? loyaltyStore.cashbackRateForTier(convertCardTier) : 5"
+      :bonus-pct="loyaltyStore.settings?.conversionBonusPct || 0"
+      @converted="handleCardConverted"
     />
 
     <!-- Add Note Dialog -->
@@ -210,6 +243,11 @@ import { useAuthStore } from '@/stores/auth'
 import { useAlertsStore } from '@/stores/alerts'
 import { useChannelsStore } from '@/stores/channels'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
+import { useLoyaltyStore } from '@/stores/loyalty'
+import { useCustomersStore } from '@/stores/customers'
+import type { Customer } from '@/stores/customers'
+import type { StampCardInfo } from '@/stores/loyalty'
+import { formatIDR } from '@/utils'
 import { useOrderCalculations } from '@/stores/pos/orders/composables/useOrderCalculations'
 import type { PosOrder, PosBill, PosBillItem, OrderType, PreBillSnapshot } from '@/stores/pos/types'
 import type { MenuItem, MenuItemVariant } from '@/stores/menu/types'
@@ -225,6 +263,8 @@ import OrderInfo from './components/OrderInfo.vue'
 import BillsManager from './components/BillsManager.vue'
 import OrderTotals from './components/OrderTotals.vue'
 import OrderActions from './components/OrderActions.vue'
+import LoyaltyDialog from '../loyalty/LoyaltyDialog.vue'
+import ConvertCardDialog from '../loyalty/ConvertCardDialog.vue'
 import PaymentDialog from '../payment/PaymentDialog.vue'
 import PrintReceiptDialog from '../payment/dialogs/PrintReceiptDialog.vue'
 import type { ReceiptData } from '@/core/printing/types'
@@ -251,6 +291,8 @@ const shiftsStore = useShiftsStore()
 const authStore = useAuthStore()
 const alertsStore = useAlertsStore()
 const channelsStore = useChannelsStore()
+const loyaltyStore = useLoyaltyStore()
+const customersStore = useCustomersStore()
 
 // Props
 interface Props {
@@ -296,6 +338,53 @@ const paymentDialogData = ref({
   channelId: ''
 })
 
+// Per-bill customer/card for payment dialog (falls back to order-level)
+const paymentBill = computed(() => {
+  if (!paymentDialogData.value.billIds.length || !currentOrder.value) return null
+  return currentOrder.value.bills.find(b => b.id === paymentDialogData.value.billIds[0]) || null
+})
+
+const paymentBillCustomerId = computed(() => {
+  // Use bill-level customer only — order-level is legacy fallback
+  if (paymentBill.value?.customerId) return paymentBill.value.customerId
+  // For multi-bill: check if all bills share the same customer
+  const billIds = paymentDialogData.value.billIds
+  if (billIds.length > 1 && currentOrder.value) {
+    const bills = billIds
+      .map(id => currentOrder.value!.bills.find(b => b.id === id))
+      .filter(Boolean)
+    const cids = [...new Set(bills.map(b => b!.customerId).filter(Boolean))]
+    if (cids.length === 1) return cids[0]
+  }
+  return null
+})
+
+const paymentBillCustomerName = computed(() => {
+  if (paymentBill.value?.customerName) return paymentBill.value.customerName
+  const cid = paymentBillCustomerId.value
+  if (cid) {
+    const c = customersStore.getById(cid)
+    if (c) return c.name
+  }
+  return ''
+})
+
+const paymentBillCustomerBalance = computed(() => {
+  const cid = paymentBillCustomerId.value
+  if (!cid) return 0
+  const customer = customersStore.getById(cid)
+  return customer?.loyaltyBalance ?? 0
+})
+
+const paymentBillLoyaltyCard = computed(() => {
+  // loyaltyCard ref is set when card attached via dialog
+  // Only return if the card belongs to this bill
+  if (loyaltyCard.value && paymentBill.value?.stampCardId) {
+    return loyaltyCard.value
+  }
+  return null
+})
+
 // Print Receipt Dialog State
 const showPrintReceiptDialog = ref(false)
 const printReceiptData = ref<{
@@ -311,6 +400,13 @@ const printReceiptData = ref<{
   receivedAmount: 0,
   change: 0
 })
+
+// Loyalty state (per-bill)
+const loyaltyCard = ref<StampCardInfo | null>(null)
+const showConvertCardDialog = ref(false)
+const showLoyaltyDialog = ref(false)
+const loyaltyDialogTab = ref<'card' | 'customer'>('card')
+const loyaltyBillId = ref<string | null>(null) // which bill the loyalty dialog is for
 
 // Printer
 const { settings: printerSettings, isConnected: isPrinterConnected } = usePrinter()
@@ -379,6 +475,15 @@ const showTableSelectionDialog = ref(false)
 const currentOrder = computed((): PosOrder | null => {
   return ordersStore.currentOrder
 })
+
+// P1 FIX: Clear loyaltyCard when switching orders
+watch(
+  () => currentOrder.value?.id,
+  () => {
+    loyaltyCard.value = null
+    loyaltyBillId.value = null
+  }
+)
 
 const bills = computed((): PosBill[] => {
   return currentOrder.value?.bills || []
@@ -1320,6 +1425,48 @@ const handleCheckout = async (itemIds: string[], billId: string): Promise<void> 
       channelId: orderChannelId
     }
 
+    // Validate loyalty conflicts for multi-bill checkout
+    if (billIds.length > 1) {
+      const bills = billIds
+        .map(id => currentOrder.value!.bills.find(b => b.id === id))
+        .filter(Boolean)
+      const customerIds = [...new Set(bills.map(b => b!.customerId).filter(Boolean))]
+      const cardIds = [...new Set(bills.map(b => b!.stampCardId).filter(Boolean))]
+      const hasCustomerOnSome = bills.some(b => b!.customerId)
+      const allHaveCustomer = bills.every(b => b!.customerId)
+      const hasCardOnSome = bills.some(b => b!.stampCardId)
+      const allHaveCard = bills.every(b => b!.stampCardId)
+
+      // Different customers across bills
+      if (customerIds.length > 1) {
+        showError(
+          'Bills have different customers. Assign the same customer to all bills or pay separately.'
+        )
+        return
+      }
+      // Different cards across bills
+      if (cardIds.length > 1) {
+        showError(
+          'Bills have different stamp cards. Assign the same card to all bills or pay separately.'
+        )
+        return
+      }
+      // Some bills have customer, some don't
+      if (hasCustomerOnSome && !allHaveCustomer) {
+        showError(
+          "Some bills have a customer and some don't. Assign the same customer to all bills or pay separately."
+        )
+        return
+      }
+      // Some bills have card, some don't
+      if (hasCardOnSome && !allHaveCard) {
+        showError(
+          "Some bills have a stamp card and some don't. Assign the same card to all bills or pay separately."
+        )
+        return
+      }
+    }
+
     showPaymentDialog.value = true
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to prepare checkout'
@@ -1337,7 +1484,14 @@ const handlePaymentConfirm = async (paymentData: {
     reason: string
     type: string
     value: number
+    stampCardReward?: {
+      stamps: number
+      category: string
+      categoryIds: string[]
+      maxDiscount: number
+    }
   }
+  pointsRedeemed?: number
 }): Promise<void> => {
   try {
     if (!currentOrder.value) {
@@ -1351,14 +1505,36 @@ const handlePaymentConfirm = async (paymentData: {
       await checkPreBillModifications(billId)
     }
 
-    // Save bill discount to order (NOT as item discounts)
-    if (paymentData.billDiscount && paymentData.billDiscount.amount > 0) {
-      console.log('💰 Saving bill discount to order:', paymentData.billDiscount)
-      await ordersStore.saveBillDiscount(
-        paymentDialogData.value.billIds[0],
-        paymentData.billDiscount.amount,
-        paymentData.billDiscount.reason
-      )
+    // Save bill discount to order (manual discount + loyalty points)
+    // Discount is saved on the first bill; paymentsStore sums all bills
+    {
+      const manualDiscount = paymentData.billDiscount?.amount || 0
+      const manualReason = paymentData.billDiscount?.reason || ''
+      const pointsDiscount = paymentData.pointsRedeemed || 0
+      const totalDiscount = manualDiscount + pointsDiscount
+
+      if (totalDiscount > 0) {
+        // Determine reason: points-only, manual-only, or combined
+        const reason =
+          pointsDiscount > 0 && manualDiscount === 0
+            ? 'loyalty_points'
+            : manualDiscount > 0 && pointsDiscount === 0
+              ? manualReason
+              : manualReason // Combined: keep manual reason, points tracked via loyalty_transactions
+
+        console.log('💰 Saving bill discount to order:', {
+          manualDiscount,
+          pointsDiscount,
+          totalDiscount,
+          reason
+        })
+
+        await ordersStore.saveBillDiscount(
+          paymentDialogData.value.billIds[0],
+          totalDiscount,
+          reason
+        )
+      }
     }
 
     // ✅ OPTIMISTIC UI: Close dialog immediately
@@ -1424,6 +1600,64 @@ const handlePaymentConfirm = async (paymentData: {
       }
 
       showPrintReceiptDialog.value = true
+
+      // 🎯 Redeem loyalty points AFTER payment success (P2 fix: no orphan deductions)
+      if (
+        paymentData.pointsRedeemed &&
+        paymentData.pointsRedeemed > 0 &&
+        currentOrder.value?.customerId
+      ) {
+        try {
+          const redeemResult = await loyaltyStore.redeemPoints(
+            currentOrder.value.customerId,
+            paymentDialogData.value.orderId,
+            paymentData.pointsRedeemed
+          )
+          if (redeemResult.success) {
+            console.log(
+              `🎯 Points redeemed: ${formatIDR(paymentData.pointsRedeemed)}, remaining: ${formatIDR(redeemResult.newBalance)}`
+            )
+          }
+        } catch (err) {
+          console.error('🎯 Points redemption failed (payment already succeeded):', err)
+        }
+      }
+
+      // 🎯 Record stamp card reward redemption (if reward discount was used)
+      if (
+        paymentData.billDiscount?.reason === 'stamp_card_reward' &&
+        paymentData.billDiscount.stampCardReward &&
+        loyaltyCard.value
+      ) {
+        try {
+          await loyaltyStore.createRedemption({
+            cardId: loyaltyCard.value.cardId,
+            cycle: loyaltyCard.value.cycle,
+            orderId: paymentDialogData.value.orderId,
+            paymentId: result.data?.id || null,
+            discountEventId: null, // filled later by saveBillDiscount if available
+            rewardTier: paymentData.billDiscount.stampCardReward.stamps,
+            category: paymentData.billDiscount.stampCardReward.category,
+            categoryIds: paymentData.billDiscount.stampCardReward.categoryIds,
+            maxDiscount: paymentData.billDiscount.stampCardReward.maxDiscount,
+            actualDiscount: paymentData.billDiscount.amount,
+            stampsAtRedemption: loyaltyCard.value.stamps
+          })
+          console.log(
+            '🎯 Stamp card reward redeemed:',
+            paymentData.billDiscount.stampCardReward.category
+          )
+        } catch (err) {
+          console.error(
+            '🎯 Stamp reward redemption record failed (payment already succeeded):',
+            err
+          )
+        }
+      }
+
+      // 🎯 Post-payment loyalty hooks (non-blocking)
+      // Cashback/stamps based on actual money paid, NOT including redeemed points
+      processLoyaltyAfterPayment(paymentDialogData.value.orderId, paymentData.amount)
     } else {
       // ❌ Rollback UI on failure
       showError(result.error || 'Payment failed')
@@ -1442,6 +1676,320 @@ const handlePaymentConfirm = async (paymentData: {
 const handlePaymentCancel = (): void => {
   showPaymentDialog.value = false
   console.log('💳 Payment cancelled by user')
+}
+
+// ===== LOYALTY HANDLERS =====
+
+/**
+ * Non-blocking post-payment loyalty processing:
+ * 1. If customer attached → apply cashback (tier-based %)
+ * 2. If stamp card attached → add stamps (amount / threshold)
+ */
+async function processLoyaltyAfterPayment(orderId: string, paidAmount: number): Promise<void> {
+  const order = ordersStore.orders.find(o => o.id === orderId)
+  if (!order) return
+
+  // 1. Apply cashback for digital loyalty customer
+  if (order.customerId) {
+    try {
+      const result = await loyaltyStore.applyCashback(order.customerId, orderId, paidAmount)
+      if (result.success) {
+        console.log(
+          `🎯 Cashback applied: ${formatIDR(result.cashback)} (${result.cashbackPct}% ${result.tier})`
+        )
+        showSuccess(
+          `Cashback +${formatIDR(result.cashback)} (${result.cashbackPct}%). Balance: ${formatIDR(result.newBalance)}`
+        )
+      }
+    } catch (err) {
+      console.error('🎯 Cashback failed:', err)
+    }
+  }
+
+  // 2. Add stamps for stamp card
+  const card = loyaltyCard.value
+  if (card && card.status === 'active') {
+    try {
+      const result = await loyaltyStore.addStamps(card.cardNumber, orderId, paidAmount)
+      if (result.success && result.stampsAdded > 0) {
+        console.log(
+          `🎯 Stamps added: +${result.stampsAdded} (total: ${result.totalStamps}/${result.stampsPerCycle})`
+        )
+        showSuccess(
+          `+${result.stampsAdded} stamp(s)! Total: ${result.totalStamps}/${result.stampsPerCycle}`
+        )
+        if (result.newCycle) {
+          showSuccess('Stamp cycle complete! New cycle started.')
+        }
+      }
+    } catch (err) {
+      console.error('🎯 Stamp failed:', err)
+    }
+  }
+}
+
+// Loyalty handlers for PaymentDialog inline search
+const handlePaymentLoyaltyCustomer = async (customer: Customer | null): Promise<void> => {
+  if (!currentOrder.value) return
+  const billIds = paymentDialogData.value.billIds
+  if (!billIds.length) return
+
+  // Update ALL bills in the checkout
+  for (const billId of billIds) {
+    const bill = currentOrder.value.bills.find(b => b.id === billId)
+    if (!bill) continue
+    bill.customerId = customer?.id
+    bill.customerName = customer?.name
+  }
+
+  if (customer) {
+    currentOrder.value.customerId = customer.id
+    currentOrder.value.customerName = customer.name
+    // Ensure customer is in store cache with fresh balance
+    try {
+      await customersStore.refreshCustomer(customer.id)
+    } catch {
+      /* not critical */
+    }
+  }
+
+  await ordersStore.updateOrder(currentOrder.value)
+  console.log(
+    '🎯 Payment loyalty customer:',
+    customer?.name || 'detached',
+    `(${billIds.length} bills)`
+  )
+}
+
+const handlePaymentLoyaltyCard = async (card: StampCardInfo | null): Promise<void> => {
+  if (!currentOrder.value) return
+  const billIds = paymentDialogData.value.billIds
+  if (!billIds.length) return
+
+  loyaltyCard.value = card
+
+  // Update ALL bills in the checkout
+  for (const billId of billIds) {
+    const bill = currentOrder.value.bills.find(b => b.id === billId)
+    if (!bill) continue
+
+    bill.stampCardId = card?.cardId || undefined
+
+    if (card?.customerId && !bill.customerId) {
+      bill.customerId = card.customerId
+      const linkedCustomer = customersStore.getById(card.customerId)
+      if (linkedCustomer) {
+        bill.customerName = linkedCustomer.name
+      }
+    }
+  }
+
+  currentOrder.value.stampCardId = card?.cardId || undefined
+  if (card?.customerId && !currentOrder.value.customerId) {
+    currentOrder.value.customerId = card.customerId
+    const linkedCustomer = customersStore.getById(card.customerId)
+    if (linkedCustomer) {
+      currentOrder.value.customerName = linkedCustomer.name
+    }
+  }
+
+  await ordersStore.updateOrder(currentOrder.value)
+  console.log(
+    '🎯 Payment loyalty card:',
+    card?.cardNumber || 'detached',
+    `(${billIds.length} bills)`
+  )
+}
+
+// Open LoyaltyDialog from PaymentDialog (uses first bill as context)
+const handlePaymentOpenLoyalty = (tab: 'card' | 'customer') => {
+  const billId = paymentDialogData.value.billIds[0]
+  if (!billId) return
+  loyaltyBillId.value = billId
+  loyaltyDialogTab.value = tab
+  showLoyaltyDialog.value = true
+}
+
+const handleDetachBillLoyalty = async (billId: string, what: 'card' | 'customer') => {
+  if (!currentOrder.value) return
+  const bill = currentOrder.value.bills.find(b => b.id === billId)
+  if (!bill) return
+
+  if (what === 'customer') {
+    bill.customerId = undefined
+    bill.customerName = undefined
+    // Clear order-level if no other bill has a customer
+    const anyCustomer = currentOrder.value.bills.some(b => b.id !== billId && b.customerId)
+    if (!anyCustomer) {
+      currentOrder.value.customerId = undefined
+      currentOrder.value.customerName = undefined
+    }
+  } else {
+    bill.stampCardId = undefined
+    loyaltyCard.value = null
+    const anyCard = currentOrder.value.bills.some(b => b.id !== billId && b.stampCardId)
+    if (!anyCard) {
+      currentOrder.value.stampCardId = undefined
+    }
+  }
+
+  await ordersStore.updateOrder(currentOrder.value)
+  console.log(`🎯 Detached ${what} from bill:`, billId)
+}
+
+const handleOpenBillLoyalty = (billId: string, tab: 'card' | 'customer') => {
+  loyaltyBillId.value = billId
+  loyaltyDialogTab.value = tab
+  showLoyaltyDialog.value = true
+}
+
+// Computed: loyalty props for dialog based on current bill
+const loyaltyDialogBill = computed(() => {
+  if (!loyaltyBillId.value || !currentOrder.value) return null
+  return currentOrder.value.bills.find(b => b.id === loyaltyBillId.value) || null
+})
+
+const handleLoyaltyCustomer = async (customer: Customer | null): Promise<void> => {
+  if (!currentOrder.value || !loyaltyBillId.value) return
+  const bill = currentOrder.value.bills.find(b => b.id === loyaltyBillId.value)
+  if (!bill) return
+
+  // Update bill with customer info
+  bill.customerId = customer?.id
+  bill.customerName = customer?.name
+
+  // If opened from PaymentDialog, update ALL payment bills
+  if (showPaymentDialog.value && paymentDialogData.value.billIds.length > 1) {
+    for (const bid of paymentDialogData.value.billIds) {
+      if (bid === loyaltyBillId.value) continue
+      const b = currentOrder.value.bills.find(x => x.id === bid)
+      if (b) {
+        b.customerId = customer?.id
+        b.customerName = customer?.name
+      }
+    }
+  }
+
+  // Also set on order level for backwards compat (first bill wins)
+  if (customer) {
+    currentOrder.value.customerId = customer.id
+    currentOrder.value.customerName = customer.name
+    // Ensure customer is in store cache with fresh balance (for PaymentDialog)
+    try {
+      await customersStore.refreshCustomer(customer.id)
+    } catch {
+      /* not critical */
+    }
+  }
+
+  await ordersStore.updateOrder(currentOrder.value)
+  showLoyaltyDialog.value = false
+  console.log(
+    '🎯 Bill loyalty customer updated:',
+    customer?.name || 'detached',
+    'bill:',
+    loyaltyBillId.value
+  )
+}
+
+const handleLoyaltyCard = async (card: StampCardInfo | null): Promise<void> => {
+  if (!currentOrder.value || !loyaltyBillId.value) return
+  const bill = currentOrder.value.bills.find(b => b.id === loyaltyBillId.value)
+  if (!bill) return
+
+  // Save locally for post-payment hooks
+  loyaltyCard.value = card
+
+  // Store card UUID on bill
+  bill.stampCardId = card?.cardId || undefined
+
+  // Auto-link card's customer if present and no customer on this bill yet
+  if (card?.customerId && !bill.customerId) {
+    bill.customerId = card.customerId
+    const linkedCustomer = customersStore.getById(card.customerId)
+    if (linkedCustomer) {
+      bill.customerName = linkedCustomer.name
+    }
+  }
+
+  // If opened from PaymentDialog, update ALL payment bills
+  if (showPaymentDialog.value && paymentDialogData.value.billIds.length > 1) {
+    for (const bid of paymentDialogData.value.billIds) {
+      if (bid === loyaltyBillId.value) continue
+      const b = currentOrder.value.bills.find(x => x.id === bid)
+      if (b) {
+        b.stampCardId = card?.cardId || undefined
+        if (card?.customerId && !b.customerId) {
+          b.customerId = card.customerId
+          const linkedCustomer = customersStore.getById(card.customerId)
+          if (linkedCustomer) b.customerName = linkedCustomer.name
+        }
+      }
+    }
+  }
+
+  // Also set on order level for backwards compat
+  currentOrder.value.stampCardId = card?.cardId || undefined
+  if (card?.customerId && !currentOrder.value.customerId) {
+    currentOrder.value.customerId = card.customerId
+    currentOrder.value.customerName = bill.customerName
+  }
+
+  await ordersStore.updateOrder(currentOrder.value)
+  showLoyaltyDialog.value = false
+  console.log(
+    '🎯 Bill loyalty card updated:',
+    card?.cardNumber || 'detached',
+    'bill:',
+    loyaltyBillId.value
+  )
+}
+
+const convertCardTier = computed(() => {
+  const bill = loyaltyDialogBill.value
+  const cid = bill?.customerId || currentOrder.value?.customerId
+  if (!cid) return 'member'
+  return customersStore.getById(cid)?.tier || 'member'
+})
+
+const convertCardCustomerId = computed(() => {
+  const bill = loyaltyDialogBill.value
+  return bill?.customerId || currentOrder.value?.customerId || ''
+})
+
+const convertCardCustomerName = computed(() => {
+  const bill = loyaltyDialogBill.value
+  return bill?.customerName || currentOrder.value?.customerName || ''
+})
+
+const handleConvertCard = (): void => {
+  if (!loyaltyCard.value || !convertCardCustomerId.value) {
+    showError('Attach both a customer and a stamp card to convert')
+    return
+  }
+  showConvertCardDialog.value = true
+}
+
+const handleCardConverted = async (
+  result: import('@/stores/loyalty').ConvertResult
+): Promise<void> => {
+  showSuccess(`Card converted! +${formatIDR(result.totalPoints)} points`)
+  // Clear the card from the bill since it's now closed
+  loyaltyCard.value = null
+  if (currentOrder.value && loyaltyBillId.value) {
+    const bill = currentOrder.value.bills.find(b => b.id === loyaltyBillId.value)
+    if (bill) {
+      bill.stampCardId = undefined
+    }
+    currentOrder.value.stampCardId = undefined
+    ordersStore.updateOrder(currentOrder.value)
+
+    // M6 FIX: Refresh customer data so balance is up to date
+    const cid = bill?.customerId || currentOrder.value.customerId
+    if (cid) {
+      await customersStore.refreshCustomer(cid)
+    }
+  }
 }
 
 // Handle pre-bill printed event - save snapshot to bill for fraud tracking

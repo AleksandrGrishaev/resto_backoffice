@@ -316,6 +316,7 @@ export class OrdersService {
         billId,
         menuItemId: menuItem.id,
         menuItemName: menuItem.name,
+        categoryId: menuItem.categoryId,
         variantId: selectedVariant.id,
         variantName: selectedVariant.name,
         quantity,

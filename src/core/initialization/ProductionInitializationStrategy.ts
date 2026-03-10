@@ -36,6 +36,8 @@ import { useDiscountsStore } from '@/stores/discounts'
 import { useSupplierStore } from '@/stores/supplier_2'
 import { useChannelsStore } from '@/stores/channels'
 import { useGobizStore } from '@/stores/gobiz'
+import { useCustomersStore } from '@/stores/customers'
+import { useLoyaltyStore } from '@/stores/loyalty'
 
 const MODULE_NAME = 'ProductionInitStrategy'
 
@@ -391,6 +393,10 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
         return this.loadGobizFromAPI()
       case 'menuCollections':
         return this.loadMenuCollectionsFromAPI()
+      case 'customers':
+        return this.loadCustomersFromAPI()
+      case 'loyalty':
+        return this.loadLoyaltyFromAPI()
       default:
         DebugUtils.warn(MODULE_NAME, `Unknown store: ${storeName}`)
         return null
@@ -1054,6 +1060,67 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
 
       return {
         name: 'gobiz',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadCustomersFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useCustomersStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading customers from API...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'customers',
+        success: true,
+        count: store.customers.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load customers'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [PROD] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'customers',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadLoyaltyFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const store = useLoyaltyStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading loyalty from API...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'loyalty',
+        success: true,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load loyalty'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [PROD] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'loyalty',
         success: false,
         error: message,
         duration: Date.now() - start
