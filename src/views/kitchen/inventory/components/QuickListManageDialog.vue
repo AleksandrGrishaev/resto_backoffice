@@ -199,9 +199,9 @@ const filteredProducts = computed(() => {
   })
 })
 
-function handleCreateList() {
+async function handleCreateList() {
   if (!newListName.value.trim()) return
-  const list = createList(newListName.value.trim(), props.department)
+  const list = await createList(newListName.value.trim(), props.department)
   newListName.value = ''
   // Auto-open editing to add products
   startEditing(list)
@@ -211,9 +211,9 @@ function handleDeleteList(id: string) {
   pendingDeleteId.value = id
 }
 
-function confirmDelete() {
+async function confirmDelete() {
   if (pendingDeleteId.value) {
-    deleteList(pendingDeleteId.value)
+    await deleteList(pendingDeleteId.value)
     pendingDeleteId.value = null
   }
 }
@@ -247,9 +247,9 @@ function cancelEditing() {
   productSearch.value = ''
 }
 
-function saveEditing() {
+async function saveEditing() {
   if (!editingList.value || !editName.value.trim()) return
-  updateList(editingList.value.id, {
+  await updateList(editingList.value.id, {
     name: editName.value.trim(),
     itemIds: editItemIds.value
   })
