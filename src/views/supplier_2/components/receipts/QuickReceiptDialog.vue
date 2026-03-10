@@ -589,9 +589,11 @@ function handleProductChange(index: number) {
     item.productName = product.name
     item.unit = product.baseUnit || 'kg'
 
-    // Выбираем первую упаковку по умолчанию
-    if (product.packageOptions && product.packageOptions.length > 0) {
-      const firstPackage = product.packageOptions[0]
+    // Выбираем первую активную упаковку по умолчанию (recommended или первую active)
+    const activePackages = product.packageOptions?.filter(pkg => pkg.isActive) || []
+    if (activePackages.length > 0) {
+      const recommendedPackage = activePackages.find(pkg => pkg.id === product.recommendedPackageId)
+      const firstPackage = recommendedPackage || activePackages[0]
       DebugUtils.info(MODULE_NAME, 'Auto-selecting first package', {
         packageId: firstPackage.id,
         packageName: firstPackage.packageName
@@ -785,9 +787,12 @@ function duplicateLastReceipt() {
   form.value.items = lastReceipt.value.items.map((receiptItem: any) => {
     const product = productsStore.products.find(p => p.id === receiptItem.itemId)
 
-    // Try to get package info from receipt item or fallback to product's first active package
+    // Try to get package info from receipt item, but only if it's still active
     const firstActivePackage = product?.packageOptions?.find(pkg => pkg.isActive)
-    const packageId = receiptItem.packageId || firstActivePackage?.id || 'default'
+    const receiptPackage = receiptItem.packageId
+      ? product?.packageOptions?.find(p => p.id === receiptItem.packageId && p.isActive)
+      : null
+    const packageId = receiptPackage?.id || firstActivePackage?.id || 'default'
     const packageInfo = product?.packageOptions?.find(p => p.id === packageId) || {
       id: 'default',
       name: 'Unit',

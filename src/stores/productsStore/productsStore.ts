@@ -877,11 +877,16 @@ export const useProductsStore = defineStore('products', {
      */
     getRecommendedPackage(productId: string): PackageOption | null {
       const product = this.getProductById(productId)
-      if (!product || !product.recommendedPackageId) {
-        return product?.packageOptions[0] || null
+      if (!product) return null
+
+      const activePackages = product.packageOptions.filter(pkg => pkg.isActive)
+
+      if (product.recommendedPackageId) {
+        const recommended = activePackages.find(pkg => pkg.id === product.recommendedPackageId)
+        if (recommended) return recommended
       }
 
-      return product.packageOptions.find(pkg => pkg.id === product.recommendedPackageId) || null
+      return activePackages[0] || null
     },
 
     /**
@@ -904,11 +909,11 @@ export const useProductsStore = defineStore('products', {
       }
 
       let packageOption: PackageOption
+      const activePackages = product.packageOptions.filter(pkg => pkg.isActive)
       if (packageId) {
-        packageOption =
-          product.packageOptions.find(pkg => pkg.id === packageId) || product.packageOptions[0]
+        packageOption = activePackages.find(pkg => pkg.id === packageId) || activePackages[0]
       } else {
-        packageOption = this.getRecommendedPackage(productId) || product.packageOptions[0]
+        packageOption = this.getRecommendedPackage(productId) || activePackages[0]
       }
 
       if (!packageOption) {

@@ -170,9 +170,9 @@ export class SupplierStorageIntegration {
 
         // Get pricing information from product
         const estimatedBaseCost = product.baseCostPerUnit || product.lastKnownCost || 0
-        const recommendedPackage = product.packageOptions?.find(
-          pkg => pkg.id === product.recommendedPackageId
-        )
+        const activePackages = product.packageOptions?.filter(pkg => pkg.isActive) || []
+        const recommendedPackage =
+          activePackages.find(pkg => pkg.id === product.recommendedPackageId) || activePackages[0]
 
         suggestions.push({
           itemId: balance.itemId,
