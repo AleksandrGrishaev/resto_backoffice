@@ -27,9 +27,20 @@ export function useInventory() {
   // ===========================
 
   /**
+   * Get the KPI department for a product.
+   * For dual-department products, KPI department = usedInDepartments[0] (primary).
+   * For single-department products, it's their only department.
+   * This matches the logic in get_food_cost_kpi_month RPC (migration 060).
+   */
+  function getProductKpiDepartment(product: { usedInDepartments: Department[] }): Department {
+    return product.usedInDepartments[0] || 'kitchen'
+  }
+
+  /**
    * Balances отфильтрованные по департаменту
-   * Фильтрация через Product.usedInDepartments
-   * Показываем только активные продукты (isActive = true)
+   * Для инвентаризации используем KPI department (usedInDepartments[0])
+   * чтобы dual-department продукты считались только одним департаментом.
+   * Это предотвращает ситуацию когда кухня "списывает" остатки бара и наоборот.
    */
   const filteredBalances = computed(() => {
     if (!storageStore.state?.balances) return []
@@ -42,13 +53,14 @@ export function useInventory() {
       return product?.isActive !== false
     })
 
-    // ✅ Фильтр по Department через Product.usedInDepartments
+    // ✅ Фильтр по KPI Department (primary department = usedInDepartments[0])
+    // Dual-department products appear only in their KPI-assigned department's inventory
     if (selectedDepartment.value !== 'all') {
       balances = balances.filter(balance => {
         const product = productsStore.products.find(p => p.id === balance.itemId)
         if (!product) return false
 
-        return product.usedInDepartments.includes(selectedDepartment.value as Department)
+        return getProductKpiDepartment(product) === selectedDepartment.value
       })
     }
 
@@ -89,12 +101,12 @@ export function useInventory() {
 
     const kitchen = activeBalances.filter(balance => {
       const product = productsStore.products.find(p => p.id === balance.itemId)
-      return product?.usedInDepartments.includes('kitchen')
+      return product ? getProductKpiDepartment(product) === 'kitchen' : false
     }).length
 
     const bar = activeBalances.filter(balance => {
       const product = productsStore.products.find(p => p.id === balance.itemId)
-      return product?.usedInDepartments.includes('bar')
+      return product ? getProductKpiDepartment(product) === 'bar' : false
     }).length
 
     return { all, kitchen, bar }

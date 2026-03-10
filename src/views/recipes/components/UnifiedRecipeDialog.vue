@@ -555,7 +555,7 @@ watch(dialogModel, async newVal => {
         const prep = props.item as Preparation
         formData.value = {
           name: prep.name,
-          code: prep.code,
+          code: prep.code || generateNextCode('preparation'),
           description: prep.description || '',
           category: prep.type,
           department: prep.department, // ✅ ADD: Include department
@@ -581,7 +581,7 @@ watch(dialogModel, async newVal => {
         const recipe = props.item as Recipe
         formData.value = {
           name: recipe.name,
-          code: recipe.code || '',
+          code: recipe.code || generateNextCode('recipe'),
           description: recipe.description || '',
           category: recipe.category,
           department: recipe.department || 'kitchen', // ✅ NEW: Include department with fallback
