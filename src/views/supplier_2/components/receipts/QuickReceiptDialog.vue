@@ -387,8 +387,17 @@
     <WatchdogConfirmDialog
       v-model="showWatchdogConfirm"
       :result="watchdogResult"
-      @confirm="proceedWithSave"
+      @confirm="proceedAfterWatchdog"
       @cancel="showWatchdogConfirm = false"
+    />
+
+    <!-- Arrival Conflict Dialog -->
+    <ArrivalConflictDialog
+      v-model="showArrivalConflict"
+      :conflicts="arrivalConflicts"
+      :is-applying="arrivalConflictComposable.isApplying.value"
+      @adjust="handleArrivalAdjust"
+      @skip="proceedWithSave"
     />
   </v-dialog>
 </template>
@@ -410,6 +419,9 @@ import type { PreCheckResult } from '@/core/watchdog'
 import type { Receipt, PurchaseOrder, ReceiptItem, OrderItem } from '@/stores/supplier_2/types'
 import QuickAddPackageDialog from '../shared/package/QuickAddPackageDialog.vue'
 import WatchdogConfirmDialog from '@/core/watchdog/WatchdogConfirmDialog.vue'
+import ArrivalConflictDialog from './ArrivalConflictDialog.vue'
+import { useReceiptArrivalConflict } from '@/stores/storage/composables/useReceiptArrivalConflict'
+import type { ArrivalConflict } from '@/stores/storage/composables/useReceiptArrivalConflict'
 import { NumericInputField } from '@/components/input'
 
 const MODULE_NAME = 'QuickReceiptDialog'
@@ -463,6 +475,11 @@ const watchdogResult = ref<PreCheckResult>({
   hasWarnings: false,
   hasCritical: false
 })
+
+// Arrival conflict state
+const arrivalConflictComposable = useReceiptArrivalConflict()
+const showArrivalConflict = ref(false)
+const arrivalConflicts = ref<ArrivalConflict[]>([])
 
 // Package dialog state
 const showPackageDialog = ref(false)
@@ -970,6 +987,60 @@ async function saveReceipt() {
     DebugUtils.warn(MODULE_NAME, 'Pre-check failed, proceeding anyway', { error: err })
   }
 
+  await checkArrivalConflictsAndProceed()
+}
+
+/**
+ * After watchdog passes, check for arrival conflicts
+ */
+async function proceedAfterWatchdog() {
+  showWatchdogConfirm.value = false
+  await checkArrivalConflictsAndProceed()
+}
+
+/**
+ * Check if the delivery date is in the past and if inventory conflicts exist
+ */
+async function checkArrivalConflictsAndProceed() {
+  try {
+    const receiptItems = form.value.items
+      .filter((item: QuickReceiptItem) => item.productId && item.quantity > 0)
+      .map((item: QuickReceiptItem) => ({
+        itemId: item.productId,
+        itemName: item.productName || 'Unknown',
+        quantity: item.quantity,
+        unit: item.unit || 'gram'
+      }))
+
+    if (receiptItems.length > 0) {
+      const result = await arrivalConflictComposable.checkForConflicts(
+        form.value.deliveryDate,
+        receiptItems
+      )
+
+      if (result.hasConflicts) {
+        arrivalConflicts.value = result.conflicts
+        showArrivalConflict.value = true
+        return
+      }
+    }
+  } catch (err) {
+    DebugUtils.warn(MODULE_NAME, 'Arrival conflict check failed, proceeding anyway', { error: err })
+  }
+
+  await proceedWithSave()
+}
+
+// Flag: user confirmed they want arrival adjustments applied after receipt creation
+const pendingArrivalAdjustments = ref(false)
+
+/**
+ * User chose "Adjust Inventory" in arrival conflict dialog
+ */
+async function handleArrivalAdjust() {
+  // Mark that adjustments should be applied after receipt creation
+  pendingArrivalAdjustments.value = true
+  showArrivalConflict.value = false
   await proceedWithSave()
 }
 
@@ -1035,6 +1106,30 @@ async function proceedWithSave() {
       rawData: data // Add full response for debugging
     })
 
+    // Apply arrival conflict adjustments if user confirmed
+    if (pendingArrivalAdjustments.value && arrivalConflicts.value.length > 0 && data?.receipt_id) {
+      try {
+        const adjResult = await arrivalConflictComposable.applyAdjustments(
+          arrivalConflicts.value,
+          data.receipt_id
+        )
+        if (adjResult.success) {
+          DebugUtils.info(MODULE_NAME, '✅ Arrival adjustments applied', {
+            receiptId: data.receipt_id
+          })
+        } else {
+          DebugUtils.warn(MODULE_NAME, '⚠️ Arrival adjustments failed', { error: adjResult.error })
+        }
+      } catch (adjErr) {
+        DebugUtils.warn(MODULE_NAME, '⚠️ Arrival adjustment error (non-blocking)', {
+          error: adjErr
+        })
+      } finally {
+        pendingArrivalAdjustments.value = false
+        arrivalConflicts.value = []
+      }
+    }
+
     // 3. Map RPC result to Receipt and Order types for storage integration
     const receipt = mapRPCResultToReceipt(data)
     const order = mapRPCResultToOrder(data)
@@ -1097,6 +1192,8 @@ async function proceedWithSave() {
     emits('error', `Failed to create receipt: ${extractErrorDetails(error).message}`)
   } finally {
     isSaving.value = false
+    pendingArrivalAdjustments.value = false
+    arrivalConflicts.value = []
   }
 }
 
@@ -1189,6 +1286,10 @@ function closeDialog() {
   form.value.taxAmount = undefined
   form.value.taxPercentage = undefined
   lastReceipt.value = null
+  pendingArrivalAdjustments.value = false
+  arrivalConflicts.value = []
+  showArrivalConflict.value = false
+  showWatchdogConfirm.value = false
 
   // Reset form validation after a tick
   setTimeout(() => {

@@ -17,7 +17,7 @@
 6. [Negative Inventory](#negative-inventory)
 7. [Inventory Counts](#inventory-counts)
 8. [Preparations Inventory](#preparations-inventory)
-9. [Integration Points](#integration-points)
+9. [Integration Points](#integration-points) (incl. [Deferred Receipt Arrival](./deferred-receipt-arrival.md))
 10. [Database Schema](#database-schema)
 11. [Code Examples](#code-examples)
 12. [Common Scenarios](#common-scenarios)
@@ -741,6 +741,12 @@ type PreparationWriteOffReason =
 ---
 
 ## Integration Points
+
+### Deferred Receipt Arrival
+
+When products arrive before the receipt is entered, inventory counts may double-count the stock as surplus corrections. The system detects and resolves these conflicts automatically.
+
+**See:** [Deferred Receipt Arrival — Conflict Detection & Resolution](./deferred-receipt-arrival.md)
 
 ### POS → Storage
 

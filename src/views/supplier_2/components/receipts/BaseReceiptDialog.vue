@@ -290,8 +290,17 @@
     <WatchdogConfirmDialog
       v-model="showWatchdogConfirm"
       :result="watchdogResult"
-      @confirm="proceedWithComplete"
+      @confirm="proceedAfterWatchdog"
       @cancel="showWatchdogConfirm = false"
+    />
+
+    <!-- Arrival Conflict Dialog -->
+    <ArrivalConflictDialog
+      v-model="showArrivalConflict"
+      :conflicts="arrivalConflicts"
+      :is-applying="arrivalConflictComposable.isApplying.value"
+      @adjust="handleArrivalAdjust"
+      @skip="proceedWithComplete"
     />
   </v-dialog>
 </template>
@@ -315,6 +324,9 @@ import type { ReceiptItemInput, ReceiptItemOutput } from '@/composables/useQuick
 import { preCheckReceiptItems } from '@/core/watchdog'
 import type { PreCheckResult } from '@/core/watchdog'
 import WatchdogConfirmDialog from '@/core/watchdog/WatchdogConfirmDialog.vue'
+import ArrivalConflictDialog from './ArrivalConflictDialog.vue'
+import { useReceiptArrivalConflict } from '@/stores/storage/composables/useReceiptArrivalConflict'
+import type { ArrivalConflict } from '@/stores/storage/composables/useReceiptArrivalConflict'
 
 const MODULE_NAME = 'BaseReceiptDialog'
 
@@ -372,6 +384,11 @@ const watchdogResult = ref<PreCheckResult>({
   hasWarnings: false,
   hasCritical: false
 })
+
+// Arrival conflict state
+const arrivalConflictComposable = useReceiptArrivalConflict()
+const showArrivalConflict = ref(false)
+const arrivalConflicts = ref<ArrivalConflict[]>([])
 
 interface ReceiptFormItem extends ReceiptItem {
   unit?: string
@@ -785,6 +802,9 @@ async function saveReceipt() {
 async function confirmComplete() {
   if (!currentReceipt.value || !canComplete.value) return
 
+  // Close confirmation dialog before showing any subsequent dialogs
+  showConfirmDialog.value = false
+
   // Watchdog pre-check before completing
   try {
     const checkItems = receiptForm.value.items
@@ -807,6 +827,73 @@ async function confirmComplete() {
     }
   } catch (err) {
     DebugUtils.warn(MODULE_NAME, 'Watchdog pre-check failed, proceeding anyway', { error: err })
+  }
+
+  await checkArrivalConflictsAndProceed()
+}
+
+/**
+ * After watchdog passes (or no warnings), check for arrival conflicts
+ */
+async function proceedAfterWatchdog() {
+  showWatchdogConfirm.value = false
+  await checkArrivalConflictsAndProceed()
+}
+
+/**
+ * Check if the delivery date is in the past and if inventory conflicts exist
+ */
+async function checkArrivalConflictsAndProceed() {
+  try {
+    const receiptItems = receiptForm.value.items
+      .filter(item => item.receivedQuantity > 0)
+      .map(item => ({
+        itemId: item.itemId,
+        itemName: item.itemName,
+        quantity: item.receivedQuantity,
+        unit: item.unit || 'gram'
+      }))
+
+    if (receiptItems.length > 0) {
+      const result = await arrivalConflictComposable.checkForConflicts(
+        receiptForm.value.deliveryDate,
+        receiptItems
+      )
+
+      if (result.hasConflicts) {
+        arrivalConflicts.value = result.conflicts
+        showArrivalConflict.value = true
+        return
+      }
+    }
+  } catch (err) {
+    DebugUtils.warn(MODULE_NAME, 'Arrival conflict check failed, proceeding anyway', { error: err })
+  }
+
+  proceedWithComplete()
+}
+
+/**
+ * User chose "Adjust Inventory" in arrival conflict dialog
+ */
+async function handleArrivalAdjust() {
+  if (!currentReceipt.value) return
+
+  const result = await arrivalConflictComposable.applyAdjustments(
+    arrivalConflicts.value,
+    currentReceipt.value.id
+  )
+
+  showArrivalConflict.value = false
+
+  if (!result.success) {
+    DebugUtils.warn(MODULE_NAME, 'Arrival adjustment failed, proceeding with receipt anyway', {
+      error: result.error
+    })
+    emits(
+      'error',
+      `Arrival adjustment partially failed: ${result.error}. Receipt will still be completed.`
+    )
   }
 
   proceedWithComplete()

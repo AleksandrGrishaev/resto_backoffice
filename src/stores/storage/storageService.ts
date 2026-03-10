@@ -1369,6 +1369,7 @@ export class StorageService {
 
       const operationItems: any[] = []
       let totalValue = 0
+      const surplusBatchIds: string[] = [] // Track batch IDs for linking to operation
 
       for (const item of data.items) {
         const productInfo = await this.getProductInfo(item.itemId)
@@ -1408,6 +1409,7 @@ export class StorageService {
             if (batchError) throw batchError
           }, `${MODULE_NAME}.createCorrection.insertBatch`)
 
+          surplusBatchIds.push(batchId)
           itemTotalCost = batch.totalValue!
         } else if (item.quantity < 0) {
           // Negative correction - use FIFO allocation
@@ -1501,6 +1503,22 @@ export class StorageService {
       )
 
       if (!opData) throw new Error('Failed to create operation')
+
+      // Link surplus batches to the operation for traceability
+      if (surplusBatchIds.length > 0) {
+        await executeSupabaseMutation(async () => {
+          const { error: linkError } = await supabase
+            .from('storage_batches')
+            .update({ storage_operation_id: operation.id })
+            .in('id', surplusBatchIds)
+
+          if (linkError) {
+            DebugUtils.warn(MODULE_NAME, 'Failed to link batches to operation (non-critical)', {
+              error: linkError
+            })
+          }
+        }, `${MODULE_NAME}.createCorrection.linkBatches`)
+      }
 
       DebugUtils.info(MODULE_NAME, '✅ Correction created successfully', {
         documentNumber,
