@@ -65,6 +65,15 @@ export class TimeUtils {
     }
   }
 
+  /**
+   * Convert HTML datetime-local value to ISO string with timezone.
+   * HTML input returns "YYYY-MM-DDTHH:mm" in local time without TZ suffix.
+   * new Date() parses it as local time, .toISOString() converts to UTC.
+   */
+  static htmlInputToISO(htmlDatetime: string): string {
+    return new Date(htmlDatetime).toISOString()
+  }
+
   static isSameDay(date1: string | Date, date2: string | Date): boolean {
     try {
       const zonedDate1 = utcToZonedTime(

@@ -484,18 +484,7 @@ function initializePackageItems() {
       packagePrice: pkg.packagePrice || 0
     }))
 
-    // Add current package if not in active list (inactive package)
-    if (currentPkg && !packages.some(p => p.id === currentPkg.id)) {
-      packages.unshift({
-        id: currentPkg.id,
-        label: `${currentPkg.packageName} (${currentPkg.packageSize} ${currentPkg.packageUnit}) [inactive]`,
-        packageName: currentPkg.packageName,
-        packageSize: currentPkg.packageSize,
-        packageUnit: currentPkg.packageUnit || currentPkg.unit || item.packageUnit,
-        baseCostPerUnit: currentPkg.baseCostPerUnit || 0,
-        packagePrice: currentPkg.packagePrice || 0
-      })
-    }
+    // Skip inactive packages — only active packages should be selectable
 
     const currentPackageSize = currentPkg?.packageSize || 1
     const currentBaseCost = item.actualBaseCost || item.orderedBaseCost

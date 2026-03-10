@@ -5,6 +5,7 @@ import { useSupplierStore } from '../supplierStore'
 import { useStorageStore } from '@/stores/storage'
 import { useProductsStore } from '@/stores/productsStore'
 import { DebugUtils } from '@/utils'
+import { TimeUtils } from '@/utils/time'
 import { supabase } from '@/supabase/client'
 import { useBackgroundTasks } from '@/core/background'
 import type {
@@ -287,7 +288,7 @@ export function useReceipts() {
       const { data, error } = await supabase.rpc('complete_receipt_full', {
         p_receipt_id: receiptId,
         p_order_id: receipt.purchaseOrderId,
-        p_delivery_date: receipt.deliveryDate,
+        p_delivery_date: TimeUtils.htmlInputToISO(receipt.deliveryDate),
         p_warehouse_id: 'warehouse-winter',
         p_supplier_id: order.supplierId,
         p_supplier_name: order.supplierName,

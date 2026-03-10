@@ -1007,7 +1007,7 @@ async function proceedWithSave() {
       p_supplier_id: form.value.supplierId,
       p_supplier_name: supplier.displayName || supplier.name,
       p_items: rpcItems,
-      p_delivery_date: form.value.deliveryDate,
+      p_delivery_date: TimeUtils.htmlInputToISO(form.value.deliveryDate),
       p_notes: form.value.notes || 'Quick Receipt Entry',
       p_tax_amount: form.value.includeTax ? form.value.taxAmount : null,
       p_tax_percentage: form.value.includeTax ? form.value.taxPercentage : null
