@@ -1,6 +1,6 @@
 -- Function: get_product_variance_report_v4
 -- Description: Product Variance Report with full stock movement tracking
--- Version: v4.1 (2026-03-10)
+-- Version: v4.2 (2026-03-10)
 --
 -- CHANGELOG:
 -- v3.0: Initial version with theoretical sales from orders
@@ -15,13 +15,19 @@
 --   - Was under-counting Sales by factor of portion_size (e.g., 30x for Salmon)
 --   - All 6 functions updated: report_v4, theoretical_sales, decomposition_factors,
 --     writeoffs_decomposed, loss_decomposed, inpreps
+-- v4.2: Opening now includes InPreps (products frozen in preparations at period start)
+--   - New helper: calc_opening_inpreps_bulk(date) estimates historical prep batch quantities
+--   - Active batches: use current_quantity; Depleted after opening: use initial_quantity
+--   - Formula: Expected = Opening(raw+inPreps) + Received - Sales - Loss + Gain
+--   - Detail dialog shows opening breakdown: rawStock + inPreparations (with per-prep detail)
+--   - Detail version bumped to v3.3
 --
 -- Key formulas:
--- - Expected = Opening + Received - Sales - Loss + Gain
+-- - Expected = Opening(raw+inPreps) + Received - Sales - Loss + Gain
 -- - Actual = Closing + InPreps
 -- - Variance = Actual - Expected (positive = surplus, negative = shortage)
 --
--- Migration: src/supabase/migrations/194_fix_variance_portion_size_bug.sql
+-- Migration: src/supabase/migrations/197_add_opening_inpreps_to_variance.sql
 -- Store: src/stores/analytics/varianceReportStore.ts (generateReportV2 function)
 --
 -- For full SQL implementation, see the migration file.

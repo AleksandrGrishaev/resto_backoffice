@@ -607,6 +607,8 @@ export const useVarianceReportStore = defineStore('varianceReport', () => {
         opening: {
           quantity: rpcData.opening?.quantity ?? 0,
           amount: rpcData.opening?.amount ?? 0,
+          rawStock: rpcData.opening?.rawStock || undefined,
+          inPreparations: rpcData.opening?.inPreparations || undefined,
           snapshot: rpcData.opening?.snapshot || null
         },
         received: {
