@@ -126,6 +126,25 @@
               class="category-select"
             />
 
+            <!-- Quick List filter -->
+            <v-select
+              v-model="selectedQuickList"
+              :items="quickListOptions"
+              density="compact"
+              hide-details
+              variant="outlined"
+              class="quick-list-select"
+            >
+              <template #append-inner>
+                <v-icon
+                  icon="mdi-playlist-edit"
+                  size="20"
+                  class="quick-list-edit-icon"
+                  @click.stop="showQuickListDialog = true"
+                />
+              </template>
+            </v-select>
+
             <!-- Days filter -->
             <v-select
               v-model="daysFilter"
@@ -152,6 +171,9 @@
           <!-- Row 2: Status Chips -->
           <v-chip-group v-model="filterType" mandatory selected-class="text-primary">
             <v-chip value="all" filter variant="outlined">All ({{ totalItems }})</v-chip>
+            <v-chip value="not_today" filter variant="outlined" color="deep-purple">
+              Not Today ({{ notCountedTodayCount }})
+            </v-chip>
             <v-chip value="uncounted" filter variant="outlined">
               Uncounted ({{ uncountedCount }})
             </v-chip>
@@ -180,6 +202,7 @@
         <div v-else-if="filteredItems.length === 0" class="text-center py-12">
           <v-icon size="48" color="grey" class="mb-4">mdi-clipboard-check</v-icon>
           <p v-if="filterType === 'uncounted'" class="text-h6">All items counted!</p>
+          <p v-else-if="filterType === 'not_today'" class="text-h6">All items counted today!</p>
           <p v-else-if="filterType === 'discrepancy'" class="text-h6">No discrepancies</p>
           <p v-else-if="filterType === 'negative'" class="text-h6">No negative stock</p>
           <p v-else class="text-h6">No products available</p>
@@ -266,6 +289,9 @@
         </v-btn>
       </v-card-actions>
 
+      <!-- Quick List Management Dialog -->
+      <QuickListManageDialog v-model="showQuickListDialog" :department="department" />
+
       <!-- Draft Recovery Dialog -->
       <v-dialog v-model="showDraftRecoveryDialog" max-width="400" persistent>
         <v-card>
@@ -294,7 +320,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useDisplay } from 'vuetify'
 import { useStorageStore } from '@/stores/storage'
 import { useProductsStore } from '@/stores/productsStore'
@@ -304,6 +330,8 @@ import type { InventoryDocument, InventoryItem, CreateInventoryData } from '@/st
 import type { Department } from '@/stores/productsStore/types'
 import { DebugUtils } from '@/utils'
 import KitchenInventoryItemRow from './components/KitchenInventoryItemRow.vue'
+import QuickListManageDialog from './components/QuickListManageDialog.vue'
+import { useQuickInventoryLists } from './composables/useQuickInventoryLists'
 
 const MODULE_NAME = 'KitchenInventoryDialog'
 
@@ -341,6 +369,7 @@ const storageStore = useStorageStore()
 const productsStore = useProductsStore()
 const authStore = useAuthStore()
 const inventory = useInventory()
+const quickLists = useQuickInventoryLists(() => props.department)
 
 // =============================================
 // STATE
@@ -348,7 +377,11 @@ const inventory = useInventory()
 
 const isLoading = ref(false)
 const isSaving = ref(false)
-const filterType = ref<'all' | 'uncounted' | 'discrepancy' | 'stale' | 'negative'>('all')
+const filterType = ref<'all' | 'uncounted' | 'discrepancy' | 'stale' | 'negative' | 'not_today'>(
+  'all'
+)
+const selectedQuickList = ref<string | null>(null) // Quick list ID
+const showQuickListDialog = ref(false)
 const sortBy = ref<'name' | 'last_counted'>('name')
 const searchQuery = ref('')
 const selectedCategory = ref<string | null>(null)
@@ -457,10 +490,30 @@ const staleCount = computed(() => {
 })
 
 /**
+ * Not counted today count
+ */
+const notCountedTodayCount = computed(() => {
+  return inventoryItems.value.filter(item => !isCountedToday(item)).length
+})
+
+/**
  * Negative stock items count
  */
 const negativeCount = computed(() => {
   return inventoryItems.value.filter(item => item.systemQuantity < 0).length
+})
+
+/**
+ * Quick list options for dropdown
+ */
+const quickListOptions = computed(() => {
+  return [
+    { title: 'All Products', value: null },
+    ...quickLists.departmentLists.value.map(l => ({
+      title: `${l.name} (${l.itemIds.length})`,
+      value: l.id
+    }))
+  ]
 })
 
 /**
@@ -490,6 +543,20 @@ const canSaveDraft = computed(() => {
 const canComplete = computed(() => {
   return hasChanges.value && totalItems.value > 0 && !isSaving.value
 })
+
+/**
+ * Check if item was counted today
+ */
+function isCountedToday(item: InventoryItem): boolean {
+  if (!item.lastCountedAt) return false
+  const today = new Date()
+  const counted = new Date(item.lastCountedAt)
+  return (
+    today.getFullYear() === counted.getFullYear() &&
+    today.getMonth() === counted.getMonth() &&
+    today.getDate() === counted.getDate()
+  )
+}
 
 /**
  * Helper to calculate days since last count
@@ -527,7 +594,15 @@ const filteredItems = computed(() => {
     })
   }
 
-  // 4. Apply status filter
+  // 4. Apply quick list filter
+  if (selectedQuickList.value) {
+    const list = quickLists.getList(selectedQuickList.value)
+    if (list) {
+      items = items.filter(item => list.itemIds.includes(item.itemId))
+    }
+  }
+
+  // 5. Apply status filter
   switch (filterType.value) {
     case 'uncounted':
       items = items.filter(item => !hasItemBeenCounted(item))
@@ -545,11 +620,14 @@ const filteredItems = computed(() => {
     case 'negative':
       items = items.filter(item => item.systemQuantity < 0)
       break
+    case 'not_today':
+      items = items.filter(item => !isCountedToday(item))
+      break
     default:
       break
   }
 
-  // 5. Apply sort
+  // 6. Apply sort
   items.sort((a, b) => {
     switch (sortBy.value) {
       case 'name':
@@ -779,6 +857,7 @@ function handleClose() {
   filterType.value = 'all'
   searchQuery.value = ''
   selectedCategory.value = null
+  selectedQuickList.value = null
   daysFilter.value = null
   sortBy.value = 'name'
   isHeaderCollapsed.value = false
@@ -811,6 +890,7 @@ function saveLocalDraft() {
       sortBy: sortBy.value,
       searchQuery: searchQuery.value,
       selectedCategory: selectedCategory.value,
+      selectedQuickList: selectedQuickList.value,
       daysFilter: daysFilter.value
     }
   }
@@ -1099,6 +1179,24 @@ onUnmounted(() => {
 .category-select {
   max-width: 150px;
   min-width: 120px;
+}
+
+.quick-list-select {
+  max-width: 200px;
+  min-width: 150px;
+}
+
+.quick-list-edit-icon {
+  cursor: pointer;
+  padding: 8px;
+  margin: -8px -4px -8px 0;
+  border-radius: 4px;
+  opacity: 0.7;
+
+  &:hover {
+    opacity: 1;
+    background-color: rgba(var(--v-theme-primary), 0.1);
+  }
 }
 
 .days-select {
