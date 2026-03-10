@@ -49,10 +49,7 @@
           variant="tonal"
           color="amber-darken-2"
           prepend-icon="mdi-stamper"
-          @click="
-            expanded = true
-            activeTab = 'card'
-          "
+          @click="openTab('card')"
         >
           Stamp Card
         </v-btn>
@@ -61,10 +58,7 @@
           variant="tonal"
           color="primary"
           prepend-icon="mdi-account-star"
-          @click="
-            expanded = true
-            activeTab = 'customer'
-          "
+          @click="openTab('customer')"
         >
           Customer
         </v-btn>
@@ -362,6 +356,11 @@ const { phoneCodes, defaultPhoneCode } = usePhoneCodes()
 const expanded = ref(props.dialogMode || false)
 const activeTab = ref<'card' | 'customer'>(props.initialTab || 'card')
 const loading = ref(false)
+
+function openTab(tab: 'card' | 'customer') {
+  expanded.value = true
+  activeTab.value = tab
+}
 const issuingCard = ref(false)
 const creatingCustomer = ref(false)
 
