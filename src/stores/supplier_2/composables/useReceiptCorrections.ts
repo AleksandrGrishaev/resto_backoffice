@@ -94,6 +94,84 @@ export function useReceiptCorrections() {
   }
 
   /**
+   * Apply package correction - changes package, recalculates quantity and cost
+   */
+  async function applyPackageCorrection(
+    receiptId: string,
+    orderId: string,
+    items: Array<{
+      receiptItemId: string
+      itemId: string
+      newPackageId: string
+      newPackageName: string
+      newPackageSize: number
+      newPackageUnit: string
+      newPackagePrice: number
+      packageQuantity: number
+      newBaseQuantity: number
+      newBaseCost: number
+    }>,
+    reason: string,
+    correctedBy?: string
+  ): Promise<ReceiptCorrection | null> {
+    isApplying.value = true
+    try {
+      DebugUtils.info(MODULE_NAME, 'Applying package correction', {
+        receiptId,
+        itemCount: items.length
+      })
+
+      const { data, error } = await supabase.rpc('apply_receipt_correction', {
+        p_receipt_id: receiptId,
+        p_order_id: orderId,
+        p_correction_type: 'item_package',
+        p_reason: reason,
+        p_corrected_by: correctedBy ?? null,
+        p_item_corrections: items,
+        p_new_supplier_id: null,
+        p_new_supplier_name: null
+      })
+
+      if (error || !data?.success) {
+        const errorMsg = data?.error || error?.message || 'Unknown error'
+        DebugUtils.error(MODULE_NAME, 'Package correction failed', { error: errorMsg })
+        throw new Error(errorMsg)
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Package correction applied', {
+        correctionNumber: data.correctionNumber,
+        financialImpact: data.financialImpact
+      })
+
+      await refreshAfterCorrection()
+
+      return {
+        id: data.correctionId,
+        correctionNumber: data.correctionNumber,
+        receiptId,
+        orderId,
+        correctionType: 'item_package',
+        reason,
+        correctedBy,
+        itemCorrections: data.itemCorrections ?? [],
+        batchAdjustments: data.batchAdjustments ?? [],
+        oldTotalAmount: data.oldTotal,
+        newTotalAmount: data.newTotal,
+        financialImpact: data.financialImpact,
+        storageOperationId: data.operationId,
+        status: 'applied',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to apply package correction', { error })
+      throw error
+    } finally {
+      isApplying.value = false
+    }
+  }
+
+  /**
    * Apply supplier change correction
    */
   async function applySupplierChange(
@@ -290,6 +368,7 @@ export function useReceiptCorrections() {
     isLoadingHistory,
 
     applyItemCorrection,
+    applyPackageCorrection,
     applySupplierChange,
     applyFullReversal,
     getCorrectionHistory,

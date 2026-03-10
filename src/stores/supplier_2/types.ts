@@ -541,7 +541,12 @@ export function isReceipt(obj: any): obj is Receipt {
 // RECEIPT CORRECTION TYPES
 // =============================================
 
-export type CorrectionType = 'item_quantity' | 'item_price' | 'supplier_change' | 'full_reversal'
+export type CorrectionType =
+  | 'item_quantity'
+  | 'item_price'
+  | 'item_package'
+  | 'supplier_change'
+  | 'full_reversal'
 
 export interface ReceiptCorrection {
   id: string

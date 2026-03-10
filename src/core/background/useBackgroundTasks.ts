@@ -812,7 +812,29 @@ export function useBackgroundTasks() {
       // Create storage operation (batches + reconciliation)
       // Note: Price update already done by RPC, but storageService may do it again
       // which is non-critical and ensures compatibility with other flows
-      await storageIntegration.createReceiptOperation(receipt, order)
+      const operationId = await storageIntegration.createReceiptOperation(receipt, order)
+
+      // Save storage_operation_id back to receipt in DB
+      if (operationId) {
+        const { supabase } = await import('@/supabase/client')
+        const { error: updateError } = await supabase
+          .from('supplierstore_receipts')
+          .update({ storage_operation_id: operationId })
+          .eq('id', payload.receiptId)
+
+        if (updateError) {
+          DebugUtils.warn(MODULE_NAME, 'Failed to save storage_operation_id to receipt', {
+            receiptId: payload.receiptId,
+            operationId,
+            error: updateError
+          })
+        } else {
+          DebugUtils.info(MODULE_NAME, 'Saved storage_operation_id to receipt', {
+            receiptId: payload.receiptId,
+            operationId
+          })
+        }
+      }
 
       // Success
       updateTaskStatus(task.id, 'completed')

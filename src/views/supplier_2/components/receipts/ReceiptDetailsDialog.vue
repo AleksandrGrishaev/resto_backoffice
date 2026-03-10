@@ -493,14 +493,7 @@ function getPurchaseOrderNumber(orderId: string): string {
 }
 
 function getItemUnit(item: ReceiptItem): string {
-  // In real app, would get from ProductsStore
-  if (
-    item.itemName.toLowerCase().includes('beer') ||
-    item.itemName.toLowerCase().includes('cola')
-  ) {
-    return 'piece'
-  }
-  return 'kg'
+  return item.unit || 'gram'
 }
 
 function hasItemDiscrepancy(item: ReceiptItem): boolean {

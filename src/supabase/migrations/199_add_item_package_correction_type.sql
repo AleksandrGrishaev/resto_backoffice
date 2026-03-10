@@ -1,56 +1,19 @@
--- Migration: 164_receipt_corrections (updated: 199_add_item_package_correction_type)
--- Description: Receipt correction system - table + RPC function + package corrections
--- Date: 2026-03-06, updated 2026-03-10
+-- Migration: 199_add_item_package_correction_type
+-- Description: Add 'item_package' correction type to receipt corrections and update RPC
+-- Date: 2026-03-10
 
 -- =============================================
--- TABLE: supplierstore_receipt_corrections
+-- STEP 1: Update CHECK constraint on correction_type
 -- =============================================
+ALTER TABLE supplierstore_receipt_corrections
+  DROP CONSTRAINT IF EXISTS supplierstore_receipt_corrections_correction_type_check;
 
-CREATE TABLE IF NOT EXISTS supplierstore_receipt_corrections (
-  id TEXT PRIMARY KEY,
-  correction_number TEXT UNIQUE NOT NULL,
-  receipt_id TEXT NOT NULL REFERENCES supplierstore_receipts(id),
-  order_id TEXT NOT NULL REFERENCES supplierstore_orders(id),
-
-  correction_type TEXT NOT NULL CHECK (correction_type IN ('item_quantity', 'item_price', 'item_package', 'supplier_change', 'full_reversal')),
-  reason TEXT NOT NULL,
-  corrected_by TEXT,
-
-  -- Supplier change fields
-  old_supplier_id TEXT,
-  old_supplier_name TEXT,
-  new_supplier_id TEXT,
-  new_supplier_name TEXT,
-
-  -- Item corrections detail
-  item_corrections JSONB DEFAULT '[]'::jsonb,
-
-  -- Financial summary
-  old_total_amount NUMERIC(15,2),
-  new_total_amount NUMERIC(15,2),
-  financial_impact NUMERIC(15,2),
-
-  -- Batch adjustments made
-  batch_adjustments JSONB DEFAULT '[]'::jsonb,
-
-  -- Audit
-  storage_operation_id TEXT,
-  status TEXT NOT NULL DEFAULT 'applied' CHECK (status IN ('applied', 'failed')),
-
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Index for quick lookups
-CREATE INDEX IF NOT EXISTS idx_receipt_corrections_receipt_id ON supplierstore_receipt_corrections(receipt_id);
-CREATE INDEX IF NOT EXISTS idx_receipt_corrections_order_id ON supplierstore_receipt_corrections(order_id);
-
--- Grant access
-GRANT ALL ON supplierstore_receipt_corrections TO service_role;
-GRANT SELECT, INSERT ON supplierstore_receipt_corrections TO authenticated;
+ALTER TABLE supplierstore_receipt_corrections
+  ADD CONSTRAINT supplierstore_receipt_corrections_correction_type_check
+  CHECK (correction_type IN ('item_quantity', 'item_price', 'item_package', 'supplier_change', 'full_reversal'));
 
 -- =============================================
--- RPC: apply_receipt_correction
+-- STEP 2: Update RPC function with item_package support
 -- =============================================
 
 CREATE OR REPLACE FUNCTION apply_receipt_correction(
@@ -317,6 +280,169 @@ BEGIN
           'newBaseCost', v_new_price,
           'delta', v_delta,
           'financialImpact', (v_new_qty * v_new_price) - (v_old_qty * v_old_price)
+        );
+      END;
+    END LOOP;
+
+    -- Recalculate new total
+    SELECT COALESCE(SUM(
+      received_quantity * COALESCE(actual_base_cost, ordered_base_cost)
+    ), 0) INTO v_new_total
+    FROM supplierstore_receipt_items
+    WHERE receipt_id = p_receipt_id;
+
+    v_financial_impact := v_new_total - v_old_total;
+
+    -- Update order amounts
+    UPDATE supplierstore_orders
+    SET actual_delivered_amount = v_new_total,
+        total_amount = v_new_total,
+        updated_at = now()
+    WHERE id = p_order_id;
+
+    -- Update receipt discrepancy flag
+    UPDATE supplierstore_receipts
+    SET has_discrepancies = EXISTS(
+      SELECT 1 FROM supplierstore_receipt_items ri
+      WHERE ri.receipt_id = p_receipt_id
+        AND (ABS(ri.received_quantity - ri.ordered_quantity) > 0.001
+          OR (ri.actual_base_cost IS NOT NULL AND ABS(ri.actual_base_cost - ri.ordered_base_cost) > 0.01))
+    ),
+    updated_at = now()
+    WHERE id = p_receipt_id;
+
+  ELSIF p_correction_type = 'item_package' THEN
+    -- =============================================
+    -- PACKAGE CORRECTION: Changes package, recalculates qty and cost
+    -- =============================================
+    FOR v_item IN SELECT * FROM jsonb_array_elements(p_item_corrections)
+    LOOP
+      DECLARE
+        v_receipt_item_id TEXT := v_item->>'receiptItemId';
+        v_item_id TEXT := v_item->>'itemId';
+        v_new_pkg_id TEXT := v_item->>'newPackageId';
+        v_new_pkg_name TEXT := v_item->>'newPackageName';
+        v_new_pkg_size NUMERIC := (v_item->>'newPackageSize')::NUMERIC;
+        v_new_pkg_unit TEXT := v_item->>'newPackageUnit';
+        v_new_pkg_price NUMERIC := (v_item->>'newPackagePrice')::NUMERIC;
+        v_pkg_qty NUMERIC := (v_item->>'packageQuantity')::NUMERIC;
+        v_new_base_qty NUMERIC := (v_item->>'newBaseQuantity')::NUMERIC;
+        v_new_base_cost NUMERIC := (v_item->>'newBaseCost')::NUMERIC;
+        v_ri RECORD;
+        v_old_qty NUMERIC;
+        v_old_price NUMERIC;
+        v_delta NUMERIC;
+        v_item_batch RECORD;
+        v_consumed NUMERIC;
+      BEGIN
+        -- Get current receipt item
+        SELECT * INTO v_ri
+        FROM supplierstore_receipt_items
+        WHERE id = v_receipt_item_id AND receipt_id = p_receipt_id;
+
+        IF NOT FOUND THEN
+          RETURN jsonb_build_object(
+            'success', false,
+            'error', format('Receipt item %s not found', v_receipt_item_id),
+            'code', 'ITEM_NOT_FOUND'
+          );
+        END IF;
+
+        v_old_qty := v_ri.received_quantity;
+        v_old_price := COALESCE(v_ri.actual_base_cost, v_ri.ordered_base_cost);
+        v_delta := v_new_base_qty - v_old_qty;
+
+        -- Update receipt item with new package info
+        UPDATE supplierstore_receipt_items
+        SET package_id = v_new_pkg_id,
+            package_name = v_new_pkg_name,
+            package_unit = v_new_pkg_unit,
+            ordered_quantity = v_new_base_qty,
+            received_quantity = v_new_base_qty,
+            ordered_package_quantity = v_pkg_qty,
+            received_package_quantity = v_pkg_qty,
+            ordered_price = v_new_pkg_price,
+            actual_price = v_new_pkg_price,
+            ordered_base_cost = v_new_base_cost,
+            actual_base_cost = v_new_base_cost
+        WHERE id = v_receipt_item_id;
+
+        -- Update corresponding order item
+        UPDATE supplierstore_order_items
+        SET package_id = v_new_pkg_id,
+            package_name = v_new_pkg_name,
+            package_unit = v_new_pkg_unit,
+            ordered_quantity = v_new_base_qty,
+            received_quantity = v_new_base_qty,
+            package_quantity = v_pkg_qty,
+            package_price = v_new_pkg_price,
+            price_per_unit = v_new_base_cost,
+            total_price = v_new_base_qty * v_new_base_cost
+        WHERE order_id = p_order_id AND item_id = v_item_id;
+
+        -- Update batch
+        SELECT * INTO v_item_batch
+        FROM storage_batches
+        WHERE purchase_order_id = p_order_id
+          AND item_id = v_item_id
+          AND status = 'active'
+        ORDER BY created_at DESC
+        LIMIT 1;
+
+        IF FOUND THEN
+          v_consumed := v_item_batch.initial_quantity - v_item_batch.current_quantity;
+
+          UPDATE storage_batches
+          SET initial_quantity = v_new_base_qty,
+              current_quantity = GREATEST(0, v_new_base_qty - v_consumed),
+              cost_per_unit = v_new_base_cost,
+              total_value = GREATEST(0, v_new_base_qty - v_consumed) * v_new_base_cost,
+              updated_at = now()
+          WHERE id = v_item_batch.id;
+
+          v_batch_adjustments := v_batch_adjustments || jsonb_build_object(
+            'batchId', v_item_batch.id,
+            'action', 'package_changed',
+            'itemId', v_item_id,
+            'oldQuantity', v_item_batch.current_quantity,
+            'newQuantity', GREATEST(0, v_new_base_qty - v_consumed),
+            'oldCostPerUnit', v_item_batch.cost_per_unit,
+            'newCostPerUnit', v_new_base_cost,
+            'consumed', v_consumed,
+            'oldPackageId', v_ri.package_id,
+            'newPackageId', v_new_pkg_id
+          );
+        END IF;
+
+        -- Also update product last_known_cost
+        UPDATE products
+        SET last_known_cost = v_new_base_cost,
+            base_cost_per_unit = v_new_base_cost,
+            updated_at = now()
+        WHERE id = v_item_id::uuid;
+
+        -- Update package_options cost
+        UPDATE package_options
+        SET base_cost_per_unit = v_new_base_cost,
+            package_price = v_new_pkg_price,
+            updated_at = now()
+        WHERE id = v_new_pkg_id::uuid;
+
+        -- Build item detail for audit
+        v_item_details := v_item_details || jsonb_build_object(
+          'receiptItemId', v_receipt_item_id,
+          'itemId', v_item_id,
+          'itemName', v_ri.item_name,
+          'oldQuantity', v_old_qty,
+          'newQuantity', v_new_base_qty,
+          'oldBaseCost', v_old_price,
+          'newBaseCost', v_new_base_cost,
+          'oldPackageId', v_ri.package_id,
+          'oldPackageName', v_ri.package_name,
+          'newPackageId', v_new_pkg_id,
+          'newPackageName', v_new_pkg_name,
+          'delta', v_delta,
+          'financialImpact', (v_new_base_qty * v_new_base_cost) - (v_old_qty * v_old_price)
         );
       END;
     END LOOP;
