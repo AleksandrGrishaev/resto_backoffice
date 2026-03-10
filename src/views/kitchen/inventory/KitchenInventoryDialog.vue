@@ -827,6 +827,10 @@ async function handleComplete() {
     await inventory.updateInventory(currentInventory.value.id, inventoryItems.value)
     await inventory.finalizeInventory(currentInventory.value.id)
 
+    // Clear draft and items BEFORE handleClose to prevent re-saving
+    clearLocalDraft()
+    inventoryItems.value = []
+
     const msg =
       discrepancyCount.value > 0
         ? `Inventory completed. ${discrepancyCount.value} discrepancies found.`
