@@ -24,6 +24,18 @@
           </v-chip>
         </div>
       </div>
+      <!-- Export PDF (menu items with modifiers) -->
+      <v-btn
+        v-if="item.type === 'menu' && modifierGroups.length > 0"
+        variant="tonal"
+        size="small"
+        prepend-icon="mdi-file-pdf-box"
+        class="mr-1"
+        :loading="isExporting"
+        @click="handleExportPdf"
+      >
+        PDF
+      </v-btn>
       <v-btn
         variant="tonal"
         size="small"
@@ -556,6 +568,11 @@
         <EntityHistoryTab :entity-type="historyEntityType" :entity-id="item.id" />
       </div>
     </div>
+
+    <!-- Export error snackbar -->
+    <v-snackbar v-model="showExportError" color="error" :timeout="4000">
+      {{ exportError }}
+    </v-snackbar>
   </div>
 </template>
 
@@ -570,6 +587,8 @@ import { useCatalogData } from '../composables/useCatalogData'
 import type { CatalogItem, ModifierGroupDisplay } from '../composables/useCatalogData'
 import { calculateFoodCostRange } from '@/core/cost/modifierCostCalculator'
 import type { FoodCostRange } from '@/core/cost/modifierCostCalculator'
+import { useExport } from '@/core/export'
+import type { ModifiersExportData, ExportTreeNode } from '@/core/export'
 import DependencyTree from './DependencyTree.vue'
 import EntityHistoryTab from '@/views/kitchen/constructor/components/EntityHistoryTab.vue'
 import type { TreeNode } from './DependencyTree.vue'
@@ -676,6 +695,63 @@ function modifierTypeColor(type: string): string {
       return 'grey'
     default:
       return 'grey'
+  }
+}
+
+// --- Export PDF ---
+const { isExporting, exportError, exportModifiers } = useExport()
+const showExportError = ref(false)
+
+function convertTreeNodes(nodes: TreeNode[]): ExportTreeNode[] {
+  return nodes.map(n => ({
+    name: n.name,
+    type: n.type as 'product' | 'recipe' | 'preparation',
+    quantity: n.quantity,
+    unit: n.unit,
+    cost: n.cost,
+    outputQuantity: n.outputQuantity,
+    outputUnit: n.outputUnit,
+    totalRecipeCost: n.totalRecipeCost,
+    children: convertTreeNodes(n.children)
+  }))
+}
+
+async function handleExportPdf() {
+  if (!menuItem.value || modifierGroups.value.length === 0) return
+  try {
+    const exportData: ModifiersExportData = {
+      title: props.item.name,
+      date: new Date().toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      }),
+      department: props.item.department,
+      categoryName: props.item.categoryName,
+      modifierGroups: modifierGroups.value.map(g => ({
+        id: g.id,
+        name: g.name,
+        type: g.type,
+        isRequired: g.isRequired,
+        minSelection: g.minSelection,
+        maxSelection: g.maxSelection,
+        targetComponentNames: g.targetComponentNames,
+        options: g.options.map(o => ({
+          id: o.id,
+          name: o.name,
+          priceAdjustment: o.priceAdjustment,
+          compositionCost: o.compositionCost,
+          netCost: o.netCost,
+          isDefault: o.isDefault,
+          isActive: o.isActive,
+          compositionTree: convertTreeNodes(o.compositionTree)
+        }))
+      }))
+    }
+    await exportModifiers(exportData)
+  } catch (e) {
+    showExportError.value = true
+    console.error('[Export] Failed:', e)
   }
 }
 

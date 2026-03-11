@@ -17,6 +17,7 @@ import type {
   PurchaseOrderExportData,
   PurchaseOrderExportOptions
 } from '../types'
+import type { ModifiersExportData } from '../templates/ModifiersExportTemplate.vue'
 import MenuExportTemplate from '../templates/MenuExportTemplate.vue'
 import RecipeExportTemplate from '../templates/RecipeExportTemplate.vue'
 import PreparationExportTemplate from '../templates/PreparationExportTemplate.vue'
@@ -24,6 +25,7 @@ import MenuItemExportTemplate from '../templates/MenuItemExportTemplate.vue'
 import CombinationsExportTemplate from '../templates/CombinationsExportTemplate.vue'
 import MenuDetailedExportTemplate from '../templates/MenuDetailedExportTemplate.vue'
 import PurchaseOrderTemplate from '../templates/PurchaseOrderTemplate.vue'
+import ModifiersExportTemplate from '../templates/ModifiersExportTemplate.vue'
 
 export function useExport() {
   const isExporting = ref(false)
@@ -402,6 +404,34 @@ export function useExport() {
     }
   }
 
+  /**
+   * Export menu item modifiers to PDF
+   * Shows modifier groups summary + composition trees
+   */
+  async function exportModifiers(
+    data: ModifiersExportData,
+    options: ExportOptions = {}
+  ): Promise<void> {
+    isExporting.value = true
+    exportError.value = null
+
+    try {
+      const sanitizedName = data.title.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()
+      const filename =
+        options.filename || exportService.generateFilename(`modifiers_${sanitizedName}`)
+      await renderAndExport(ModifiersExportTemplate, data, {
+        ...options,
+        filename,
+        orientation: options.orientation || 'portrait'
+      })
+    } catch (error) {
+      exportError.value = error instanceof Error ? error.message : 'Export failed'
+      throw error
+    } finally {
+      isExporting.value = false
+    }
+  }
+
   return {
     isExporting,
     exportError,
@@ -411,6 +441,7 @@ export function useExport() {
     exportMenuItem,
     exportMenuItemCombinations,
     exportMenuDetailed,
+    exportModifiers,
     exportPurchaseOrder,
     exportPurchaseOrderAsBlob,
     generatePDF
