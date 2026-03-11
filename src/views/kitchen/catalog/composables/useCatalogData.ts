@@ -463,7 +463,7 @@ export function useCatalogData() {
         replacedCost = calculateTargetComponentsCost(group.targetComponents, menuItem)
       }
 
-      const options: ModifierOptionDisplay[] = group.options.map(opt => {
+      const options: ModifierOptionDisplay[] = (group.options || []).map(opt => {
         // Build mini-tree for option composition
         let compositionTree: TreeNode[] = []
         let compositionCost = 0

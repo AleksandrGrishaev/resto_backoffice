@@ -399,6 +399,7 @@
                               </span>
                               <NumericInputField
                                 v-model="comp.quantity"
+                                :allow-decimal="true"
                                 variant="outlined"
                                 hide-details
                                 density="compact"
