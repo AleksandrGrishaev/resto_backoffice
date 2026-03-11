@@ -89,6 +89,17 @@ export const useLoyaltyStore = defineStore('loyalty', () => {
     return loyaltyService.listCards()
   }
 
+  async function updateCard(
+    cardId: string,
+    updates: { status?: string; stamps?: number; cycle?: number; customer_id?: string | null }
+  ): Promise<void> {
+    return loyaltyService.updateCard(cardId, updates)
+  }
+
+  async function deleteCard(cardId: string): Promise<void> {
+    return loyaltyService.deleteCard(cardId)
+  }
+
   // Points operations
   async function applyCashback(
     customerId: string,
@@ -143,6 +154,8 @@ export const useLoyaltyStore = defineStore('loyalty', () => {
     issueNewCard,
     linkCardToCustomer,
     listCards,
+    updateCard,
+    deleteCard,
     applyCashback,
     redeemPoints,
     convertCard,

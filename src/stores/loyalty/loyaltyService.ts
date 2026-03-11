@@ -203,6 +203,114 @@ export class LoyaltyService {
     }))
   }
 
+  async updateCard(
+    cardId: string,
+    updates: { status?: string; stamps?: number; cycle?: number; customer_id?: string | null }
+  ): Promise<void> {
+    // Update card fields
+    const cardUpdates: Record<string, any> = {}
+    if (updates.status !== undefined) cardUpdates.status = updates.status
+    if (updates.cycle !== undefined) cardUpdates.cycle = updates.cycle
+    if (updates.customer_id !== undefined) cardUpdates.customer_id = updates.customer_id
+
+    if (Object.keys(cardUpdates).length > 0) {
+      const { error } = await supabase.from('stamp_cards').update(cardUpdates).eq('id', cardId)
+
+      if (error) {
+        DebugUtils.error(MODULE_NAME, 'Failed to update stamp card', { error })
+        throw error
+      }
+    }
+
+    // Stamps are stored in stamp_entries, so to set stamps we need to adjust
+    if (updates.stamps !== undefined) {
+      await this.setCardStamps(cardId, updates.stamps, updates.cycle)
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Stamp card updated', { cardId, updates })
+  }
+
+  async deleteCard(cardId: string): Promise<void> {
+    // Delete stamp entries first (FK constraint)
+    const { error: entriesError } = await supabase
+      .from('stamp_entries')
+      .delete()
+      .eq('card_id', cardId)
+
+    if (entriesError) {
+      DebugUtils.error(MODULE_NAME, 'Failed to delete stamp entries', { error: entriesError })
+      throw entriesError
+    }
+
+    const { error } = await supabase.from('stamp_cards').delete().eq('id', cardId)
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to delete stamp card', { error })
+      throw error
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Stamp card deleted', { cardId })
+  }
+
+  /** Set stamps to exact value by adjusting stamp_entries */
+  private async setCardStamps(cardId: string, targetStamps: number, cycle?: number): Promise<void> {
+    // Get current cycle
+    const { data: card } = await supabase
+      .from('stamp_cards')
+      .select('cycle')
+      .eq('id', cardId)
+      .single()
+
+    const currentCycle = cycle ?? card?.cycle ?? 1
+
+    // Get current stamps for this cycle
+    const { data: entries } = await supabase
+      .from('stamp_entries')
+      .select('stamps')
+      .eq('card_id', cardId)
+      .eq('cycle', currentCycle)
+
+    const currentStamps = (entries || []).reduce((sum, e) => sum + (e.stamps || 0), 0)
+    const diff = targetStamps - currentStamps
+
+    if (diff === 0) return
+
+    // expires_at is NOT NULL — set to 1 year from now for manual adjustments
+    const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+
+    if (diff > 0) {
+      // Add stamps
+      const { error } = await supabase.from('stamp_entries').insert({
+        card_id: cardId,
+        stamps: diff,
+        cycle: currentCycle,
+        order_amount: 0,
+        expires_at: expiresAt
+      })
+      if (error) throw error
+    } else {
+      // Remove stamps: delete entries and re-add with correct count
+      const { error: delError } = await supabase
+        .from('stamp_entries')
+        .delete()
+        .eq('card_id', cardId)
+        .eq('cycle', currentCycle)
+
+      if (delError) throw delError
+
+      if (targetStamps > 0) {
+        const { error } = await supabase.from('stamp_entries').insert({
+          card_id: cardId,
+          stamps: targetStamps,
+          cycle: currentCycle,
+          order_amount: 0,
+          expires_at: expiresAt
+        })
+        if (error) throw error
+      }
+    }
+  }
+
   async linkCardToCustomer(cardNumber: string, customerId: string): Promise<void> {
     const { error } = await supabase
       .from('stamp_cards')

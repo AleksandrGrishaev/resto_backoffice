@@ -129,6 +129,8 @@
       :customer-id="paymentBillCustomerId"
       :customer-balance="paymentBillCustomerBalance"
       :customer-name="paymentBillCustomerName"
+      :customer-personal-discount="paymentBillPersonalDiscount"
+      :customer-discount-note="paymentBillDiscountNote"
       :stamp-card-info="paymentBillLoyaltyCard"
       @confirm="handlePaymentConfirm"
       @cancel="handlePaymentCancel"
@@ -244,7 +246,7 @@ import { useAlertsStore } from '@/stores/alerts'
 import { useChannelsStore } from '@/stores/channels'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import { useLoyaltyStore } from '@/stores/loyalty'
-import { useCustomersStore } from '@/stores/customers'
+import { useCustomersStore, customersService } from '@/stores/customers'
 import type { Customer } from '@/stores/customers'
 import type { StampCardInfo } from '@/stores/loyalty'
 import { formatIDR } from '@/utils'
@@ -345,7 +347,7 @@ const paymentBill = computed(() => {
 })
 
 const paymentBillCustomerId = computed(() => {
-  // Use bill-level customer only — order-level is legacy fallback
+  // Use bill-level customer first
   if (paymentBill.value?.customerId) return paymentBill.value.customerId
   // For multi-bill: check if all bills share the same customer
   const billIds = paymentDialogData.value.billIds
@@ -356,7 +358,8 @@ const paymentBillCustomerId = computed(() => {
     const cids = [...new Set(bills.map(b => b!.customerId).filter(Boolean))]
     if (cids.length === 1) return cids[0]
   }
-  return null
+  // Fallback to order-level customer (e.g. customer attached before bill creation)
+  return currentOrder.value?.customerId || null
 })
 
 const paymentBillCustomerName = computed(() => {
@@ -374,6 +377,20 @@ const paymentBillCustomerBalance = computed(() => {
   if (!cid) return 0
   const customer = customersStore.getById(cid)
   return customer?.loyaltyBalance ?? 0
+})
+
+const paymentBillPersonalDiscount = computed(() => {
+  const cid = paymentBillCustomerId.value
+  if (!cid) return 0
+  const customer = customersStore.getById(cid)
+  return customer?.personalDiscount ?? 0
+})
+
+const paymentBillDiscountNote = computed(() => {
+  const cid = paymentBillCustomerId.value
+  if (!cid) return ''
+  const customer = customersStore.getById(cid)
+  return customer?.discountNote ?? ''
 })
 
 const paymentBillLoyaltyCard = computed(() => {
@@ -1681,16 +1698,36 @@ const handlePaymentCancel = (): void => {
 // ===== LOYALTY HANDLERS =====
 
 /**
- * Non-blocking post-payment loyalty processing:
- * 1. If customer attached → apply cashback (tier-based %)
- * 2. If stamp card attached → add stamps (amount / threshold)
+ * Non-blocking post-payment processing:
+ * 1. ALWAYS update customer stats (total_spent, total_visits, etc.)
+ * 2. If loyalty enabled → apply cashback (tier-based %)
+ * 3. If stamp card attached & loyalty enabled → add stamps
  */
 async function processLoyaltyAfterPayment(orderId: string, paidAmount: number): Promise<void> {
   const order = ordersStore.orders.find(o => o.id === orderId)
   if (!order) return
 
-  // 1. Apply cashback for digital loyalty customer
+  const customer = order.customerId ? customersStore.getById(order.customerId) : null
+  const loyaltyDisabled = customer?.disableLoyaltyAccrual === true
+
+  // 1. ALWAYS update customer stats (regardless of loyalty settings)
   if (order.customerId) {
+    try {
+      const statsResult = await customersService.updateStats(order.customerId, orderId, paidAmount)
+      if (statsResult.success) {
+        console.log(
+          `📊 Customer stats updated: ${customer?.name} — visits: ${statsResult.totalVisits}, spent: ${formatIDR(statsResult.totalSpent || 0)}`
+        )
+        // Refresh customer in store to reflect new stats
+        await customersStore.refreshCustomer(order.customerId)
+      }
+    } catch (err) {
+      console.error('📊 Customer stats update failed:', err)
+    }
+  }
+
+  // 2. Apply cashback for digital loyalty customer (only if loyalty enabled)
+  if (order.customerId && !loyaltyDisabled) {
     try {
       const result = await loyaltyStore.applyCashback(order.customerId, orderId, paidAmount)
       if (result.success) {
@@ -1704,11 +1741,13 @@ async function processLoyaltyAfterPayment(orderId: string, paidAmount: number): 
     } catch (err) {
       console.error('🎯 Cashback failed:', err)
     }
+  } else if (loyaltyDisabled) {
+    console.log('🎯 Cashback skipped: loyalty accrual disabled for', customer?.name)
   }
 
-  // 2. Add stamps for stamp card
+  // 3. Add stamps for stamp card (also skip if loyalty disabled)
   const card = loyaltyCard.value
-  if (card && card.status === 'active') {
+  if (card && card.status === 'active' && !loyaltyDisabled) {
     try {
       const result = await loyaltyStore.addStamps(card.cardNumber, orderId, paidAmount)
       if (result.success && result.stampsAdded > 0) {
@@ -1725,6 +1764,8 @@ async function processLoyaltyAfterPayment(orderId: string, paidAmount: number): 
     } catch (err) {
       console.error('🎯 Stamp failed:', err)
     }
+  } else if (loyaltyDisabled && card) {
+    console.log('🎯 Stamps skipped: loyalty accrual disabled for', customer?.name)
   }
 }
 

@@ -8,12 +8,27 @@
     >
       <!-- Customer attached -->
       <template v-if="attachedCustomer">
-        <v-chip size="small" :color="tierColor" variant="flat" class="text-white">
-          {{ attachedCustomer.tier.toUpperCase() }}
+        <v-chip
+          size="small"
+          :color="attachedCustomer.personalDiscount > 0 ? 'orange' : tierColor"
+          variant="flat"
+          class="text-white"
+        >
+          {{
+            attachedCustomer.personalDiscount > 0 ? 'DISCOUNT' : attachedCustomer.tier.toUpperCase()
+          }}
         </v-chip>
         <span class="text-body-2 text-truncate flex-grow-1">
           {{ attachedCustomer.name }}
         </span>
+        <v-chip
+          v-if="attachedCustomer.personalDiscount > 0"
+          size="x-small"
+          color="orange"
+          variant="tonal"
+        >
+          {{ attachedCustomer.personalDiscount }}%
+        </v-chip>
         <span class="text-body-2 font-weight-medium">
           {{ formatIDR(attachedCustomer.loyaltyBalance) }}
         </span>
@@ -187,17 +202,17 @@
             v-for="c in searchResults"
             :key="c.id"
             :title="c.name"
-            :subtitle="`${c.tier.toUpperCase()} | ${formatIDR(c.loyaltyBalance)}${c.phone ? ' | ' + c.phone : ''}${c.telegramUsername ? ' | @' + c.telegramUsername : ''}`"
+            :subtitle="`${c.personalDiscount > 0 ? 'DISCOUNT ' + c.personalDiscount + '%' : c.tier.toUpperCase()} | ${formatIDR(c.loyaltyBalance)}${c.phone ? ' | ' + c.phone : ''}${c.telegramUsername ? ' | @' + c.telegramUsername : ''}`"
             @click="selectCustomer(c)"
           >
             <template #prepend>
               <v-chip
                 size="x-small"
-                :color="getTierColor(c.tier)"
+                :color="c.personalDiscount > 0 ? 'orange' : getTierColor(c.tier)"
                 variant="flat"
                 class="text-white mr-2"
               >
-                {{ c.tier[0].toUpperCase() }}
+                {{ c.personalDiscount > 0 ? 'D' : c.tier[0].toUpperCase() }}
               </v-chip>
             </template>
           </v-list-item>
@@ -211,15 +226,24 @@
           <div class="d-flex align-center justify-space-between">
             <span class="text-body-2 font-weight-medium">{{ attachedCustomer.name }}</span>
             <div class="d-flex align-center gap-1">
-              <v-chip size="x-small" :color="tierColor" variant="flat" class="text-white">
-                {{ attachedCustomer.tier.toUpperCase() }} ({{ cashbackPct }}%)
+              <v-chip
+                size="x-small"
+                :color="attachedCustomer.personalDiscount > 0 ? 'orange' : tierColor"
+                variant="flat"
+                class="text-white"
+              >
+                {{
+                  attachedCustomer.personalDiscount > 0
+                    ? `DISCOUNT ${attachedCustomer.personalDiscount}%`
+                    : `${attachedCustomer.tier.toUpperCase()} (${cashbackPct}%)`
+                }}
               </v-chip>
               <v-btn icon size="x-small" variant="text" color="error" @click="detachCustomer">
                 <v-icon size="14">mdi-close</v-icon>
               </v-btn>
             </div>
           </div>
-          <div class="d-flex align-center gap-4 mt-1">
+          <div class="d-flex align-center gap-4 mt-1 flex-wrap">
             <span class="text-body-2">
               <v-icon size="14" class="mr-1">mdi-wallet</v-icon>
               {{ formatIDR(attachedCustomer.loyaltyBalance) }}
@@ -227,6 +251,24 @@
             <span class="text-body-2 text-medium-emphasis">
               {{ attachedCustomer.totalVisits }} visits
             </span>
+            <v-chip
+              v-if="attachedCustomer.personalDiscount > 0"
+              size="x-small"
+              color="orange"
+              variant="tonal"
+            >
+              <v-icon start size="12">mdi-percent</v-icon>
+              {{ attachedCustomer.personalDiscount }}%
+              {{ attachedCustomer.discountNote || 'Personal' }}
+            </v-chip>
+            <v-chip
+              v-if="attachedCustomer.disableLoyaltyAccrual"
+              size="x-small"
+              color="grey"
+              variant="tonal"
+            >
+              No accrual
+            </v-chip>
           </div>
         </div>
 

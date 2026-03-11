@@ -20,6 +20,9 @@ export interface Customer {
   firstVisitAt: string | null
   lastVisitAt: string | null
   notes: string | null
+  personalDiscount: number // 0-100, auto-applied at checkout
+  disableLoyaltyAccrual: boolean // skip stamps/cashback accrual
+  discountNote: string | null // e.g. "Founder", "VIP friend"
   status: CustomerStatus
   createdAt: string
   updatedAt: string

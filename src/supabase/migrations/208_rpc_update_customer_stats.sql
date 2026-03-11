@@ -1,8 +1,65 @@
--- Function: apply_cashback
--- Description: Apply cashback points after order payment (loyalty balance only)
--- Stats (total_spent, total_visits) are handled by update_customer_stats() separately
--- Usage: SELECT apply_cashback('customer-uuid', 'order-uuid', 138000);
+-- Migration: 208_rpc_update_customer_stats
+-- Description: Separate customer stats update from cashback accrual
+-- Date: 2026-03-11
+-- Context: Previously total_spent/total_visits were only updated inside apply_cashback,
+--   so customers with disable_loyalty_accrual=true never got their stats updated.
+--   This RPC is called ALWAYS after payment, regardless of loyalty settings.
 
+-- 1. Create standalone stats update function
+CREATE OR REPLACE FUNCTION update_customer_stats(
+  p_customer_id UUID,
+  p_order_id UUID DEFAULT NULL,
+  p_order_amount NUMERIC DEFAULT 0
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_customer RECORD;
+  v_new_total_spent NUMERIC;
+  v_new_visits INTEGER;
+  v_new_avg_check NUMERIC;
+BEGIN
+  SELECT * INTO v_customer
+  FROM customers
+  WHERE id = p_customer_id AND status = 'active';
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'error', 'Customer not found or blocked'
+    );
+  END IF;
+
+  v_new_total_spent := v_customer.total_spent + p_order_amount;
+  v_new_visits := v_customer.total_visits + 1;
+  v_new_avg_check := round(v_new_total_spent / v_new_visits);
+
+  UPDATE customers SET
+    total_spent = v_new_total_spent,
+    total_visits = v_new_visits,
+    average_check = v_new_avg_check,
+    first_visit_at = COALESCE(first_visit_at, now()),
+    last_visit_at = now()
+  WHERE id = p_customer_id;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'total_spent', v_new_total_spent,
+    'total_visits', v_new_visits,
+    'average_check', v_new_avg_check
+  );
+
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object(
+    'success', false,
+    'error', SQLERRM
+  );
+END;
+$$;
+
+-- 2. Update apply_cashback to NOT update stats (stats handled by update_customer_stats)
 CREATE OR REPLACE FUNCTION apply_cashback(
   p_customer_id UUID,
   p_order_id UUID DEFAULT NULL,

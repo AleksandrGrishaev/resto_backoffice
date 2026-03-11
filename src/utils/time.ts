@@ -363,17 +363,17 @@ export class TimeUtils {
 
       if (TimeUtils.isToday(dateString)) {
         if (diffHours === 0) {
-          if (diffMinutes === 0) return 'Только что'
-          return `${diffMinutes} мин ${diffTime < 0 ? 'назад' : 'до'}`
+          if (diffMinutes === 0) return 'Just now'
+          return `${diffMinutes} min ${diffTime < 0 ? 'ago' : 'from now'}`
         }
-        return `${diffHours} ч ${diffTime < 0 ? 'назад' : 'до'}`
+        return `${diffHours}h ${diffTime < 0 ? 'ago' : 'from now'}`
       }
 
-      if (TimeUtils.isYesterday(dateString)) return 'Вчера'
-      if (TimeUtils.isTomorrow(dateString)) return 'Завтра'
+      if (TimeUtils.isYesterday(dateString)) return 'Yesterday'
+      if (TimeUtils.isTomorrow(dateString)) return 'Tomorrow'
 
       if (diffDays < 7) {
-        return `${diffDays} ${diffTime < 0 ? 'дня назад' : 'дня до'}`
+        return `${diffDays}d ${diffTime < 0 ? 'ago' : 'from now'}`
       }
 
       return TimeUtils.formatDateForDisplay(dateString)

@@ -35,6 +35,11 @@
           {{ customerName }}
           <span v-if="customerBalance > 0" class="ml-1">— {{ formatPrice(customerBalance) }}</span>
         </v-chip>
+        <!-- Personal discount badge -->
+        <v-chip v-if="customerPersonalDiscount > 0" color="orange" variant="tonal" size="small">
+          <v-icon start size="14">mdi-percent</v-icon>
+          {{ customerPersonalDiscount }}% {{ customerDiscountNote || 'Personal' }}
+        </v-chip>
         <!-- Stamp card chip with detach -->
         <v-chip
           v-if="stampCardInfo"
@@ -90,7 +95,10 @@
               <div v-if="localDiscount > 0" class="summary-row-compact">
                 <span class="text-body-2 text-medium-emphasis">
                   <v-icon size="12" class="mr-1">mdi-tag-multiple</v-icon>
-                  Bill Discount:
+                  <template v-if="hasPersonalDiscount">
+                    {{ customerDiscountNote || 'Owner Family' }} ({{ customerPersonalDiscount }}%):
+                  </template>
+                  <template v-else>Bill Discount:</template>
                 </span>
                 <span class="text-body-2 text-success">-{{ formatPrice(localDiscount) }}</span>
               </div>
@@ -324,20 +332,31 @@
 
             <v-divider class="my-1" />
 
-            <!-- Manual Discount -->
-            <v-list-item prepend-icon="mdi-pencil" @click="handleOpenDiscountDialog">
+            <!-- Manual Discount (disabled when personal discount is active) -->
+            <v-list-item
+              prepend-icon="mdi-pencil"
+              :disabled="hasPersonalDiscount"
+              @click="handleOpenDiscountDialog"
+            >
               <v-list-item-title>Manual Discount</v-list-item-title>
-              <v-list-item-subtitle>Custom amount or %</v-list-item-subtitle>
+              <v-list-item-subtitle v-if="hasPersonalDiscount">
+                Overridden by personal discount ({{ customerPersonalDiscount }}%)
+              </v-list-item-subtitle>
+              <v-list-item-subtitle v-else>Custom amount or %</v-list-item-subtitle>
             </v-list-item>
 
-            <!-- Stamp Card Reward (only if card has active reward) -->
+            <!-- Stamp Card Reward (disabled when personal discount is active) -->
             <v-list-item
               v-if="stampCardInfo?.activeReward"
               prepend-icon="mdi-gift"
+              :disabled="hasPersonalDiscount"
               @click="handleStampCardReward"
             >
               <v-list-item-title>Stamp Card Reward</v-list-item-title>
-              <v-list-item-subtitle>
+              <v-list-item-subtitle v-if="hasPersonalDiscount">
+                Overridden by personal discount
+              </v-list-item-subtitle>
+              <v-list-item-subtitle v-else>
                 {{ stampCardInfo.activeReward.category }} — up to
                 {{ formatPrice(stampCardInfo.activeReward.maxDiscount) }}
               </v-list-item-subtitle>
@@ -415,6 +434,8 @@ interface Props {
   customerId?: string | null
   customerBalance?: number
   customerName?: string
+  customerPersonalDiscount?: number
+  customerDiscountNote?: string
   stampCardInfo?: StampCardInfo | null
 }
 
@@ -429,6 +450,8 @@ const props = withDefaults(defineProps<Props>(), {
   customerId: null,
   customerBalance: 0,
   customerName: '',
+  customerPersonalDiscount: 0,
+  customerDiscountNote: '',
   stampCardInfo: null
 })
 
@@ -628,6 +651,8 @@ const effectivePointsRedeem = computed(() => {
   return Math.min(pointsToRedeem.value, props.customerBalance, subtotalWithTax)
 })
 
+const hasPersonalDiscount = computed(() => (props.customerPersonalDiscount || 0) > 0)
+
 const totalAmount = computed(() => {
   return amountAfterDiscount.value + totalTaxAmount.value - effectivePointsRedeem.value
 })
@@ -722,6 +747,24 @@ const resetForm = () => {
   preBillPrinted.value = false
   usePoints.value = false
   pointsToRedeem.value = 0
+}
+
+/**
+ * Auto-apply personal discount when customer has one.
+ * Personal discount replaces any manual discount.
+ */
+const applyPersonalDiscount = () => {
+  if (props.customerPersonalDiscount > 0) {
+    const discountAmount = amountAfterItemDiscounts.value * (props.customerPersonalDiscount / 100)
+    localDiscount.value = Math.round(discountAmount)
+    localDiscountReason.value = 'owner_family'
+    localStampCardReward.value = null
+    console.log('🏷️ Personal discount auto-applied:', {
+      pct: props.customerPersonalDiscount,
+      amount: localDiscount.value,
+      note: props.customerDiscountNote
+    })
+  }
 }
 
 const handleOpenDiscountDialog = () => {
@@ -911,6 +954,27 @@ const ensurePaymentMethodsLoaded = async () => {
   }
 }
 
+// Re-apply personal discount when customer changes while dialog is open
+watch(
+  () => props.customerPersonalDiscount,
+  newPct => {
+    if (!props.modelValue) return
+    if (newPct > 0) {
+      applyPersonalDiscount()
+      // Recalculate cash received
+      setTimeout(() => {
+        if (selectedMethod.value === 'cash') {
+          cashReceived.value = totalAmount.value
+        }
+      }, 50)
+    } else if (localDiscountReason.value === 'owner_family') {
+      // Customer changed to one without personal discount — clear auto-discount
+      localDiscount.value = 0
+      localDiscountReason.value = ''
+    }
+  }
+)
+
 // Watchers
 watch(
   () => props.modelValue,
@@ -926,6 +990,8 @@ watch(
       await ensurePaymentMethodsLoaded()
       // Reset form when dialog opens (selects first available method)
       resetForm()
+      // Auto-apply personal discount if customer has one
+      applyPersonalDiscount()
       // Auto-fill exact amount for cash payments
       setTimeout(() => {
         if (selectedMethod.value === 'cash') {

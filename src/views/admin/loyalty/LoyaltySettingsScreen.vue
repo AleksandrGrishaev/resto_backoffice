@@ -355,8 +355,8 @@
             </v-col>
           </v-row>
 
-          <!-- Filter -->
-          <div class="d-flex gap-2 mb-3">
+          <!-- Filter + New Card button -->
+          <div class="d-flex gap-2 mb-3 align-center">
             <v-text-field
               v-model="cardSearch"
               placeholder="Search card number..."
@@ -377,6 +377,11 @@
               clearable
               style="max-width: 160px"
             />
+            <v-spacer />
+            <v-btn color="primary" variant="flat" :loading="creatingCard" @click="handleCreateCard">
+              <v-icon start>mdi-plus</v-icon>
+              New Card
+            </v-btn>
           </div>
 
           <!-- Cards table -->
@@ -388,6 +393,7 @@
               :items-per-page="20"
               density="compact"
               hover
+              @click:row="(_: Event, row: any) => openCardDetail(row.item)"
             >
               <template #[`item.cardNumber`]="{ item }">
                 <span class="font-weight-medium">#{{ item.cardNumber }}</span>
@@ -432,6 +438,109 @@
           </v-card>
         </div>
 
+        <!-- ========== Stamp Card Edit Dialog ========== -->
+        <v-dialog v-model="showCardDetail" max-width="480" scrollable>
+          <v-card v-if="selectedCard">
+            <v-card-title
+              class="d-flex align-center justify-space-between bg-amber-darken-2 text-white"
+            >
+              <span>Card #{{ selectedCard.cardNumber }}</span>
+              <v-chip
+                :color="
+                  selectedCard.status === 'active'
+                    ? 'success'
+                    : selectedCard.status === 'converted'
+                      ? 'deep-purple'
+                      : 'grey'
+                "
+                variant="flat"
+                size="small"
+              >
+                {{ selectedCard.status }}
+              </v-chip>
+            </v-card-title>
+
+            <v-card-text class="pt-4">
+              <!-- Read-only info -->
+              <div class="d-flex justify-space-between text-body-2 mb-3">
+                <span class="text-medium-emphasis">Created</span>
+                <span>{{ formatDate(selectedCard.createdAt) }}</span>
+              </div>
+              <div class="d-flex justify-space-between text-body-2 mb-4">
+                <span class="text-medium-emphasis">Last Stamp</span>
+                <span>
+                  {{
+                    selectedCard.lastStampAt ? formatRelative(selectedCard.lastStampAt) : 'Never'
+                  }}
+                </span>
+              </div>
+
+              <v-divider class="mb-4" />
+
+              <!-- Editable fields -->
+              <v-select
+                v-model="cardForm.status"
+                :items="cardStatusOptions"
+                label="Status"
+                density="compact"
+                variant="outlined"
+                class="mb-3"
+              />
+
+              <v-text-field
+                v-model.number="cardForm.stamps"
+                label="Stamps"
+                type="number"
+                :min="0"
+                :max="form?.stampsPerCycle || 15"
+                density="compact"
+                variant="outlined"
+                :hint="`Max: ${form?.stampsPerCycle || 15} per cycle`"
+                persistent-hint
+                class="mb-3"
+              />
+
+              <v-text-field
+                v-model.number="cardForm.cycle"
+                label="Cycle"
+                type="number"
+                :min="1"
+                density="compact"
+                variant="outlined"
+                class="mb-3"
+              />
+
+              <v-autocomplete
+                v-model="cardForm.customerId"
+                :items="customerOptions"
+                item-title="name"
+                item-value="id"
+                label="Linked Customer"
+                density="compact"
+                variant="outlined"
+                clearable
+                class="mb-3"
+              />
+
+              <!-- Error -->
+              <v-alert v-if="cardSaveError" type="error" density="compact" class="mb-3">
+                {{ cardSaveError }}
+              </v-alert>
+            </v-card-text>
+
+            <v-card-actions class="px-4 pb-4">
+              <v-btn color="error" variant="text" :loading="cardDeleting" @click="handleDeleteCard">
+                Delete
+              </v-btn>
+              <v-spacer />
+              <v-btn variant="text" @click="showCardDetail = false">Cancel</v-btn>
+              <v-btn color="primary" variant="flat" :loading="cardSaving" @click="handleSaveCard">
+                Save
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-dialog>
+
         <!-- ===================== CUSTOMERS TAB ===================== -->
         <div v-show="activeTab === 'customers'">
           <!-- Stats -->
@@ -444,7 +553,7 @@
             </v-col>
           </v-row>
 
-          <!-- Search & filter -->
+          <!-- Search, filter & create -->
           <div class="d-flex gap-2 mb-3">
             <v-text-field
               v-model="customerSearch"
@@ -466,6 +575,25 @@
               clearable
               style="max-width: 140px"
             />
+            <v-select
+              v-model="customerStatusFilter"
+              :items="['active', 'blocked']"
+              label="Status"
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+              style="max-width: 140px"
+            />
+            <v-spacer />
+            <v-btn
+              color="primary"
+              variant="flat"
+              prepend-icon="mdi-plus"
+              @click="openCreateCustomer"
+            >
+              New Customer
+            </v-btn>
           </div>
 
           <!-- Table -->
@@ -498,6 +626,17 @@
               <template #[`item.averageCheck`]="{ item }">
                 {{ item.averageCheck ? formatIDR(item.averageCheck) : '-' }}
               </template>
+              <template #[`item.personalDiscount`]="{ item }">
+                <v-chip
+                  v-if="item.personalDiscount > 0"
+                  size="x-small"
+                  color="orange"
+                  variant="tonal"
+                >
+                  {{ item.personalDiscount }}%
+                </v-chip>
+                <span v-else class="text-medium-emphasis">-</span>
+              </template>
               <template #[`item.lastVisitAt`]="{ item }">
                 {{ item.lastVisitAt ? formatRelative(item.lastVisitAt) : 'Never' }}
               </template>
@@ -513,99 +652,389 @@
             </v-data-table>
           </v-card>
 
-          <!-- Customer Detail Dialog -->
-          <v-dialog v-model="showCustomerDetail" max-width="600">
+          <!-- ===== Customer Detail / Edit Dialog ===== -->
+          <v-dialog v-model="showCustomerDetail" max-width="650" scrollable>
             <v-card v-if="selectedCustomer">
               <v-card-title class="d-flex align-center justify-space-between bg-primary text-white">
-                <span>{{ selectedCustomer.name }}</span>
-                <v-chip
-                  :color="getTierColor(selectedCustomer.tier)"
-                  variant="flat"
-                  class="text-white"
-                >
-                  {{ selectedCustomer.tier.toUpperCase() }}
-                </v-chip>
+                <span>{{ customerEditing ? 'Edit Customer' : selectedCustomer.name }}</span>
+                <div class="d-flex align-center gap-1">
+                  <v-chip
+                    :color="getTierColor(selectedCustomer.tier)"
+                    variant="flat"
+                    class="text-white"
+                    size="small"
+                  >
+                    {{ selectedCustomer.tier.toUpperCase() }}
+                  </v-chip>
+                  <v-chip
+                    :color="selectedCustomer.status === 'active' ? 'success' : 'error'"
+                    variant="flat"
+                    size="small"
+                  >
+                    {{ selectedCustomer.status }}
+                  </v-chip>
+                </div>
               </v-card-title>
 
+              <v-card-text class="pt-4" style="max-height: 70vh">
+                <!-- ---- View Mode ---- -->
+                <template v-if="!customerEditing">
+                  <v-row dense>
+                    <v-col cols="6">
+                      <div class="text-caption text-medium-emphasis">Balance</div>
+                      <div class="text-h6">{{ formatIDR(selectedCustomer.loyaltyBalance) }}</div>
+                    </v-col>
+                    <v-col cols="6">
+                      <div class="text-caption text-medium-emphasis">Total Spent</div>
+                      <div class="text-h6">{{ formatIDR(selectedCustomer.totalSpent) }}</div>
+                    </v-col>
+                    <v-col cols="6">
+                      <div class="text-caption text-medium-emphasis">Visits</div>
+                      <div class="text-h6">{{ selectedCustomer.totalVisits }}</div>
+                    </v-col>
+                    <v-col cols="6">
+                      <div class="text-caption text-medium-emphasis">Avg Check</div>
+                      <div class="text-h6">
+                        {{
+                          selectedCustomer.averageCheck
+                            ? formatIDR(selectedCustomer.averageCheck)
+                            : '-'
+                        }}
+                      </div>
+                    </v-col>
+                  </v-row>
+
+                  <v-divider class="my-3" />
+
+                  <v-row dense>
+                    <v-col cols="6">
+                      <div class="text-caption text-medium-emphasis">Phone</div>
+                      <div class="text-body-1">{{ selectedCustomer.phone || '-' }}</div>
+                    </v-col>
+                    <v-col cols="6">
+                      <div class="text-caption text-medium-emphasis">Telegram</div>
+                      <div class="text-body-1">
+                        {{
+                          selectedCustomer.telegramUsername
+                            ? '@' + selectedCustomer.telegramUsername
+                            : '-'
+                        }}
+                      </div>
+                    </v-col>
+                  </v-row>
+
+                  <!-- Personal Discount -->
+                  <v-divider class="my-3" />
+                  <div class="text-subtitle-2 mb-1">Personal Discount</div>
+                  <div
+                    v-if="selectedCustomer.personalDiscount > 0"
+                    class="d-flex align-center gap-2 mb-1"
+                  >
+                    <v-chip color="orange" variant="tonal" size="small">
+                      {{ selectedCustomer.personalDiscount }}%
+                    </v-chip>
+                    <span v-if="selectedCustomer.discountNote" class="text-body-2">
+                      {{ selectedCustomer.discountNote }}
+                    </span>
+                    <v-chip
+                      v-if="selectedCustomer.disableLoyaltyAccrual"
+                      size="x-small"
+                      color="grey"
+                      variant="tonal"
+                    >
+                      No accrual
+                    </v-chip>
+                  </div>
+                  <div v-else class="text-body-2 text-medium-emphasis">No personal discount</div>
+
+                  <v-divider class="my-3" />
+
+                  <div class="text-caption text-medium-emphasis mb-1">Token</div>
+                  <div class="text-body-2 font-weight-mono mb-3">
+                    {{ maskToken(selectedCustomer.token) }}
+                  </div>
+
+                  <!-- Transactions -->
+                  <v-divider class="my-3" />
+                  <div class="text-subtitle-2 mb-2">Recent Transactions</div>
+                  <div v-if="loadingTx" class="text-center py-2">
+                    <v-progress-circular indeterminate size="24" />
+                  </div>
+                  <v-list
+                    v-else-if="customerTxs.length > 0"
+                    density="compact"
+                    class="transaction-list"
+                  >
+                    <v-list-item v-for="tx in customerTxs" :key="tx.id" class="px-0">
+                      <template #prepend>
+                        <v-icon
+                          size="18"
+                          :color="tx.amount >= 0 ? 'success' : 'error'"
+                          class="mr-2"
+                        >
+                          {{ tx.amount >= 0 ? 'mdi-arrow-down' : 'mdi-arrow-up' }}
+                        </v-icon>
+                      </template>
+                      <v-list-item-title class="text-body-2">
+                        {{ tx.type }} — {{ formatIDR(Math.abs(tx.amount)) }}
+                      </v-list-item-title>
+                      <v-list-item-subtitle class="text-caption">
+                        {{ tx.description || '' }} | Balance: {{ formatIDR(tx.balanceAfter) }}
+                      </v-list-item-subtitle>
+                      <template #append>
+                        <span class="text-caption text-medium-emphasis">
+                          {{ formatRelative(tx.createdAt) }}
+                        </span>
+                      </template>
+                    </v-list-item>
+                  </v-list>
+                  <div v-else class="text-body-2 text-medium-emphasis">No transactions yet</div>
+                </template>
+
+                <!-- ---- Edit Mode ---- -->
+                <template v-else>
+                  <v-text-field
+                    v-model="custForm.name"
+                    label="Name *"
+                    density="compact"
+                    variant="outlined"
+                    class="mb-3"
+                  />
+                  <v-row dense class="mb-3">
+                    <v-col cols="4">
+                      <v-select
+                        v-model="custForm.phoneCode"
+                        :items="phoneCodes"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                      />
+                    </v-col>
+                    <v-col cols="8">
+                      <v-text-field
+                        v-model="custForm.phoneNumber"
+                        label="Phone"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                        inputmode="tel"
+                      />
+                    </v-col>
+                  </v-row>
+                  <v-text-field
+                    v-model="custForm.telegramUsername"
+                    label="Telegram username"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="mb-3"
+                  />
+                  <v-text-field
+                    v-model="custForm.notes"
+                    label="Notes"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="mb-3"
+                  />
+                  <v-select
+                    v-model="custForm.tier"
+                    :items="tierOptions"
+                    label="Tier"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="mb-3"
+                  />
+
+                  <v-divider class="my-3" />
+                  <div class="text-subtitle-2 mb-2">Personal Discount</div>
+                  <v-row dense class="mb-2">
+                    <v-col cols="4">
+                      <v-text-field
+                        v-model.number="custForm.personalDiscount"
+                        type="number"
+                        label="Discount %"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                        :min="0"
+                        :max="100"
+                        suffix="%"
+                      />
+                    </v-col>
+                    <v-col cols="5">
+                      <v-text-field
+                        v-model="custForm.discountNote"
+                        label="Note (e.g. Founder)"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                      />
+                    </v-col>
+                    <v-col cols="3" class="d-flex align-center">
+                      <v-checkbox
+                        v-model="custForm.disableLoyaltyAccrual"
+                        label="No accrual"
+                        density="compact"
+                        hide-details
+                      />
+                    </v-col>
+                  </v-row>
+
+                  <v-alert
+                    v-if="custSaveError"
+                    type="error"
+                    variant="tonal"
+                    density="compact"
+                    class="mt-2"
+                  >
+                    {{ custSaveError }}
+                  </v-alert>
+                </template>
+              </v-card-text>
+
+              <v-card-actions class="px-4 pb-3">
+                <template v-if="!customerEditing">
+                  <v-btn
+                    variant="tonal"
+                    :color="selectedCustomer.status === 'active' ? 'error' : 'success'"
+                    size="small"
+                    :loading="togglingStatus"
+                    @click="toggleCustomerStatus"
+                  >
+                    {{ selectedCustomer.status === 'active' ? 'Deactivate' : 'Activate' }}
+                  </v-btn>
+                  <v-spacer />
+                  <v-btn variant="outlined" prepend-icon="mdi-pencil" @click="startCustomerEdit">
+                    Edit
+                  </v-btn>
+                  <v-btn variant="text" @click="showCustomerDetail = false">Close</v-btn>
+                </template>
+                <template v-else>
+                  <v-spacer />
+                  <v-btn variant="text" @click="customerEditing = false">Cancel</v-btn>
+                  <v-btn
+                    color="primary"
+                    variant="flat"
+                    :loading="custSaving"
+                    :disabled="!custForm.name?.trim()"
+                    @click="saveCustomerEdit"
+                  >
+                    Save
+                  </v-btn>
+                </template>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+
+          <!-- ===== Create Customer Dialog ===== -->
+          <v-dialog v-model="showCreateCustomerDialog" max-width="500">
+            <v-card>
+              <v-card-title class="bg-primary text-white">New Customer</v-card-title>
               <v-card-text class="pt-4">
-                <v-row dense>
-                  <v-col cols="6">
-                    <div class="text-caption text-medium-emphasis">Balance</div>
-                    <div class="text-h6">{{ formatIDR(selectedCustomer.loyaltyBalance) }}</div>
+                <v-text-field
+                  v-model="custForm.name"
+                  label="Name *"
+                  density="compact"
+                  variant="outlined"
+                  class="mb-3"
+                />
+                <v-row dense class="mb-3">
+                  <v-col cols="4">
+                    <v-select
+                      v-model="custForm.phoneCode"
+                      :items="phoneCodes"
+                      density="compact"
+                      variant="outlined"
+                      hide-details
+                    />
                   </v-col>
-                  <v-col cols="6">
-                    <div class="text-caption text-medium-emphasis">Total Spent</div>
-                    <div class="text-h6">{{ formatIDR(selectedCustomer.totalSpent) }}</div>
+                  <v-col cols="8">
+                    <v-text-field
+                      v-model="custForm.phoneNumber"
+                      label="Phone"
+                      density="compact"
+                      variant="outlined"
+                      hide-details
+                      inputmode="tel"
+                    />
                   </v-col>
-                  <v-col cols="6">
-                    <div class="text-caption text-medium-emphasis">Visits</div>
-                    <div class="text-h6">{{ selectedCustomer.totalVisits }}</div>
+                </v-row>
+                <v-text-field
+                  v-model="custForm.telegramUsername"
+                  label="Telegram username"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                  class="mb-3"
+                />
+                <v-text-field
+                  v-model="custForm.notes"
+                  label="Notes"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                  class="mb-3"
+                />
+
+                <v-divider class="my-3" />
+                <div class="text-subtitle-2 mb-2">Personal Discount (optional)</div>
+                <v-row dense class="mb-2">
+                  <v-col cols="4">
+                    <v-text-field
+                      v-model.number="custForm.personalDiscount"
+                      type="number"
+                      label="Discount %"
+                      density="compact"
+                      variant="outlined"
+                      hide-details
+                      :min="0"
+                      :max="100"
+                      suffix="%"
+                    />
                   </v-col>
-                  <v-col cols="6">
-                    <div class="text-caption text-medium-emphasis">Avg Check</div>
-                    <div class="text-h6">
-                      {{
-                        selectedCustomer.averageCheck
-                          ? formatIDR(selectedCustomer.averageCheck)
-                          : '-'
-                      }}
-                    </div>
+                  <v-col cols="5">
+                    <v-text-field
+                      v-model="custForm.discountNote"
+                      label="Note (e.g. Founder)"
+                      density="compact"
+                      variant="outlined"
+                      hide-details
+                    />
+                  </v-col>
+                  <v-col cols="3" class="d-flex align-center">
+                    <v-checkbox
+                      v-model="custForm.disableLoyaltyAccrual"
+                      label="No accrual"
+                      density="compact"
+                      hide-details
+                    />
                   </v-col>
                 </v-row>
 
-                <v-divider class="my-3" />
-
-                <div v-if="selectedCustomer.phone" class="mb-2">
-                  <div class="text-caption text-medium-emphasis mb-1">Phone</div>
-                  <div class="text-body-1">{{ selectedCustomer.phone }}</div>
-                </div>
-                <div class="mb-2">
-                  <div class="text-caption text-medium-emphasis mb-1">Telegram</div>
-                  <div class="text-body-1">{{ selectedCustomer.telegramUsername || '-' }}</div>
-                </div>
-                <div>
-                  <div class="text-caption text-medium-emphasis mb-1">Token</div>
-                  <div class="text-body-2 font-weight-mono">
-                    {{ maskToken(selectedCustomer.token) }}
-                  </div>
-                </div>
-
-                <!-- Transactions -->
-                <v-divider class="my-3" />
-                <div class="text-subtitle-2 mb-2">Recent Transactions</div>
-                <div v-if="loadingTx" class="text-center py-2">
-                  <v-progress-circular indeterminate size="24" />
-                </div>
-                <v-list
-                  v-else-if="customerTxs.length > 0"
+                <v-alert
+                  v-if="custSaveError"
+                  type="error"
+                  variant="tonal"
                   density="compact"
-                  class="transaction-list"
+                  class="mt-2"
                 >
-                  <v-list-item v-for="tx in customerTxs" :key="tx.id" class="px-0">
-                    <template #prepend>
-                      <v-icon size="18" :color="tx.amount >= 0 ? 'success' : 'error'" class="mr-2">
-                        {{ tx.amount >= 0 ? 'mdi-arrow-down' : 'mdi-arrow-up' }}
-                      </v-icon>
-                    </template>
-                    <v-list-item-title class="text-body-2">
-                      {{ tx.type }} — {{ formatIDR(Math.abs(tx.amount)) }}
-                    </v-list-item-title>
-                    <v-list-item-subtitle class="text-caption">
-                      {{ tx.description || '' }} | Balance: {{ formatIDR(tx.balanceAfter) }}
-                    </v-list-item-subtitle>
-                    <template #append>
-                      <span class="text-caption text-medium-emphasis">
-                        {{ formatRelative(tx.createdAt) }}
-                      </span>
-                    </template>
-                  </v-list-item>
-                </v-list>
-                <div v-else class="text-body-2 text-medium-emphasis">No transactions yet</div>
+                  {{ custSaveError }}
+                </v-alert>
               </v-card-text>
-
               <v-card-actions>
                 <v-spacer />
-                <v-btn variant="text" @click="showCustomerDetail = false">Close</v-btn>
+                <v-btn variant="text" @click="showCreateCustomerDialog = false">Cancel</v-btn>
+                <v-btn
+                  color="primary"
+                  variant="flat"
+                  :loading="custSaving"
+                  :disabled="!custForm.name?.trim()"
+                  @click="createNewCustomer"
+                >
+                  Create
+                </v-btn>
               </v-card-actions>
             </v-card>
           </v-dialog>
@@ -632,10 +1061,12 @@ import type {
 } from '@/stores/loyalty'
 import type { Customer } from '@/stores/customers'
 import { formatIDR, TimeUtils } from '@/utils'
+import { usePhoneCodes, buildFullPhone } from '@/composables/usePhoneCodes'
 
 const loyaltyStore = useLoyaltyStore()
 const customersStore = useCustomersStore()
 const menuStore = useMenuStore()
+const { phoneCodes } = usePhoneCodes()
 
 // Menu categories for reward category picker
 const menuCategoryItems = computed(() =>
@@ -739,6 +1170,81 @@ const filteredCards = computed(() => {
   return list
 })
 
+const showCardDetail = ref(false)
+const selectedCard = ref<StampCardListItem | null>(null)
+const creatingCard = ref(false)
+const cardSaving = ref(false)
+const cardDeleting = ref(false)
+const cardSaveError = ref('')
+const cardForm = ref({
+  status: 'active',
+  stamps: 0,
+  cycle: 1,
+  customerId: null as string | null
+})
+
+const customerOptions = computed(() =>
+  customersStore.activeCustomers.map(c => ({ id: c.id, name: c.name }))
+)
+
+function openCardDetail(card: StampCardListItem) {
+  selectedCard.value = card
+  cardForm.value = {
+    status: card.status,
+    stamps: card.stamps,
+    cycle: card.cycle,
+    customerId: card.customerId
+  }
+  cardSaveError.value = ''
+  showCardDetail.value = true
+}
+
+async function handleCreateCard() {
+  creatingCard.value = true
+  try {
+    await loyaltyStore.issueNewCard()
+    await loadCards()
+  } catch (err) {
+    console.error('Failed to create card:', err)
+  } finally {
+    creatingCard.value = false
+  }
+}
+
+async function handleSaveCard() {
+  if (!selectedCard.value) return
+  cardSaving.value = true
+  cardSaveError.value = ''
+  try {
+    await loyaltyStore.updateCard(selectedCard.value.id, {
+      status: cardForm.value.status,
+      stamps: cardForm.value.stamps,
+      cycle: cardForm.value.cycle,
+      customer_id: cardForm.value.customerId
+    })
+    showCardDetail.value = false
+    await loadCards()
+  } catch (err) {
+    cardSaveError.value = err instanceof Error ? err.message : 'Failed to save'
+  } finally {
+    cardSaving.value = false
+  }
+}
+
+async function handleDeleteCard() {
+  if (!selectedCard.value) return
+  cardDeleting.value = true
+  try {
+    await loyaltyStore.deleteCard(selectedCard.value.id)
+    showCardDetail.value = false
+    await loadCards()
+  } catch (err) {
+    cardSaveError.value = err instanceof Error ? err.message : 'Failed to delete'
+  } finally {
+    cardDeleting.value = false
+  }
+}
+
 async function loadCards() {
   loadingCards.value = true
   try {
@@ -757,12 +1263,31 @@ async function loadCards() {
 const loadingCustomers = ref(false)
 const customerSearch = ref('')
 const customerTierFilter = ref<string | null>(null)
+const customerStatusFilter = ref<string | null>(null)
 const showCustomerDetail = ref(false)
+const showCreateCustomerDialog = ref(false)
 const selectedCustomer = ref<Customer | null>(null)
 const customerTxs = ref<LoyaltyTransaction[]>([])
 const loadingTx = ref(false)
+const customerEditing = ref(false)
+const custSaving = ref(false)
+const custSaveError = ref('')
+const togglingStatus = ref(false)
 
 const tierOptions = ['member', 'regular', 'vip']
+
+// Shared form for create & edit
+const custForm = ref({
+  name: '',
+  phoneCode: '+62',
+  phoneNumber: '',
+  telegramUsername: '',
+  notes: '',
+  tier: 'member' as string,
+  personalDiscount: 0,
+  discountNote: '',
+  disableLoyaltyAccrual: false
+})
 
 const customerHeaders = [
   { title: 'Name', key: 'name', sortable: true },
@@ -771,6 +1296,7 @@ const customerHeaders = [
   { title: 'Total Spent', key: 'totalSpent', sortable: true },
   { title: 'Visits', key: 'totalVisits', sortable: true },
   { title: 'Avg Check', key: 'averageCheck', sortable: true },
+  { title: 'Discount', key: 'personalDiscount', sortable: true },
   { title: 'Last Visit', key: 'lastVisitAt', sortable: true },
   { title: 'Status', key: 'status', sortable: true }
 ]
@@ -788,6 +1314,9 @@ const filteredCustomers = computed(() => {
   }
   if (customerTierFilter.value) {
     list = list.filter(c => c.tier === customerTierFilter.value)
+  }
+  if (customerStatusFilter.value) {
+    list = list.filter(c => c.status === customerStatusFilter.value)
   }
   return list
 })
@@ -807,17 +1336,156 @@ const customerStats = computed(() => {
   ]
 })
 
+// Phone code parsing helper
+function parsePhone(phone: string | null): { code: string; number: string } {
+  if (!phone) return { code: '+62', number: '' }
+  const sorted = [...phoneCodes].sort((a, b) => b.value.length - a.value.length)
+  for (const pc of sorted) {
+    if (phone.startsWith(pc.value)) {
+      return { code: pc.value, number: phone.slice(pc.value.length) }
+    }
+  }
+  return { code: '+62', number: phone }
+}
+
+function resetCustForm() {
+  custForm.value = {
+    name: '',
+    phoneCode: '+62',
+    phoneNumber: '',
+    telegramUsername: '',
+    notes: '',
+    tier: 'member',
+    personalDiscount: 0,
+    discountNote: '',
+    disableLoyaltyAccrual: false
+  }
+  custSaveError.value = ''
+}
+
+// ---- Open detail (view mode) ----
 async function openCustomerDetail(customer: Customer) {
   selectedCustomer.value = customer
+  customerEditing.value = false
+  custSaveError.value = ''
   showCustomerDetail.value = true
   loadingTx.value = true
 
   try {
-    customerTxs.value = await loyaltyStore.getTransactions(customer.id, 20)
+    // Refresh + load transactions in parallel
+    const [, txs] = await Promise.all([
+      customersStore.refreshCustomer(customer.id).then(() => {
+        selectedCustomer.value = customersStore.getById(customer.id) || customer
+      }),
+      loyaltyStore.getTransactions(customer.id, 20)
+    ])
+    customerTxs.value = txs
   } catch {
     customerTxs.value = []
   } finally {
     loadingTx.value = false
+  }
+}
+
+// ---- Edit mode ----
+function startCustomerEdit() {
+  if (!selectedCustomer.value) return
+  const c = selectedCustomer.value
+  const parsed = parsePhone(c.phone)
+  custForm.value = {
+    name: c.name,
+    phoneCode: parsed.code,
+    phoneNumber: parsed.number,
+    telegramUsername: c.telegramUsername || '',
+    notes: c.notes || '',
+    tier: c.tier,
+    personalDiscount: c.personalDiscount || 0,
+    discountNote: c.discountNote || '',
+    disableLoyaltyAccrual: c.disableLoyaltyAccrual || false
+  }
+  custSaveError.value = ''
+  customerEditing.value = true
+}
+
+async function saveCustomerEdit() {
+  if (!selectedCustomer.value || !custForm.value.name.trim()) return
+  custSaving.value = true
+  custSaveError.value = ''
+
+  try {
+    const fullPhone = buildFullPhone(custForm.value.phoneCode, custForm.value.phoneNumber)
+    const updated = await customersStore.updateCustomer(selectedCustomer.value.id, {
+      name: custForm.value.name.trim(),
+      phone: fullPhone || null,
+      telegramUsername: custForm.value.telegramUsername.trim() || null,
+      notes: custForm.value.notes.trim() || null,
+      tier: custForm.value.tier,
+      personalDiscount: Math.max(0, Math.min(100, custForm.value.personalDiscount || 0)),
+      discountNote: custForm.value.discountNote.trim() || null,
+      disableLoyaltyAccrual: custForm.value.disableLoyaltyAccrual
+    } as Partial<Customer>)
+    selectedCustomer.value = updated
+    customerEditing.value = false
+    snackbar.message = 'Customer updated'
+    snackbar.color = 'success'
+    snackbar.show = true
+  } catch (err) {
+    custSaveError.value = err instanceof Error ? err.message : 'Failed to save'
+  } finally {
+    custSaving.value = false
+  }
+}
+
+// ---- Toggle status ----
+async function toggleCustomerStatus() {
+  if (!selectedCustomer.value) return
+  togglingStatus.value = true
+  try {
+    const newStatus = selectedCustomer.value.status === 'active' ? 'blocked' : 'active'
+    const updated = await customersStore.updateCustomer(selectedCustomer.value.id, {
+      status: newStatus
+    } as Partial<Customer>)
+    selectedCustomer.value = updated
+    snackbar.message = `Customer ${newStatus === 'active' ? 'activated' : 'deactivated'}`
+    snackbar.color = 'success'
+    snackbar.show = true
+  } catch (err) {
+    console.error('Failed to toggle status:', err)
+  } finally {
+    togglingStatus.value = false
+  }
+}
+
+// ---- Create customer ----
+function openCreateCustomer() {
+  resetCustForm()
+  showCreateCustomerDialog.value = true
+}
+
+async function createNewCustomer() {
+  if (!custForm.value.name.trim()) return
+  custSaving.value = true
+  custSaveError.value = ''
+
+  try {
+    const fullPhone = buildFullPhone(custForm.value.phoneCode, custForm.value.phoneNumber)
+    await customersStore.createCustomer({
+      name: custForm.value.name.trim(),
+      phone: fullPhone || null,
+      telegramUsername: custForm.value.telegramUsername.trim() || null,
+      notes: custForm.value.notes.trim() || null,
+      personalDiscount: Math.max(0, Math.min(100, custForm.value.personalDiscount || 0)),
+      discountNote: custForm.value.discountNote.trim() || null,
+      disableLoyaltyAccrual: custForm.value.disableLoyaltyAccrual
+    } as Partial<Customer>)
+    showCreateCustomerDialog.value = false
+    snackbar.message = 'Customer created'
+    snackbar.color = 'success'
+    snackbar.show = true
+  } catch (err) {
+    custSaveError.value = err instanceof Error ? err.message : 'Failed to create customer'
+  } finally {
+    custSaving.value = false
   }
 }
 

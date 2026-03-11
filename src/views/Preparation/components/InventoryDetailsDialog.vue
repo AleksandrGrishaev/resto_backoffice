@@ -416,19 +416,36 @@
           </v-card-text>
         </v-card>
 
-        <!-- Total Value Difference -->
-        <v-card
-          v-if="(inventory.totalValueDifference || 0) !== 0"
-          variant="tonal"
-          :color="(inventory.totalValueDifference || 0) > 0 ? 'success' : 'error'"
-          class="mt-4"
-        >
-          <v-card-text class="d-flex align-center justify-space-between">
-            <div class="text-subtitle-1 font-weight-medium">
-              Total Value {{ (inventory.totalValueDifference || 0) > 0 ? 'Surplus' : 'Shortage' }}
+        <!-- Value Summary Breakdown -->
+        <v-card v-if="surplusTotal !== 0 || shortageTotal !== 0" variant="outlined" class="mt-4">
+          <v-card-text class="py-3">
+            <div v-if="surplusTotal > 0" class="d-flex align-center justify-space-between mb-2">
+              <div class="d-flex align-center">
+                <v-icon icon="mdi-plus-circle" color="success" size="20" class="mr-2" />
+                <span class="text-body-1">Surplus</span>
+              </div>
+              <span class="text-body-1 font-weight-medium text-success">
+                +{{ formatCurrency(surplusTotal) }}
+              </span>
             </div>
-            <div class="text-h6 font-weight-bold">
-              {{ formatCurrency(Math.abs(inventory.totalValueDifference || 0)) }}
+            <div v-if="shortageTotal < 0" class="d-flex align-center justify-space-between mb-2">
+              <div class="d-flex align-center">
+                <v-icon icon="mdi-minus-circle" color="error" size="20" class="mr-2" />
+                <span class="text-body-1">Shortage</span>
+              </div>
+              <span class="text-body-1 font-weight-medium text-error">
+                {{ formatCurrency(shortageTotal) }}
+              </span>
+            </div>
+            <v-divider v-if="surplusTotal > 0 && shortageTotal < 0" class="mb-2" />
+            <div class="d-flex align-center justify-space-between">
+              <span class="text-subtitle-1 font-weight-bold">Total</span>
+              <span
+                class="text-h6 font-weight-bold"
+                :class="(inventory.totalValueDifference || 0) >= 0 ? 'text-success' : 'text-error'"
+              >
+                {{ formatCurrency(inventory.totalValueDifference || 0) }}
+              </span>
             </div>
           </v-card-text>
         </v-card>
@@ -500,6 +517,20 @@ const countedItemsCount = computed(() => countedItems.value.length)
 
 const discrepancyItems = computed(() =>
   countedItems.value.filter(item => Math.abs(item.difference || 0) > 0.01)
+)
+
+const surplusTotal = computed(() =>
+  countedItems.value.reduce((sum, item) => {
+    const val = item.valueDifference || 0
+    return val > 0 ? sum + val : sum
+  }, 0)
+)
+
+const shortageTotal = computed(() =>
+  countedItems.value.reduce((sum, item) => {
+    const val = item.valueDifference || 0
+    return val < 0 ? sum + val : sum
+  }, 0)
 )
 
 const expiredOrExpiringItems = computed(() =>
