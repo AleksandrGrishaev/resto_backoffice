@@ -582,10 +582,10 @@ function applyTemplate(template: VariantTemplate): void {
 
   template.selectedModifiers.forEach(selection => {
     const groupSelections = new Map<string, number>()
-    // Count occurrences of each optionId (supports multiple same options in template)
     selection.optionIds.forEach(optionId => {
-      const current = groupSelections.get(optionId) || 0
-      groupSelections.set(optionId, current + 1)
+      // Use explicit quantities if available, otherwise count duplicates in optionIds
+      const qty = selection.quantities?.[optionId] || (groupSelections.get(optionId) || 0) + 1
+      groupSelections.set(optionId, qty)
     })
     selectedModifiers.value.set(selection.groupId, groupSelections)
   })
