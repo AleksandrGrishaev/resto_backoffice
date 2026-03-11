@@ -462,14 +462,35 @@ export class RecipesService {
         message: 'Cost will be automatically updated when first production batch is created'
       })
 
-      // Insert preparation to Supabase and return the result
-      const { data: insertedPreparation, error: preparationError } = await supabase
-        .from('preparations')
-        .insert(preparationInsert)
-        .select()
-        .single()
+      // Insert preparation to Supabase with retry on duplicate code
+      let insertedPreparation: any = null
+      const maxRetries = 3
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const { data: result, error: preparationError } = await supabase
+          .from('preparations')
+          .insert(
+            attempt === 0
+              ? preparationInsert
+              : { ...preparationInsert, code: await getNextPreparationCode() }
+          )
+          .select()
+          .single()
 
-      if (preparationError) {
+        if (!preparationError) {
+          insertedPreparation = result
+          break
+        }
+
+        // Retry on duplicate code conflict
+        if (
+          preparationError.code === '23505' &&
+          preparationError.message.includes('preparations_code_key') &&
+          attempt < maxRetries
+        ) {
+          DebugUtils.info(MODULE_NAME, `⚠️ Code conflict, retrying (${attempt + 1}/${maxRetries})`)
+          continue
+        }
+
         DebugUtils.error(
           MODULE_NAME,
           '❌ Failed to save preparation to Supabase:',
@@ -856,14 +877,36 @@ export class RecipesService {
         updatedAt: now
       })
 
-      // Insert recipe to Supabase and return the result
-      const { data: insertedRecipe, error: recipeError } = await supabase
-        .from('recipes')
-        .insert(recipeInsert)
-        .select()
-        .single()
+      // Insert recipe to Supabase with retry on duplicate code
+      let insertedRecipe: any = null
+      const maxRetries = 3
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const { data: result, error: recipeError } = await supabase
+          .from('recipes')
+          .insert(
+            attempt === 0 ? recipeInsert : { ...recipeInsert, code: await getNextRecipeCode() }
+          )
+          .select()
+          .single()
 
-      if (recipeError) {
+        if (!recipeError) {
+          insertedRecipe = result
+          break
+        }
+
+        // Retry on duplicate code conflict
+        if (
+          recipeError.code === '23505' &&
+          recipeError.message.includes('code_key') &&
+          attempt < maxRetries
+        ) {
+          DebugUtils.info(
+            MODULE_NAME,
+            `⚠️ Recipe code conflict, retrying (${attempt + 1}/${maxRetries})`
+          )
+          continue
+        }
+
         DebugUtils.error(MODULE_NAME, '❌ Failed to save recipe to Supabase:', recipeError)
         throw new Error(`Failed to create recipe: ${recipeError.message}`)
       }
