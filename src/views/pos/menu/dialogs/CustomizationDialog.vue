@@ -94,7 +94,10 @@
               class="modifier-group pa-4 border-b"
             >
               <!-- Group Header -->
-              <div class="d-flex align-center justify-space-between mb-3">
+              <div
+                class="d-flex align-center justify-space-between mb-3 group-header-toggle"
+                @click="toggleGroupCollapse(group.id)"
+              >
                 <div>
                   <div class="text-subtitle-1 font-weight-bold">
                     {{ group.name }}
@@ -106,10 +109,15 @@
                     {{ group.description }}
                   </div>
                 </div>
+                <v-icon
+                  :icon="collapsedGroups.has(group.id) ? 'mdi-chevron-down' : 'mdi-chevron-up'"
+                  size="small"
+                />
               </div>
 
               <!-- Options (Radio only for component groups) -->
               <v-radio-group
+                v-show="!collapsedGroups.has(group.id)"
                 :model-value="getSelectedOptionId(group.id)"
                 hide-details
                 @update:model-value="value => handleRadioChange(group, value)"
@@ -163,35 +171,68 @@
 
           <!-- Addon Groups Section -->
           <div v-if="addonGroups.length > 0" class="addon-groups-section">
-            <div class="section-header pa-3 bg-green-lighten-5">
+            <div class="section-header pa-3 bg-green-lighten-5 d-flex align-center">
               <v-icon icon="mdi-plus-circle-outline" size="small" class="mr-2" />
               <span class="text-subtitle-2 font-weight-bold">Extras</span>
+              <v-spacer />
+              <v-btn
+                size="x-small"
+                variant="text"
+                :prepend-icon="
+                  addonGroups.every(g => collapsedGroups.has(g.id))
+                    ? 'mdi-unfold-more-horizontal'
+                    : 'mdi-unfold-less-horizontal'
+                "
+                @click="collapseAll"
+              >
+                {{ addonGroups.every(g => collapsedGroups.has(g.id)) ? 'Expand' : 'Collapse' }}
+              </v-btn>
             </div>
 
             <div v-for="group in addonGroups" :key="group.id" class="modifier-group pa-4 border-b">
               <!-- Group Header -->
-              <div class="d-flex align-center justify-space-between mb-3">
+              <div
+                class="d-flex align-center justify-space-between group-header-toggle"
+                :class="{ 'mb-3': !collapsedGroups.has(group.id) }"
+                @click="toggleGroupCollapse(group.id)"
+              >
                 <div>
                   <div class="text-subtitle-1 font-weight-bold">
                     {{ group.name }}
                     <v-chip v-if="group.isRequired" size="x-small" color="error" class="ml-2" label>
                       Required
                     </v-chip>
+                    <v-chip
+                      v-if="collapsedGroups.has(group.id) && getSelectedCount(group) > 0"
+                      size="x-small"
+                      color="primary"
+                      class="ml-2"
+                    >
+                      {{ getSelectedCount(group) }} selected
+                    </v-chip>
                   </div>
                   <div v-if="group.description" class="text-body-2 text-grey">
                     {{ group.description }}
                   </div>
                 </div>
-                <div
-                  v-if="group.maxSelection && group.maxSelection > 0"
-                  class="text-caption text-grey"
-                >
-                  {{ getSelectedCount(group) }} / {{ group.maxSelection }} selected
+                <div class="d-flex align-center">
+                  <div
+                    v-if="
+                      !collapsedGroups.has(group.id) && group.maxSelection && group.maxSelection > 0
+                    "
+                    class="text-caption text-grey mr-2"
+                  >
+                    {{ getSelectedCount(group) }} / {{ group.maxSelection }} selected
+                  </div>
+                  <v-icon
+                    :icon="collapsedGroups.has(group.id) ? 'mdi-chevron-down' : 'mdi-chevron-up'"
+                    size="small"
+                  />
                 </div>
               </div>
 
               <!-- Options (with +/- controls for addon groups) -->
-              <v-list class="pa-0">
+              <v-list v-show="!collapsedGroups.has(group.id)" class="pa-0">
                 <v-list-item
                   v-for="option in group.options"
                   :key="option.id"
@@ -349,6 +390,26 @@ const recipesStore = useRecipesStore()
 // Map<groupId, Map<optionId, count>> - allows selecting same option multiple times
 const selectedModifiers = ref<Map<string, Map<string, number>>>(new Map())
 const selectedTemplateId = ref<string | null>(null)
+const collapsedGroups = ref<Set<string>>(new Set())
+
+function toggleGroupCollapse(groupId: string): void {
+  if (collapsedGroups.value.has(groupId)) {
+    collapsedGroups.value.delete(groupId)
+  } else {
+    collapsedGroups.value.add(groupId)
+  }
+}
+
+function collapseAll(): void {
+  const allGroupIds = [...componentGroups.value.map(g => g.id), ...addonGroups.value.map(g => g.id)]
+  // If all are collapsed, expand all instead
+  const allCollapsed = allGroupIds.every(id => collapsedGroups.value.has(id))
+  if (allCollapsed) {
+    collapsedGroups.value.clear()
+  } else {
+    allGroupIds.forEach(id => collapsedGroups.value.add(id))
+  }
+}
 
 // ✨ UPDATED: Read modifierGroups from menuItem (not variant)
 // ✅ Architecture v2: Use isRequired instead of groupStyle
@@ -654,6 +715,7 @@ function initializeDefaults(): void {
 
   selectedModifiers.value.clear()
   selectedTemplateId.value = null
+  collapsedGroups.value.clear()
 
   // Apply defaults for required groups (they always need a selection)
   props.menuItem.modifierGroups.forEach(group => {
@@ -720,5 +782,10 @@ watch(
 .quantity-value {
   min-width: 24px;
   text-align: center;
+}
+
+.group-header-toggle {
+  cursor: pointer;
+  user-select: none;
 }
 </style>
