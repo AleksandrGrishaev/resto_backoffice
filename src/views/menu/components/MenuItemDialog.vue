@@ -672,9 +672,22 @@ function getNextSortOrder(categoryId: string): number {
   return Math.max(...categoryItems.map(item => item.sortOrder || 0)) + 1
 }
 
+/**
+ * Deep-clone modifierGroups/templates to decouple form state from the store.
+ * Without this, Vuetify's form.reset() sets v-model-bound fields to null,
+ * corrupting the reactive store objects through shared references.
+ */
+function deepCloneModifiers(groups: any[]): any[] {
+  if (!groups || groups.length === 0) return []
+  return JSON.parse(JSON.stringify(groups))
+}
+
 function resetForm() {
+  // NOTE: Do NOT call form.value.reset() here.
+  // Vuetify's VForm.reset() sets all v-model values to null, which corrupts
+  // store objects when modifierGroups/templates share references with the store.
   if (form.value) {
-    form.value.reset()
+    form.value.resetValidation()
   }
   formData.value = {
     categoryId: '',
@@ -905,8 +918,8 @@ watch(
           ...variant,
           composition: variant.composition || []
         })),
-        modifierGroups: newItem.modifierGroups || [],
-        templates: newItem.templates || [],
+        modifierGroups: deepCloneModifiers(newItem.modifierGroups || []),
+        templates: deepCloneModifiers(newItem.templates || []),
         channelIds: channelsStore.getMenuItemChannelIds(newItem.id),
         onlyModifiers: isOnlyModifiers
       }
@@ -947,8 +960,8 @@ watch(
             ...variant,
             composition: variant.composition || []
           })),
-          modifierGroups: props.item.modifierGroups || [],
-          templates: props.item.templates || [],
+          modifierGroups: deepCloneModifiers(props.item.modifierGroups || []),
+          templates: deepCloneModifiers(props.item.templates || []),
           channelIds: channelsStore.getMenuItemChannelIds(props.item.id),
           onlyModifiers: isOnlyMods
         }

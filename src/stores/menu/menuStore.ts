@@ -431,8 +431,10 @@ export const useMenuStore = defineStore('menu', () => {
           ? original.modifierGroups.map(group => ({
               ...group,
               id: generateId(), // новый ID для группы
-              // Deep copy targetComponent для replacement модификаторов
-              targetComponent: group.targetComponent ? { ...group.targetComponent } : undefined,
+              // Deep copy targetComponents для replacement модификаторов
+              targetComponents: group.targetComponents
+                ? group.targetComponents.map(tc => ({ ...tc }))
+                : undefined,
               options: group.options.map(option => ({
                 ...option,
                 id: generateId(), // новый ID для опции
