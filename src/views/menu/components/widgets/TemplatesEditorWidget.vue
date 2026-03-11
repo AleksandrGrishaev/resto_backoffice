@@ -135,16 +135,70 @@
                         class="mr-1"
                       />
                       {{ option.name }}
+                      <template
+                        v-if="
+                          isOptionSelected(group.id, option.id) &&
+                          getOptionQuantity(group.id, option.id) > 1
+                        "
+                      >
+                        <span class="ml-1 font-weight-bold">
+                          x{{ getOptionQuantity(group.id, option.id) }}
+                        </span>
+                      </template>
                       <span v-if="option.priceAdjustment" class="ml-1 text-caption">
                         (+{{ option.priceAdjustment.toLocaleString() }})
                       </span>
                     </v-chip>
+                  </div>
+                  <!-- Quantity controls for selected options -->
+                  <div
+                    v-if="getSelectedOptions(group.id).length > 0 && group.maxSelection !== 1"
+                    class="quantity-controls mt-3"
+                  >
+                    <div
+                      v-for="optId in getSelectedOptions(group.id)"
+                      :key="optId"
+                      class="quantity-row"
+                    >
+                      <span class="quantity-label">{{ getOptionName(group, optId) }}</span>
+                      <div class="quantity-buttons">
+                        <v-btn
+                          icon="mdi-minus"
+                          size="x-small"
+                          variant="outlined"
+                          density="compact"
+                          :disabled="getOptionQuantity(group.id, optId) <= 1"
+                          @click.stop="changeQuantity(group.id, optId, -1)"
+                        />
+                        <span class="quantity-value">{{ getOptionQuantity(group.id, optId) }}</span>
+                        <v-btn
+                          icon="mdi-plus"
+                          size="x-small"
+                          variant="outlined"
+                          density="compact"
+                          :disabled="
+                            group.maxSelection
+                              ? getTotalQuantity(group.id) >= group.maxSelection
+                              : false
+                          "
+                          @click.stop="changeQuantity(group.id, optId, 1)"
+                        />
+                      </div>
+                    </div>
                   </div>
                   <div
                     v-if="group.maxSelection === 1"
                     class="text-caption text-medium-emphasis mt-2"
                   >
                     Single selection only
+                  </div>
+                  <div
+                    v-else-if="group.maxSelection && group.maxSelection > 1"
+                    class="text-caption text-medium-emphasis mt-2"
+                  >
+                    Max {{ group.maxSelection }} selections ({{ getTotalQuantity(group.id) }}/{{
+                      group.maxSelection
+                    }})
                   </div>
                 </v-expansion-panel-text>
               </v-expansion-panel>
@@ -172,7 +226,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { ModifierGroup, VariantTemplate } from '@/stores/menu/types'
+import type { ModifierGroup, VariantTemplate, TemplateModifierSelection } from '@/stores/menu/types'
 
 interface Props {
   templates: VariantTemplate[]
@@ -195,6 +249,7 @@ interface DialogState {
   name: string
   description: string
   selectedModifiers: Map<string, Set<string>>
+  quantities: Map<string, Map<string, number>> // groupId → optionId → quantity
 }
 
 const dialog = ref<DialogState>({
@@ -202,14 +257,17 @@ const dialog = ref<DialogState>({
   editIndex: null,
   name: '',
   description: '',
-  selectedModifiers: new Map()
+  selectedModifiers: new Map(),
+  quantities: new Map()
 })
 
 function openAddDialog(): void {
   const defaultSelection = new Map<string, Set<string>>()
+  const defaultQuantities = new Map<string, Map<string, number>>()
   for (const group of props.modifierGroups) {
     const defaultOptions = group.options.filter(opt => opt.isDefault).map(opt => opt.id)
     defaultSelection.set(group.id, new Set(defaultOptions.length > 0 ? defaultOptions : []))
+    defaultQuantities.set(group.id, new Map())
   }
 
   dialog.value = {
@@ -217,7 +275,8 @@ function openAddDialog(): void {
     editIndex: null,
     name: '',
     description: '',
-    selectedModifiers: defaultSelection
+    selectedModifiers: defaultSelection,
+    quantities: defaultQuantities
   }
 }
 
@@ -226,11 +285,21 @@ function openEditDialog(index: number): void {
   if (!template) return
 
   const selection = new Map<string, Set<string>>()
+  const quantities = new Map<string, Map<string, number>>()
   for (const group of props.modifierGroups) {
     selection.set(group.id, new Set())
+    quantities.set(group.id, new Map())
   }
   for (const sel of template.selectedModifiers) {
     selection.set(sel.groupId, new Set(sel.optionIds))
+    // Restore quantities if present
+    if (sel.quantities) {
+      const groupQty = new Map<string, number>()
+      for (const [optId, qty] of Object.entries(sel.quantities)) {
+        if (qty > 1) groupQty.set(optId, qty)
+      }
+      quantities.set(sel.groupId, groupQty)
+    }
   }
 
   dialog.value = {
@@ -238,23 +307,33 @@ function openEditDialog(index: number): void {
     editIndex: index,
     name: template.name,
     description: template.description || '',
-    selectedModifiers: selection
+    selectedModifiers: selection,
+    quantities
   }
 }
 
 function toggleOption(groupId: string, optionId: string, maxSelection?: number): void {
   const current = dialog.value.selectedModifiers.get(groupId) || new Set()
+  const groupQty = dialog.value.quantities.get(groupId) || new Map<string, number>()
 
   if (current.has(optionId)) {
     current.delete(optionId)
+    groupQty.delete(optionId)
   } else {
+    // Check if adding would exceed maxSelection (counting total quantities)
+    if (maxSelection && maxSelection > 0) {
+      const totalQty = getTotalQuantity(groupId)
+      if (totalQty >= maxSelection) return
+    }
     if (maxSelection === 1) {
       current.clear()
+      groupQty.clear()
     }
     current.add(optionId)
   }
 
   dialog.value.selectedModifiers.set(groupId, current)
+  dialog.value.quantities.set(groupId, groupQty)
 }
 
 function isOptionSelected(groupId: string, optionId: string): boolean {
@@ -262,16 +341,66 @@ function isOptionSelected(groupId: string, optionId: string): boolean {
 }
 
 function getSelectedCount(groupId: string): number {
-  return dialog.value.selectedModifiers.get(groupId)?.size || 0
+  return getTotalQuantity(groupId)
+}
+
+function getOptionQuantity(groupId: string, optionId: string): number {
+  return dialog.value.quantities.get(groupId)?.get(optionId) || 1
+}
+
+function getTotalQuantity(groupId: string): number {
+  const selected = dialog.value.selectedModifiers.get(groupId)
+  if (!selected || selected.size === 0) return 0
+  let total = 0
+  for (const optId of selected) {
+    total += getOptionQuantity(groupId, optId)
+  }
+  return total
+}
+
+function getSelectedOptions(groupId: string): string[] {
+  const selected = dialog.value.selectedModifiers.get(groupId)
+  return selected ? Array.from(selected) : []
+}
+
+function getOptionName(group: ModifierGroup, optionId: string): string {
+  return group.options.find(o => o.id === optionId)?.name || optionId
+}
+
+function changeQuantity(groupId: string, optionId: string, delta: number): void {
+  const groupQty = dialog.value.quantities.get(groupId) || new Map<string, number>()
+  const current = getOptionQuantity(groupId, optionId)
+  const newQty = current + delta
+  if (newQty < 1) return
+  if (newQty === 1) {
+    groupQty.delete(optionId)
+  } else {
+    groupQty.set(optionId, newQty)
+  }
+  dialog.value.quantities.set(groupId, groupQty)
 }
 
 function saveTemplate(): void {
   if (!dialog.value.name.trim()) return
 
-  const selectedModifiers: { groupId: string; optionIds: string[] }[] = []
+  const selectedModifiers: TemplateModifierSelection[] = []
   dialog.value.selectedModifiers.forEach((optionIds, groupId) => {
     if (optionIds.size > 0) {
-      selectedModifiers.push({ groupId, optionIds: Array.from(optionIds) })
+      const groupQty = dialog.value.quantities.get(groupId)
+      const quantities: Record<string, number> = {}
+      let hasQuantities = false
+      for (const optId of optionIds) {
+        const qty = groupQty?.get(optId)
+        if (qty && qty > 1) {
+          quantities[optId] = qty
+          hasQuantities = true
+        }
+      }
+      selectedModifiers.push({
+        groupId,
+        optionIds: Array.from(optionIds),
+        ...(hasQuantities ? { quantities } : {})
+      })
     }
   })
 
@@ -310,7 +439,12 @@ function getModifiersPreview(template: VariantTemplate): string {
     const group = props.modifierGroups.find(g => g.id === sel.groupId)
     if (group) {
       const optionNames = sel.optionIds
-        .map(oid => group.options.find(o => o.id === oid)?.name)
+        .map(oid => {
+          const name = group.options.find(o => o.id === oid)?.name
+          if (!name) return null
+          const qty = sel.quantities?.[oid]
+          return qty && qty > 1 ? `${name} (x${qty})` : name
+        })
         .filter(Boolean)
       if (optionNames.length > 0) {
         parts.push(optionNames.join(', '))
@@ -374,5 +508,38 @@ function getModifiersPreview(template: VariantTemplate): string {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.quantity-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.quantity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.quantity-label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.quantity-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quantity-value {
+  min-width: 20px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 14px;
 }
 </style>
