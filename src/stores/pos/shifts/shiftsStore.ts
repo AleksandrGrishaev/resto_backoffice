@@ -23,6 +23,8 @@ import type {
   CreateLinkedExpenseDto,
   CreateUnlinkedExpenseDto,
   CreateAccountPaymentExpenseDto,
+  CancelExpenseDto,
+  EditExpenseDto,
   // Sprint 10: Transfer Operations
   ShiftTransferOperation,
   ConfirmTransferDto,
@@ -41,6 +43,11 @@ const MAX_SYNC_ATTEMPTS = 10 // Максимальное количество п
 
 // Heartbeat: periodic sync of active shift data
 const HEARTBEAT_INTERVAL = 2 * 60 * 1000 // 2 minutes
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function isValidUUID(value: string): boolean {
+  return UUID_RE.test(value)
+}
 
 export const useShiftsStore = defineStore('posShifts', () => {
   // ===== STATE =====
@@ -951,6 +958,395 @@ export const useShiftsStore = defineStore('posShifts', () => {
       return { success: true }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to reject expense'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    } finally {
+      loading.value.sync = false
+    }
+  }
+
+  // ============ EXPENSE EDIT / CANCEL OPERATIONS ============
+
+  /**
+   * Cancel an expense within the current shift
+   * If the expense already has a transaction in account store, creates a reversal
+   */
+  async function cancelExpense(data: CancelExpenseDto): Promise<ServiceResponse<void>> {
+    try {
+      if (!currentShift.value) {
+        return { success: false, error: 'No active shift' }
+      }
+
+      loading.value.sync = true
+      error.value = null
+
+      // Find the expense in the shift
+      const expense = currentShift.value.expenseOperations.find(e => e.id === data.expenseId)
+      if (!expense) {
+        return { success: false, error: `Expense ${data.expenseId} not found` }
+      }
+
+      if (expense.status === 'cancelled') {
+        return { success: false, error: 'Expense is already cancelled' }
+      }
+
+      // If expense has a related transaction, create a reversal
+      if (expense.relatedTransactionId) {
+        try {
+          const reversalTx = await accountStore.createOperation({
+            accountId: expense.relatedAccountId,
+            type: 'income', // Reverse of expense
+            amount: expense.amount,
+            description: `[REVERSAL] ${expense.description} — Reason: ${data.reason}`,
+            expenseCategory: { type: 'income', category: 'correction' },
+            performedBy: data.performedBy,
+            counteragentId: expense.counteragentId,
+            counteragentName: expense.counteragentName,
+            relatedPaymentId: expense.relatedPaymentId,
+            source: 'pos'
+          })
+
+          expense.reversalTransactionId = reversalTx.id
+          console.log('✅ Reversal transaction created:', reversalTx.id)
+        } catch (txError) {
+          console.error('❌ Failed to create reversal transaction:', txError)
+          return {
+            success: false,
+            error:
+              'Failed to create reversal transaction: ' +
+              (txError instanceof Error ? txError.message : String(txError))
+          }
+        }
+      }
+
+      // Update expense status
+      expense.status = 'cancelled'
+      expense.cancelledAt = new Date().toISOString()
+      expense.cancelledBy = data.performedBy
+      expense.cancelReason = data.reason
+      expense.updatedAt = new Date().toISOString()
+
+      // Update account balance in shift
+      const accountBalance = currentShift.value.accountBalances.find(
+        ab => ab.accountId === expense.relatedAccountId
+      )
+      if (accountBalance) {
+        accountBalance.totalExpense -= expense.amount
+      }
+
+      // Save shift
+      await shiftsService.updateShift(currentShift.value.id, currentShift.value)
+
+      // Cancel linked PendingPayment if exists
+      if (expense.relatedPaymentId) {
+        try {
+          await paymentService.update(expense.relatedPaymentId, { status: 'cancelled' })
+          const localPayment = accountStore.pendingPayments.find(
+            p => p.id === expense.relatedPaymentId
+          )
+          if (localPayment) {
+            localPayment.status = 'cancelled'
+            localPayment.updatedAt = new Date().toISOString()
+          }
+          console.log('✅ PendingPayment cancelled:', expense.relatedPaymentId)
+        } catch (paymentError) {
+          console.warn('⚠️ Failed to cancel PendingPayment:', paymentError)
+        }
+      }
+
+      // Create alert
+      try {
+        const { useAlertsStore } = await import('@/stores/alerts')
+        const alertsStore = useAlertsStore()
+        await alertsStore.createAlert({
+          category: 'shift',
+          type: 'expense_cancelled',
+          severity: 'warning',
+          title: 'Expense cancelled',
+          description: `${expense.counteragentName || 'Direct expense'}: Rp ${expense.amount.toLocaleString('id-ID')}. Reason: ${data.reason}`,
+          metadata: {
+            expenseId: expense.id,
+            expenseType: expense.type,
+            amount: expense.amount,
+            category: expense.category,
+            counteragentName: expense.counteragentName,
+            reason: data.reason,
+            cancelledBy: data.performedBy.name,
+            reversalTransactionId: expense.reversalTransactionId
+          },
+          shiftId: data.shiftId,
+          userId: isValidUUID(data.performedBy.id) ? data.performedBy.id : undefined
+        })
+      } catch (alertError) {
+        console.warn('⚠️ Failed to create cancellation alert:', alertError)
+      }
+
+      console.log(`✅ Expense cancelled: ${data.expenseId}`)
+      return { success: true }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to cancel expense'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    } finally {
+      loading.value.sync = false
+    }
+  }
+
+  /**
+   * Edit an expense within the current shift
+   * If the expense already has a transaction, creates reversal + new transaction
+   */
+  async function editExpense(
+    data: EditExpenseDto
+  ): Promise<ServiceResponse<ShiftExpenseOperation>> {
+    try {
+      if (!currentShift.value) {
+        return { success: false, error: 'No active shift' }
+      }
+
+      loading.value.sync = true
+      error.value = null
+
+      // Find the expense in the shift
+      const expense = currentShift.value.expenseOperations.find(e => e.id === data.expenseId)
+      if (!expense) {
+        return { success: false, error: `Expense ${data.expenseId} not found` }
+      }
+
+      if (expense.status === 'cancelled') {
+        return { success: false, error: 'Cannot edit a cancelled expense' }
+      }
+
+      // Track changes
+      const changes: { field: string; oldValue: any; newValue: any }[] = []
+      const oldAmount = expense.amount
+
+      if (data.amount !== undefined && data.amount !== expense.amount) {
+        changes.push({ field: 'amount', oldValue: expense.amount, newValue: data.amount })
+      }
+      if (data.description !== undefined && data.description !== expense.description) {
+        changes.push({
+          field: 'description',
+          oldValue: expense.description,
+          newValue: data.description
+        })
+      }
+      if (data.category !== undefined && data.category !== expense.category) {
+        changes.push({ field: 'category', oldValue: expense.category, newValue: data.category })
+      }
+      if (data.counteragentId !== undefined && data.counteragentId !== expense.counteragentId) {
+        changes.push({
+          field: 'counteragentId',
+          oldValue: expense.counteragentId,
+          newValue: data.counteragentId
+        })
+      }
+      if (
+        data.counteragentName !== undefined &&
+        data.counteragentName !== expense.counteragentName
+      ) {
+        changes.push({
+          field: 'counteragentName',
+          oldValue: expense.counteragentName,
+          newValue: data.counteragentName
+        })
+      }
+      if (data.notes !== undefined && data.notes !== (expense.notes || '')) {
+        changes.push({ field: 'notes', oldValue: expense.notes, newValue: data.notes })
+      }
+
+      if (changes.length === 0) {
+        return { success: false, error: 'No changes detected' }
+      }
+
+      // If expense has a related transaction AND financial fields changed, create reversal + new tx
+      const amountChanged = data.amount !== undefined && data.amount !== oldAmount
+      const categoryChanged = data.category !== undefined && data.category !== expense.category
+      const counteragentChanged =
+        data.counteragentId !== undefined && data.counteragentId !== expense.counteragentId
+      const needsTransactionUpdate =
+        expense.relatedTransactionId && (amountChanged || categoryChanged || counteragentChanged)
+
+      let reversalTransactionId: string | undefined
+
+      if (needsTransactionUpdate) {
+        // Step 1: Create reversal for old transaction
+        let reversalTx: { id: string }
+        try {
+          reversalTx = await accountStore.createOperation({
+            accountId: expense.relatedAccountId,
+            type: 'income',
+            amount: oldAmount,
+            description: `[REVERSAL] ${expense.description} — Edited: ${data.reason}`,
+            expenseCategory: { type: 'income', category: 'correction' },
+            performedBy: data.performedBy,
+            counteragentId: expense.counteragentId,
+            counteragentName: expense.counteragentName,
+            source: 'pos'
+          })
+          reversalTransactionId = reversalTx.id
+          console.log('✅ Reversal transaction created:', reversalTx.id)
+        } catch (txError) {
+          console.error('❌ Failed to create reversal transaction:', txError)
+          return {
+            success: false,
+            error:
+              'Failed to create reversal transaction: ' +
+              (txError instanceof Error ? txError.message : String(txError))
+          }
+        }
+
+        // Step 2: Create new transaction with updated values
+        try {
+          const newCategory = data.category || expense.category || ''
+          const isSupplierExpense = newCategory === 'supplier'
+          const newAmount = data.amount ?? expense.amount
+
+          const newTx = await accountStore.createOperation({
+            accountId: expense.relatedAccountId,
+            type: 'expense',
+            amount: newAmount,
+            description: data.description || expense.description,
+            expenseCategory: {
+              type: 'expense',
+              category: isSupplierExpense ? 'supplier' : newCategory
+            },
+            performedBy: data.performedBy,
+            counteragentId: data.counteragentId ?? expense.counteragentId,
+            counteragentName: data.counteragentName ?? expense.counteragentName,
+            relatedPaymentId: expense.relatedPaymentId,
+            source: 'pos'
+          })
+
+          expense.relatedTransactionId = newTx.id
+          console.log('✅ Transaction updated via reversal + new:', newTx.id)
+        } catch (txError) {
+          // Compensate: reverse the reversal to restore original balance
+          console.error('❌ Failed to create new transaction, compensating reversal:', txError)
+          try {
+            await accountStore.createOperation({
+              accountId: expense.relatedAccountId,
+              type: 'expense',
+              amount: oldAmount,
+              description: `[COMPENSATION] Restore after failed edit of: ${expense.description}`,
+              expenseCategory: { type: 'expense', category: expense.category || 'other' },
+              performedBy: data.performedBy,
+              source: 'pos'
+            })
+            console.log('✅ Compensation transaction created, balance restored')
+          } catch (compError) {
+            console.error(
+              '❌ CRITICAL: Failed to compensate reversal, balance may be incorrect:',
+              compError
+            )
+          }
+          return {
+            success: false,
+            error:
+              'Failed to create updated transaction: ' +
+              (txError instanceof Error ? txError.message : String(txError))
+          }
+        }
+      }
+
+      // Apply changes to expense (empty string = clear the field)
+      if (data.amount !== undefined) expense.amount = data.amount
+      if (data.description !== undefined) expense.description = data.description
+      if (data.category !== undefined) expense.category = data.category
+      if (data.counteragentId !== undefined)
+        expense.counteragentId = data.counteragentId || undefined
+      if (data.counteragentName !== undefined)
+        expense.counteragentName = data.counteragentName || undefined
+      if (data.notes !== undefined) expense.notes = data.notes || undefined
+
+      // Update expense type based on category change
+      if (data.category !== undefined) {
+        expense.type = data.category === 'supplier' ? 'supplier_payment' : 'direct_expense'
+        expense.linkingStatus = data.category === 'supplier' ? 'unlinked' : undefined
+      }
+
+      // Record edit history
+      if (!expense.editHistory) expense.editHistory = []
+      expense.editHistory.push({
+        editedAt: new Date().toISOString(),
+        editedBy: data.performedBy,
+        changes,
+        reason: data.reason,
+        reversalTransactionId
+      })
+      expense.lastEditedAt = new Date().toISOString()
+      expense.lastEditedBy = data.performedBy
+      expense.updatedAt = new Date().toISOString()
+
+      // Update account balance in shift if amount changed
+      if (amountChanged) {
+        const accountBalance = currentShift.value.accountBalances.find(
+          ab => ab.accountId === expense.relatedAccountId
+        )
+        if (accountBalance) {
+          accountBalance.totalExpense =
+            accountBalance.totalExpense - oldAmount + (data.amount ?? oldAmount)
+        }
+      }
+
+      // Save shift
+      await shiftsService.updateShift(currentShift.value.id, currentShift.value)
+
+      // Update linked PendingPayment if exists and relevant fields changed
+      if (expense.relatedPaymentId && (counteragentChanged || amountChanged || categoryChanged)) {
+        try {
+          const paymentUpdates: Record<string, any> = {}
+          // counteragent_id is NOT NULL in DB — only update if non-empty
+          if (data.counteragentId) paymentUpdates.counteragentId = data.counteragentId
+          if (data.counteragentName) paymentUpdates.counteragentName = data.counteragentName
+          if (data.category !== undefined) paymentUpdates.category = data.category
+          if (data.amount !== undefined) paymentUpdates.amount = data.amount
+          if (data.description !== undefined) paymentUpdates.description = data.description
+
+          await paymentService.update(expense.relatedPaymentId, paymentUpdates)
+
+          // Update local state in accountStore
+          const localPayment = accountStore.pendingPayments.find(
+            p => p.id === expense.relatedPaymentId
+          )
+          if (localPayment) {
+            Object.assign(localPayment, paymentUpdates, { updatedAt: new Date().toISOString() })
+          }
+
+          console.log('✅ PendingPayment updated:', expense.relatedPaymentId)
+        } catch (paymentError) {
+          console.warn('⚠️ Failed to update PendingPayment:', paymentError)
+          // Non-blocking: expense was already saved successfully
+        }
+      }
+
+      // Create alert
+      try {
+        const { useAlertsStore } = await import('@/stores/alerts')
+        const alertsStore = useAlertsStore()
+        await alertsStore.createAlert({
+          category: 'shift',
+          type: 'expense_modified',
+          severity: 'info',
+          title: 'Expense modified',
+          description: `${expense.counteragentName || 'Direct expense'}: ${changes.map(c => `${c.field}: ${c.oldValue} → ${c.newValue}`).join(', ')}. Reason: ${data.reason}`,
+          metadata: {
+            expenseId: expense.id,
+            changes,
+            reason: data.reason,
+            editedBy: data.performedBy.name
+          },
+          shiftId: data.shiftId,
+          userId: isValidUUID(data.performedBy.id) ? data.performedBy.id : undefined
+        })
+      } catch (alertError) {
+        console.warn('⚠️ Failed to create edit alert:', alertError)
+      }
+
+      console.log(`✅ Expense edited: ${data.expenseId}, changes:`, changes)
+      return { success: true, data: expense }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to edit expense'
       error.value = errorMsg
       return { success: false, error: errorMsg }
     } finally {
@@ -1890,6 +2286,8 @@ export const useShiftsStore = defineStore('posShifts', () => {
     createDirectExpense,
     confirmExpense,
     rejectExpense,
+    cancelExpense,
+    editExpense,
 
     // Sprint 10: Transfer Operations
     confirmTransfer,

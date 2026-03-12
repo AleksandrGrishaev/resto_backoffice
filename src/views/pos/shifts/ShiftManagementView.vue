@@ -187,7 +187,12 @@
 
         <!-- Expenses List -->
         <div class="mt-3">
-          <ShiftExpensesList :expenses="shiftExpenses" />
+          <ShiftExpensesList
+            :expenses="shiftExpenses"
+            :read-only="readOnly"
+            @edit-expense="handleEditExpenseClick"
+            @cancel-expense="handleCancelExpenseClick"
+          />
         </div>
       </div>
 
@@ -306,6 +311,24 @@
       @transfer-confirmed="handleTransferConfirmed"
       @transfer-rejected="handleTransferRejected"
     />
+
+    <!-- Cancel Expense Dialog -->
+    <CancelExpenseDialog
+      v-if="currentShift"
+      v-model="showCancelExpenseDialog"
+      :expense="selectedExpense"
+      :shift-id="currentShift.id"
+      @expense-cancelled="handleExpenseCancelled"
+    />
+
+    <!-- Edit Expense Dialog -->
+    <EditExpenseDialog
+      v-if="currentShift"
+      v-model="showEditExpenseDialog"
+      :expense="selectedExpense"
+      :shift-id="currentShift.id"
+      @expense-edited="handleExpenseEdited"
+    />
   </div>
 </template>
 
@@ -318,12 +341,15 @@ import { useAccountStore } from '@/stores/account'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import type { PosShift, PosPayment } from '@/stores/pos/types'
 import type { PendingPayment } from '@/stores/account/types'
+import type { ShiftExpenseOperation } from '@/stores/pos/shifts/types'
 import StartShiftDialog from './dialogs/StartShiftDialog.vue'
 import EndShiftDialog from './dialogs/EndShiftDialog.vue'
 import PaymentDetailsDialog from './dialogs/PaymentDetailsDialog.vue'
 import ExpenseOperationDialog from './dialogs/ExpenseOperationDialog.vue'
 import SupplierPaymentConfirmDialog from './dialogs/SupplierPaymentConfirmDialog.vue'
 import TransferConfirmDialog from './dialogs/TransferConfirmDialog.vue'
+import CancelExpenseDialog from './dialogs/CancelExpenseDialog.vue'
+import EditExpenseDialog from './dialogs/EditExpenseDialog.vue'
 import ShiftExpensesList from './components/ShiftExpensesList.vue'
 import PendingSupplierPaymentsList from './components/PendingSupplierPaymentsList.vue'
 import ShiftTransfersList from './components/ShiftTransfersList.vue'
@@ -367,6 +393,11 @@ const selectedPayment = ref<PendingPayment | null>(null)
 // Sprint 10: Transfer confirmation state
 const showTransferConfirmDialog = ref(false)
 const selectedTransfer = ref<Transaction | null>(null)
+
+// Expense edit/cancel state
+const showCancelExpenseDialog = ref(false)
+const showEditExpenseDialog = ref(false)
+const selectedExpense = ref<ShiftExpenseOperation | null>(null)
 
 // Computed
 // ✅ Sprint 5: Support shiftId prop for viewing specific shift
@@ -670,6 +701,27 @@ const handleExpenseCreated = async (expenseId: string) => {
   if (currentShift.value) {
     await shiftsStore.loadPendingPayments()
   }
+}
+
+// Expense edit/cancel handlers
+const handleEditExpenseClick = (expense: ShiftExpenseOperation) => {
+  selectedExpense.value = expense
+  showEditExpenseDialog.value = true
+}
+
+const handleCancelExpenseClick = (expense: ShiftExpenseOperation) => {
+  selectedExpense.value = expense
+  showCancelExpenseDialog.value = true
+}
+
+const handleExpenseEdited = () => {
+  console.log('✅ Expense edited')
+  selectedExpense.value = null
+}
+
+const handleExpenseCancelled = () => {
+  console.log('✅ Expense cancelled')
+  selectedExpense.value = null
 }
 
 const handleConfirmPaymentClick = (payment: PendingPayment) => {

@@ -740,6 +740,22 @@ export class AccountSupabaseService {
       if (updates.linkedOrders !== undefined) {
         supabaseUpdates.linked_orders = updates.linkedOrders
       }
+      // ✅ Expense edit support: counteragent, category, description, amount
+      if (updates.counteragentId !== undefined) {
+        supabaseUpdates.counteragent_id = updates.counteragentId
+      }
+      if (updates.counteragentName !== undefined) {
+        supabaseUpdates.counteragent_name = updates.counteragentName
+      }
+      if (updates.category !== undefined) {
+        supabaseUpdates.category = updates.category
+      }
+      if (updates.description !== undefined) {
+        supabaseUpdates.description = updates.description
+      }
+      if (updates.amount !== undefined) {
+        supabaseUpdates.amount = updates.amount
+      }
 
       const { error } = await withTimeout(
         supabase.from('pending_payments').update(supabaseUpdates).eq('id', paymentId)

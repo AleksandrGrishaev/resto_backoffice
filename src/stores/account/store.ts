@@ -22,11 +22,17 @@ import type {
   LinkPaymentToOrderDto,
   TransactionCategory,
   CreateCategoryDto,
-  UpdateCategoryDto
+  UpdateCategoryDto,
+  CorrectTransactionDto
 } from './types'
 import { COGS_CATEGORY_LABELS } from './constants'
 
 const MODULE_NAME = 'AccountStore'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function isValidUUID(value: string): boolean {
+  return UUID_RE.test(value)
+}
 
 export const useAccountStore = defineStore('account', () => {
   // ============ STATE ============
@@ -665,7 +671,7 @@ export const useAccountStore = defineStore('account', () => {
             reason: data.description,
             performedBy: data.performedBy.name
           },
-          userId: data.performedBy.id
+          userId: isValidUUID(data.performedBy.id) ? data.performedBy.id : undefined
         })
         DebugUtils.info(MODULE_NAME, 'Correction alert created')
       } catch (alertError) {
@@ -680,6 +686,165 @@ export const useAccountStore = defineStore('account', () => {
       throw error
     } finally {
       state.value.loading.correction = false
+    }
+  }
+
+  /**
+   * Correct an existing transaction by creating reversal + new transaction
+   * Used from backoffice when wrong category/counteragent was assigned
+   */
+  async function correctTransaction(
+    data: CorrectTransactionDto
+  ): Promise<{ reversalTx: Transaction; newTx: Transaction }> {
+    try {
+      clearError()
+      state.value.loading.operation = true
+
+      // Find original transaction
+      const allTx = getAllTransactions.value
+      const originalTx = allTx.find(t => t.id === data.originalTransactionId)
+      if (!originalTx) {
+        throw new Error(`Transaction ${data.originalTransactionId} not found`)
+      }
+
+      // Step 1: Create reversal
+      const reversalType = originalTx.type === 'expense' ? 'income' : 'expense'
+      let reversalTx: Transaction
+      try {
+        reversalTx = await createOperation({
+          accountId: data.accountId,
+          type: reversalType,
+          amount: originalTx.amount,
+          description: `[REVERSAL] ${originalTx.description} — Reason: ${data.reason}`,
+          expenseCategory:
+            reversalType === 'income'
+              ? { type: 'income', category: 'correction' }
+              : { type: 'expense', category: 'correction' },
+          performedBy: data.performedBy,
+          counteragentId: originalTx.counteragentId,
+          counteragentName: originalTx.counteragentName,
+          relatedPaymentId: originalTx.relatedPaymentId,
+          source: 'backoffice'
+        })
+      } catch (err) {
+        throw new Error(
+          'Failed to create reversal: ' + (err instanceof Error ? err.message : String(err))
+        )
+      }
+
+      // Step 2: Create new corrected transaction
+      const newAmount = data.amount ?? originalTx.amount
+      const newCategory = data.category ?? originalTx.expenseCategory?.category ?? ''
+      const newDescription = data.description ?? originalTx.description
+      let newTx: Transaction
+      try {
+        newTx = await createOperation({
+          accountId: data.accountId,
+          type: originalTx.type,
+          amount: newAmount,
+          description: newDescription,
+          expenseCategory: originalTx.expenseCategory
+            ? { type: originalTx.expenseCategory.type, category: newCategory }
+            : undefined,
+          performedBy: data.performedBy,
+          counteragentId: data.counteragentId ?? originalTx.counteragentId,
+          counteragentName: data.counteragentName ?? originalTx.counteragentName,
+          relatedPaymentId: originalTx.relatedPaymentId,
+          source: 'backoffice'
+        })
+      } catch (err) {
+        // Compensate: reverse the reversal
+        DebugUtils.error(MODULE_NAME, 'New tx failed, compensating reversal', { err })
+        try {
+          await createOperation({
+            accountId: data.accountId,
+            type: originalTx.type,
+            amount: originalTx.amount,
+            description: `[COMPENSATION] Restore after failed correction of: ${originalTx.description}`,
+            expenseCategory: originalTx.expenseCategory,
+            performedBy: data.performedBy,
+            source: 'backoffice'
+          })
+        } catch (compErr) {
+          DebugUtils.error(MODULE_NAME, 'CRITICAL: Compensation failed, balance may be incorrect', {
+            compErr
+          })
+        }
+        throw new Error(
+          'Failed to create corrected transaction: ' +
+            (err instanceof Error ? err.message : String(err))
+        )
+      }
+
+      // Step 3: Update linked PendingPayment if exists and fields changed
+      if (originalTx.relatedPaymentId) {
+        try {
+          const paymentUpdates: Record<string, any> = {}
+          // counteragent_id is NOT NULL in DB — only update if non-empty
+          if (data.counteragentId) paymentUpdates.counteragentId = data.counteragentId
+          if (data.counteragentName) paymentUpdates.counteragentName = data.counteragentName
+          if (data.category !== undefined) paymentUpdates.category = data.category
+          if (data.amount !== undefined) paymentUpdates.amount = data.amount
+          if (data.description !== undefined) paymentUpdates.description = data.description
+
+          if (Object.keys(paymentUpdates).length > 0) {
+            await paymentService.update(originalTx.relatedPaymentId, paymentUpdates)
+            const localPayment = state.value.pendingPayments.find(
+              p => p.id === originalTx.relatedPaymentId
+            )
+            if (localPayment) {
+              Object.assign(localPayment, paymentUpdates, { updatedAt: new Date().toISOString() })
+            }
+            DebugUtils.info(MODULE_NAME, 'PendingPayment updated after correction', {
+              paymentId: originalTx.relatedPaymentId
+            })
+          }
+        } catch (paymentError) {
+          DebugUtils.warn(MODULE_NAME, 'Failed to update PendingPayment after correction', {
+            paymentError
+          })
+        }
+      }
+
+      // Step 4: Create alert
+      try {
+        const alertsStore = useAlertsStore()
+        await alertsStore.createAlert({
+          category: 'shift',
+          type: 'post_shift_correction',
+          severity: 'warning',
+          title: 'Post-shift transaction correction',
+          description: `${originalTx.counteragentName || originalTx.description}: ${formatIDR(originalTx.amount)}. Reason: ${data.reason}`,
+          metadata: {
+            originalTransactionId: originalTx.id,
+            reversalTransactionId: reversalTx.id,
+            newTransactionId: newTx.id,
+            originalCounteragent: originalTx.counteragentName,
+            newCounteragent: data.counteragentName ?? originalTx.counteragentName,
+            originalCategory: originalTx.expenseCategory?.category,
+            newCategory,
+            reason: data.reason,
+            correctedBy: data.performedBy.name
+          },
+          userId: isValidUUID(data.performedBy.id) ? data.performedBy.id : undefined
+        })
+      } catch (alertError) {
+        DebugUtils.warn(MODULE_NAME, 'Failed to create correction alert', { alertError })
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Transaction corrected', {
+        originalId: data.originalTransactionId,
+        reversalId: reversalTx.id,
+        newId: newTx.id
+      })
+
+      return { reversalTx, newTx }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to correct transaction', { error })
+      setError(error)
+      throw error
+    } finally {
+      state.value.loading.operation = false
     }
   }
 
@@ -2110,6 +2275,7 @@ export const useAccountStore = defineStore('account', () => {
     createSupplierExpenseWithPayment,
     transferBetweenAccounts,
     correctBalance,
+    correctTransaction,
     fetchTransactions,
     setFilters,
     fetchAllAccountsTransactions,
