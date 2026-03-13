@@ -24,9 +24,9 @@
           </v-chip>
         </div>
       </div>
-      <!-- Export PDF (menu items with modifiers) -->
+      <!-- Export PDF (menu items, recipes, preparations) -->
       <v-btn
-        v-if="item.type === 'menu' && modifierGroups.length > 0"
+        v-if="item.type !== 'product'"
         variant="tonal"
         size="small"
         prepend-icon="mdi-file-pdf-box"
@@ -588,7 +588,14 @@ import type { CatalogItem, ModifierGroupDisplay } from '../composables/useCatalo
 import { calculateFoodCostRange } from '@/core/cost/modifierCostCalculator'
 import type { FoodCostRange } from '@/core/cost/modifierCostCalculator'
 import { useExport } from '@/core/export'
-import type { ModifiersExportData, ExportTreeNode } from '@/core/export'
+import type {
+  ModifiersExportData,
+  ExportTreeNode,
+  RecipeExportData,
+  RecipeComponentExport,
+  PreparationExportData,
+  PreparationComponentExport
+} from '@/core/export'
 import DependencyTree from './DependencyTree.vue'
 import EntityHistoryTab from '@/views/kitchen/constructor/components/EntityHistoryTab.vue'
 import type { TreeNode } from './DependencyTree.vue'
@@ -621,7 +628,7 @@ const emit = defineEmits<{
 const productsStore = useProductsStore()
 const recipesStore = useRecipesStore()
 const menuStore = useMenuStore()
-const { buildTree, buildModifierDisplayData } = useCatalogData()
+const { buildTree, buildModifierDisplayData, resolveComponentCost } = useCatalogData()
 
 const defaultTab = (type: CatalogItem['type']) => (type === 'product' ? 'used-in' : 'tree')
 const activeTab = ref(defaultTab(props.item.type))
@@ -699,60 +706,198 @@ function modifierTypeColor(type: string): string {
 }
 
 // --- Export PDF ---
-const { isExporting, exportError, exportModifiers } = useExport()
+const { isExporting, exportError, exportModifiers, exportRecipes, exportPreparations } = useExport()
 const showExportError = ref(false)
 
-function convertTreeNodes(nodes: TreeNode[]): ExportTreeNode[] {
-  return nodes.map(n => ({
-    name: n.name,
-    type: n.type as 'product' | 'recipe' | 'preparation',
-    quantity: n.quantity,
-    unit: n.unit,
-    cost: n.cost,
-    outputQuantity: n.outputQuantity,
-    outputUnit: n.outputUnit,
-    totalRecipeCost: n.totalRecipeCost,
-    children: convertTreeNodes(n.children)
-  }))
+function convertTreeNodes(nodes: TreeNode[], scaleRatio?: number): ExportTreeNode[] {
+  return nodes.map(n => {
+    // Scale quantity & cost proportionally when inside a preparation/recipe
+    const scaledQty =
+      n.quantity != null && scaleRatio
+        ? Math.round(n.quantity * scaleRatio * 100) / 100
+        : n.quantity
+    const scaledCost = n.cost != null && scaleRatio ? Math.round(n.cost * scaleRatio) : n.cost
+
+    // For prep/recipe children: scale by usage/output ratio
+    let childScale: number | undefined
+    if (
+      (n.type === 'preparation' || n.type === 'recipe') &&
+      n.outputQuantity &&
+      n.outputQuantity > 0 &&
+      n.quantity
+    ) {
+      const usedQty = scaleRatio ? n.quantity * scaleRatio : n.quantity
+      childScale = usedQty / n.outputQuantity
+    }
+
+    return {
+      name: n.name,
+      type: n.type as 'product' | 'recipe' | 'preparation',
+      quantity: scaledQty,
+      unit: n.unit,
+      cost: scaledCost,
+      outputQuantity: n.outputQuantity,
+      outputUnit: n.outputUnit,
+      totalRecipeCost: n.totalRecipeCost,
+      children: convertTreeNodes(n.children, childScale)
+    }
+  })
 }
 
 async function handleExportPdf() {
-  if (!menuItem.value || modifierGroups.value.length === 0) return
+  const dateStr = new Date().toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  })
+
   try {
-    const exportData: ModifiersExportData = {
-      title: props.item.name,
-      date: new Date().toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric'
-      }),
-      department: props.item.department,
-      categoryName: props.item.categoryName,
-      modifierGroups: modifierGroups.value.map(g => ({
-        id: g.id,
-        name: g.name,
-        type: g.type,
-        isRequired: g.isRequired,
-        minSelection: g.minSelection,
-        maxSelection: g.maxSelection,
-        targetComponentNames: g.targetComponentNames,
-        options: g.options.map(o => ({
-          id: o.id,
-          name: o.name,
-          priceAdjustment: o.priceAdjustment,
-          compositionCost: o.compositionCost,
-          netCost: o.netCost,
-          isDefault: o.isDefault,
-          isActive: o.isActive,
-          compositionTree: convertTreeNodes(o.compositionTree)
-        }))
-      }))
+    if (props.item.type === 'menu' && menuItem.value) {
+      // Menu item — export modifiers if has them, otherwise export as recipe
+      if (modifierGroups.value.length > 0) {
+        const exportData: ModifiersExportData = {
+          title: props.item.name,
+          date: dateStr,
+          department: props.item.department,
+          categoryName: props.item.categoryName,
+          modifierGroups: modifierGroups.value.map(g => ({
+            id: g.id,
+            name: g.name,
+            type: g.type,
+            isRequired: g.isRequired,
+            minSelection: g.minSelection,
+            maxSelection: g.maxSelection,
+            targetComponentNames: g.targetComponentNames,
+            options: g.options.map(o => ({
+              id: o.id,
+              name: o.name,
+              priceAdjustment: o.priceAdjustment,
+              compositionCost: o.compositionCost,
+              netCost: o.netCost,
+              isDefault: o.isDefault,
+              isActive: o.isActive,
+              compositionTree: convertTreeNodes(o.compositionTree)
+            }))
+          }))
+        }
+        await exportModifiers(exportData)
+      } else {
+        // Simple menu item — export as a recipe card
+        const variant = menuItem.value.variants?.[0]
+        if (!variant?.composition?.length) return
+        const data: RecipeExportData = {
+          title: props.item.name,
+          date: dateStr,
+          categories: [
+            {
+              name: props.item.categoryName || 'Menu Item',
+              recipes: [
+                {
+                  id: props.item.id,
+                  name: props.item.name,
+                  outputQuantity: 1,
+                  outputUnit: 'portion',
+                  costPerUnit: totalCost.value,
+                  totalCost: totalCost.value,
+                  components: variant.composition.map(
+                    (comp): RecipeComponentExport => ({
+                      name: getEntityName(comp.type, comp.id) || comp.id,
+                      type: comp.type as 'product' | 'preparation',
+                      quantity: comp.quantity,
+                      unit: comp.unit,
+                      cost: resolveComponentCost(comp.type, comp.id, comp.quantity)
+                    })
+                  )
+                }
+              ]
+            }
+          ]
+        }
+        await exportRecipes(data, { includeInstructions: false })
+      }
+    } else if (props.item.type === 'recipe' && recipe.value) {
+      // Recipe export
+      const r = recipe.value
+      const data: RecipeExportData = {
+        title: r.name,
+        date: dateStr,
+        categories: [
+          {
+            name: props.item.categoryName || 'Recipe',
+            recipes: [
+              {
+                id: r.id,
+                name: r.name,
+                outputQuantity: r.portionSize || 1,
+                outputUnit: r.portionUnit || 'portion',
+                costPerUnit:
+                  totalCost.value > 0 ? Math.round(totalCost.value / (r.portionSize || 1)) : 0,
+                totalCost: totalCost.value,
+                components: (r.components || []).map(
+                  (comp): RecipeComponentExport => ({
+                    name: getEntityName(comp.componentType, comp.componentId) || comp.componentId,
+                    type: comp.componentType as 'product' | 'preparation',
+                    quantity: comp.quantity,
+                    unit: comp.unit,
+                    cost: resolveComponentCost(comp.componentType, comp.componentId, comp.quantity)
+                  })
+                ),
+                instructions: r.instructions
+              }
+            ]
+          }
+        ]
+      }
+      await exportRecipes(data, { includeInstructions: !!r.instructions })
+    } else if (props.item.type === 'preparation' && preparation.value) {
+      // Preparation export
+      const p = preparation.value
+      const data: PreparationExportData = {
+        title: p.name,
+        date: dateStr,
+        categories: [
+          {
+            name: props.item.categoryName || 'Preparation',
+            preparations: [
+              {
+                id: p.id,
+                name: p.name,
+                portionType: (p.portionType || 'weight') as 'weight' | 'portion',
+                outputQuantity: p.outputQuantity || 1,
+                outputUnit: p.outputUnit || 'gram',
+                costPerUnit:
+                  totalCost.value > 0 ? Math.round(totalCost.value / (p.outputQuantity || 1)) : 0,
+                totalCost: totalCost.value,
+                components: (p.recipe || []).map(
+                  (comp): PreparationComponentExport => ({
+                    name: getEntityName(comp.type, comp.id) || comp.id,
+                    type: comp.type as 'product' | 'preparation',
+                    quantity: comp.quantity,
+                    unit: comp.unit,
+                    cost: resolveComponentCost(comp.type, comp.id, comp.quantity)
+                  })
+                ),
+                instructions: p.instructions
+              }
+            ]
+          }
+        ]
+      }
+      await exportPreparations(data, { includeInstructions: !!p.instructions })
     }
-    await exportModifiers(exportData)
   } catch (e) {
     showExportError.value = true
     console.error('[Export] Failed:', e)
   }
+}
+
+/** Resolve entity name by type and ID */
+function getEntityName(type: string, id: string): string | undefined {
+  if (type === 'recipe') return (recipesStore.getRecipeById(id) as Recipe | undefined)?.name
+  if (type === 'preparation')
+    return (recipesStore.getPreparationById(id) as Preparation | undefined)?.name
+  if (type === 'product') return (productsStore.getProductById(id) as Product | undefined)?.name
+  return undefined
 }
 
 // Food cost range for modifiable items (single-variant path only)

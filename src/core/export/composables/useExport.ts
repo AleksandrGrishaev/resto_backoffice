@@ -18,6 +18,7 @@ import type {
   PurchaseOrderExportOptions
 } from '../types'
 import type { ModifiersExportData } from '../templates/ModifiersExportTemplate.vue'
+import type { CatalogExportData } from '../templates/CatalogExportTemplate.vue'
 import MenuExportTemplate from '../templates/MenuExportTemplate.vue'
 import RecipeExportTemplate from '../templates/RecipeExportTemplate.vue'
 import PreparationExportTemplate from '../templates/PreparationExportTemplate.vue'
@@ -26,6 +27,7 @@ import CombinationsExportTemplate from '../templates/CombinationsExportTemplate.
 import MenuDetailedExportTemplate from '../templates/MenuDetailedExportTemplate.vue'
 import PurchaseOrderTemplate from '../templates/PurchaseOrderTemplate.vue'
 import ModifiersExportTemplate from '../templates/ModifiersExportTemplate.vue'
+import CatalogExportTemplate from '../templates/CatalogExportTemplate.vue'
 
 export function useExport() {
   const isExporting = ref(false)
@@ -432,6 +434,34 @@ export function useExport() {
     }
   }
 
+  /**
+   * Export catalog items with full composition trees
+   * Shows each item with its recipe tree (like modifier recipes)
+   */
+  async function exportCatalog(
+    data: CatalogExportData,
+    options: ExportOptions = {}
+  ): Promise<void> {
+    isExporting.value = true
+    exportError.value = null
+
+    try {
+      const sanitizedTitle = data.title.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()
+      const filename =
+        options.filename || exportService.generateFilename(`catalog_${sanitizedTitle}`)
+      await renderAndExport(CatalogExportTemplate, data, {
+        ...options,
+        filename,
+        orientation: options.orientation || 'portrait'
+      })
+    } catch (error) {
+      exportError.value = error instanceof Error ? error.message : 'Export failed'
+      throw error
+    } finally {
+      isExporting.value = false
+    }
+  }
+
   return {
     isExporting,
     exportError,
@@ -442,6 +472,7 @@ export function useExport() {
     exportMenuItemCombinations,
     exportMenuDetailed,
     exportModifiers,
+    exportCatalog,
     exportPurchaseOrder,
     exportPurchaseOrderAsBlob,
     generatePDF

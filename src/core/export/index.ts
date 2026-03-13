@@ -100,6 +100,14 @@ export type {
   ModifierOptionExportData,
   ExportTreeNode
 } from './templates/ModifiersExportTemplate.vue'
+export { default as CatalogExportTemplate } from './templates/CatalogExportTemplate.vue'
+export type {
+  CatalogExportData,
+  CatalogExportItem,
+  CatalogExportVariant,
+  CatalogExportModifierGroup,
+  CatalogExportModifierOption
+} from './templates/CatalogExportTemplate.vue'
 
 // Utils
 export {

@@ -95,6 +95,19 @@
             <v-icon>mdi-filter-variant</v-icon>
           </v-btn>
 
+          <!-- Export PDF -->
+          <v-btn
+            v-if="activeSection !== 'products'"
+            icon
+            variant="text"
+            size="small"
+            :loading="isExporting"
+            @click="showExportDialog = true"
+          >
+            <v-icon>mdi-file-pdf-box</v-icon>
+            <v-tooltip activator="parent" location="bottom">Export to PDF</v-tooltip>
+          </v-btn>
+
           <!-- Manage categories -->
           <v-btn icon variant="text" size="small" @click="showCategoryListDialog = true">
             <v-icon>mdi-folder-cog-outline</v-icon>
@@ -338,6 +351,89 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Export PDF dialog -->
+    <v-dialog v-model="showExportDialog" max-width="440">
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon start color="primary">mdi-file-pdf-box</v-icon>
+          Export {{ currentSectionLabel }} to PDF
+        </v-card-title>
+        <v-card-text>
+          <!-- Scope: all or current category -->
+          <div class="filter-group">
+            <div class="filter-label">Scope</div>
+            <v-radio-group v-model="exportScope" hide-details density="compact">
+              <v-radio value="all" label="All items (current department)" color="primary" />
+              <v-radio
+                v-if="currentCategory"
+                value="category"
+                :label="`Category: ${currentCategory.name}`"
+                color="primary"
+              />
+            </v-radio-group>
+          </div>
+
+          <!-- Export mode for Menu -->
+          <div v-if="activeSection === 'menu'" class="filter-group mt-3">
+            <div class="filter-label">Detail level</div>
+            <v-radio-group v-model="exportMode" hide-details density="compact">
+              <v-radio value="summary" color="primary">
+                <template #label>
+                  <div>
+                    <div>Summary table</div>
+                    <div class="text-caption text-medium-emphasis">Cost, price, FC% per item</div>
+                  </div>
+                </template>
+              </v-radio>
+              <v-radio value="detailed" color="primary">
+                <template #label>
+                  <div>
+                    <div>Detailed with recipes</div>
+                    <div class="text-caption text-medium-emphasis">
+                      Full composition, modifiers, ingredients
+                    </div>
+                  </div>
+                </template>
+              </v-radio>
+            </v-radio-group>
+          </div>
+
+          <!-- Include instructions -->
+          <v-checkbox
+            v-if="activeSection === 'recipes' || activeSection === 'preps'"
+            v-model="exportIncludeInstructions"
+            label="Include instructions"
+            hide-details
+            density="compact"
+            color="primary"
+            class="mt-2"
+          />
+
+          <!-- Summary -->
+          <v-alert type="info" variant="tonal" density="compact" class="mt-3">
+            {{ exportItemCount }} items will be exported
+            <template v-if="activeSection === 'menu' && exportMode === 'detailed'">
+              (detailed — may take a moment)
+            </template>
+          </v-alert>
+        </v-card-text>
+        <v-card-actions class="pa-4 pt-0">
+          <v-spacer />
+          <v-btn variant="text" @click="showExportDialog = false">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            prepend-icon="mdi-download"
+            :loading="isExporting"
+            :disabled="exportItemCount === 0"
+            @click="handleBulkExport"
+          >
+            Export PDF
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -372,6 +468,15 @@ import type {
   CreateProductData,
   ProductCategory
 } from '@/stores/productsStore'
+import { useExport } from '@/core/export'
+import type {
+  MenuExportData,
+  MenuCategoryExport,
+  CatalogExportData,
+  CatalogExportItem,
+  CatalogExportModifierGroup,
+  ExportTreeNode
+} from '@/core/export'
 
 type SectionId = 'menu' | 'recipes' | 'preps' | 'products'
 
@@ -424,7 +529,10 @@ const {
   recipeCategories,
   preparationCategories,
   productCategories,
-  search
+  search,
+  buildTree,
+  buildModifierDisplayData,
+  resolveComponentCost
 } = useCatalogData()
 
 // --- State ---
@@ -451,6 +559,326 @@ async function handleRecalculateCosts() {
     console.error('Failed to recalculate costs:', e)
   } finally {
     isRecalculating.value = false
+  }
+}
+
+// --- Export ---
+const { isExporting, exportMenu, exportCatalog } = useExport()
+const showExportDialog = ref(false)
+const exportScope = ref<'all' | 'category'>('all')
+const exportMode = ref<'summary' | 'detailed'>('detailed')
+const exportIncludeInstructions = ref(true)
+
+const exportItemCount = computed(() => {
+  if (exportScope.value === 'category' && currentCategory.value) {
+    return categoryItems.value.length
+  }
+  return currentSectionItems.value.length
+})
+
+function getComponentName(type: string, id: string): string {
+  if (type === 'product') return (productsStore.getProductById(id) as Product | null)?.name || id
+  if (type === 'recipe') return (recipesStore.getRecipeById(id) as Recipe | undefined)?.name || id
+  if (type === 'preparation')
+    return (recipesStore.getPreparationById(id) as Preparation | undefined)?.name || id
+  return id
+}
+
+function getComponentCost(type: string, id: string, quantity: number): number {
+  if (type === 'product') {
+    const p = productsStore.getProductById(id) as Product | null
+    return (p?.baseCostPerUnit ?? 0) * quantity
+  }
+  if (type === 'preparation') {
+    const p = recipesStore.getPreparationById(id) as Preparation | undefined
+    return (p?.costPerPortion ?? p?.lastKnownCost ?? 0) * quantity
+  }
+  if (type === 'recipe') {
+    const r = recipesStore.getRecipeById(id) as Recipe | undefined
+    return (r?.cost ?? 0) * quantity
+  }
+  return 0
+}
+
+function convertTreeNodes(
+  nodes: Array<{
+    name: string
+    type: string
+    quantity?: number
+    unit?: string
+    cost?: number
+    outputQuantity?: number
+    outputUnit?: string
+    totalRecipeCost?: number
+    children: any[]
+  }>,
+  scaleRatio?: number
+): ExportTreeNode[] {
+  return nodes.map(n => {
+    // Scale quantity & cost proportionally when inside a preparation/recipe
+    const scaledQty =
+      n.quantity != null && scaleRatio
+        ? Math.round(n.quantity * scaleRatio * 100) / 100
+        : n.quantity
+    const scaledCost = n.cost != null && scaleRatio ? Math.round(n.cost * scaleRatio) : n.cost
+
+    // For prep/recipe children: scale by usage/output ratio
+    let childScale: number | undefined
+    if (
+      (n.type === 'preparation' || n.type === 'recipe') &&
+      n.outputQuantity &&
+      n.outputQuantity > 0 &&
+      n.quantity
+    ) {
+      const usedQty = scaleRatio ? n.quantity * scaleRatio : n.quantity
+      childScale = usedQty / n.outputQuantity
+    }
+
+    return {
+      name: n.name,
+      type: n.type as 'product' | 'recipe' | 'preparation',
+      quantity: scaledQty,
+      unit: n.unit,
+      cost: scaledCost,
+      outputQuantity: n.outputQuantity,
+      outputUnit: n.outputUnit,
+      totalRecipeCost: n.totalRecipeCost,
+      children: convertTreeNodes(n.children, childScale)
+    }
+  })
+}
+
+async function handleBulkExport() {
+  const items =
+    exportScope.value === 'category' && currentCategory.value
+      ? categoryItems.value
+      : currentSectionItems.value
+  if (items.length === 0) return
+
+  const dateStr = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
+  const deptLabel = activeDepartment.value === 'kitchen' ? 'Kitchen' : 'Bar'
+
+  try {
+    if (activeSection.value === 'menu') {
+      const scopeLabel =
+        exportScope.value === 'category' && currentCategory.value
+          ? ` — ${currentCategory.value.name}`
+          : ''
+
+      if (exportMode.value === 'detailed') {
+        // Detailed export — each item with composition tree + modifiers
+        const catalogItems: CatalogExportItem[] = items
+          .map(ci => {
+            const mi = (menuStore.menuItems as MenuItem[]).find(m => m.id === ci.id)
+            if (!mi) return null
+            const catName =
+              menuCategories.value.find(c => c.id === ci.categoryId)?.name || 'Uncategorized'
+            const variants = (mi.variants || []).filter(v => v.isActive)
+            const hasMultipleVariants = variants.length > 1
+
+            // Build modifier groups with trees
+            let modGroups: CatalogExportModifierGroup[] | undefined
+            if (mi.modifierGroups?.length) {
+              const displayGroups = buildModifierDisplayData(mi)
+              modGroups = displayGroups.map(g => ({
+                name: g.name,
+                type: g.type,
+                options: g.options.map(o => ({
+                  name: o.name,
+                  priceAdjustment: o.priceAdjustment,
+                  cost: o.compositionCost,
+                  isDefault: o.isDefault,
+                  tree: convertTreeNodes(o.compositionTree)
+                }))
+              }))
+            }
+
+            if (hasMultipleVariants) {
+              return {
+                id: ci.id,
+                name: ci.name,
+                type: 'menu' as const,
+                categoryName: catName,
+                department: ci.department,
+                cost: ci.cost || 0,
+                tree: [],
+                variants: variants.map((v, idx) => {
+                  const tree = buildTree('menu', ci.id, undefined, idx)
+                  const cost = tree.reduce((sum, n) => sum + (n.cost ?? 0), 0)
+                  return {
+                    name: v.name,
+                    price: v.price,
+                    cost,
+                    foodCostPercent: v.price > 0 ? (cost / v.price) * 100 : 0,
+                    tree: convertTreeNodes(tree)
+                  }
+                }),
+                modifierGroups: modGroups
+              } as CatalogExportItem
+            } else {
+              const tree = buildTree('menu', ci.id)
+              const cost = tree.reduce((sum, n) => sum + (n.cost ?? 0), 0)
+              const price = variants[0]?.price || 0
+              return {
+                id: ci.id,
+                name: ci.name,
+                type: 'menu' as const,
+                categoryName: catName,
+                department: ci.department,
+                price,
+                cost,
+                foodCostPercent: price > 0 ? (cost / price) * 100 : 0,
+                tree: convertTreeNodes(tree),
+                modifierGroups: modGroups
+              } as CatalogExportItem
+            }
+          })
+          .filter((x): x is CatalogExportItem => x !== null)
+
+        const data: CatalogExportData = {
+          title: `Menu (${deptLabel})${scopeLabel}`,
+          date: dateStr,
+          department: deptLabel,
+          items: catalogItems,
+          summary: {
+            totalItems: catalogItems.length,
+            totalCost: catalogItems.reduce((sum, i) => sum + i.cost, 0)
+          }
+        }
+        await exportCatalog(data, { avoidPageBreaks: true })
+      } else {
+        // Summary export — table with cost/price/FC%
+        const catMap = new Map<string, CatalogItem[]>()
+        for (const item of items) {
+          const catKey = item.categoryId || '__uncategorized__'
+          if (!catMap.has(catKey)) catMap.set(catKey, [])
+          catMap.get(catKey)!.push(item)
+        }
+
+        const categories: MenuCategoryExport[] = []
+        for (const [catId, catItems] of catMap) {
+          const catName =
+            catId === '__uncategorized__'
+              ? 'Uncategorized'
+              : menuCategories.value.find(c => c.id === catId)?.name || 'Unknown'
+          categories.push({
+            name: catName,
+            items: catItems.map(ci => {
+              const mi = (menuStore.menuItems as MenuItem[]).find(m => m.id === ci.id)
+              return {
+                name: ci.name,
+                dishType: (mi?.dishType || 'simple') as
+                  | 'simple'
+                  | 'component-based'
+                  | 'addon-based',
+                variants: (mi?.variants || [])
+                  .filter(v => v.isActive)
+                  .map(v => {
+                    const cost = ci.cost || 0
+                    return {
+                      name: v.name,
+                      price: v.price,
+                      cost,
+                      foodCostPercent: v.price > 0 ? (cost / v.price) * 100 : 0
+                    }
+                  })
+              }
+            })
+          })
+        }
+
+        const data: MenuExportData = {
+          title: `Menu (${deptLabel})${scopeLabel}`,
+          date: dateStr,
+          categories,
+          totals: {
+            itemCount: items.length,
+            totalCost: items.reduce((sum, i) => sum + (i.cost || 0), 0)
+          }
+        }
+        await exportMenu(data, { orientation: 'landscape' })
+      }
+    } else if (activeSection.value === 'recipes') {
+      // Recipes — use catalog tree export
+      const catalogItems: CatalogExportItem[] = items.map(ci => {
+        const r = recipesStore.getRecipeById(ci.id) as Recipe | undefined
+        const tree = buildTree('recipe', ci.id)
+        const cost = tree.reduce((sum, n) => sum + (n.cost ?? 0), 0)
+        return {
+          id: ci.id,
+          name: ci.name,
+          type: 'recipe' as const,
+          categoryName: ci.categoryName || 'Uncategorized',
+          department: ci.department,
+          cost,
+          outputQuantity: r?.portionSize || 1,
+          outputUnit: r?.portionUnit || 'portion',
+          costPerUnit: cost > 0 ? Math.round(cost / (r?.portionSize || 1)) : 0,
+          instructions: exportIncludeInstructions.value ? r?.instructions : undefined,
+          tree: convertTreeNodes(tree)
+        }
+      })
+
+      const scopeLabel =
+        exportScope.value === 'category' && currentCategory.value
+          ? ` — ${currentCategory.value.name}`
+          : ''
+      const data: CatalogExportData = {
+        title: `Recipes (${deptLabel})${scopeLabel}`,
+        date: dateStr,
+        department: deptLabel,
+        items: catalogItems,
+        summary: {
+          totalItems: catalogItems.length,
+          totalCost: catalogItems.reduce((sum, i) => sum + i.cost, 0)
+        }
+      }
+      await exportCatalog(data, { avoidPageBreaks: true })
+    } else if (activeSection.value === 'preps') {
+      // Preparations — use catalog tree export
+      const catalogItems: CatalogExportItem[] = items.map(ci => {
+        const p = recipesStore.getPreparationById(ci.id) as Preparation | undefined
+        const tree = buildTree('preparation', ci.id)
+        const cost = tree.reduce((sum, n) => sum + (n.cost ?? 0), 0)
+        return {
+          id: ci.id,
+          name: ci.name,
+          type: 'preparation' as const,
+          categoryName: ci.categoryName || 'Uncategorized',
+          department: ci.department,
+          cost,
+          outputQuantity: p?.outputQuantity || 1,
+          outputUnit: p?.outputUnit || 'gram',
+          costPerUnit: cost > 0 ? Math.round(cost / (p?.outputQuantity || 1)) : 0,
+          instructions: exportIncludeInstructions.value ? p?.instructions : undefined,
+          tree: convertTreeNodes(tree)
+        }
+      })
+
+      const scopeLabel =
+        exportScope.value === 'category' && currentCategory.value
+          ? ` — ${currentCategory.value.name}`
+          : ''
+      const data: CatalogExportData = {
+        title: `Preparations (${deptLabel})${scopeLabel}`,
+        date: dateStr,
+        department: deptLabel,
+        items: catalogItems,
+        summary: {
+          totalItems: catalogItems.length,
+          totalCost: catalogItems.reduce((sum, i) => sum + i.cost, 0)
+        }
+      }
+      await exportCatalog(data, { avoidPageBreaks: true })
+    }
+
+    showExportDialog.value = false
+  } catch (error) {
+    console.error('[CatalogExport] Failed:', error)
   }
 }
 
