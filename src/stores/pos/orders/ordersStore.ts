@@ -1068,7 +1068,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
    */
   async function recalculateOrderTotals(
     orderId: string,
-    options?: { skipTableUpdate?: boolean }
+    options?: { skipTableUpdate?: boolean; skipItemUpsert?: boolean }
   ): Promise<void> {
     const order = orders.value.find(o => o.id === orderId)
     if (!order) return
@@ -1080,7 +1080,13 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     order.updatedAt = new Date().toISOString()
 
     // CRITICAL: Save order to Supabase after recalculation (dual-write)
-    await updateOrder(order)
+    if (options?.skipItemUpsert) {
+      // Only update order-level fields, skip items upsert
+      // Used during payment to avoid triggering unnecessary kitchen realtime events
+      await ordersService.updateOrderOnly(order)
+    } else {
+      await updateOrder(order)
+    }
 
     // Автоматически управлять статусом стола после пересчета
     // (ловит изменения paymentStatus и order.status)
@@ -1088,6 +1094,22 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     if (!options?.skipTableUpdate) {
       await updateTableStatusForOrder(orderId)
     }
+  }
+
+  /**
+   * Update only payment-related fields on specific items (targeted, no full upsert)
+   */
+  async function updateItemsPaymentStatus(
+    items: Array<{ id: string; paymentStatus: string; paidByPaymentIds: string[] }>
+  ): Promise<void> {
+    await ordersService.updateItemsPaymentStatus(items)
+  }
+
+  /**
+   * Update only order-level fields without re-upserting items
+   */
+  async function updateOrderOnly(order: PosOrder): Promise<ServiceResponse<PosOrder>> {
+    return await ordersService.updateOrderOnly(order)
   }
 
   /**
@@ -2411,6 +2433,8 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     deleteOrder,
     updateOrder,
     recalculateOrderTotals,
+    updateItemsPaymentStatus,
+    updateOrderOnly,
     setFilters,
     clearFilters,
     clearError,

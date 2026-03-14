@@ -1121,13 +1121,28 @@ const handleAddOneMore = async (itemData: {
       isActive: true
     }
 
+    // Channel-aware pricing: use channel price if order has a channel
+    let effectivePrice = variant.price
+    if (currentOrder.value?.channelId) {
+      const cp = channelsStore.getChannelPrice(
+        currentOrder.value.channelId,
+        menuItem.id,
+        variant.id,
+        variant.price
+      )
+      effectivePrice = cp.netPrice
+    }
+
+    const effectiveVariant =
+      effectivePrice !== variant.price ? { ...variant, price: effectivePrice } : variant
+
     // Create PosMenuItem from MenuItem
     const posMenuItem = {
       id: menuItem.id,
       name: menuItem.name,
       categoryId: menuItem.categoryId,
       categoryName: menuItem.categoryName || '',
-      price: variant.price,
+      price: effectivePrice,
       isAvailable: menuItem.isActive,
       stockQuantity: undefined,
       preparationTime: undefined,
@@ -1148,7 +1163,7 @@ const handleAddOneMore = async (itemData: {
       currentOrder.value.id,
       activeBillId.value,
       posMenuItem,
-      variant as any,
+      effectiveVariant as any,
       1,
       [],
       itemData.selectedModifiers
