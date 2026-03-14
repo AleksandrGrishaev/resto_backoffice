@@ -1,6 +1,12 @@
 <!-- src/views/pos/payment/PaymentDialog.vue -->
 <template>
-  <v-dialog :model-value="modelValue" max-width="1000" persistent @update:model-value="handleClose">
+  <v-dialog
+    :model-value="modelValue"
+    max-width="900"
+    persistent
+    content-class="payment-dialog-wrapper"
+    @update:model-value="handleClose"
+  >
     <v-card>
       <!-- Header -->
       <v-card-title class="d-flex align-center justify-space-between bg-primary">
@@ -17,72 +23,76 @@
         </div>
       </v-card-title>
 
-      <!-- Loyalty Banner: only shown when customer/card is attached -->
-      <div
-        v-if="customerId || stampCardInfo"
-        class="loyalty-banner d-flex align-center gap-2 px-6 py-2"
-      >
-        <!-- Customer chip with balance & detach -->
-        <v-chip
-          v-if="customerName"
-          color="blue"
-          variant="tonal"
-          size="small"
-          closable
-          @click:close="emit('update:customer', null)"
-        >
-          <v-icon start size="14">mdi-account-star</v-icon>
-          {{ customerName }}
-          <span v-if="customerBalance > 0" class="ml-1">— {{ formatPrice(customerBalance) }}</span>
-        </v-chip>
-        <!-- Personal discount badge -->
-        <v-chip v-if="customerPersonalDiscount > 0" color="orange" variant="tonal" size="small">
-          <v-icon start size="14">mdi-percent</v-icon>
-          {{ customerPersonalDiscount }}% {{ customerDiscountNote || 'Personal' }}
-        </v-chip>
-        <!-- Stamp card chip with detach -->
-        <v-chip
-          v-if="stampCardInfo"
-          color="amber-darken-2"
-          variant="tonal"
-          size="small"
-          closable
-          @click:close="emit('update:card', null)"
-        >
-          <v-icon start size="14">mdi-stamper</v-icon>
-          #{{ stampCardInfo.cardNumber }} — {{ stampCardInfo.stamps }}/{{
-            stampCardInfo.stampsPerCycle
-          }}
-          <span v-if="stampCardInfo.activeReward" class="ml-1 text-success">
-            ({{ stampCardInfo.activeReward.category }})
-          </span>
-        </v-chip>
-        <!-- Edit button opens external loyalty dialog -->
-        <v-btn icon size="x-small" variant="text" @click="emit('open-loyalty', 'customer')">
-          <v-icon size="16">mdi-pencil</v-icon>
-        </v-btn>
-      </div>
+      <v-card-text class="dialog-content pa-0">
+        <v-row no-gutters class="fill-height">
+          <!-- LEFT COLUMN: Items + Customer -->
+          <v-col cols="12" md="5" class="left-column d-flex flex-column">
+            <!-- Items List (scrollable) -->
+            <div class="items-scroll flex-grow-1 pa-4">
+              <PaymentItemsList v-if="items.length > 0" :items="items" />
+            </div>
 
-      <v-card-text class="pt-4 pb-2">
-        <v-row>
-          <!-- LEFT COLUMN: Items List -->
-          <v-col cols="12" md="5" class="items-column pr-md-4">
-            <h3 class="text-subtitle-1 font-weight-bold mb-3">Items to Pay ({{ items.length }})</h3>
-            <PaymentItemsList v-if="items.length > 0" :items="items" />
+            <!-- Customer/Loyalty (pinned at bottom of left column) -->
+            <div
+              v-if="customerId || stampCardInfo"
+              class="loyalty-section d-flex align-center flex-wrap gap-2 px-4 py-3"
+            >
+              <v-chip
+                v-if="customerName"
+                color="blue"
+                variant="tonal"
+                size="small"
+                closable
+                @click:close="emit('update:customer', null)"
+              >
+                <v-icon start size="14">mdi-account-star</v-icon>
+                {{ customerName }}
+                <span v-if="customerBalance > 0" class="ml-1">
+                  — {{ formatPrice(customerBalance) }}
+                </span>
+              </v-chip>
+              <v-chip
+                v-if="customerPersonalDiscount > 0"
+                color="orange"
+                variant="tonal"
+                size="small"
+              >
+                <v-icon start size="14">mdi-percent</v-icon>
+                {{ customerPersonalDiscount }}% {{ customerDiscountNote || 'Personal' }}
+              </v-chip>
+              <v-chip
+                v-if="stampCardInfo"
+                color="amber-darken-2"
+                variant="tonal"
+                size="small"
+                closable
+                @click:close="emit('update:card', null)"
+              >
+                <v-icon start size="14">mdi-stamper</v-icon>
+                #{{ stampCardInfo.cardNumber }} — {{ stampCardInfo.stamps }}/{{
+                  stampCardInfo.stampsPerCycle
+                }}
+                <span v-if="stampCardInfo.activeReward" class="ml-1 text-success">
+                  ({{ stampCardInfo.activeReward.category }})
+                </span>
+              </v-chip>
+              <v-btn icon size="x-small" variant="text" @click="emit('open-loyalty', 'customer')">
+                <v-icon size="16">mdi-pencil</v-icon>
+              </v-btn>
+            </div>
           </v-col>
 
-          <!-- RIGHT COLUMN: Order Summary + Payment -->
-          <v-col cols="12" md="7" class="payment-column pl-md-4">
+          <!-- RIGHT COLUMN: Summary + Payment -->
+          <v-col cols="12" md="7" class="right-column pa-4">
             <!-- Order Summary (Compact) -->
             <div class="order-summary-compact mb-4">
-              <h3 class="text-subtitle-1 font-weight-bold mb-2">Order Summary</h3>
+              <h3 class="text-subtitle-2 font-weight-bold mb-2">Order Summary</h3>
 
               <div class="summary-row-compact">
                 <span class="text-body-2">Subtotal:</span>
                 <span class="text-body-2">{{ formatPrice(amount) }}</span>
               </div>
 
-              <!-- Item Discounts (already applied to items) -->
               <div v-if="itemDiscounts > 0" class="summary-row-compact">
                 <span class="text-body-2 text-medium-emphasis">
                   <v-icon size="12" class="mr-1">mdi-tag</v-icon>
@@ -91,7 +101,6 @@
                 <span class="text-body-2 text-success">-{{ formatPrice(itemDiscounts) }}</span>
               </div>
 
-              <!-- Bill Discount (applied to whole bill) -->
               <div v-if="localDiscount > 0" class="summary-row-compact">
                 <span class="text-body-2 text-medium-emphasis">
                   <v-icon size="12" class="mr-1">mdi-tag-multiple</v-icon>
@@ -103,7 +112,6 @@
                 <span class="text-body-2 text-success">-{{ formatPrice(localDiscount) }}</span>
               </div>
 
-              <!-- Tax Breakdown (dynamic from channel) -->
               <template v-if="taxMode === 'inclusive'">
                 <div class="summary-row-compact">
                   <span class="text-body-2 text-medium-emphasis">
@@ -121,7 +129,6 @@
 
               <v-divider class="my-2" />
 
-              <!-- Points Redemption -->
               <template v-if="effectivePointsRedeem > 0">
                 <div class="summary-row-compact">
                   <span class="text-body-2 text-deep-purple">
@@ -190,9 +197,9 @@
               </div>
             </div>
 
-            <!-- Payment Method Selection (Horizontal Slider) -->
-            <div class="payment-method mb-4">
-              <h3 class="text-subtitle-1 font-weight-bold mb-2">Payment Method</h3>
+            <!-- Payment Method Selection -->
+            <div class="payment-method mb-3">
+              <h3 class="text-subtitle-2 font-weight-bold mb-2">Payment Method</h3>
 
               <v-slide-group v-model="selectedMethod" mandatory show-arrows class="payment-slider">
                 <v-slide-group-item
@@ -205,8 +212,8 @@
                     :color="isSelected ? 'primary' : 'surface'"
                     :variant="isSelected ? 'flat' : 'outlined'"
                     class="ma-1 payment-method-card"
-                    height="80"
-                    min-width="90"
+                    height="72"
+                    min-width="80"
                     @click="toggle"
                   >
                     <v-card-text
@@ -216,7 +223,7 @@
                       <v-icon
                         :icon="method.icon || getDefaultIcon(method.type)"
                         :color="isSelected ? 'white' : method.iconColor || 'primary'"
-                        size="28"
+                        size="24"
                       />
                       <div class="text-caption mt-1" :class="isSelected ? 'text-white' : ''">
                         {{ method.name }}
@@ -228,7 +235,7 @@
             </div>
 
             <!-- Cash Payment Details -->
-            <div v-if="selectedMethod === 'cash'" class="cash-payment mb-4">
+            <div v-if="selectedMethod === 'cash'" class="cash-payment">
               <NumericInputField
                 v-model="cashReceived"
                 label="Cash Received"
@@ -254,35 +261,10 @@
               </NumericInputField>
 
               <!-- Change Display -->
-              <v-alert
-                v-if="change > 0"
-                type="success"
-                variant="tonal"
-                class="mt-2"
-                density="compact"
-              >
-                <div class="d-flex justify-space-between align-center">
-                  <span class="text-body-2">Change:</span>
-                  <span class="text-h6 font-weight-bold">{{ formatPrice(change) }}</span>
-                </div>
-              </v-alert>
-            </div>
-
-            <!-- Bank Payment Info (Card, QR, BNI, etc.) -->
-            <div v-if="selectedMethodType === 'bank'" class="bank-payment mb-4">
-              <v-alert type="info" variant="tonal" density="compact">
-                <div class="d-flex align-center">
-                  <v-icon
-                    :icon="selectedMethodIcon"
-                    :color="selectedMethodColor"
-                    class="mr-2"
-                    size="24"
-                  />
-                  <div class="text-body-2">
-                    Waiting for {{ selectedMethodName }} payment confirmation
-                  </div>
-                </div>
-              </v-alert>
+              <div v-if="change > 0" class="change-display mt-2">
+                <span class="text-body-2">Change:</span>
+                <span class="text-h6 font-weight-bold text-success">{{ formatPrice(change) }}</span>
+              </div>
             </div>
           </v-col>
         </v-row>
@@ -1004,29 +986,44 @@ watch(
 </script>
 
 <style scoped>
-/* Loyalty banner */
-.loyalty-banner {
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  background: rgba(var(--v-theme-on-surface), 0.05);
+/* Dialog card: flex column, constrained to viewport */
+.v-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
 }
 
-/* Two-column layout */
-.items-column {
-  max-height: 450px;
-  overflow-y: auto;
+.dialog-content {
+  flex: 1 1 auto;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.dialog-content :deep(.v-row) {
+  height: 100%;
+}
+
+/* Left column: items list + loyalty at bottom */
+.left-column {
   border-right: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  min-height: 0;
 }
 
-@media (max-width: 960px) {
-  .items-column {
-    border-right: none;
-    border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-    max-height: 300px;
-  }
+.items-scroll {
+  overflow-y: auto;
+  min-height: 0;
 }
 
-.payment-column {
-  min-height: 400px;
+.loyalty-section {
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  flex-shrink: 0;
+}
+
+/* Right column: scrollable if content overflows */
+.right-column {
+  overflow-y: auto;
+  min-height: 0;
 }
 
 /* Compact summary rows */
@@ -1034,11 +1031,21 @@ watch(
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 0;
+  padding: 3px 0;
 }
 
 .summary-row-compact:not(:last-child) {
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+}
+
+/* Change display */
+.change-display {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  background: rgba(var(--v-theme-success), 0.08);
+  border-radius: 6px;
 }
 
 /* Payment method slider */
@@ -1057,9 +1064,19 @@ watch(
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* Payment input sections */
-.cash-payment,
-.bank-payment {
-  min-height: 60px;
+@media (max-width: 960px) {
+  .left-column {
+    border-right: none;
+    border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+    max-height: 40vh;
+  }
+}
+</style>
+
+<!-- Global style for dialog wrapper -->
+<style>
+.payment-dialog-wrapper {
+  max-height: 95vh !important;
+  margin: 16px !important;
 }
 </style>
