@@ -2071,8 +2071,8 @@ const handlePreBillPrinted = async (data: {
       bill.preBillSnapshot = data.snapshot
       bill.preBillModifiedAfterPrint = false
 
-      // Save to database
-      await ordersStore.updateOrder(currentOrder.value)
+      // Save to database (order-level only, no item re-upsert)
+      await ordersStore.updateOrderOnly(currentOrder.value)
 
       console.log('✅ [OrderSection] Pre-bill snapshot saved successfully')
     }
