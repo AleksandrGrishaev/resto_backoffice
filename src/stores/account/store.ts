@@ -333,6 +333,35 @@ export const useAccountStore = defineStore('account', () => {
     }
   }
 
+  /**
+   * Lightweight init for POS — loads accounts + categories + cash account transactions only.
+   * Skips loading transactions for all other accounts and allTransactionsCache.
+   */
+  async function initializeForPOS(cashAccountId?: string) {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Initializing account store for POS (lightweight)')
+
+      await Promise.all([fetchAccounts(), fetchCategories()])
+
+      // Only load transactions for cash account
+      const targetId = cashAccountId || state.value.accounts.find(acc => acc.type === 'cash')?.id
+      if (targetId) {
+        await fetchTransactions(targetId)
+        DebugUtils.info(MODULE_NAME, 'POS: Cash account transactions loaded', {
+          accountId: targetId
+        })
+      }
+
+      DebugUtils.info(MODULE_NAME, 'Account store initialized for POS', {
+        accounts: state.value.accounts.length,
+        categories: state.value.transactionCategories.length
+      })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to initialize store for POS', { error })
+      setError(error)
+    }
+  }
+
   // ============ CATEGORY ACTIONS ============
 
   async function fetchCategories(force = false) {
@@ -2307,6 +2336,7 @@ export const useAccountStore = defineStore('account', () => {
     updatePaymentUsedAmount,
 
     // init
-    initializeStore
+    initializeStore,
+    initializeForPOS
   }
 })

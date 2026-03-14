@@ -128,15 +128,12 @@ export const usePosStore = defineStore('pos', () => {
         currentShift: shiftsStore.currentShift?.shiftNumber || 'None'
       })
 
-      // Phase 2: Account Store (depends on nothing, can be parallel with phase 1 in future)
-      platform.debugLog('POS', '💰 Initializing Account Store...')
+      // Phase 2: Account Store — lightweight POS init (cash account only)
+      platform.debugLog('POS', '💰 Initializing Account Store (POS mode)...')
       const accountStore = useAccountStore()
-      await accountStore.initializeStore()
+      await accountStore.initializeForPOS()
 
-      // ✅ Lazy load pending payments - defer to when Receipt is opened
-      // This saves ~300ms on initial load
-      // await accountStore.fetchPayments(true) // DEFERRED - loaded on-demand
-      platform.debugLog('POS', '✅ Account Store initialized (payments deferred)', {
+      platform.debugLog('POS', '✅ Account Store initialized (POS mode, cash only)', {
         accountsCount: accountStore.accounts.length
       })
 
