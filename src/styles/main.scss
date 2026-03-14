@@ -5,6 +5,10 @@
 // =============================================
 // БАЗОВЫЕ СТИЛИ
 // =============================================
+html {
+  overscroll-behavior-y: contain; /* Disable pull-to-refresh in PWA */
+}
+
 body {
   margin: 0;
   background: var(--black-primary);
@@ -12,6 +16,7 @@ body {
   font-family: 'Roboto', sans-serif;
   font-size: var(--text-base);
   line-height: 1.5;
+  overscroll-behavior-y: contain; /* Disable pull-to-refresh in PWA */
 }
 
 * {
