@@ -319,6 +319,9 @@ export const usePosStore = defineStore('pos', () => {
     syncService.stop()
     platform.debugLog('POS', '✅ SyncService stopped')
 
+    // Reset initialization flag so next login triggers full reload
+    isInitialized.value = false
+
     platform.debugLog('POS', '✅ POS cleanup complete')
   }
 

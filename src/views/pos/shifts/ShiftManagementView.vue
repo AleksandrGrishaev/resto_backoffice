@@ -800,6 +800,18 @@ onMounted(async () => {
   // ✅ Sprint 8: Load pending payments ALWAYS (even without active shift)
   await shiftsStore.loadPendingPayments()
 
+  // ✅ FIX: Force-refresh cash account transactions on mount
+  // Without this, transfers created from backoffice are invisible
+  // because POS uses stale in-memory cache
+  if (cashAccount.value) {
+    try {
+      await accountStore.fetchTransactions(cashAccount.value.id)
+      console.log('✅ [ShiftManagementView] Cash account transactions refreshed')
+    } catch (err) {
+      console.warn('⚠️ [ShiftManagementView] Failed to refresh cash transactions:', err)
+    }
+  }
+
   if (currentShift.value) {
     // Start expense operations sync (polling every 30 sec)
     // TODO: Replace with WebSocket/Firebase Realtime/SSE
