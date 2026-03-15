@@ -224,6 +224,7 @@ export interface CreateMenuItemDto {
   preparationTime?: number
   allergens?: string[]
   tags?: string[]
+  imageUrl?: string
 
   // ✨ NEW: Модификаторы и шаблоны на уровне блюда
   modifierGroups?: ModifierGroup[]
