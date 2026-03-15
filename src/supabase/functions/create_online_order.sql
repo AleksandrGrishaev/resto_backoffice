@@ -317,6 +317,8 @@ BEGIN
       'status', 'active',
       'paymentStatus', 'unpaid',
       'paidAmount', 0,
+      'customerId', v_customer_id,
+      'customerName', p_data->>'customerName',
       'createdAt', now(),
       'updatedAt', now()
     ))
