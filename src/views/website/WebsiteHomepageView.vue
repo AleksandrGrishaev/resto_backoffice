@@ -177,7 +177,7 @@ function getSection(slot: number) {
               @update:model-value="updateSectionCategory(getSection(slot)!.id, slot, $event)"
             />
 
-            <!-- Custom title -->
+            <!-- Custom title (saves on blur, not on every keystroke) -->
             <v-text-field
               :model-value="getSection(slot)!.title || ''"
               label="Custom title (optional)"
@@ -186,7 +186,13 @@ function getSection(slot: number) {
               hide-details
               clearable
               style="max-width: 250px"
-              @update:model-value="updateSectionTitle(getSection(slot)!.id, slot, $event || '')"
+              @blur="
+                updateSectionTitle(
+                  getSection(slot)!.id,
+                  slot,
+                  ($event.target as HTMLInputElement)?.value || ''
+                )
+              "
             />
 
             <v-spacer />
