@@ -51,7 +51,11 @@ export interface KitchenHoursSettings {
   schedule: KitchenHoursSchedule
 }
 
-export type SettingsKey = 'general' | 'hours' | 'social' | 'auth' | 'seo' | 'kitchen_hours'
+export interface MenuSettings {
+  excluded_categories: string[]
+}
+
+export type SettingsKey = 'general' | 'hours' | 'social' | 'auth' | 'seo' | 'kitchen_hours' | 'menu'
 
 export interface WebsiteSettingsRow {
   id: string
@@ -68,4 +72,5 @@ export type SettingsMap = {
   auth: AuthSettings
   seo: SeoSettings
   kitchen_hours: KitchenHoursSettings
+  menu: MenuSettings
 }

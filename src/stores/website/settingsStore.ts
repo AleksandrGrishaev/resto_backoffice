@@ -11,7 +11,8 @@ import type {
   SocialSettings,
   AuthSettings,
   SeoSettings,
-  KitchenHoursSettings
+  KitchenHoursSettings,
+  MenuSettings
 } from './settingsTypes'
 
 const DEFAULTS: SettingsMap = {
@@ -58,6 +59,9 @@ const DEFAULTS: SettingsMap = {
       sat: { open: '10:00', close: '21:00' },
       sun: { open: '10:00', close: '21:00' }
     }
+  },
+  menu: {
+    excluded_categories: []
   }
 }
 
@@ -75,6 +79,7 @@ export const useWebsiteSettingsStore = defineStore('websiteSettings', () => {
   const auth = computed(() => settings.value.auth)
   const seo = computed(() => settings.value.seo)
   const kitchenHours = computed(() => settings.value.kitchen_hours)
+  const menu = computed(() => settings.value.menu)
 
   async function loadAll() {
     loading.value = true
@@ -127,6 +132,7 @@ export const useWebsiteSettingsStore = defineStore('websiteSettings', () => {
     auth,
     seo,
     kitchenHours,
+    menu,
     loadAll,
     saveSection,
     updateSettings

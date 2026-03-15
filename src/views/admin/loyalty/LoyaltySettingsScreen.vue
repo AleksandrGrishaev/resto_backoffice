@@ -222,10 +222,11 @@
                       v-model.number="form.tierWindowDays"
                       label="Tier window (days)"
                       type="number"
-                      :min="1"
+                      :min="7"
+                      :max="365"
                       variant="outlined"
                       density="compact"
-                      hint="Sliding window for tier calculation"
+                      hint="Spending within this period determines the customer's tier level"
                       persistent-hint
                       class="mb-3"
                     />
