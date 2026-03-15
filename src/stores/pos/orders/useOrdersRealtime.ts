@@ -57,6 +57,17 @@ export function useOrdersRealtime() {
           handleOrderUpdate(payload)
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'orders'
+        },
+        payload => {
+          handleOrderInsert(payload)
+        }
+      )
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
           DebugUtils.info(MODULE_NAME, '📡 POS orders Realtime connected')
@@ -105,6 +116,66 @@ export function useOrdersRealtime() {
   }
 
   /**
+   * Handle new order INSERT (online orders from website)
+   * Loads full order with items and adds to POS store
+   */
+  async function handleOrderInsert(payload: any) {
+    const newOrder = payload.new
+    if (!newOrder?.id) return
+
+    // Only auto-load online orders (source = 'website')
+    // POS-created orders are already in local state
+    if (newOrder.source !== 'website') {
+      DebugUtils.debug(MODULE_NAME, 'Non-website order INSERT, ignoring', {
+        orderId: newOrder.id,
+        source: newOrder.source
+      })
+      return
+    }
+
+    // Check if already in store (shouldn't be, but safety check)
+    if (ordersStore.orders.some(o => o.id === newOrder.id)) {
+      DebugUtils.debug(MODULE_NAME, 'Order already in store', { orderId: newOrder.id })
+      return
+    }
+
+    DebugUtils.info(MODULE_NAME, '🌐 New online order received!', {
+      orderNumber: newOrder.order_number,
+      type: newOrder.type,
+      source: newOrder.source
+    })
+
+    try {
+      // Load order items from DB
+      const { data: itemRows, error: itemsError } = await supabase
+        .from('order_items')
+        .select('*')
+        .eq('order_id', newOrder.id)
+
+      if (itemsError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to load online order items', { error: itemsError })
+        return
+      }
+
+      // Map to app types
+      const items = (itemRows || []).map(fromOrderItemRow)
+      const order = fromSupabase(newOrder, items)
+
+      // Add to store
+      ordersStore.orders.push(order)
+
+      DebugUtils.info(MODULE_NAME, '✅ Online order added to POS', {
+        orderNumber: order.orderNumber,
+        type: order.type,
+        itemCount: items.length,
+        total: order.finalAmount
+      })
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Error loading online order', { err, orderId: newOrder.id })
+    }
+  }
+
+  /**
    * Handle order-level updates (status, payment, metadata)
    */
   function handleOrderUpdate(payload: any) {
@@ -131,6 +202,13 @@ export function useOrdersRealtime() {
       existingOrder.paidAmount = updatedOrder.paid_amount ?? existingOrder.paidAmount
       existingOrder.paymentIds = updatedOrder.payment_ids || existingOrder.paymentIds
       existingOrder.updatedAt = updatedOrder.updated_at
+
+      // Online ordering fields
+      if (updatedOrder.source) existingOrder.source = updatedOrder.source
+      if (updatedOrder.fulfillment_method)
+        existingOrder.fulfillmentMethod = updatedOrder.fulfillment_method
+      if (updatedOrder.customer_phone) existingOrder.customerPhone = updatedOrder.customer_phone
+      if (updatedOrder.comment) existingOrder.comment = updatedOrder.comment
 
       DebugUtils.info(MODULE_NAME, '✅ Order metadata updated in POS', {
         orderNumber: existingOrder.orderNumber,
