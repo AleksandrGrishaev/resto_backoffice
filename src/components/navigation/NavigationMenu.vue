@@ -45,6 +45,29 @@
         </template>
       </v-list-item>
 
+      <!-- Website -->
+      <v-list-group value="website" class="mb-2">
+        <template #activator="{ props }">
+          <v-list-item v-bind="props" prepend-icon="mdi-web" color="primary">
+            <template #title>
+              <span>Website</span>
+            </template>
+          </v-list-item>
+        </template>
+
+        <v-list-item to="/website/homepage" prepend-icon="mdi-home" color="primary" class="ps-8">
+          <template #title>
+            <span>Homepage</span>
+          </template>
+        </v-list-item>
+
+        <v-list-item to="/website/settings" prepend-icon="mdi-cog" color="primary" class="ps-8">
+          <template #title>
+            <span>Settings</span>
+          </template>
+        </v-list-item>
+      </v-list-group>
+
       <!-- Preparations -->
       <v-list-item to="/preparations" prepend-icon="mdi-chef-hat" color="primary" class="mb-2">
         <template #title>

@@ -254,6 +254,35 @@ const routes: RouteRecordRaw[] = [
           allowedRoles: ['admin', 'manager']
         }
       },
+      // === Website ===
+      {
+        path: 'website',
+        meta: {
+          allowedRoles: ['admin', 'manager']
+        },
+        children: [
+          {
+            path: '',
+            redirect: '/website/homepage'
+          },
+          {
+            path: 'homepage',
+            name: 'website-homepage',
+            component: () => import('@/views/website/WebsiteHomepageView.vue'),
+            meta: {
+              title: 'Website Homepage'
+            }
+          },
+          {
+            path: 'settings',
+            name: 'website-settings',
+            component: () => import('@/views/website/WebsiteSettingsView.vue'),
+            meta: {
+              title: 'Website Settings'
+            }
+          }
+        ]
+      },
       // === Продукты ===
       {
         path: 'products',
