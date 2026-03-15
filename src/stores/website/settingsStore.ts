@@ -39,7 +39,9 @@ const DEFAULTS: SettingsMap = {
   auth: {
     google_enabled: true,
     email_magic_link_enabled: true,
-    telegram_enabled: false,
+    telegram_enabled: false
+  },
+  auth_secrets: {
     telegram_bot_token: '',
     telegram_bot_username: ''
   },

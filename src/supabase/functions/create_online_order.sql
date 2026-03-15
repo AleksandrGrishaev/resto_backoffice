@@ -227,34 +227,41 @@ BEGIN
     v_selected_modifiers := '[]'::jsonb;
 
     IF v_item->'modifiers' IS NOT NULL AND jsonb_array_length(v_item->'modifiers') > 0 THEN
+      -- Menu item must support modifiers if customer sent them
+      IF v_menu_item.modifier_groups IS NULL THEN
+        RAISE EXCEPTION '%', 'Menu item does not support modifiers: ' || v_menu_item.name;
+      END IF;
+
       FOR v_modifier IN SELECT * FROM jsonb_array_elements(v_item->'modifiers')
       LOOP
-        -- Find modifier group and option in menu_item's modifier_groups JSONB
-        IF v_menu_item.modifier_groups IS NOT NULL THEN
-          SELECT grp INTO v_mod_group
-          FROM jsonb_array_elements(v_menu_item.modifier_groups) grp
-          WHERE grp->>'id' = v_modifier->>'groupId';
+        -- Find modifier group in menu_item's modifier_groups JSONB
+        SELECT grp INTO v_mod_group
+        FROM jsonb_array_elements(v_menu_item.modifier_groups) grp
+        WHERE grp->>'id' = v_modifier->>'groupId';
 
-          IF v_mod_group IS NOT NULL THEN
-            SELECT opt INTO v_mod_option
-            FROM jsonb_array_elements(v_mod_group->'options') opt
-            WHERE opt->>'id' = v_modifier->>'optionId'
-              AND (opt->>'isActive')::boolean = true;
-
-            IF v_mod_option IS NOT NULL THEN
-              v_modifiers_total := v_modifiers_total + COALESCE((v_mod_option->>'priceAdjustment')::numeric, 0) * COALESCE((v_modifier->>'quantity')::integer, 1);
-
-              v_selected_modifiers := v_selected_modifiers || jsonb_build_array(jsonb_build_object(
-                'groupId', v_modifier->>'groupId',
-                'groupName', v_mod_group->>'name',
-                'optionId', v_modifier->>'optionId',
-                'optionName', v_mod_option->>'name',
-                'priceAdjustment', COALESCE((v_mod_option->>'priceAdjustment')::numeric, 0),
-                'quantity', COALESCE((v_modifier->>'quantity')::integer, 1)
-              ));
-            END IF;
-          END IF;
+        IF v_mod_group IS NULL THEN
+          RAISE EXCEPTION '%', 'Modifier group not found: ' || (v_modifier->>'groupId');
         END IF;
+
+        SELECT opt INTO v_mod_option
+        FROM jsonb_array_elements(v_mod_group->'options') opt
+        WHERE opt->>'id' = v_modifier->>'optionId'
+          AND (opt->>'isActive')::boolean = true;
+
+        IF v_mod_option IS NULL THEN
+          RAISE EXCEPTION '%', 'Modifier option not found: ' || (v_modifier->>'optionId');
+        END IF;
+
+        v_modifiers_total := v_modifiers_total + COALESCE((v_mod_option->>'priceAdjustment')::numeric, 0) * COALESCE((v_modifier->>'quantity')::integer, 1);
+
+        v_selected_modifiers := v_selected_modifiers || jsonb_build_array(jsonb_build_object(
+          'groupId', v_modifier->>'groupId',
+          'groupName', v_mod_group->>'name',
+          'optionId', v_modifier->>'optionId',
+          'optionName', v_mod_option->>'name',
+          'priceAdjustment', COALESCE((v_mod_option->>'priceAdjustment')::numeric, 0),
+          'quantity', COALESCE((v_modifier->>'quantity')::integer, 1)
+        ));
       END LOOP;
     END IF;
 

@@ -32,6 +32,9 @@ export interface AuthSettings {
   google_enabled: boolean
   email_magic_link_enabled: boolean
   telegram_enabled: boolean
+}
+
+export interface AuthSecretsSettings {
   telegram_bot_token: string
   telegram_bot_username: string
 }
@@ -55,7 +58,15 @@ export interface MenuSettings {
   excluded_categories: string[]
 }
 
-export type SettingsKey = 'general' | 'hours' | 'social' | 'auth' | 'seo' | 'kitchen_hours' | 'menu'
+export type SettingsKey =
+  | 'general'
+  | 'hours'
+  | 'social'
+  | 'auth'
+  | 'auth_secrets'
+  | 'seo'
+  | 'kitchen_hours'
+  | 'menu'
 
 export interface WebsiteSettingsRow {
   id: string
@@ -70,6 +81,7 @@ export type SettingsMap = {
   hours: HoursSettings
   social: SocialSettings
   auth: AuthSettings
+  auth_secrets: AuthSecretsSettings
   seo: SeoSettings
   kitchen_hours: KitchenHoursSettings
   menu: MenuSettings

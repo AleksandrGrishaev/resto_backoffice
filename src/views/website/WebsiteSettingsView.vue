@@ -301,7 +301,7 @@
               </v-col>
               <v-col v-if="store.settings.auth.telegram_enabled" cols="12" md="6">
                 <v-text-field
-                  v-model="store.settings.auth.telegram_bot_token"
+                  v-model="store.settings.auth_secrets.telegram_bot_token"
                   label="Telegram Bot Token"
                   variant="outlined"
                   density="comfortable"
@@ -312,7 +312,7 @@
               </v-col>
               <v-col v-if="store.settings.auth.telegram_enabled" cols="12" md="6">
                 <v-text-field
-                  v-model="store.settings.auth.telegram_bot_username"
+                  v-model="store.settings.auth_secrets.telegram_bot_username"
                   label="Telegram Bot Username"
                   variant="outlined"
                   density="comfortable"
@@ -321,7 +321,7 @@
               </v-col>
             </v-row>
             <div class="d-flex justify-end mt-4">
-              <v-btn color="primary" :loading="store.saving === 'auth'" @click="save('auth')">
+              <v-btn color="primary" :loading="store.saving === 'auth'" @click="saveAuth">
                 Save Auth
               </v-btn>
             </div>
@@ -478,5 +478,10 @@ async function save(key: SettingsKey) {
   snackbarText.value = success ? 'Settings saved' : store.error || 'Failed to save'
   snackbarColor.value = success ? 'success' : 'error'
   snackbar.value = true
+}
+
+async function saveAuth() {
+  await save('auth')
+  await save('auth_secrets')
 }
 </script>
