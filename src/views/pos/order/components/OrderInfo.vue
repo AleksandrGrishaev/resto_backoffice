@@ -9,8 +9,12 @@
         </div>
 
         <div class="order-text">
-          <div class="order-type text-subtitle-1 font-weight-medium">
+          <div class="order-type text-subtitle-1 font-weight-medium d-flex align-center ga-2">
             {{ orderTypeLabel }}
+            <v-chip v-if="isOnlineOrder" color="teal" size="x-small" variant="flat">
+              <v-icon start size="x-small">mdi-web</v-icon>
+              Online
+            </v-chip>
           </div>
           <div class="order-subtitle text-caption text-medium-emphasis">
             {{ orderSubtitle }}
@@ -247,12 +251,38 @@ const orderTypeLabel = computed((): string => {
   return orderVisual.value?.label ?? 'Unknown'
 })
 
+const isOnlineOrder = computed(() => props.order?.source === 'website')
+
 const orderSubtitle = computed((): string => {
   if (!props.order) return 'Select or create an order'
 
+  const parts: string[] = []
+
+  // Online order: show customer info
+  if (isOnlineOrder.value) {
+    if (props.order.customerName) parts.push(props.order.customerName)
+    if (props.order.customerPhone) parts.push(props.order.customerPhone)
+    if (props.order.fulfillmentMethod) {
+      const labels: Record<string, string> = {
+        self_pickup: 'Self Pickup',
+        goshop: 'GoShop',
+        courier: 'Courier'
+      }
+      parts.push(labels[props.order.fulfillmentMethod] || props.order.fulfillmentMethod)
+    }
+    if (props.order.pickupTime) {
+      parts.push(props.order.pickupTime === 'asap' ? 'ASAP' : `Pickup: ${props.order.pickupTime}`)
+    }
+    if (parts.length > 0) return parts.join(' · ')
+  }
+
   switch (props.order.type) {
     case 'dine_in':
-      return props.tableNumber ? `Table ${props.tableNumber}` : 'No table assigned'
+      return props.tableNumber
+        ? `Table ${props.tableNumber}`
+        : props.order.tableNumber
+          ? `Table ${props.order.tableNumber} (requested)`
+          : 'No table assigned'
     case 'takeaway':
     case 'delivery':
       return `Order #${props.order.orderNumber}`
