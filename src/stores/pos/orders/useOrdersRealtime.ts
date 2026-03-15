@@ -11,6 +11,13 @@ import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'POSOrdersRealtime'
 
+// Cancellation request callback type
+type CancellationRequestCallback = (order: {
+  orderId: string
+  orderNumber: string
+  reason?: string
+}) => void
+
 /**
  * POS Orders Realtime Subscription (NEW: Migration 053-054)
  * Listens for order updates from Kitchen (item status changes)
@@ -28,6 +35,7 @@ export function useOrdersRealtime() {
   const itemsChannel = ref<RealtimeChannel | null>(null)
   const isConnected = ref(false)
   const ordersStore = usePosOrdersStore()
+  let onCancellationRequest: CancellationRequestCallback | null = null
 
   /**
    * Subscribe to orders and order_items table changes
@@ -55,6 +63,17 @@ export function useOrdersRealtime() {
         },
         payload => {
           handleOrderUpdate(payload)
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'orders'
+        },
+        payload => {
+          handleOrderInsert(payload)
         }
       )
       .subscribe((status, err) => {
@@ -105,6 +124,80 @@ export function useOrdersRealtime() {
   }
 
   /**
+   * Handle new order INSERT (online orders from website)
+   * Loads full order with items and adds to POS store
+   */
+  async function handleOrderInsert(payload: any) {
+    const newOrder = payload.new
+    if (!newOrder?.id) return
+
+    // Only auto-load online orders (source = 'website')
+    // POS-created orders are already in local state
+    if (newOrder.source !== 'website') {
+      DebugUtils.debug(MODULE_NAME, 'Non-website order INSERT, ignoring', {
+        orderId: newOrder.id,
+        source: newOrder.source
+      })
+      return
+    }
+
+    // Check if already in store (shouldn't be, but safety check)
+    if (ordersStore.orders.some(o => o.id === newOrder.id)) {
+      DebugUtils.debug(MODULE_NAME, 'Order already in store', { orderId: newOrder.id })
+      return
+    }
+
+    DebugUtils.info(MODULE_NAME, '🌐 New online order received!', {
+      orderNumber: newOrder.order_number,
+      type: newOrder.type,
+      source: newOrder.source
+    })
+
+    try {
+      // IMPORTANT: Re-fetch the full order from DB because the INSERT event
+      // fires with stale data (bills=[]) before the RPC's UPDATE sets the actual bills.
+      // By the time this handler runs, the RPC transaction has committed.
+      const { data: freshOrder, error: orderError } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('id', newOrder.id)
+        .single()
+
+      if (orderError || !freshOrder) {
+        DebugUtils.error(MODULE_NAME, 'Failed to re-fetch online order', { error: orderError })
+        return
+      }
+
+      // Load order items from DB
+      const { data: itemRows, error: itemsError } = await supabase
+        .from('order_items')
+        .select('*')
+        .eq('order_id', newOrder.id)
+
+      if (itemsError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to load online order items', { error: itemsError })
+        return
+      }
+
+      // Map to app types using fresh order data (with correct bills JSONB)
+      const items = (itemRows || []).map(fromOrderItemRow)
+      const order = fromSupabase(freshOrder, items)
+
+      // Add to store
+      ordersStore.orders.push(order)
+
+      DebugUtils.info(MODULE_NAME, '✅ Online order added to POS', {
+        orderNumber: order.orderNumber,
+        type: order.type,
+        itemCount: items.length,
+        total: order.finalAmount
+      })
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Error loading online order', { err, orderId: newOrder.id })
+    }
+  }
+
+  /**
    * Handle order-level updates (status, payment, metadata)
    */
   function handleOrderUpdate(payload: any) {
@@ -131,6 +224,41 @@ export function useOrdersRealtime() {
       existingOrder.paidAmount = updatedOrder.paid_amount ?? existingOrder.paidAmount
       existingOrder.paymentIds = updatedOrder.payment_ids || existingOrder.paymentIds
       existingOrder.updatedAt = updatedOrder.updated_at
+
+      // Online ordering fields
+      if (updatedOrder.source) existingOrder.source = updatedOrder.source
+      if (updatedOrder.fulfillment_method)
+        existingOrder.fulfillmentMethod = updatedOrder.fulfillment_method
+      if (updatedOrder.customer_phone) existingOrder.customerPhone = updatedOrder.customer_phone
+      if (updatedOrder.comment) existingOrder.comment = updatedOrder.comment
+
+      // Cancellation request fields
+      if (updatedOrder.cancellation_requested_at) {
+        existingOrder.cancellationRequestedAt = updatedOrder.cancellation_requested_at
+      }
+      if (updatedOrder.cancellation_reason) {
+        existingOrder.cancellationReason = updatedOrder.cancellation_reason
+      }
+      if (updatedOrder.cancellation_resolved_at) {
+        existingOrder.cancellationResolvedAt = updatedOrder.cancellation_resolved_at
+        existingOrder.cancellationResolvedBy = updatedOrder.cancellation_resolved_by
+      }
+
+      // Detect NEW cancellation request (not already resolved)
+      const oldHadRequest = payload.old?.cancellation_requested_at
+      const newHasRequest = updatedOrder.cancellation_requested_at
+      const isResolved = updatedOrder.cancellation_resolved_at
+      if (!oldHadRequest && newHasRequest && !isResolved && onCancellationRequest) {
+        DebugUtils.info(MODULE_NAME, '🔔 Cancellation request detected!', {
+          orderNumber: existingOrder.orderNumber,
+          reason: updatedOrder.cancellation_reason
+        })
+        onCancellationRequest({
+          orderId: existingOrder.id,
+          orderNumber: existingOrder.orderNumber,
+          reason: updatedOrder.cancellation_reason
+        })
+      }
 
       DebugUtils.info(MODULE_NAME, '✅ Order metadata updated in POS', {
         orderNumber: existingOrder.orderNumber,
@@ -265,9 +393,17 @@ export function useOrdersRealtime() {
     isConnected.value = false
   }
 
+  /**
+   * Register callback for cancellation request notifications
+   */
+  function onCancellationRequested(callback: CancellationRequestCallback) {
+    onCancellationRequest = callback
+  }
+
   return {
     subscribe,
     unsubscribe,
-    isConnected
+    isConnected,
+    onCancellationRequested
   }
 }

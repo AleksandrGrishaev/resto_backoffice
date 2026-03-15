@@ -166,6 +166,11 @@ export const usePosStore = defineStore('pos', () => {
         ordersRealtime = useOrdersRealtime()
         ordersRealtime.subscribe()
 
+        // Register cancellation request callback if already set
+        if (_cancellationCallback) {
+          ordersRealtime.onCancellationRequested(_cancellationCallback)
+        }
+
         // 🆕 Tables Realtime for sync between tabs/devices
         tablesRealtime = useTablesRealtime()
         tablesRealtime.subscribe()
@@ -343,6 +348,22 @@ export const usePosStore = defineStore('pos', () => {
     }
   })
 
+  /**
+   * Register callback for cancellation request notifications from website orders
+   */
+  function onCancellationRequested(
+    callback: (order: { orderId: string; orderNumber: string; reason?: string }) => void
+  ) {
+    if (ordersRealtime) {
+      ordersRealtime.onCancellationRequested(callback)
+    }
+    // Store for late registration (if called before realtime init)
+    _cancellationCallback = callback
+  }
+  let _cancellationCallback:
+    | ((order: { orderId: string; orderNumber: string; reason?: string }) => void)
+    | null = null
+
   // ===== RETURN =====
 
   return {
@@ -363,6 +384,7 @@ export const usePosStore = defineStore('pos', () => {
     syncWithServer, // @deprecated - use syncData
     clearError,
     reset,
-    cleanup // ✅ FIX: Add cleanup method to exports
+    cleanup,
+    onCancellationRequested
   }
 })

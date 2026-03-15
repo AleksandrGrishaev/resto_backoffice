@@ -105,7 +105,7 @@ export function menuItemToSupabaseInsert(item: MenuItem): SupabaseMenuItemInsert
     last_edited_at: item.lastEditedAt || null,
 
     // Media
-    image_url: (item as any).imageUrl || null,
+    image_url: item.imageUrl || null,
 
     // Timestamps
     created_at: item.createdAt,

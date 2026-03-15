@@ -24,6 +24,39 @@
             @move-selected-items="handleMoveSelectedItems"
             @delete-order="handleDeleteOrder"
           />
+
+          <!-- Online Order Details Bar -->
+          <div v-if="currentOrder.source === 'website'" class="online-order-bar">
+            <div class="online-order-bar-content">
+              <div v-if="currentOrder.customerName" class="online-field">
+                <v-icon size="14" class="mr-1">mdi-account</v-icon>
+                {{ currentOrder.customerName }}
+              </div>
+              <div v-if="currentOrder.customerPhone" class="online-field">
+                <v-icon size="14" class="mr-1">mdi-phone</v-icon>
+                {{ currentOrder.customerPhone }}
+              </div>
+              <div v-if="onlineFulfillmentLabel" class="online-field">
+                <v-icon size="14" class="mr-1">{{ onlineFulfillmentIcon }}</v-icon>
+                {{ onlineFulfillmentLabel }}
+              </div>
+              <div v-if="onlinePickupLabel" class="online-field">
+                <v-icon size="14" class="mr-1">mdi-clock-outline</v-icon>
+                {{ onlinePickupLabel }}
+              </div>
+              <div v-if="currentOrder.comment" class="online-field online-comment">
+                <v-icon size="14" class="mr-1" color="warning">mdi-message-text</v-icon>
+                {{ currentOrder.comment }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Cancellation Request Banner (website orders) -->
+          <CancellationRequestBanner
+            v-if="currentOrder.cancellationRequestedAt && !currentOrder.cancellationResolvedAt"
+            :order="currentOrder"
+            @resolved="handleCancellationResolved"
+          />
         </div>
 
         <!-- Scrollable Content Area -->
@@ -277,6 +310,7 @@ import BillItemCancelDialog from './dialogs/BillItemCancelDialog.vue'
 import MoveItemsDialog from './dialogs/MoveItemsDialog.vue'
 import OrderTypeDialog from './dialogs/OrderTypeDialog.vue'
 import TableSelectionDialog from './dialogs/TableSelectionDialog.vue'
+import CancellationRequestBanner from './components/CancellationRequestBanner.vue'
 
 const MODULE_NAME = 'OrderSection'
 
@@ -520,6 +554,29 @@ const tableNumber = computed((): string | null => {
   return table?.number || null
 })
 
+// Online order info
+const FULFILLMENT_LABELS: Record<string, { label: string; icon: string }> = {
+  self_pickup: { label: 'Self Pickup', icon: 'mdi-walk' },
+  goshop: { label: 'GoShop', icon: 'mdi-moped' },
+  courier: { label: 'Courier', icon: 'mdi-bike-fast' }
+}
+
+const onlineFulfillmentLabel = computed(() => {
+  const fm = currentOrder.value?.fulfillmentMethod
+  return fm ? FULFILLMENT_LABELS[fm]?.label || fm : null
+})
+
+const onlineFulfillmentIcon = computed(() => {
+  const fm = currentOrder.value?.fulfillmentMethod
+  return fm ? FULFILLMENT_LABELS[fm]?.icon || 'mdi-package' : 'mdi-package'
+})
+
+const onlinePickupLabel = computed(() => {
+  const pt = currentOrder.value?.pickupTime
+  if (!pt) return null
+  return pt === 'asap' ? 'ASAP' : pt
+})
+
 // Order Calculations - using composable
 const calculations = useOrderCalculations(() => currentOrder.value?.bills || [], {
   channelId: () => currentOrder.value?.channelId,
@@ -593,6 +650,15 @@ const showError = (message: string, type: 'error' | 'warning' = 'error'): void =
 
 const clearError = (): void => {
   error.value.show = false
+}
+
+// Methods - Cancellation Request
+const handleCancellationResolved = (action: 'accept' | 'dismiss'): void => {
+  if (action === 'accept') {
+    showSuccess('Order cancellation accepted')
+  } else {
+    showSuccess('Cancellation request dismissed — contact customer')
+  }
 }
 
 // Methods - Order Management
@@ -2437,10 +2503,36 @@ onMounted(() => {
    ============================================= */
 
 .order-header {
-  flex-shrink: 0; /* Фиксированная высота */
+  flex-shrink: 0;
   background: rgb(var(--v-theme-surface));
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   z-index: 10;
+}
+
+.online-order-bar {
+  background: rgba(0, 150, 136, 0.08);
+  border-bottom: 1px solid rgba(0, 150, 136, 0.15);
+  padding: 6px 16px;
+}
+
+.online-order-bar-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.online-field {
+  display: flex;
+  align-items: center;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.online-comment {
+  width: 100%;
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .order-content {
