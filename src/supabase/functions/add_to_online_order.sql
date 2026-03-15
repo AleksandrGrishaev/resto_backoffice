@@ -192,11 +192,17 @@ BEGIN
           FROM order_items oi
           WHERE oi.order_id = p_order_id AND oi.status != 'cancelled'
         ), '[]'::jsonb),
+        'orderId', p_order_id,
+        'name', 'Bill 1',
         'subtotal', v_new_total,
-        'discount', 0,
-        'tax', 0,
+        'discountAmount', 0,
+        'taxAmount', 0,
         'total', v_new_total,
-        'status', 'open'
+        'status', 'active',
+        'paymentStatus', 'unpaid',
+        'paidAmount', 0,
+        'createdAt', now(),
+        'updatedAt', now()
       ))
     ),
     updated_at = now()

@@ -183,8 +183,10 @@ BEGIN
     total_amount = v_order_subtotal,
     final_amount = v_order_subtotal,
     bills = jsonb_build_array(jsonb_build_object(
-      'id', v_bill_id, 'billNumber', '1', 'items', v_bill_items,
-      'subtotal', v_order_subtotal, 'discount', 0, 'tax', 0, 'total', v_order_subtotal, 'status', 'open'
+      'id', v_bill_id, 'billNumber', '1', 'orderId', p_order_id, 'name', 'Bill 1',
+      'items', v_bill_items, 'subtotal', v_order_subtotal, 'discountAmount', 0, 'taxAmount', 0,
+      'total', v_order_subtotal, 'status', 'active', 'paymentStatus', 'unpaid', 'paidAmount', 0,
+      'createdAt', now(), 'updatedAt', now()
     )),
     updated_at = now()
   WHERE id = p_order_id;

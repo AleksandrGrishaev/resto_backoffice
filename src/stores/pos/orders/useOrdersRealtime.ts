@@ -146,6 +146,20 @@ export function useOrdersRealtime() {
     })
 
     try {
+      // IMPORTANT: Re-fetch the full order from DB because the INSERT event
+      // fires with stale data (bills=[]) before the RPC's UPDATE sets the actual bills.
+      // By the time this handler runs, the RPC transaction has committed.
+      const { data: freshOrder, error: orderError } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('id', newOrder.id)
+        .single()
+
+      if (orderError || !freshOrder) {
+        DebugUtils.error(MODULE_NAME, 'Failed to re-fetch online order', { error: orderError })
+        return
+      }
+
       // Load order items from DB
       const { data: itemRows, error: itemsError } = await supabase
         .from('order_items')
@@ -157,9 +171,9 @@ export function useOrdersRealtime() {
         return
       }
 
-      // Map to app types
+      // Map to app types using fresh order data (with correct bills JSONB)
       const items = (itemRows || []).map(fromOrderItemRow)
-      const order = fromSupabase(newOrder, items)
+      const order = fromSupabase(freshOrder, items)
 
       // Add to store
       ordersStore.orders.push(order)
