@@ -1,6 +1,6 @@
 -- RPC: create_online_order
 -- Creates a new order from the website with full server-side price validation
--- Auth: Optional (guest allowed for dine_in, authenticated for takeaway)
+-- Auth: Required (authenticated users only)
 -- Returns: { success, order_id, order_number, total, items }
 
 CREATE OR REPLACE FUNCTION public.create_online_order(p_data JSONB)
@@ -63,15 +63,22 @@ BEGIN
   END IF;
 
   -- ============================================================
-  -- 2. Check kitchen hours
+  -- 2. Authentication check
+  -- ============================================================
+  IF auth.uid() IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Authentication required');
+  END IF;
+
+  -- ============================================================
+  -- 3. Check kitchen hours
   -- ============================================================
   SELECT value INTO v_kitchen_hours
   FROM website_settings
   WHERE key = 'kitchen_hours';
 
   IF v_kitchen_hours IS NOT NULL AND (v_kitchen_hours->>'enabled')::boolean = true THEN
-    -- Get current day key (mon, tue, wed, etc.)
-    v_today_key := lower(to_char(now() AT TIME ZONE 'Asia/Jakarta', 'Dy'));
+    -- Get current day key (mon, tue, wed, etc.) using locale-independent approach
+    v_today_key := (ARRAY['sun','mon','tue','wed','thu','fri','sat'])[EXTRACT(DOW FROM now() AT TIME ZONE 'Asia/Jakarta')::int + 1];
     v_now_time := (now() AT TIME ZONE 'Asia/Jakarta')::time;
 
     IF v_kitchen_hours->'schedule'->v_today_key IS NOT NULL THEN
@@ -90,23 +97,15 @@ BEGIN
   END IF;
 
   -- ============================================================
-  -- 3. Resolve customer from auth
+  -- 4. Resolve customer from auth
   -- ============================================================
-  IF auth.uid() IS NOT NULL THEN
-    SELECT ci.customer_id INTO v_customer_id
-    FROM customer_identities ci
-    WHERE ci.auth_user_id = auth.uid()
-    LIMIT 1;
-  END IF;
-
-  -- Guest dine_in is allowed (v_customer_id can be null)
-  -- But takeaway requires authentication
-  IF v_type = 'takeaway' AND v_customer_id IS NULL AND auth.uid() IS NULL THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Authentication required for takeaway orders');
-  END IF;
+  SELECT ci.customer_id INTO v_customer_id
+  FROM customer_identities ci
+  WHERE ci.auth_user_id = auth.uid()
+  LIMIT 1;
 
   -- ============================================================
-  -- 4. Resolve channel (takeaway channel for website orders)
+  -- 5. Resolve channel (takeaway channel for website orders)
   -- ============================================================
   SELECT id, code INTO v_channel_id, v_channel_code
   FROM sales_channels
@@ -122,7 +121,7 @@ BEGIN
   END IF;
 
   -- ============================================================
-  -- 5. Generate sequential order number: SK-{daily_counter}
+  -- 6. Generate sequential order number: SK-{daily_counter}
   -- ============================================================
   INSERT INTO order_counters (counter_date, last_number)
   VALUES (CURRENT_DATE, 1)
@@ -133,7 +132,7 @@ BEGIN
   v_order_number := 'SK-' || v_counter;
 
   -- ============================================================
-  -- 6. Create order
+  -- 7. Create order
   -- ============================================================
   v_order_id := gen_random_uuid();
   v_bill_id := gen_random_uuid();
@@ -159,7 +158,7 @@ BEGIN
   );
 
   -- ============================================================
-  -- 7. Process items: validate, resolve prices, insert
+  -- 8. Process items: validate, resolve prices, insert
   -- ============================================================
   FOR v_item IN SELECT * FROM jsonb_array_elements(v_items)
   LOOP
@@ -171,9 +170,7 @@ BEGIN
       AND (mi.is_active = true OR mi.status = 'active');
 
     IF v_menu_item.id IS NULL THEN
-      -- Rollback: delete order
-      DELETE FROM orders WHERE id = v_order_id;
-      RETURN jsonb_build_object('success', false, 'error', 'Menu item not found or inactive: ' || (v_item->>'menuItemId'));
+      RAISE EXCEPTION '%', 'Menu item not found or inactive: ' || (v_item->>'menuItemId');
     END IF;
 
     -- Resolve variant price
@@ -187,9 +184,7 @@ BEGIN
         AND (elem->>'isActive')::boolean = true;
 
       IF v_variant IS NULL THEN
-        DELETE FROM orders WHERE id = v_order_id;
-        DELETE FROM order_items WHERE order_id = v_order_id;
-        RETURN jsonb_build_object('success', false, 'error', 'Variant not found: ' || (v_item->>'variantId'));
+        RAISE EXCEPTION '%', 'Variant not found: ' || (v_item->>'variantId');
       END IF;
 
       v_unit_price := (v_variant->>'price')::numeric;
@@ -203,8 +198,10 @@ BEGIN
         FROM channel_prices cp
         WHERE cp.channel_id = v_channel_id
           AND cp.menu_item_id = v_menu_item.id
-          AND (cp.variant_id IS NULL OR cp.variant_id = v_item->>'variantId')
-          AND cp.is_active = true;
+          AND (cp.variant_id = v_item->>'variantId' OR cp.variant_id IS NULL)
+          AND cp.is_active = true
+        ORDER BY cp.variant_id NULLS LAST
+        LIMIT 1;
 
         IF v_channel_price IS NOT NULL THEN
           v_unit_price := v_channel_price;
@@ -300,7 +297,7 @@ BEGIN
   END LOOP;
 
   -- ============================================================
-  -- 8. Update order totals and bills
+  -- 9. Update order totals and bills
   -- ============================================================
   UPDATE orders SET
     subtotal = v_order_subtotal,
@@ -320,7 +317,7 @@ BEGIN
   WHERE id = v_order_id;
 
   -- ============================================================
-  -- 9. Return success
+  -- 10. Return success
   -- ============================================================
   RETURN jsonb_build_object(
     'success', true,
@@ -335,6 +332,4 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
--- Grant execute to authenticated and anon (guest dine-in allowed)
 GRANT EXECUTE ON FUNCTION public.create_online_order(jsonb) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.create_online_order(jsonb) TO anon;

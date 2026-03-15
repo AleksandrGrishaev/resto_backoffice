@@ -80,7 +80,7 @@ BEGIN
       AND (mi.is_active = true OR mi.status = 'active');
 
     IF v_menu_item.id IS NULL THEN
-      RETURN jsonb_build_object('success', false, 'error', 'Menu item not found: ' || (v_item->>'menuItemId'));
+      RAISE EXCEPTION '%', 'Menu item not found: ' || (v_item->>'menuItemId');
     END IF;
 
     -- Resolve variant price
@@ -93,7 +93,7 @@ BEGIN
       WHERE elem->>'id' = v_item->>'variantId' AND (elem->>'isActive')::boolean = true;
 
       IF v_variant IS NULL THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Variant not found: ' || (v_item->>'variantId'));
+        RAISE EXCEPTION '%', 'Variant not found: ' || (v_item->>'variantId');
       END IF;
       v_unit_price := (v_variant->>'price')::numeric;
     END IF;
@@ -106,8 +106,10 @@ BEGIN
         FROM channel_prices cp
         WHERE cp.channel_id = v_channel_id
           AND cp.menu_item_id = v_menu_item.id
-          AND (cp.variant_id IS NULL OR cp.variant_id = v_item->>'variantId')
-          AND cp.is_active = true;
+          AND (cp.variant_id = v_item->>'variantId' OR cp.variant_id IS NULL)
+          AND cp.is_active = true
+        ORDER BY cp.variant_id NULLS LAST
+        LIMIT 1;
         IF v_channel_price IS NOT NULL THEN
           v_unit_price := v_channel_price;
         END IF;
