@@ -63,6 +63,10 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Items list cannot be empty');
   END IF;
 
+  IF jsonb_array_length(p_items) > 50 THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Too many items (max 50)');
+  END IF;
+
   v_channel_id := v_order.channel_id;
 
   -- Delete existing items

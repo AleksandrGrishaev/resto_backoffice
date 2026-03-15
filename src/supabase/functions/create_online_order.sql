@@ -55,6 +55,19 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Order must contain at least one item');
   END IF;
 
+  -- Input bounds validation
+  IF jsonb_array_length(v_items) > 50 THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Too many items (max 50)');
+  END IF;
+
+  IF length(p_data->>'customerName') > 200 THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Customer name too long');
+  END IF;
+
+  IF length(p_data->>'customerPhone') > 30 THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Phone number too long');
+  END IF;
+
   -- Takeaway requires contact info
   IF v_type = 'takeaway' THEN
     IF (p_data->>'customerName') IS NULL OR (p_data->>'customerPhone') IS NULL THEN
