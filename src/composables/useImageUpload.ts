@@ -177,16 +177,7 @@ export function useImageUpload() {
         throw new Error('Image must be smaller than 10MB')
       }
 
-      // Remove old files if replacing (old slug may differ from new slug)
-      if (currentImageUrl) {
-        const oldPath = extractPathFromUrl(currentImageUrl)
-        if (oldPath) {
-          const oldThumbPath = oldPath.replace('.webp', '_thumb.webp')
-          await supabase.storage.from(BUCKET).remove([oldPath, oldThumbPath])
-        }
-      }
-
-      // Resize and convert
+      // Resize and convert BEFORE any deletion
       const [fullBlob, thumbBlob] = await Promise.all([
         resizeImage(file, FULL_SIZE, WEBP_QUALITY),
         resizeImage(file, THUMB_SIZE, WEBP_QUALITY)
@@ -201,7 +192,7 @@ export function useImageUpload() {
       const fullPath = `items/${slug}.webp`
       const thumbPath = `items/${slug}_thumb.webp`
 
-      // Upload both (upsert to replace if same slug)
+      // Upload new files first (upsert to replace if same slug)
       const [fullResult, thumbResult] = await Promise.all([
         supabase.storage.from(BUCKET).upload(fullPath, fullBlob, {
           contentType: 'image/webp',
@@ -223,6 +214,15 @@ export function useImageUpload() {
         throw new Error(`Thumbnail upload failed: ${thumbResult.error.message}`)
       }
       if (fullResult.error) throw new Error(`Upload failed: ${fullResult.error.message}`)
+
+      // Remove old files AFTER successful upload (safe: old image preserved on failure)
+      if (currentImageUrl) {
+        const oldPath = extractPathFromUrl(currentImageUrl)
+        if (oldPath && oldPath !== fullPath) {
+          const oldThumbPath = oldPath.replace('.webp', '_thumb.webp')
+          await supabase.storage.from(BUCKET).remove([oldPath, oldThumbPath])
+        }
+      }
 
       // Get public URLs with cache-busting param (same path after upsert = stale cache)
       const cacheBuster = `?t=${Date.now()}`

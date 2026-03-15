@@ -32,11 +32,12 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Customer not found');
   END IF;
 
-  -- Get order and verify ownership
+  -- Get order and verify ownership (FOR UPDATE prevents TOCTOU race)
   SELECT id, status, customer_id, cancellation_requested_at
   INTO v_order
   FROM orders
-  WHERE id = p_order_id;
+  WHERE id = p_order_id
+  FOR UPDATE;
 
   IF v_order.id IS NULL THEN
     RETURN jsonb_build_object('success', false, 'error', 'Order not found');

@@ -66,7 +66,7 @@ const DEFAULTS: SettingsMap = {
 }
 
 export const useWebsiteSettingsStore = defineStore('websiteSettings', () => {
-  const settings = ref<SettingsMap>({ ...DEFAULTS })
+  const settings = ref<SettingsMap>(JSON.parse(JSON.stringify(DEFAULTS)))
   const loading = ref(false)
   const saving = ref<SettingsKey | null>(null)
   const error = ref<string | null>(null)

@@ -40,6 +40,9 @@ BEGIN
       o.pickup_time,
       o.comment,
       o.estimated_ready_time,
+      o.cancellation_requested_at,
+      o.cancellation_reason,
+      o.cancellation_resolved_at,
       o.created_at,
       o.updated_at,
       (

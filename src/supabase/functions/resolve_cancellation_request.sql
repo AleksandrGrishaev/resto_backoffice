@@ -21,6 +21,11 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Authentication required');
   END IF;
 
+  -- Staff-only check (cashier/admin)
+  IF NOT is_staff() THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Only staff can resolve cancellation requests');
+  END IF;
+
   IF p_action NOT IN ('accept', 'dismiss') THEN
     RETURN jsonb_build_object('success', false, 'error', 'Invalid action. Use accept or dismiss');
   END IF;

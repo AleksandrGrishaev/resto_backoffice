@@ -42,9 +42,10 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Customer not found');
   END IF;
 
-  -- Get order and verify
+  -- Get order and verify (FOR UPDATE prevents TOCTOU race)
   SELECT id, status, customer_id, channel_id INTO v_order
-  FROM orders WHERE id = p_order_id;
+  FROM orders WHERE id = p_order_id
+  FOR UPDATE;
 
   IF v_order.id IS NULL THEN
     RETURN jsonb_build_object('success', false, 'error', 'Order not found');
@@ -171,8 +172,9 @@ BEGIN
 
     v_bill_items := v_bill_items || jsonb_build_array(jsonb_build_object(
       'id', v_item_id, 'menuItemId', v_menu_item.id, 'menuItemName', v_menu_item.name,
+      'variantId', v_item->>'variantId', 'variantName', COALESCE(v_variant->>'name', NULL),
       'quantity', COALESCE((v_item->>'quantity')::integer, 1),
-      'unitPrice', v_unit_price, 'totalPrice', v_item_total
+      'unitPrice', v_unit_price, 'modifiersTotal', v_modifiers_total, 'totalPrice', v_item_total
     ));
   END LOOP;
 

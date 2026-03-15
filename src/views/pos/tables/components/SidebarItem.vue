@@ -196,7 +196,7 @@ const hasCancellationRequest = computed((): boolean => {
 const shouldShowStatusBadge = computed((): boolean => {
   if (isOrder.value && props.order) {
     // Показываем статус если заказ готовится или готов
-    return ['preparing', 'ready'].includes(props.order.status)
+    return ['cooking', 'ready'].includes(props.order.status)
   }
   return false
 })

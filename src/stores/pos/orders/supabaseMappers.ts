@@ -230,16 +230,16 @@ export function fromSupabase(supabaseOrder: SupabaseOrder, items?: PosBillItem[]
     customerId: supabaseOrder.customer_id || undefined,
     customerName: supabaseOrder.customer_name || undefined,
     stampCardId: supabaseOrder.stamp_card_id || undefined,
-    guestCount: supabaseOrder.guest_count || 1,
+    guestCount: supabaseOrder.guest_count ?? 1,
 
     // Reconstructed bills with items
     bills,
 
-    // Financial data
-    totalAmount: supabaseOrder.total_amount || 0,
-    discountAmount: supabaseOrder.discount_amount || 0,
-    taxAmount: supabaseOrder.tax_amount || 0,
-    finalAmount: supabaseOrder.final_amount || 0,
+    // Financial data (use ?? to preserve valid 0 values)
+    totalAmount: supabaseOrder.total_amount ?? 0,
+    discountAmount: supabaseOrder.discount_amount ?? 0,
+    taxAmount: supabaseOrder.tax_amount ?? 0,
+    finalAmount: supabaseOrder.final_amount ?? 0,
 
     // Revenue breakdown (Sprint 7)
     plannedRevenue: supabaseOrder.planned_revenue || undefined,
@@ -249,7 +249,7 @@ export function fromSupabase(supabaseOrder: SupabaseOrder, items?: PosBillItem[]
 
     // Payment tracking
     paymentIds: supabaseOrder.payment_ids || [],
-    paidAmount: supabaseOrder.paid_amount || 0,
+    paidAmount: supabaseOrder.paid_amount ?? 0,
 
     // Waiter & timing
     waiterName: supabaseOrder.waiter_name || undefined,
