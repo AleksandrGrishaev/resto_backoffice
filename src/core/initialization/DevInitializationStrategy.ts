@@ -320,6 +320,10 @@ export class DevInitializationStrategy implements InitializationStrategy {
         return this.loadCustomers()
       case 'loyalty':
         return this.loadLoyalty()
+      case 'website':
+        return this.loadWebsite()
+      case 'websiteSettings':
+        return this.loadWebsiteSettings()
       default:
         DebugUtils.warn(MODULE_NAME, `Unknown store: ${storeName}`)
         return null
@@ -748,6 +752,12 @@ export class DevInitializationStrategy implements InitializationStrategy {
     if (!this.loadedStores.has('loyalty')) {
       parallelPromises.push(this.loadLoyalty())
     }
+    if (!this.loadedStores.has('website')) {
+      parallelPromises.push(this.loadWebsite())
+    }
+    if (!this.loadedStores.has('websiteSettings')) {
+      parallelPromises.push(this.loadWebsiteSettings())
+    }
 
     if (parallelPromises.length > 0) {
       const parallelResults = await Promise.all(parallelPromises)
@@ -1066,6 +1076,67 @@ export class DevInitializationStrategy implements InitializationStrategy {
 
       return {
         name: 'loyalty',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  // ===== WEBSITE STORES =====
+
+  private async loadWebsite(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const { useWebsiteStore } = await import('@/stores/website/websiteStore')
+      const store = useWebsiteStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading website...')
+
+      await store.loadAll()
+
+      return {
+        name: 'website',
+        success: true,
+        count: store.sections.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load website'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [DEV] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'website',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadWebsiteSettings(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const { useWebsiteSettingsStore } = await import('@/stores/website/settingsStore')
+      const store = useWebsiteSettingsStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading website settings...')
+
+      await store.loadAll()
+
+      return {
+        name: 'websiteSettings',
+        success: true,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load website settings'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [DEV] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'websiteSettings',
         success: false,
         error: message,
         duration: Date.now() - start

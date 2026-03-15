@@ -50,6 +50,8 @@ export type StoreName =
   | 'menuCollections'
   | 'customers'
   | 'loyalty'
+  | 'website'
+  | 'websiteSettings'
   | 'debug'
 
 /**

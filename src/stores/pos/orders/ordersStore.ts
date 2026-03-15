@@ -12,6 +12,8 @@ import type {
   PosMenuItem
 } from '../types'
 import type { MenuItemVariant } from '@/stores/menu'
+import { supabase } from '@/supabase/client'
+import { DebugUtils } from '@/utils'
 import { OrdersService } from './services'
 import {
   useOrdersComposables,
@@ -2376,6 +2378,39 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     }
   }
 
+  // ===== CANCELLATION =====
+
+  /**
+   * Resolve a cancellation request for an order (accept or dismiss)
+   * Calls the resolve_cancellation_request RPC
+   *
+   * @param orderId - Order ID to resolve cancellation for
+   * @param action - 'accept' to cancel the order, 'dismiss' to keep it
+   * @returns Service response with success status
+   */
+  async function resolveCancellationRequest(
+    orderId: string,
+    action: 'accept' | 'dismiss'
+  ): Promise<ServiceResponse<void>> {
+    try {
+      const { data, error: rpcError } = await supabase.rpc('resolve_cancellation_request', {
+        p_order_id: orderId,
+        p_action: action
+      })
+
+      if (rpcError) throw rpcError
+      if (data && !(data as any).success) throw new Error((data as any).error)
+
+      DebugUtils.info('ordersStore', `Cancellation ${action}ed`, { orderId })
+
+      return { success: true }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to resolve cancellation'
+      DebugUtils.error('ordersStore', 'Failed to resolve cancellation', { error: message })
+      return { success: false, error: message }
+    }
+  }
+
   // ===== COMPOSABLES =====
   const {
     canAddItemToOrder,
@@ -2464,6 +2499,9 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     mergeBillsIntoOrder,
     repriceItemsForChannel,
     getUnavailableItemsForChannel,
+
+    // Cancellation
+    resolveCancellationRequest,
 
     // Discount Methods (Sprint 7)
     applyItemDiscount,

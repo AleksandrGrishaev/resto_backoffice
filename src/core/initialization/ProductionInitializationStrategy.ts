@@ -397,6 +397,10 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
         return this.loadCustomersFromAPI()
       case 'loyalty':
         return this.loadLoyaltyFromAPI()
+      case 'website':
+        return this.loadWebsiteFromAPI()
+      case 'websiteSettings':
+        return this.loadWebsiteSettingsFromAPI()
       default:
         DebugUtils.warn(MODULE_NAME, `Unknown store: ${storeName}`)
         return null
@@ -1121,6 +1125,65 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
 
       return {
         name: 'loyalty',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadWebsiteFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const { useWebsiteStore } = await import('@/stores/website/websiteStore')
+      const store = useWebsiteStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading website from API...')
+
+      await store.loadAll()
+
+      return {
+        name: 'website',
+        success: true,
+        count: store.sections.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load website'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [PROD] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'website',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadWebsiteSettingsFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const { useWebsiteSettingsStore } = await import('@/stores/website/settingsStore')
+      const store = useWebsiteSettingsStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading website settings from API...')
+
+      await store.loadAll()
+
+      return {
+        name: 'websiteSettings',
+        success: true,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load website settings'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [PROD] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'websiteSettings',
         success: false,
         error: message,
         duration: Date.now() - start

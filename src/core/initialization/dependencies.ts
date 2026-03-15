@@ -62,6 +62,10 @@ export const STORE_DEPENDENCIES: Record<StoreName, StoreName[]> = {
   customers: [],
   loyalty: ['customers'],
 
+  // Website management
+  website: [],
+  websiteSettings: [],
+
   // Debug system
   debug: []
 }
@@ -157,6 +161,10 @@ export const STORE_CATEGORIES: Record<StoreName, StoreCategory> = {
   // Loyalty program (needed by both backoffice and POS)
   customers: 'backoffice',
   loyalty: 'backoffice',
+
+  // Website management
+  website: 'backoffice',
+  websiteSettings: 'backoffice',
 
   // Опциональные
   debug: 'optional'
@@ -266,6 +274,9 @@ export function getStoresForContext(context: AppContext, userRoles: UserRole[]):
       // Loyalty program
       stores.add('customers')
       stores.add('loyalty')
+      // Website management
+      stores.add('website')
+      stores.add('websiteSettings')
       break
   }
 

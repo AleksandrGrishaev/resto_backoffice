@@ -62,11 +62,7 @@
 
       <!-- Order Section -->
       <template #order>
-        <OrderSection
-          ref="orderSectionRef"
-          :current-order="currentOrder"
-          @order-changed="handleOrderChanged"
-        />
+        <OrderSection ref="orderSectionRef" @order-changed="handleOrderChanged" />
       </template>
     </PosLayout>
 

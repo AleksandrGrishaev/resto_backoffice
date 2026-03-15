@@ -2,7 +2,7 @@
 // POS Orders Realtime Composable - Subscribe to order updates from Kitchen
 // Updated for order_items table architecture (Migration 053-054)
 
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { supabase } from '@/supabase/client'
 import { usePosOrdersStore } from './ordersStore'
 import { fromSupabase, fromOrderItemRow } from './supabaseMappers'
@@ -33,7 +33,9 @@ type CancellationRequestCallback = (order: {
 export function useOrdersRealtime() {
   const ordersChannel = ref<RealtimeChannel | null>(null)
   const itemsChannel = ref<RealtimeChannel | null>(null)
-  const isConnected = ref(false)
+  const ordersConnected = ref(false)
+  const itemsConnected = ref(false)
+  const isConnected = computed(() => ordersConnected.value && itemsConnected.value)
   const ordersStore = usePosOrdersStore()
   let onCancellationRequest: CancellationRequestCallback | null = null
 
@@ -77,6 +79,8 @@ export function useOrdersRealtime() {
         }
       )
       .subscribe((status, err) => {
+        ordersConnected.value = status === 'SUBSCRIBED'
+
         if (status === 'SUBSCRIBED') {
           DebugUtils.info(MODULE_NAME, '📡 POS orders Realtime connected')
         } else if (status === 'CHANNEL_ERROR') {
@@ -107,7 +111,7 @@ export function useOrdersRealtime() {
         }
       )
       .subscribe((status, err) => {
-        isConnected.value = status === 'SUBSCRIBED'
+        itemsConnected.value = status === 'SUBSCRIBED'
 
         if (status === 'SUBSCRIBED') {
           DebugUtils.info(MODULE_NAME, '📡 POS order_items Realtime connected')
@@ -390,7 +394,8 @@ export function useOrdersRealtime() {
       supabase.removeChannel(itemsChannel.value)
       itemsChannel.value = null
     }
-    isConnected.value = false
+    ordersConnected.value = false
+    itemsConnected.value = false
   }
 
   /**

@@ -41,7 +41,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { PosOrder } from '@/stores/pos/types'
-import { supabase } from '@/supabase/client'
+import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { useSnackbar } from '@/composables/useSnackbar'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'CancellationBanner'
@@ -56,6 +57,9 @@ const emit = defineEmits<{
   resolved: [action: 'accept' | 'dismiss']
 }>()
 
+const ordersStore = usePosOrdersStore()
+const snackbar = useSnackbar()
+
 const loading = ref<'accept' | 'dismiss' | null>(null)
 
 const hasPendingRequest = computed(() => {
@@ -65,13 +69,11 @@ const hasPendingRequest = computed(() => {
 async function handleAccept() {
   loading.value = 'accept'
   try {
-    const { data, error } = await supabase.rpc('resolve_cancellation_request', {
-      p_order_id: props.order.id,
-      p_action: 'accept'
-    })
+    const result = await ordersStore.resolveCancellationRequest(props.order.id, 'accept')
 
-    if (error) throw error
-    if (data && !(data as any).success) throw new Error((data as any).error)
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to accept cancellation')
+    }
 
     DebugUtils.info(MODULE_NAME, 'Cancellation accepted', {
       orderNumber: props.order.orderNumber
@@ -79,6 +81,7 @@ async function handleAccept() {
     emit('resolved', 'accept')
   } catch (err: any) {
     DebugUtils.error(MODULE_NAME, 'Failed to accept cancellation', { error: err.message })
+    snackbar.showError(err.message || 'Failed to accept cancellation')
   } finally {
     loading.value = null
   }
@@ -87,13 +90,11 @@ async function handleAccept() {
 async function handleDismiss() {
   loading.value = 'dismiss'
   try {
-    const { data, error } = await supabase.rpc('resolve_cancellation_request', {
-      p_order_id: props.order.id,
-      p_action: 'dismiss'
-    })
+    const result = await ordersStore.resolveCancellationRequest(props.order.id, 'dismiss')
 
-    if (error) throw error
-    if (data && !(data as any).success) throw new Error((data as any).error)
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to dismiss cancellation')
+    }
 
     DebugUtils.info(MODULE_NAME, 'Cancellation dismissed', {
       orderNumber: props.order.orderNumber
@@ -101,6 +102,7 @@ async function handleDismiss() {
     emit('resolved', 'dismiss')
   } catch (err: any) {
     DebugUtils.error(MODULE_NAME, 'Failed to dismiss cancellation', { error: err.message })
+    snackbar.showError(err.message || 'Failed to dismiss cancellation')
   } finally {
     loading.value = null
   }
