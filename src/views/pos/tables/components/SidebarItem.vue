@@ -12,6 +12,9 @@
       <div class="item-number">{{ displayNumber }}</div>
     </div>
 
+    <!-- Cancellation Request Indicator -->
+    <div v-if="hasCancellationRequest" class="cancellation-dot" />
+
     <!-- Status Badge (если нужен) -->
     <div v-if="shouldShowStatusBadge" class="status-badge">
       <v-chip :color="statusBadgeColor" size="x-small" variant="flat">
@@ -177,6 +180,14 @@ const itemClasses = computed((): Record<string, boolean> => {
   }
 
   return classes
+})
+
+/**
+ * Has pending cancellation request from website customer
+ */
+const hasCancellationRequest = computed((): boolean => {
+  if (!isOrder.value || !props.order) return false
+  return !!props.order.cancellationRequestedAt && !props.order.cancellationResolvedAt
 })
 
 /**
@@ -435,6 +446,30 @@ const handleClick = (): void => {
   margin-top: 2px;
   white-space: pre-line;
   text-align: center;
+}
+
+.cancellation-dot {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgb(var(--v-theme-error));
+  z-index: 3;
+  animation: cancel-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes cancel-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.7;
+  }
 }
 
 .status-badge {

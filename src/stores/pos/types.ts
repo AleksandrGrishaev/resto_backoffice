@@ -179,6 +179,12 @@ export interface PosOrder extends BaseEntity {
   // Loyalty tracking
   stampCardId?: string
   guestCount?: number
+
+  // Cancellation request (website orders)
+  cancellationRequestedAt?: string
+  cancellationReason?: string
+  cancellationResolvedAt?: string
+  cancellationResolvedBy?: string
 }
 
 // ===== BILL TYPES =====

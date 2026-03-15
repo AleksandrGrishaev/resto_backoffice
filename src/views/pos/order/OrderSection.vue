@@ -50,6 +50,13 @@
               </div>
             </div>
           </div>
+
+          <!-- Cancellation Request Banner (website orders) -->
+          <CancellationRequestBanner
+            v-if="currentOrder.cancellationRequestedAt && !currentOrder.cancellationResolvedAt"
+            :order="currentOrder"
+            @resolved="handleCancellationResolved"
+          />
         </div>
 
         <!-- Scrollable Content Area -->
@@ -303,6 +310,7 @@ import BillItemCancelDialog from './dialogs/BillItemCancelDialog.vue'
 import MoveItemsDialog from './dialogs/MoveItemsDialog.vue'
 import OrderTypeDialog from './dialogs/OrderTypeDialog.vue'
 import TableSelectionDialog from './dialogs/TableSelectionDialog.vue'
+import CancellationRequestBanner from './components/CancellationRequestBanner.vue'
 
 const MODULE_NAME = 'OrderSection'
 
@@ -642,6 +650,15 @@ const showError = (message: string, type: 'error' | 'warning' = 'error'): void =
 
 const clearError = (): void => {
   error.value.show = false
+}
+
+// Methods - Cancellation Request
+const handleCancellationResolved = (action: 'accept' | 'dismiss'): void => {
+  if (action === 'accept') {
+    showSuccess('Order cancellation accepted')
+  } else {
+    showSuccess('Cancellation request dismissed — contact customer')
+  }
 }
 
 // Methods - Order Management

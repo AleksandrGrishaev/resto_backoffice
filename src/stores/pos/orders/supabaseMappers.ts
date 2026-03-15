@@ -139,6 +139,12 @@ export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
     pickup_time: order.pickupTime || null,
     comment: order.comment || null,
 
+    // Cancellation request
+    cancellation_requested_at: order.cancellationRequestedAt || null,
+    cancellation_reason: order.cancellationReason || null,
+    cancellation_resolved_at: order.cancellationResolvedAt || null,
+    cancellation_resolved_by: order.cancellationResolvedBy || null,
+
     // Timestamps
     created_at: order.createdAt
   }
@@ -266,6 +272,12 @@ export function fromSupabase(supabaseOrder: SupabaseOrder, items?: PosBillItem[]
     tableNumber: (supabaseOrder as any).table_number || undefined,
     pickupTime: (supabaseOrder as any).pickup_time || undefined,
     comment: (supabaseOrder as any).comment || undefined,
+
+    // Cancellation request
+    cancellationRequestedAt: (supabaseOrder as any).cancellation_requested_at || undefined,
+    cancellationReason: (supabaseOrder as any).cancellation_reason || undefined,
+    cancellationResolvedAt: (supabaseOrder as any).cancellation_resolved_at || undefined,
+    cancellationResolvedBy: (supabaseOrder as any).cancellation_resolved_by || undefined,
 
     // Timestamps
     createdAt: supabaseOrder.created_at,
