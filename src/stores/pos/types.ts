@@ -27,6 +27,12 @@ export interface PosTable extends BaseEntity {
 // ===== ORDER TYPES =====
 export type OrderType = 'dine_in' | 'takeaway' | 'delivery'
 
+// Order source: where the order was created
+export type OrderSource = 'pos' | 'website'
+
+// Fulfillment method for takeaway orders
+export type FulfillmentMethod = 'self_pickup' | 'goshop' | 'courier'
+
 export type OrderStatus =
   | 'draft'
   | 'waiting'
@@ -161,6 +167,14 @@ export interface PosOrder extends BaseEntity {
   channelCode?: string
   externalOrderId?: string
   externalStatus?: string
+
+  // Online ordering (Website integration)
+  source?: OrderSource
+  fulfillmentMethod?: FulfillmentMethod
+  customerPhone?: string
+  tableNumber?: string // Free-text table preference from website (not table_id)
+  pickupTime?: string // 'asap' or 'HH:MM'
+  comment?: string // Customer-facing comment (distinct from notes)
 
   // Loyalty tracking
   stampCardId?: string

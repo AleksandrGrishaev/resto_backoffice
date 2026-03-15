@@ -131,6 +131,14 @@ export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
     external_order_id: order.externalOrderId || null,
     external_status: order.externalStatus || null,
 
+    // Online ordering
+    source: order.source || 'pos',
+    fulfillment_method: order.fulfillmentMethod || null,
+    customer_phone: order.customerPhone || null,
+    table_number: order.tableNumber || null,
+    pickup_time: order.pickupTime || null,
+    comment: order.comment || null,
+
     // Timestamps
     created_at: order.createdAt
   }
@@ -250,6 +258,14 @@ export function fromSupabase(supabaseOrder: SupabaseOrder, items?: PosBillItem[]
     channelCode: (supabaseOrder as any).channel_code || undefined,
     externalOrderId: (supabaseOrder as any).external_order_id || undefined,
     externalStatus: (supabaseOrder as any).external_status || undefined,
+
+    // Online ordering
+    source: (supabaseOrder as any).source || 'pos',
+    fulfillmentMethod: (supabaseOrder as any).fulfillment_method || undefined,
+    customerPhone: (supabaseOrder as any).customer_phone || undefined,
+    tableNumber: (supabaseOrder as any).table_number || undefined,
+    pickupTime: (supabaseOrder as any).pickup_time || undefined,
+    comment: (supabaseOrder as any).comment || undefined,
 
     // Timestamps
     createdAt: supabaseOrder.created_at,

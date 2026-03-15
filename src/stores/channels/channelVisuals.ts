@@ -24,6 +24,26 @@ const CHANNEL_VISUALS: Record<string, ChannelVisual> = {
   grab: { icon: 'mdi-car', color: '#00b14f', label: 'GrabFood', subtitle: 'GrabFood' }
 }
 
+// Fulfillment method visuals (for takeaway orders)
+export const FULFILLMENT_VISUALS: Record<string, ChannelVisual> = {
+  self_pickup: {
+    icon: 'mdi-walk',
+    color: 'warning',
+    label: 'Self Pickup',
+    subtitle: 'Customer picks up'
+  },
+  goshop: { icon: 'mdi-moped', color: '#00aa13', label: 'GoShop', subtitle: 'GoJek pickup' },
+  courier: { icon: 'mdi-bike-fast', color: 'info', label: 'Courier', subtitle: 'Own delivery' }
+}
+
+// Online order visual (for source = 'website')
+export const ONLINE_ORDER_VISUAL: ChannelVisual = {
+  icon: 'mdi-web',
+  color: 'teal',
+  label: 'Online',
+  subtitle: 'Website order'
+}
+
 const DELIVERY_FALLBACK: ChannelVisual = {
   icon: 'mdi-bike-fast',
   color: 'info',
@@ -68,4 +88,12 @@ export function getOrderVisual(
  */
 export function getChannelVisual(channelCode: ChannelCode | string): ChannelVisual {
   return CHANNEL_VISUALS[channelCode] || DELIVERY_FALLBACK
+}
+
+/**
+ * Get visual props for fulfillment method (takeaway sub-type).
+ */
+export function getFulfillmentVisual(fulfillmentMethod?: string): ChannelVisual | null {
+  if (!fulfillmentMethod) return null
+  return FULFILLMENT_VISUALS[fulfillmentMethod] || null
 }

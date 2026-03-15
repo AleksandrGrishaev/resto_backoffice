@@ -42,7 +42,16 @@ export interface SeoSettings {
   favicon_url: string
 }
 
-export type SettingsKey = 'general' | 'hours' | 'social' | 'auth' | 'seo'
+export interface KitchenHoursSchedule {
+  [day: string]: WorkingHoursSlot // mon, tue, wed, thu, fri, sat, sun
+}
+
+export interface KitchenHoursSettings {
+  enabled: boolean
+  schedule: KitchenHoursSchedule
+}
+
+export type SettingsKey = 'general' | 'hours' | 'social' | 'auth' | 'seo' | 'kitchen_hours'
 
 export interface WebsiteSettingsRow {
   id: string
@@ -58,4 +67,5 @@ export type SettingsMap = {
   social: SocialSettings
   auth: AuthSettings
   seo: SeoSettings
+  kitchen_hours: KitchenHoursSettings
 }
