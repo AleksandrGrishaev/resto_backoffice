@@ -105,6 +105,8 @@ const displayIcon = computed((): string => {
   }
 
   if (isOrder.value && props.order) {
+    // Online orders get web icon
+    if (props.order.source === 'website') return 'mdi-web'
     return getOrderVisual(props.order.type, props.order.channelCode).icon
   }
 
@@ -145,6 +147,7 @@ const iconColor = computed((): string | undefined => {
   }
 
   if (isOrder.value && props.order) {
+    if (props.order.source === 'website') return 'teal'
     return getOrderVisual(props.order.type, props.order.channelCode).color
   }
 
@@ -396,6 +399,8 @@ const handleClick = (): void => {
   border-color: #00b14f;
   background: color-mix(in srgb, #00b14f 6%, transparent);
 }
+
+/* Online orders (source = website) - handled via inline color from teal */
 
 .sidebar-item--order.sidebar-item--order-preparing {
   animation: pulse 2s infinite;

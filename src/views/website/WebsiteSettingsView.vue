@@ -34,6 +34,7 @@
       <v-tabs v-model="activeTab" color="primary" grow>
         <v-tab value="general">General</v-tab>
         <v-tab value="hours">Hours</v-tab>
+        <v-tab value="kitchen_hours">Kitchen Hours</v-tab>
         <v-tab value="social">Social</v-tab>
         <v-tab value="auth">Auth</v-tab>
         <v-tab value="seo">SEO</v-tab>
@@ -158,6 +159,55 @@
             <div class="d-flex justify-end mt-4">
               <v-btn color="primary" :loading="store.saving === 'hours'" @click="save('hours')">
                 Save Hours
+              </v-btn>
+            </div>
+          </v-tabs-window-item>
+
+          <!-- Kitchen Hours -->
+          <v-tabs-window-item value="kitchen_hours">
+            <v-alert type="info" variant="tonal" class="mb-4">
+              Kitchen hours control when online ordering is available. The kitchen may close earlier
+              than the cafe.
+            </v-alert>
+            <v-row>
+              <v-col cols="12">
+                <v-switch
+                  v-model="store.settings.kitchen_hours.enabled"
+                  label="Enable kitchen hours check for online orders"
+                  color="primary"
+                  hide-details
+                  class="mb-4"
+                />
+              </v-col>
+            </v-row>
+            <v-row v-if="store.settings.kitchen_hours.enabled">
+              <v-col v-for="day in daysList" :key="day.key" cols="12" md="6" lg="4">
+                <div class="text-subtitle-2 mb-2">{{ day.label }}</div>
+                <div class="d-flex gap-2">
+                  <v-text-field
+                    v-model="store.settings.kitchen_hours.schedule[day.key].open"
+                    label="Open"
+                    variant="outlined"
+                    density="comfortable"
+                    type="time"
+                  />
+                  <v-text-field
+                    v-model="store.settings.kitchen_hours.schedule[day.key].close"
+                    label="Close"
+                    variant="outlined"
+                    density="comfortable"
+                    type="time"
+                  />
+                </div>
+              </v-col>
+            </v-row>
+            <div class="d-flex justify-end mt-4">
+              <v-btn
+                color="primary"
+                :loading="store.saving === 'kitchen_hours'"
+                @click="save('kitchen_hours')"
+              >
+                Save Kitchen Hours
               </v-btn>
             </div>
           </v-tabs-window-item>
@@ -334,6 +384,16 @@ const store = useWebsiteSettingsStore()
 
 const activeTab = ref('general')
 const showTelegramToken = ref(false)
+
+const daysList = [
+  { key: 'mon', label: 'Monday' },
+  { key: 'tue', label: 'Tuesday' },
+  { key: 'wed', label: 'Wednesday' },
+  { key: 'thu', label: 'Thursday' },
+  { key: 'fri', label: 'Friday' },
+  { key: 'sat', label: 'Saturday' },
+  { key: 'sun', label: 'Sunday' }
+]
 
 const snackbar = ref(false)
 const snackbarText = ref('')
