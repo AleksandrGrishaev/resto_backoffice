@@ -14,6 +14,8 @@ import type {
 import type { MenuItemVariant } from '@/stores/menu'
 import { supabase } from '@/supabase/client'
 import { DebugUtils } from '@/utils'
+
+const MODULE_NAME = 'OrdersStore'
 import { OrdersService } from './services'
 import {
   useOrdersComposables,
@@ -1292,6 +1294,83 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     if (order.type === 'dine_in' && hasActiveItems) return false
 
     return !hasActiveItems
+  }
+
+  /**
+   * Cleanup all empty draft orders (no items).
+   * Called before shift end and periodically in background.
+   * Returns the number of cleaned-up orders.
+   */
+  async function cleanupEmptyDraftOrders(
+    options: { maxAgeMinutes?: number } = {}
+  ): Promise<number> {
+    const { maxAgeMinutes } = options
+    let cleanedCount = 0
+
+    // Find all empty draft orders
+    const emptyDrafts = orders.value.filter(order => {
+      if (order.status !== 'draft') return false
+      const allItems = order.bills.flatMap(b => b.items)
+      if (allItems.length > 0) return false
+
+      // If maxAgeMinutes specified, only cleanup orders older than threshold
+      if (maxAgeMinutes !== undefined) {
+        const ageMs = Date.now() - new Date(order.createdAt).getTime()
+        if (ageMs < maxAgeMinutes * 60 * 1000) return false
+      }
+
+      return true
+    })
+
+    if (emptyDrafts.length === 0) return 0
+
+    DebugUtils.info(MODULE_NAME, `Cleaning up ${emptyDrafts.length} empty draft orders`, {
+      maxAgeMinutes,
+      orderIds: emptyDrafts.map(o => o.id)
+    })
+
+    for (const order of emptyDrafts) {
+      try {
+        const result = await deleteOrder(order.id)
+        if (result.success) {
+          cleanedCount++
+        }
+      } catch (err) {
+        DebugUtils.warn(MODULE_NAME, 'Failed to cleanup empty draft order', {
+          orderId: order.id,
+          error: err instanceof Error ? err.message : String(err)
+        })
+      }
+    }
+
+    if (cleanedCount > 0) {
+      DebugUtils.info(MODULE_NAME, `Cleaned up ${cleanedCount} empty draft orders`)
+    }
+
+    return cleanedCount
+  }
+
+  // Background cleanup timer
+  let _cleanupInterval: ReturnType<typeof setInterval> | null = null
+  const CLEANUP_INTERVAL = 5 * 60 * 1000 // 5 minutes
+  const CLEANUP_MAX_AGE_MINUTES = 15
+
+  function startBackgroundCleanup(): void {
+    stopBackgroundCleanup()
+    _cleanupInterval = setInterval(async () => {
+      await cleanupEmptyDraftOrders({ maxAgeMinutes: CLEANUP_MAX_AGE_MINUTES })
+    }, CLEANUP_INTERVAL)
+    DebugUtils.debug(
+      MODULE_NAME,
+      'Background empty order cleanup started (every 5 min, >15 min old)'
+    )
+  }
+
+  function stopBackgroundCleanup(): void {
+    if (_cleanupInterval) {
+      clearInterval(_cleanupInterval)
+      _cleanupInterval = null
+    }
   }
 
   /**
@@ -2640,6 +2719,9 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     hasItemsInOrder,
     hasItemsInBill,
     canDeleteOrder,
+    cleanupEmptyDraftOrders,
+    startBackgroundCleanup,
+    stopBackgroundCleanup,
     updateTableStatusForOrder,
 
     // Order Movement Methods
