@@ -8,6 +8,10 @@
       </v-btn>
       <h1>Shift Management</h1>
       <div class="header-actions">
+        <v-btn icon variant="text" :loading="refreshing" @click="handleRefreshAll">
+          <v-icon>mdi-refresh</v-icon>
+          <v-tooltip activator="parent" location="bottom">Refresh shift data</v-tooltip>
+        </v-btn>
         <!-- ✅ Sprint 5: Hide End Shift button in read-only mode -->
         <v-btn
           v-if="currentShift && !readOnly"
@@ -384,6 +388,7 @@ const showEndShiftDialog = ref(false)
 const showPaymentDetailsDialog = ref(false)
 const selectedPaymentId = ref<string | null>(null)
 const loading = ref(false) // ✅ Sprint 8: Loading state for pending payments refresh
+const refreshing = ref(false)
 
 // Sprint 3: Expense operations state
 const showExpenseDialog = ref(false)
@@ -766,6 +771,22 @@ const handleTransferConfirmed = async (transactionId: string) => {
 const handleTransferRejected = async (transactionId: string) => {
   console.log('❌ Transfer rejected:', transactionId)
   selectedTransfer.value = null
+}
+
+const handleRefreshAll = async () => {
+  refreshing.value = true
+  try {
+    await Promise.all([
+      shiftsStore.loadShifts(),
+      paymentsStore.initialize().catch(() => {}),
+      shiftsStore.loadPendingPayments().catch(() => {})
+    ])
+    console.log('✅ Shift data refreshed')
+  } catch (error) {
+    console.error('❌ Failed to refresh shift data:', error)
+  } finally {
+    refreshing.value = false
+  }
 }
 
 // ✅ Sprint 8: Refresh pending payments manually
