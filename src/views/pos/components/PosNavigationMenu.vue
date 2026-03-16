@@ -87,6 +87,7 @@ const authStore = useAuthStore()
 const loading = ref(false)
 const syncing = ref(false)
 const currentTime = ref('')
+const swUpdateAvailable = ref(false)
 
 // Dialog states
 const showStartShiftDialog = ref(false)
@@ -211,11 +212,11 @@ const menuSections = computed(() => [
       },
       {
         id: POS_ACTIONS.FULL_RESET,
-        icon: 'mdi-database-refresh',
-        label: 'Full Reset',
+        icon: swUpdateAvailable.value ? 'mdi-update' : 'mdi-database-refresh',
+        label: swUpdateAvailable.value ? 'Update App' : 'Full Reset',
         loading: syncing.value,
         disabled: loading.value,
-        color: 'warning' as const
+        color: swUpdateAvailable.value ? ('error' as const) : ('warning' as const)
       }
     ]
   },
@@ -373,6 +374,18 @@ const handleSyncData = async () => {
 }
 
 const handleFullReset = async () => {
+  // If SW update available — tell SW to activate and hard-reload
+  if (swUpdateAvailable.value) {
+    DebugUtils.info(MODULE_NAME, '🚀 App update — activating new version...')
+    const reg = await navigator.serviceWorker?.getRegistration()
+    if (reg?.waiting) {
+      reg.waiting.postMessage('SKIP_WAITING')
+    }
+    // Hard reload to get new code (bypasses cache)
+    window.location.reload()
+    return
+  }
+
   syncing.value = true
 
   try {
@@ -422,16 +435,29 @@ const handleLogout = async () => {
 // LIFECYCLE
 // =============================================
 
+// SW update listener
+const onSwUpdate = () => {
+  swUpdateAvailable.value = true
+  DebugUtils.info(MODULE_NAME, '🔴 App update available — Full Reset button is now red')
+}
+
 onMounted(() => {
   DebugUtils.debug(MODULE_NAME, 'PosNavigationMenu mounted')
   updateTime()
   timeInterval = setInterval(updateTime, 60000) // Update every minute
+
+  // Check if SW update was already detected before mount
+  if ((window as any).__SW_UPDATE_AVAILABLE__) {
+    swUpdateAvailable.value = true
+  }
+  window.addEventListener('sw-update-available', onSwUpdate)
 })
 
 onUnmounted(() => {
   if (timeInterval) {
     clearInterval(timeInterval)
   }
+  window.removeEventListener('sw-update-available', onSwUpdate)
 })
 </script>
 
