@@ -229,6 +229,40 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
       const response = await ordersService.createOrder(orderData)
 
+      // Handle DB unique violation (another device already created order for this table)
+      if (
+        !response.success &&
+        response.error?.includes('23505') &&
+        orderData.type === 'dine_in' &&
+        orderData.tableId
+      ) {
+        console.warn(
+          '⚠️ [ordersStore] Duplicate order detected (23505), fetching existing order for table',
+          orderData.tableId
+        )
+        const { data: existingRows } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('table_id', orderData.tableId)
+          .not('status', 'in', '("cancelled","served","collected","delivered")')
+          .limit(1)
+          .single()
+
+        if (existingRows) {
+          // Import the order mapper
+          const { fromSupabase: orderFromSupabase } = await import('./supabaseMappers')
+          const existingOrder = orderFromSupabase(existingRows)
+
+          // Add to local state if not already present
+          if (!orders.value.find(o => o.id === existingOrder.id)) {
+            orders.value.unshift(existingOrder)
+          }
+          selectOrder(existingOrder.id)
+          await tablesStore.occupyTable(orderData.tableId, existingOrder.id)
+          return { success: true, data: existingOrder }
+        }
+      }
+
       if (response.success && response.data) {
         // ДОБАВИТЬ: устанавливаем дефолтный paymentStatus если не установлен
         if (!response.data.paymentStatus) {

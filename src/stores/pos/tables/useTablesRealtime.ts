@@ -4,6 +4,7 @@
 import { ref } from 'vue'
 import { supabase } from '@/supabase/client'
 import { usePosTablesStore } from './tablesStore'
+import { mapStatusFromSupabase } from './supabaseMappers'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { DebugUtils } from '@/utils'
 
@@ -83,7 +84,7 @@ export function useTablesRealtime() {
     tablesStore.updateTableFromRealtime({
       id: updatedTable.id,
       number: updatedTable.table_number,
-      status: updatedTable.status,
+      status: mapStatusFromSupabase(updatedTable.status),
       currentOrderId: updatedTable.current_order_id || undefined,
       updatedAt: updatedTable.updated_at
     })

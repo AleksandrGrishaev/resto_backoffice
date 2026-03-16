@@ -142,10 +142,24 @@ export class TablesService {
       // 1. Update in Supabase (if online)
       if (this.isSupabaseAvailable()) {
         const supabaseUpdate = toSupabaseUpdate(updatedTable)
-        const { error } = await supabase!.from('tables').update(supabaseUpdate).eq('id', tableId)
+        let query = supabase!.from('tables').update(supabaseUpdate).eq('id', tableId)
+
+        // Optimistic lock: only occupy if table is still available (prevents race condition)
+        if (status === 'occupied') {
+          query = query.in('status', ['available'])
+        }
+
+        const { error, count } = await query.select('id').maybeSingle()
 
         if (error) {
           console.error('❌ Supabase table status update failed:', error.message)
+          // If occupying failed due to optimistic lock, return error so caller can handle
+          if (status === 'occupied' && !count) {
+            return {
+              success: false,
+              error: 'Table is already occupied by another device'
+            }
+          }
         } else {
           console.log(`✅ Table ${updatedTable.number} status updated in Supabase: ${status}`)
         }
