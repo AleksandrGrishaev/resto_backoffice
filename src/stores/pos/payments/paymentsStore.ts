@@ -451,6 +451,10 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
           refundPayment.amount, // Negative amount
           `Refund ${refundPayment.paymentNumber} - ${refundPayment.method}`
         )
+
+        // ✅ FIX: Update payment methods in shift for refund (negative amount)
+        // Without this, shift.paymentMethods becomes stale after refunds
+        await shiftsStore.updatePaymentMethods(refundPayment.method, refundPayment.amount)
       }
 
       // Update items: paid → refunded

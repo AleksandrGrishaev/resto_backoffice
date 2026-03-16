@@ -355,8 +355,15 @@ const handleTableSelect = async (item: PosTable | PosOrder): Promise<void> => {
 
 /**
  * Выполнить выбор стола (внутренняя функция)
+ * ✅ FIX: Guard against double-tap race condition
  */
+let isSelectingTable = false
 const performTableSelect = async (table: PosTable): Promise<void> => {
+  if (isSelectingTable) {
+    DebugUtils.warn(MODULE_NAME, 'Table selection already in progress, ignoring duplicate tap')
+    return
+  }
+  isSelectingTable = true
   try {
     DebugUtils.debug(MODULE_NAME, 'Table selected via SidebarItem', {
       tableId: table.id,
@@ -421,6 +428,8 @@ const performTableSelect = async (table: PosTable): Promise<void> => {
     } else {
       emit('error', message, 'error')
     }
+  } finally {
+    isSelectingTable = false
   }
 }
 
