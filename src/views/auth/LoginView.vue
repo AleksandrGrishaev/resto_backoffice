@@ -362,7 +362,7 @@ function renderTurnstile() {
       DebugUtils.error(MODULE_NAME, 'Turnstile error')
     },
     theme: 'dark',
-    size: 'flexible'
+    size: 'invisible'
   })
 }
 
