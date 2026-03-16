@@ -16,7 +16,7 @@
       <!-- Templates (if available) -->
       <v-card-text v-if="menuItem?.templates && menuItem.templates.length > 0" class="pt-4 pb-2">
         <div class="text-subtitle-2 mb-2">Quick Select:</div>
-        <div class="d-flex flex-wrap ga-2">
+        <div class="templates-slider">
           <v-chip
             v-for="template in menuItem.templates"
             :key="template.id"
@@ -751,6 +751,25 @@ watch(
 </script>
 
 <style scoped>
+.templates-slider {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  white-space: nowrap;
+  height: 40px;
+  align-items: center;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.templates-slider::-webkit-scrollbar {
+  display: none;
+}
+
+.templates-slider .v-chip {
+  flex-shrink: 0;
+}
+
 .border-b {
   border-bottom: 1px solid rgba(0, 0, 0, 0.12);
 }
