@@ -776,12 +776,21 @@ const handleTransferRejected = async (transactionId: string) => {
 const handleRefreshAll = async () => {
   refreshing.value = true
   try {
+    // Reset paymentsStore initialized flag to force re-fetch
+    paymentsStore.initialized = false
+
     await Promise.all([
       shiftsStore.loadShifts(),
       paymentsStore.initialize().catch(() => {}),
-      shiftsStore.loadPendingPayments().catch(() => {})
+      shiftsStore.loadPendingPayments().catch(() => {}),
+      // Force-refresh account payments (bypass 2-min cache)
+      accountStore.fetchPayments(true).catch(() => {}),
+      // Force-refresh cash account transactions
+      cashAccount.value
+        ? accountStore.fetchTransactions(cashAccount.value.id).catch(() => {})
+        : Promise.resolve()
     ])
-    console.log('✅ Shift data refreshed')
+    console.log('✅ Shift data refreshed (full cache bypass)')
   } catch (error) {
     console.error('❌ Failed to refresh shift data:', error)
   } finally {
