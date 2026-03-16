@@ -460,10 +460,9 @@ const shiftStats = computed(() => {
   }
 
   // For active shifts, calculate from payments store
-  // ✅ FIX: Separate completed payments from refund entries for accurate display
-  // - Completed payments: count and amount for payment method summary
-  // - Refund entries (negative amount, has originalPaymentId): track separately
-  // - Refunded originals (positive amount, status 'refunded'): exclude from count/received
+  // ✅ FIX: Refund pairs (original + refund entry) are fully excluded from payment method totals.
+  // Only completed payments count toward method count/amount.
+  // Refunds only affect cashReceived/cashRefunded for Expected Cash calculation.
   shiftPayments.value.forEach((p: PosPayment) => {
     if (p.status !== 'completed' && p.status !== 'refunded') return
 
@@ -481,20 +480,14 @@ const shiftStats = computed(() => {
     const isRefundEntry = p.amount < 0 // Refund record (negative amount)
     const isRefundedOriginal = p.status === 'refunded' && p.amount > 0 // Original that was refunded
 
-    if (isRefundEntry) {
-      // Refund entry: subtract from method amount, don't increment count
-      stats.methods[p.method].amount += p.amount
-      stats.totalAmount += p.amount
-
-      // Track cash refunds for expected cash calculation
-      if (p.method === 'cash') {
+    if (isRefundEntry || isRefundedOriginal) {
+      // Refund pair: exclude from payment method totals entirely
+      // Only track cash refunds for Expected Cash calculation
+      if (isRefundEntry && p.method === 'cash') {
         stats.cashRefunded += Math.abs(p.amount)
       }
-    } else if (isRefundedOriginal) {
-      // Refunded original: don't count in stats at all — it's been reversed
-      // The refund entry above handles the subtraction
     } else {
-      // Normal completed payment
+      // Normal completed payment — count in method totals
       stats.totalCount++
       stats.totalAmount += p.amount
       stats.methods[p.method].count++
