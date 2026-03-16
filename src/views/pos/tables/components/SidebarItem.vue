@@ -108,7 +108,10 @@ const displayIcon = computed((): string => {
   }
 
   if (isOrder.value && props.order) {
-    // Online orders get web icon
+    // Online dine-in without table — needs table assignment
+    if (props.order.source === 'website' && props.order.type === 'dine_in' && !props.order.tableId)
+      return 'mdi-table-alert'
+    // Other online orders (takeaway, delivery)
     if (props.order.source === 'website') return 'mdi-web'
     return getOrderVisual(props.order.type, props.order.channelCode).icon
   }
@@ -150,6 +153,9 @@ const iconColor = computed((): string | undefined => {
   }
 
   if (isOrder.value && props.order) {
+    // Online dine-in without table — orange to indicate needs assignment
+    if (props.order.source === 'website' && props.order.type === 'dine_in' && !props.order.tableId)
+      return 'orange'
     if (props.order.source === 'website') return 'teal'
     return getOrderVisual(props.order.type, props.order.channelCode).color
   }

@@ -178,7 +178,9 @@ const onlineOrders = computed((): PosOrder[] => {
       const isNotCompleted = !['cancelled', 'delivered', 'collected', 'served'].includes(
         order.status
       )
-      return isOnline && isNotCompleted
+      // Exclude orders already assigned to a table (they appear in Tables section)
+      const isNotAssignedToTable = !order.tableId
+      return isOnline && isNotCompleted && isNotAssignedToTable
     })
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 })
