@@ -35,31 +35,41 @@
     <script type="module" src="/src/main.ts"></script>
     <script>
       // Register Service Worker for PWA with update detection
+      // Does NOT auto-reload — sets a global flag for the app to show "Update available"
+      window.__SW_UPDATE_AVAILABLE__ = false
       if ('serviceWorker' in navigator) {
-        var swRefreshing = false
-
-        window.addEventListener('load', () => {
+        window.addEventListener('load', function() {
           navigator.serviceWorker.register('/sw.js').then(function(reg) {
             console.log('[SW] Registered, scope:', reg.scope)
 
-            // Check for updates every 5 minutes
-            setInterval(function() { reg.update().catch(function(){}) }, 5 * 60 * 1000)
-
-            // Also check on page focus (user returns to PWA)
+            // Check for updates when user returns to the app
             document.addEventListener('visibilitychange', function() {
               if (document.visibilityState === 'visible') reg.update().catch(function(){})
+            })
+
+            // Detect when a new SW is waiting
+            function trackWaiting(worker) {
+              if (!worker) return
+              worker.addEventListener('statechange', function() {
+                if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                  console.log('[SW] New version available — waiting for user action')
+                  window.__SW_UPDATE_AVAILABLE__ = true
+                  window.dispatchEvent(new Event('sw-update-available'))
+                }
+              })
+            }
+
+            if (reg.waiting) {
+              // Already a waiting worker from a previous visit
+              window.__SW_UPDATE_AVAILABLE__ = true
+              window.dispatchEvent(new Event('sw-update-available'))
+            }
+            reg.addEventListener('updatefound', function() {
+              trackWaiting(reg.installing)
             })
           }).catch(function(err) {
             console.warn('[SW] Registration failed:', err)
           })
-        })
-
-        // When a new SW takes control, reload once to get new code
-        navigator.serviceWorker.addEventListener('controllerchange', function() {
-          if (swRefreshing) return
-          swRefreshing = true
-          console.log('[SW] New version activated, reloading...')
-          window.location.reload()
         })
       }
     </script>

@@ -460,34 +460,42 @@ const shiftStats = computed(() => {
   }
 
   // For active shifts, calculate from payments store
+  // ✅ FIX: Refund pairs (original + refund entry) are fully excluded from payment method totals.
+  // Only completed payments count toward method count/amount.
+  // Refunds only affect cashReceived/cashRefunded for Expected Cash calculation.
   shiftPayments.value.forEach((p: PosPayment) => {
-    // Include both completed payments and refunds
-    if (p.status === 'completed' || p.status === 'refunded') {
+    if (p.status !== 'completed' && p.status !== 'refunded') return
+
+    // Initialize method stats if not exists
+    if (!stats.methods[p.method]) {
+      const methodInfo = paymentSettingsStore.activePaymentMethods.find(m => m.code === p.method)
+      stats.methods[p.method] = {
+        count: 0,
+        amount: 0,
+        name: methodInfo?.name || p.method,
+        icon: methodInfo?.icon || getPaymentMethodIcon(p.method)
+      }
+    }
+
+    const isRefundEntry = p.amount < 0 // Refund record (negative amount)
+    const isRefundedOriginal = p.status === 'refunded' && p.amount > 0 // Original that was refunded
+
+    if (isRefundEntry || isRefundedOriginal) {
+      // Refund pair: exclude from payment method totals entirely
+      // Only track cash refunds for Expected Cash calculation
+      if (isRefundEntry && p.method === 'cash') {
+        stats.cashRefunded += Math.abs(p.amount)
+      }
+    } else {
+      // Normal completed payment — count in method totals
       stats.totalCount++
       stats.totalAmount += p.amount
-
-      // Initialize method stats if not exists
-      if (!stats.methods[p.method]) {
-        const methodInfo = paymentSettingsStore.activePaymentMethods.find(m => m.code === p.method)
-        stats.methods[p.method] = {
-          count: 0,
-          amount: 0,
-          name: methodInfo?.name || p.method,
-          icon: methodInfo?.icon || getPaymentMethodIcon(p.method)
-        }
-      }
-
-      // Update method-specific stats
       stats.methods[p.method].count++
       stats.methods[p.method].amount += p.amount
 
-      // Cash tracking (for expected cash calculation)
+      // Track cash received for expected cash calculation
       if (p.method === 'cash') {
-        if (p.amount > 0) {
-          stats.cashReceived += p.amount
-        } else {
-          stats.cashRefunded += Math.abs(p.amount)
-        }
+        stats.cashReceived += p.amount
       }
     }
   })
