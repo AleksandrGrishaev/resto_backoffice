@@ -8,7 +8,7 @@
       </v-btn>
       <h1>Shift Management</h1>
       <div class="header-actions">
-        <v-btn icon variant="text" :loading="refreshing" @click="handleRefreshAll">
+        <v-btn icon variant="text" color="success" :loading="refreshing" @click="handleRefreshAll">
           <v-icon>mdi-refresh</v-icon>
           <v-tooltip activator="parent" location="bottom">Refresh shift data</v-tooltip>
         </v-btn>

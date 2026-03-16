@@ -7,7 +7,7 @@ import { DebugUtils, extractErrorDetails } from '@/utils'
 import { supabase } from '@/supabase'
 import { ENV } from '@/config/environment'
 import { useRouter } from 'vue-router'
-import { resetAllStores } from '@/core/storeResetService'
+import { resetAllStores, clearAppLocalStorage } from '@/core/storeResetService'
 import { clearHMRState } from '@/core/hmrState'
 import { executeSupabaseSingle } from '@/utils/supabase'
 
@@ -187,10 +187,11 @@ export const useAuthStore = defineStore('auth', () => {
     // Reset local state immediately (no API calls needed)
     await resetAllStores()
     clearHMRState()
+    clearAppLocalStorage()
     resetState()
 
-    // Redirect to login
-    router.push('/auth/login')
+    // Full page reload to clear all in-memory state (critical for PWA)
+    window.location.href = '/auth/login'
 
     // Show notification (optional)
     // toast.info('Session ended in another tab')
@@ -477,8 +478,8 @@ export const useAuthStore = defineStore('auth', () => {
       // Step 4: Clear HMR state (prevent stale store data on next login)
       clearHMRState()
 
-      // Step 5: Clear legacy session storage
-      localStorage.removeItem('pin_session')
+      // Step 5: Clear all app-specific localStorage (POS data, caches, sync queues)
+      clearAppLocalStorage()
 
       // Step 6: Reset auth state
       resetState()
@@ -486,10 +487,10 @@ export const useAuthStore = defineStore('auth', () => {
       // Step 7: Clean up broadcast key
       localStorage.removeItem(LOGOUT_BROADCAST_KEY)
 
-      // Step 7: Redirect to login
-      await router.push('/auth/login')
-
       DebugUtils.info(MODULE_NAME, '✅ Logout complete')
+
+      // Step 8: Full page reload to clear all in-memory state (critical for PWA)
+      window.location.href = '/auth/login'
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Logout failed', { error })
 
@@ -497,8 +498,9 @@ export const useAuthStore = defineStore('auth', () => {
       try {
         await resetAllStores()
         clearHMRState()
+        clearAppLocalStorage()
         resetState()
-        await router.push('/auth/login')
+        window.location.href = '/auth/login'
       } catch (cleanupError) {
         DebugUtils.error(MODULE_NAME, 'Cleanup after failed logout also failed', { cleanupError })
       }
