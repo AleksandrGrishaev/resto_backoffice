@@ -68,7 +68,7 @@ BEGIN
   -- 6. Free table if assigned
   IF v_table_id IS NOT NULL THEN
     UPDATE tables SET
-      status = 'free',
+      status = 'available',
       current_order_id = NULL,
       updated_at = now()
     WHERE id = v_table_id;

@@ -43,13 +43,7 @@
       <v-card-actions>
         <v-spacer />
         <v-btn variant="text" @click="handleCancel">Back</v-btn>
-        <v-btn
-          color="error"
-          variant="flat"
-          :disabled="!reason?.trim()"
-          :loading="loading"
-          @click="handleConfirm"
-        >
+        <v-btn color="error" variant="flat" :disabled="!reason?.trim()" @click="handleConfirm">
           Cancel Order
         </v-btn>
       </v-card-actions>
@@ -58,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { PosOrder } from '@/stores/pos/types'
 
 interface Props {
@@ -75,7 +69,14 @@ const emit = defineEmits<{
 }>()
 
 const reason = ref('')
-const loading = ref(false)
+
+// Reset reason when dialog opens
+watch(
+  () => props.modelValue,
+  open => {
+    if (open) reason.value = ''
+  }
+)
 
 const itemCount = computed(() => {
   if (!props.order) return 0

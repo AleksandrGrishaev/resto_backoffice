@@ -53,6 +53,7 @@ export type CancellationReason =
   | 'customer_refused'
   | 'wrong_order'
   | 'out_of_stock'
+  | 'staff_cancelled'
   | 'other'
 
 // Ready-Triggered Write-off types

@@ -1045,6 +1045,16 @@ const handleConfirmCancel = async (data: {
 
       // Recalculate order totals
       await ordersStore.recalculateOrderTotals(orderId)
+
+      // Watchdog: track prepared item cancellations (non-blocking)
+      if (item.status === 'cooking' || item.status === 'ready') {
+        import('@/core/watchdog/WatchdogService').then(({ onItemCancelled }) => {
+          const currentShift = shiftsStore.currentShift
+          if (currentShift) {
+            onItemCancelled(currentShift.id, item.menuItemName, authStore.user?.name || 'Unknown')
+          }
+        })
+      }
     } else {
       throw new Error(result.error || 'Failed to cancel item')
     }
@@ -2460,9 +2470,91 @@ const handleCancelOrderConfirm = async (reason: string): Promise<void> => {
     loadingMessage.value = 'Cancelling order...'
     showCancelOrderDialog.value = false
 
-    const result = await ordersStore.cancelOrder(currentOrder.value.id, reason)
+    const order = currentOrder.value
+
+    // Collect prepared items BEFORE cancelling (for write-offs)
+    const preparedItems = order.bills.flatMap((b, _bi) =>
+      b.items
+        .filter(i => i.status === 'cooking' || i.status === 'ready')
+        .map(i => ({ item: i, billId: b.id }))
+    )
+
+    // Cancel the order via RPC (sets status in DB, cancels all items)
+    const result = await ordersStore.cancelOrder(order.id, reason)
 
     if (result.success) {
+      // Run write-offs for prepared items (non-blocking, fire-and-forget)
+      // Items are already cancelled in DB by RPC, so we create write-offs directly
+      if (preparedItems.length > 0) {
+        ;(async () => {
+          try {
+            const { createDecompositionEngine } = await import(
+              '@/core/decomposition/DecompositionEngine'
+            )
+            const { createWriteOffAdapter } = await import(
+              '@/core/decomposition/adapters/WriteOffAdapter'
+            )
+            const { useStorageStore } = await import('@/stores/storage/storageStore')
+
+            const engine = await createDecompositionEngine()
+            const adapter = createWriteOffAdapter()
+            const storageStore = useStorageStore()
+            const currentUser = authStore.user?.name || 'Unknown'
+
+            for (const { item } of preparedItems) {
+              try {
+                const traversal = await engine.traverse(
+                  {
+                    menuItemId: item.menuItemId,
+                    variantId: item.variantId,
+                    quantity: item.quantity,
+                    selectedModifiers: item.selectedModifiers || []
+                  },
+                  adapter.getTraversalOptions()
+                )
+                const woResult = await adapter.transform(traversal, {
+                  menuItemId: item.menuItemId,
+                  variantId: item.variantId,
+                  quantity: item.quantity,
+                  selectedModifiers: item.selectedModifiers || []
+                })
+                if (woResult.items && woResult.items.length > 0) {
+                  await storageStore.createWriteOff({
+                    department: item.department || 'kitchen',
+                    responsiblePerson: currentUser,
+                    reason: 'other',
+                    items: woResult.items.map(wi => ({
+                      itemId: wi.type === 'product' ? wi.productId! : wi.preparationId!,
+                      itemName: wi.type === 'product' ? wi.productName! : wi.preparationName!,
+                      itemType: wi.type as 'product' | 'preparation',
+                      quantity: wi.quantity,
+                      unit: wi.unit
+                    })),
+                    notes: `Order ${order.orderNumber} cancelled: ${item.menuItemName} (${reason})`
+                  })
+                }
+              } catch {
+                // Non-critical per item
+              }
+            }
+          } catch {
+            // Non-critical — cancellation already succeeded
+          }
+        })()
+
+        // Watchdog alert (non-blocking)
+        import('@/core/watchdog/WatchdogService').then(({ onItemCancelled }) => {
+          const currentShift = shiftsStore.currentShift
+          if (currentShift) {
+            onItemCancelled(
+              currentShift.id,
+              `Order ${order.orderNumber} (${preparedItems.length} items)`,
+              authStore.user?.name || 'Unknown'
+            )
+          }
+        })
+      }
+
       showSuccess('Order cancelled successfully')
     } else {
       showError(result.error || 'Failed to cancel order')

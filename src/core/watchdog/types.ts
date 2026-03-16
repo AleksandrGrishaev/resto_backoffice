@@ -30,6 +30,12 @@ export const WATCHDOG_THRESHOLDS = {
     dailyCriticalPercent: 10
   },
 
+  // Cancellation checks (per shift)
+  cancellation: {
+    warningCount: 3, // >=3 prepared items cancelled = warning
+    criticalLoss: 500000 // >=Rp 500k estimated loss = critical
+  },
+
   // History lookback
   historyDays: 30, // Compare against last 30 days average
   weeklyReportDay: 1 // Monday (0=Sunday, 1=Monday, ...)

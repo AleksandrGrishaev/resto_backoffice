@@ -221,6 +221,8 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
             }
           )
           selectOrder(existingOrder.id)
+          // Fix table status in case it's stale
+          await tablesStore.occupyTable(orderData.tableId, existingOrder.id)
           return { success: true, data: existingOrder }
         }
       }
@@ -1152,6 +1154,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
    */
   async function cancelOrder(orderId: string, reason: string): Promise<ServiceResponse<void>> {
     try {
+      loading.value.update = true
       const order = orders.value.find(o => o.id === orderId)
       if (!order) {
         return { success: false, error: 'Order not found' }
@@ -1179,27 +1182,33 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
       // Update local state
       order.status = 'cancelled'
+      order.cancellationReason = reason
       order.updatedAt = new Date().toISOString()
       for (const bill of order.bills) {
         for (const item of bill.items) {
           if (item.status !== 'cancelled') {
             item.status = 'cancelled'
             item.cancelledAt = new Date().toISOString()
-            item.cancellationReason = 'staff_cancelled' as any
+            item.cancellationReason = 'staff_cancelled'
             item.cancellationNotes = reason
           }
         }
       }
 
-      // If table was freed by the RPC, update local table state
+      // If table was freed by the RPC, update local table state only (DB already updated)
       if (data.tableFreed && order.tableId) {
-        await tablesStore.freeTable(order.tableId)
+        const table = tablesStore.tables.find(t => t.id === order.tableId)
+        if (table) {
+          table.status = 'free'
+          table.currentOrderId = undefined
+        }
       }
 
-      // Clear current order if this was selected
+      // Clear current order and selection if this was selected
       if (currentOrderId.value === orderId) {
         currentOrderId.value = null
         activeBillId.value = null
+        clearSelection()
       }
 
       console.log('✅ [ordersStore] Order cancelled:', {
@@ -1212,6 +1221,8 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       const errorMsg = err instanceof Error ? err.message : 'Failed to cancel order'
       error.value = errorMsg
       return { success: false, error: errorMsg }
+    } finally {
+      loading.value.update = false
     }
   }
 
@@ -1232,8 +1243,13 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       return true
     }
 
-    // Dine_in with items: only allow for website orders
-    if (order.type === 'dine_in' && order.source !== 'website') return false
+    // Dine_in with all items cancelled — allow cleanup
+    if (order.type === 'dine_in' && allItems.length > 0 && !hasActiveItems) {
+      return true
+    }
+
+    // Regular dine_in with active items — cannot delete (use Cancel Order instead)
+    if (order.type === 'dine_in' && hasActiveItems) return false
 
     return !hasActiveItems
   }
