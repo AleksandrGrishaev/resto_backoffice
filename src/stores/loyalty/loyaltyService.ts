@@ -108,6 +108,19 @@ export class LoyaltyService {
     return this.getCardInfo((data as any).card_number)
   }
 
+  async getActiveCardByCustomerId(customerId: string): Promise<StampCardInfo | null> {
+    const { data, error } = await supabase
+      .from('stamp_cards')
+      .select('card_number')
+      .eq('customer_id', customerId)
+      .eq('status', 'active')
+      .limit(1)
+      .single()
+
+    if (error || !data) return null
+    return this.getCardInfo((data as any).card_number)
+  }
+
   async getCardInfo(cardNumber: string): Promise<StampCardInfo> {
     const { data, error } = await supabase.rpc('get_stamp_card_info', {
       p_card_number: cardNumber

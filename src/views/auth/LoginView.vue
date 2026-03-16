@@ -282,7 +282,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth/authStore'
 import { DebugUtils } from '@/utils'
 import PinInput from '@/components/atoms/inputs/PinInput.vue'
@@ -292,7 +292,6 @@ const MODULE_NAME = 'LoginView'
 const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || ''
 
 // ===== COMPOSABLES =====
-const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
@@ -407,9 +406,10 @@ onBeforeUnmount(() => {
 
 /**
  * Handle email + password login (Admin/Manager)
+ * Sets target route based on ?redirect query or role default.
+ * App.vue handles the actual redirect after stores are loaded.
  */
 const handleEmailLogin = async () => {
-  // Validate form
   const { valid } = await emailFormRef.value.validate()
   if (!valid) return
 
@@ -422,15 +422,17 @@ const handleEmailLogin = async () => {
     const token = await getCaptchaToken()
     const success = await authStore.loginWithEmail(email.value, password.value, token)
 
-    if (success) {
-      DebugUtils.info(MODULE_NAME, 'Email login successful')
-
-      // Redirect to intended page or default
-      const redirectPath = (route.query.redirect as string) || authStore.getDefaultRoute()
-      await router.push(redirectPath)
-    } else {
+    if (!success) {
       throw new Error(authStore.state.error || 'Login failed')
     }
+
+    // Set target route AFTER successful login (avoids stale route on failed attempts)
+    const redirectPath = (route.query.redirect as string) || null
+    if (redirectPath) {
+      authStore.setTargetRoute(redirectPath)
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Email login successful — App.vue will handle redirect')
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Login failed'
     error.value = errorMessage
@@ -443,6 +445,7 @@ const handleEmailLogin = async () => {
 
 /**
  * Handle PIN login (Cashier - POS)
+ * Always targets /pos regardless of user role.
  */
 const handlePinLogin = async (pin: string) => {
   try {
@@ -454,15 +457,14 @@ const handlePinLogin = async (pin: string) => {
     const token = await getCaptchaToken()
     const success = await authStore.loginWithPin(pin, token)
 
-    if (success) {
-      DebugUtils.info(MODULE_NAME, 'POS PIN login successful')
-
-      // Redirect to POS or intended page
-      const redirectPath = (route.query.redirect as string) || '/pos'
-      await router.push(redirectPath)
-    } else {
+    if (!success) {
       throw new Error(authStore.state.error || 'Invalid PIN')
     }
+
+    // Set target route AFTER successful login
+    authStore.setTargetRoute((route.query.redirect as string) || '/pos')
+
+    DebugUtils.info(MODULE_NAME, 'POS PIN login successful — App.vue will handle redirect')
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Login failed'
     error.value = errorMessage
@@ -475,6 +477,7 @@ const handlePinLogin = async (pin: string) => {
 
 /**
  * Handle Kitchen PIN login (Kitchen/Bar)
+ * Always targets /kitchen regardless of user role.
  */
 const handleKitchenPinLogin = async (pin: string) => {
   try {
@@ -486,15 +489,14 @@ const handleKitchenPinLogin = async (pin: string) => {
     const token = await getCaptchaToken()
     const success = await authStore.loginWithPin(pin, token)
 
-    if (success) {
-      DebugUtils.info(MODULE_NAME, 'Kitchen PIN login successful')
-
-      // Redirect to kitchen dashboard or intended page
-      const redirectPath = (route.query.redirect as string) || '/kitchen'
-      await router.push(redirectPath)
-    } else {
+    if (!success) {
       throw new Error(authStore.state.error || 'Invalid PIN')
     }
+
+    // Set target route AFTER successful login
+    authStore.setTargetRoute((route.query.redirect as string) || '/kitchen')
+
+    DebugUtils.info(MODULE_NAME, 'Kitchen PIN login successful — App.vue will handle redirect')
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Login failed'
     error.value = errorMessage
@@ -507,6 +509,7 @@ const handleKitchenPinLogin = async (pin: string) => {
 
 /**
  * Handle Admin email login (redirects to /admin tablet UI)
+ * Always targets /admin regardless of user role.
  */
 const handleAdminLogin = async () => {
   const { valid } = await adminFormRef.value.validate()
@@ -521,12 +524,14 @@ const handleAdminLogin = async () => {
     const token = await getCaptchaToken()
     const success = await authStore.loginWithEmail(adminEmail.value, adminPassword.value, token)
 
-    if (success) {
-      DebugUtils.info(MODULE_NAME, 'Admin login successful')
-      await router.push('/admin')
-    } else {
+    if (!success) {
       throw new Error(authStore.state.error || 'Login failed')
     }
+
+    // Set target route AFTER successful login
+    authStore.setTargetRoute('/admin')
+
+    DebugUtils.info(MODULE_NAME, 'Admin login successful — App.vue will handle redirect')
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Login failed'
     error.value = errorMessage

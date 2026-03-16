@@ -13,6 +13,7 @@ import '@/styles/main.scss'
 
 // Plugins
 import { vuetify } from '@/plugins/vuetify'
+import { piniaResetPlugin } from '@/plugins/piniaReset'
 
 // Global components
 import { NumericInputField, NumericKeypad } from '@/components/input'
@@ -58,6 +59,7 @@ function initializeApp() {
 
     const app = createApp(App)
     const pinia = createPinia()
+    pinia.use(piniaResetPlugin)
 
     // Регистрируем только базовые плагины
     app.use(pinia)

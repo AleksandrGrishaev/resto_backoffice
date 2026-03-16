@@ -443,6 +443,11 @@ const paymentBillLoyaltyCard = computed(() => {
   if (loyaltyCard.value && paymentBill.value?.stampCardId) {
     return loyaltyCard.value
   }
+  // If bill has stampCardId but loyaltyCard wasn't loaded yet,
+  // trigger async load (the computed will re-evaluate when loyaltyCard updates)
+  if (paymentBill.value?.stampCardId && !loyaltyCard.value) {
+    loadLoyaltyCardForBill(paymentBill.value.stampCardId)
+  }
   return null
 })
 
@@ -468,6 +473,65 @@ const showConvertCardDialog = ref(false)
 const showLoyaltyDialog = ref(false)
 const loyaltyDialogTab = ref<'card' | 'customer'>('card')
 const loyaltyBillId = ref<string | null>(null) // which bill the loyalty dialog is for
+let _loadingCardForBillId: string | null = null // prevent duplicate loads
+
+/**
+ * Load stamp card info from stampCardId (async, updates loyaltyCard ref).
+ * Called when bill has stampCardId but loyaltyCard wasn't hydrated.
+ */
+async function loadLoyaltyCardForBill(stampCardId: string): Promise<void> {
+  if (_loadingCardForBillId === stampCardId) return // already loading
+  _loadingCardForBillId = stampCardId
+  try {
+    const card = await loyaltyStore.getCardById(stampCardId)
+    if (card) {
+      loyaltyCard.value = card
+      console.log('🎯 Auto-loaded stamp card for bill:', card.cardNumber)
+    }
+  } catch (err) {
+    console.error('🎯 Failed to auto-load stamp card:', err)
+  } finally {
+    _loadingCardForBillId = null
+  }
+}
+
+/**
+ * Auto-hydrate bill customer data from order-level customer (for online orders).
+ * Also auto-attach stamp card if customer has one.
+ */
+async function hydrateOnlineOrderBills(
+  order: import('@/stores/pos/types').PosOrder
+): Promise<void> {
+  if (!order.customerId) return
+
+  let updated = false
+  for (const bill of order.bills) {
+    // Copy customer from order to bill if missing
+    if (!bill.customerId && order.customerId) {
+      bill.customerId = order.customerId
+      bill.customerName = order.customerName
+      updated = true
+    }
+
+    // Auto-attach stamp card if customer has one and bill doesn't
+    if (bill.customerId && !bill.stampCardId) {
+      try {
+        const card = await loyaltyStore.getActiveCardByCustomerId(bill.customerId)
+        if (card) {
+          bill.stampCardId = card.cardId
+          updated = true
+          console.log('🎯 Auto-attached stamp card to bill:', card.cardNumber, bill.name)
+        }
+      } catch {
+        // Not critical
+      }
+    }
+  }
+
+  if (updated) {
+    await ordersStore.updateOrder(order)
+  }
+}
 
 // Printer
 const { settings: printerSettings, isConnected: isPrinterConnected } = usePrinter()
@@ -540,12 +604,17 @@ const currentOrder = computed((): PosOrder | null => {
   return ordersStore.currentOrder
 })
 
-// P1 FIX: Clear loyaltyCard when switching orders
+// P1 FIX: Clear loyaltyCard when switching orders + hydrate online order bills
 watch(
   () => currentOrder.value?.id,
-  () => {
+  newId => {
     loyaltyCard.value = null
     loyaltyBillId.value = null
+
+    // Auto-hydrate bills for online orders (copy customer to bills, attach stamp card)
+    if (newId && currentOrder.value?.source === 'website' && currentOrder.value.customerId) {
+      hydrateOnlineOrderBills(currentOrder.value)
+    }
   }
 )
 
@@ -1778,7 +1847,12 @@ const handlePaymentConfirm = async (paymentData: {
 
       // 🎯 Post-payment loyalty hooks (non-blocking)
       // Cashback/stamps based on actual money paid, NOT including redeemed points
-      processLoyaltyAfterPayment(paymentDialogData.value.orderId, paymentData.amount)
+      // Use bill-level customer (not order-level) for correct multi-bill loyalty
+      processLoyaltyAfterPayment(
+        paymentDialogData.value.orderId,
+        paymentDialogData.value.billIds,
+        paymentData.amount
+      )
     } else {
       // ❌ Rollback UI on failure
       showError(result.error || 'Payment failed')
@@ -1802,39 +1876,51 @@ const handlePaymentCancel = (): void => {
 // ===== LOYALTY HANDLERS =====
 
 /**
- * Non-blocking post-payment processing:
+ * Non-blocking post-payment processing (BILL-LEVEL customer):
  * 1. ALWAYS update customer stats (total_spent, total_visits, etc.)
  * 2. If loyalty enabled → apply cashback (tier-based %)
  * 3. If stamp card attached & loyalty enabled → add stamps
+ *
+ * Customer is resolved from BILL first, then falls back to ORDER.
+ * Stamp card is resolved: loyaltyCard ref → bill.stampCardId → customer's active card.
  */
-async function processLoyaltyAfterPayment(orderId: string, paidAmount: number): Promise<void> {
+async function processLoyaltyAfterPayment(
+  orderId: string,
+  billIds: string[],
+  paidAmount: number
+): Promise<void> {
   const order = ordersStore.orders.find(o => o.id === orderId)
   if (!order) return
 
-  const customer = order.customerId ? customersStore.getById(order.customerId) : null
+  // Resolve customer from BILL level (first bill with a customer wins)
+  const paidBills = billIds
+    .map(id => order.bills.find(b => b.id === id))
+    .filter(Boolean) as import('@/stores/pos/types').PosBill[]
+  const billCustomerId = paidBills.find(b => b.customerId)?.customerId || order.customerId || null
+
+  if (!billCustomerId) return // No customer — nothing to do
+
+  const customer = customersStore.getById(billCustomerId)
   const loyaltyDisabled = customer?.disableLoyaltyAccrual === true
 
   // 1. ALWAYS update customer stats (regardless of loyalty settings)
-  if (order.customerId) {
-    try {
-      const statsResult = await customersService.updateStats(order.customerId, orderId, paidAmount)
-      if (statsResult.success) {
-        console.log(
-          `📊 Customer stats updated: ${customer?.name} — visits: ${statsResult.totalVisits}, spent: ${formatIDR(statsResult.totalSpent || 0)}`
-        )
-        // Refresh customer in store to reflect new stats
-        await customersStore.refreshCustomer(order.customerId)
-      }
-    } catch (err) {
-      console.error('📊 Customer stats update failed:', err)
+  try {
+    const statsResult = await customersService.updateStats(billCustomerId, orderId, paidAmount)
+    if (statsResult.success) {
+      console.log(
+        `📊 Customer stats updated: ${customer?.name} — visits: ${statsResult.totalVisits}, spent: ${formatIDR(statsResult.totalSpent || 0)}`
+      )
+      await customersStore.refreshCustomer(billCustomerId)
     }
+  } catch (err) {
+    console.error('📊 Customer stats update failed:', err)
   }
 
   // 2. Apply cashback for digital loyalty customer (only if loyalty enabled AND on cashback program)
   const onCashbackProgram = customer?.loyaltyProgram === 'cashback'
-  if (order.customerId && !loyaltyDisabled && onCashbackProgram) {
+  if (!loyaltyDisabled && onCashbackProgram) {
     try {
-      const result = await loyaltyStore.applyCashback(order.customerId, orderId, paidAmount)
+      const result = await loyaltyStore.applyCashback(billCustomerId, orderId, paidAmount)
       if (result.success) {
         console.log(
           `🎯 Cashback applied: ${formatIDR(result.cashback)} (${result.cashbackPct}% ${result.tier})`
@@ -1848,12 +1934,32 @@ async function processLoyaltyAfterPayment(orderId: string, paidAmount: number): 
     }
   } else if (loyaltyDisabled) {
     console.log('🎯 Cashback skipped: loyalty accrual disabled for', customer?.name)
-  } else if (!onCashbackProgram && order.customerId) {
+  } else if (!onCashbackProgram) {
     console.log('🎯 Cashback skipped: customer on stamps program', customer?.name)
   }
 
-  // 3. Add stamps for stamp card (also skip if loyalty disabled)
-  const card = loyaltyCard.value
+  // 3. Add stamps — resolve card: loyaltyCard ref → bill.stampCardId → customer's active card
+  let card = loyaltyCard.value
+  if (!card) {
+    // Try to load from bill's stampCardId
+    const billStampCardId = paidBills.find(b => b.stampCardId)?.stampCardId
+    if (billStampCardId) {
+      try {
+        card = await loyaltyStore.getCardById(billStampCardId)
+      } catch (err) {
+        console.error('🎯 Failed to load stamp card from bill:', err)
+      }
+    }
+    // Fallback: find customer's active stamp card
+    if (!card) {
+      try {
+        card = await loyaltyStore.getActiveCardByCustomerId(billCustomerId)
+      } catch (err) {
+        console.error('🎯 Failed to find customer stamp card:', err)
+      }
+    }
+  }
+
   if (card && card.status === 'active' && !loyaltyDisabled) {
     try {
       const result = await loyaltyStore.addStamps(card.cardNumber, orderId, paidAmount)
@@ -1866,11 +1972,8 @@ async function processLoyaltyAfterPayment(orderId: string, paidAmount: number): 
         )
         if (result.newCycle) {
           showSuccess('Stamp cycle complete! New cycle started.')
-          // Customer auto-upgraded to cashback — refresh to get new loyalty_program
-          if (order.customerId) {
-            await customersStore.refreshCustomer(order.customerId)
-            console.log('🎯 Customer upgraded to cashback program after stamp cycle completion')
-          }
+          await customersStore.refreshCustomer(billCustomerId)
+          console.log('🎯 Customer upgraded to cashback program after stamp cycle completion')
         }
       }
     } catch (err) {
@@ -1903,6 +2006,24 @@ const handlePaymentLoyaltyCustomer = async (customer: Customer | null): Promise<
       await customersStore.refreshCustomer(customer.id)
     } catch {
       /* not critical */
+    }
+
+    // Auto-attach stamp card if customer has one and no card is attached yet
+    if (!loyaltyCard.value) {
+      try {
+        const card = await loyaltyStore.getActiveCardByCustomerId(customer.id)
+        if (card) {
+          loyaltyCard.value = card
+          // Also set stampCardId on bills
+          for (const billId of billIds) {
+            const bill = currentOrder.value.bills.find(b => b.id === billId)
+            if (bill) bill.stampCardId = card.cardId
+          }
+          console.log('🎯 Auto-attached stamp card:', card.cardNumber)
+        }
+      } catch {
+        /* not critical */
+      }
     }
   }
 
@@ -2032,6 +2153,27 @@ const handleLoyaltyCustomer = async (customer: Customer | null): Promise<void> =
       await customersStore.refreshCustomer(customer.id)
     } catch {
       /* not critical */
+    }
+
+    // Auto-attach stamp card if customer has one and no card is attached yet
+    if (!bill.stampCardId && !loyaltyCard.value) {
+      try {
+        const card = await loyaltyStore.getActiveCardByCustomerId(customer.id)
+        if (card) {
+          loyaltyCard.value = card
+          bill.stampCardId = card.cardId
+          // If multi-bill payment, attach to all bills
+          if (showPaymentDialog.value && paymentDialogData.value.billIds.length > 1) {
+            for (const bid of paymentDialogData.value.billIds) {
+              const b = currentOrder.value.bills.find(x => x.id === bid)
+              if (b) b.stampCardId = card.cardId
+            }
+          }
+          console.log('🎯 Auto-attached stamp card:', card.cardNumber)
+        }
+      } catch {
+        /* not critical */
+      }
     }
   }
 
