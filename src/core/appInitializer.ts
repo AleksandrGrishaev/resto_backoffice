@@ -230,34 +230,31 @@ export class AppInitializer {
    * Показать сводку инициализации
    */
   private showInitializationSummary(userRoles: UserRole[]): void {
-    // Информация об устройстве и среде
-    const deviceInfo = {
-      platform: this.platform.platform.value,
-      online: this.platform.isOnline.value,
-      userRole: userRoles.join(', '),
-      strategy: this.strategy.getName(),
-      debugMode: ENV.debugEnabled,
-      offlineEnabled: ENV.enableOffline
+    try {
+      const deviceInfo = {
+        platform: this.platform.platform.value,
+        online: this.platform.isOnline.value,
+        userRole: userRoles.join(', '),
+        strategy: this.strategy.getName(),
+        debugMode: ENV.debugEnabled,
+        offlineEnabled: ENV.enableOffline
+      }
+
+      // Build plain strings only — avoid passing reactive objects to console.table
+      const storesStatus: Record<string, string> = {
+        products: this.getStoreStatus(() => useProductsStore().products?.length, 'items'),
+        recipes: this.getStoreStatus(() => useRecipesStore().recipes?.length, 'items'),
+        menu: this.getStoreStatus(() => useMenuStore().state?.value?.menuItems?.length, 'items'),
+        pos: this.getStoreStatus(() => (usePosStore().isInitialized ? 1 : 0), 'Ready'),
+        kitchen: this.getStoreStatus(() => (useKitchenStore().initialized ? 1 : 0), 'Ready')
+      }
+
+      DebugUtils.deviceInfo(deviceInfo)
+      DebugUtils.summary('Initialization Summary', storesStatus)
+    } catch (error) {
+      // Summary is non-critical — never let it crash initialization
+      DebugUtils.warn(MODULE_NAME, 'Failed to show initialization summary')
     }
-
-    // Статус stores
-    const storesStatus: any = {}
-
-    // Critical stores (always loaded)
-    storesStatus.products = this.getStoreStatus(() => useProductsStore().products?.length, 'items')
-    storesStatus.recipes = this.getStoreStatus(() => useRecipesStore().recipes?.length, 'items')
-    storesStatus.menu = this.getStoreStatus(
-      () => useMenuStore().state?.value?.menuItems?.length,
-      'items'
-    )
-
-    // Role-based stores
-    storesStatus.pos = usePosStore().isInitialized ? 'Ready' : 'Not loaded'
-    storesStatus.kitchen = useKitchenStore().initialized ? 'Ready' : 'Not loaded'
-
-    // Выводим сводки
-    DebugUtils.deviceInfo(deviceInfo)
-    DebugUtils.summary('Initialization Summary', storesStatus)
   }
 
   /**
