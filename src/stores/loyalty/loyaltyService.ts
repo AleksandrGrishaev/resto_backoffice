@@ -92,7 +92,8 @@ export class LoyaltyService {
         maxDiscount: r.max_discount,
         redeemed: r.redeemed ?? false
       })),
-      newCycle: result.new_cycle
+      newCycle: result.new_cycle,
+      loyaltyUpgraded: result.loyalty_upgraded ?? false
     }
   }
 
@@ -354,7 +355,8 @@ export class LoyaltyService {
       cashbackPct: result.cashback_pct,
       tier: result.tier,
       newBalance: result.new_balance,
-      totalVisits: result.total_visits
+      totalVisits: result.total_visits,
+      skipped: result.skipped ?? false
     }
   }
 

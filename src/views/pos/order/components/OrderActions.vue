@@ -123,6 +123,20 @@
             {{ order?.type === 'delivery' ? 'Delivered' : 'Collected' }}
           </template>
         </BaseButton>
+
+        <!-- Cancel Order Button -->
+        <BaseButton
+          v-if="canCancelOrder"
+          color="error"
+          variant="outlined"
+          size="large"
+          class="flex-shrink-0"
+          :icon="isCompact ? 'mdi-cancel' : undefined"
+          :start-icon="isCompact ? undefined : 'mdi-cancel'"
+          @click="emit('cancelOrder')"
+        >
+          <template v-if="!isCompact">Cancel</template>
+        </BaseButton>
       </div>
 
       <!-- Checkout Summary (only when items selected) -->
@@ -176,6 +190,7 @@ const emit = defineEmits<{
   checkout: [items: string[], amount: number]
   releaseTable: []
   completeOrder: []
+  cancelOrder: []
 }>()
 
 // State
@@ -227,6 +242,22 @@ const canCompleteOrder = computed((): boolean => {
   return (
     isOrderFullyPaid.value && (props.order.type === 'delivery' || props.order.type === 'takeaway')
   )
+})
+
+// Can cancel order (website order not in final status, OR all items already cancelled)
+const canCancelOrder = computed((): boolean => {
+  if (!props.order) return false
+  const finalStatuses = ['cancelled', 'served', 'collected', 'delivered']
+  if (finalStatuses.includes(props.order.status)) return false
+
+  // Show for website orders
+  if (props.order.source === 'website') return true
+
+  // Show when all items are cancelled (stuck order)
+  const allItems = props.order.bills.flatMap(b => b.items)
+  if (allItems.length > 0 && allItems.every(i => i.status === 'cancelled')) return true
+
+  return false
 })
 
 // Computed - Amounts

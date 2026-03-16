@@ -527,22 +527,20 @@ export class OrdersService {
       const allItems = this.getAllStoredItems()
       const itemIndex = allItems.findIndex(item => item.id === itemId)
 
-      if (itemIndex === -1) {
-        throw new Error('Item not found')
-      }
+      if (itemIndex !== -1) {
+        allItems[itemIndex] = {
+          ...allItems[itemIndex],
+          status: 'cancelled',
+          cancelledAt,
+          cancelledBy: cancellationData.cancelledBy,
+          cancellationReason: cancellationData.reason,
+          cancellationNotes: cancellationData.notes,
+          writeOffOperationId: cancellationData.writeOffOperationId,
+          updatedAt: cancelledAt
+        }
 
-      allItems[itemIndex] = {
-        ...allItems[itemIndex],
-        status: 'cancelled',
-        cancelledAt,
-        cancelledBy: cancellationData.cancelledBy,
-        cancellationReason: cancellationData.reason,
-        cancellationNotes: cancellationData.notes,
-        writeOffOperationId: cancellationData.writeOffOperationId,
-        updatedAt: cancelledAt
+        await this.saveItemsSafely(allItems)
       }
-
-      await this.saveItemsSafely(allItems)
 
       return { success: true }
     } catch (error) {

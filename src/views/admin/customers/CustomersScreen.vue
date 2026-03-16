@@ -64,6 +64,16 @@
         hover
         @click:row="(_: Event, row: any) => openDetail(row.item)"
       >
+        <template #[`item.loyaltyProgram`]="{ item }">
+          <v-chip
+            size="x-small"
+            :color="item.loyaltyProgram === 'cashback' ? 'teal' : 'amber-darken-1'"
+            variant="tonal"
+          >
+            {{ item.loyaltyProgram === 'cashback' ? 'cashback' : 'stamps' }}
+          </v-chip>
+        </template>
+
         <template #[`item.tier`]="{ item }">
           <v-chip
             v-if="item.personalDiscount > 0"
@@ -143,6 +153,14 @@
               class="text-white"
             >
               {{ selectedCustomer.tier.toUpperCase() }}
+            </v-chip>
+            <v-chip
+              :color="selectedCustomer.loyaltyProgram === 'cashback' ? 'teal' : 'amber-darken-1'"
+              variant="flat"
+              size="small"
+              class="text-white"
+            >
+              {{ selectedCustomer.loyaltyProgram === 'cashback' ? 'Cashback' : 'Stamps' }}
             </v-chip>
             <v-chip
               :color="selectedCustomer.status === 'active' ? 'success' : 'error'"
@@ -376,6 +394,18 @@
             >
               {{ selectedCustomer.status === 'active' ? 'Deactivate' : 'Activate' }}
             </v-btn>
+            <v-btn
+              v-if="selectedCustomer.loyaltyProgram !== 'cashback'"
+              variant="tonal"
+              color="teal"
+              size="small"
+              :loading="switchingProgram"
+              prepend-icon="mdi-arrow-up-bold"
+              class="ml-2"
+              @click="switchToCashback"
+            >
+              Switch to Cashback
+            </v-btn>
             <v-spacer />
             <v-btn variant="outlined" prepend-icon="mdi-pencil" @click="startEditing">Edit</v-btn>
             <v-btn variant="text" @click="showDetail = false">Close</v-btn>
@@ -541,6 +571,7 @@ const isEditing = ref(false)
 const saving = ref(false)
 const saveError = ref('')
 const togglingStatus = ref(false)
+const switchingProgram = ref(false)
 
 // Create dialog
 const showCreateDialog = ref(false)
@@ -577,6 +608,7 @@ const statusOptions = ['active', 'blocked']
 
 const headers = [
   { title: 'Name', key: 'name', sortable: true },
+  { title: 'Program', key: 'loyaltyProgram', sortable: true },
   { title: 'Tier', key: 'tier', sortable: true },
   { title: 'Balance', key: 'loyaltyBalance', sortable: true },
   { title: 'Total Spent', key: 'totalSpent', sortable: true },
@@ -747,6 +779,21 @@ async function toggleStatus() {
     console.error('Failed to toggle status:', err)
   } finally {
     togglingStatus.value = false
+  }
+}
+
+async function switchToCashback() {
+  if (!selectedCustomer.value) return
+  switchingProgram.value = true
+  try {
+    const updated = await customersStore.updateCustomer(selectedCustomer.value.id, {
+      loyaltyProgram: 'cashback'
+    } as Partial<Customer>)
+    selectedCustomer.value = updated
+  } catch (err) {
+    console.error('Failed to switch loyalty program:', err)
+  } finally {
+    switchingProgram.value = false
   }
 }
 

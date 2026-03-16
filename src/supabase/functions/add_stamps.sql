@@ -80,6 +80,14 @@ BEGIN
   IF v_total_active >= v_settings.stamps_per_cycle THEN
     UPDATE stamp_cards SET cycle = cycle + 1 WHERE id = v_card.id;
     v_new_cycle := true;
+
+    -- Auto-transition customer from stamps → cashback on first cycle completion
+    IF v_card.customer_id IS NOT NULL THEN
+      UPDATE customers
+      SET loyalty_program = 'cashback'
+      WHERE id = v_card.customer_id
+        AND COALESCE(loyalty_program, 'stamps') = 'stamps';
+    END IF;
   END IF;
 
   RETURN jsonb_build_object(
@@ -88,7 +96,8 @@ BEGIN
     'total_stamps', v_total_active,
     'stamps_per_cycle', v_settings.stamps_per_cycle,
     'available_rewards', COALESCE(v_available_rewards, '[]'::jsonb),
-    'new_cycle', v_new_cycle
+    'new_cycle', v_new_cycle,
+    'loyalty_upgraded', v_new_cycle AND v_card.customer_id IS NOT NULL
   );
 
 EXCEPTION WHEN OTHERS THEN

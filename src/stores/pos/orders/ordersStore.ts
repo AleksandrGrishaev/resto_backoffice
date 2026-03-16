@@ -205,6 +205,26 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       const orderData =
         typeof typeOrData === 'string' ? { type: typeOrData, tableId, customerName } : typeOrData
 
+      // ✅ Guard: if a dine_in order already exists for this table, select it instead
+      if (orderData.type === 'dine_in' && orderData.tableId) {
+        const existingOrder = orders.value.find(
+          o =>
+            o.tableId === orderData.tableId &&
+            !['cancelled', 'served', 'collected', 'delivered'].includes(o.status)
+        )
+        if (existingOrder) {
+          console.log(
+            '⚠️ [ordersStore] Order already exists for table, selecting instead of creating',
+            {
+              tableId: orderData.tableId,
+              existingOrderId: existingOrder.id
+            }
+          )
+          selectOrder(existingOrder.id)
+          return { success: true, data: existingOrder }
+        }
+      }
+
       const response = await ordersService.createOrder(orderData)
 
       if (response.success && response.data) {
@@ -902,12 +922,12 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
-   * Delete an empty order (for takeaway/delivery only)
+   * Delete an empty order
    *
-   * Conditions:
-   * 1. Order must be takeaway or delivery (not dine_in)
-   * 2. Order must have no items or only draft/cancelled items
-   * 3. Order must not have any paid items
+   * Conditions (via canDeleteOrder):
+   * - Takeaway/delivery with no active items
+   * - Website dine_in with no active items
+   * - Any empty draft dine_in order (ghost order cleanup)
    */
   async function deleteOrder(orderId: string): Promise<ServiceResponse<void>> {
     try {
@@ -917,37 +937,29 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         return { success: false, error: 'Order not found' }
       }
 
-      // Only allow deleting takeaway/delivery orders
-      if (order.type === 'dine_in') {
+      if (!canDeleteOrder(order)) {
         return {
           success: false,
-          error: 'Cannot delete dine-in orders. Use table management instead.'
-        }
-      }
-
-      // Check if order has any non-deletable items
-      const allItems = order.bills.flatMap(bill => bill.items)
-      const hasActiveItems = allItems.some(
-        item => !['draft', 'cancelled'].includes(item.status) || item.paymentStatus === 'paid'
-      )
-
-      if (hasActiveItems) {
-        return {
-          success: false,
-          error: 'Cannot delete order with active or paid items'
+          error: 'Cannot delete this order. It may have active or paid items.'
         }
       }
 
       console.log('🗑️ [ordersStore] Deleting order:', {
         orderId,
         orderType: order.type,
-        itemsCount: allItems.length
+        tableId: order.tableId,
+        itemsCount: order.bills.flatMap(b => b.items).length
       })
 
       // Delete from service (Supabase + localStorage)
       const deleteResponse = await ordersService.deleteOrder(orderId)
       if (!deleteResponse.success) {
         return deleteResponse
+      }
+
+      // Free the table if this was a dine_in order with a table
+      if (order.type === 'dine_in' && order.tableId) {
+        await tablesStore.freeTable(order.tableId)
       }
 
       // Remove from local state
@@ -1135,18 +1147,93 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
+   * Cancel an entire order via server-side RPC (staff action)
+   * Works for any order type including dine_in with no table
+   */
+  async function cancelOrder(orderId: string, reason: string): Promise<ServiceResponse<void>> {
+    try {
+      const order = orders.value.find(o => o.id === orderId)
+      if (!order) {
+        return { success: false, error: 'Order not found' }
+      }
+
+      const finalStatuses = ['cancelled', 'served', 'collected', 'delivered']
+      if (finalStatuses.includes(order.status)) {
+        return { success: false, error: `Order is already in final status: ${order.status}` }
+      }
+
+      console.log('🚫 [ordersStore] Cancelling order:', { orderId, reason })
+
+      const { data, error: rpcError } = await supabase.rpc('staff_cancel_order', {
+        p_order_id: orderId,
+        p_reason: reason
+      })
+
+      if (rpcError) {
+        return { success: false, error: rpcError.message }
+      }
+
+      if (!data?.success) {
+        return { success: false, error: data?.error || 'RPC failed' }
+      }
+
+      // Update local state
+      order.status = 'cancelled'
+      order.updatedAt = new Date().toISOString()
+      for (const bill of order.bills) {
+        for (const item of bill.items) {
+          if (item.status !== 'cancelled') {
+            item.status = 'cancelled'
+            item.cancelledAt = new Date().toISOString()
+            item.cancellationReason = 'staff_cancelled' as any
+            item.cancellationNotes = reason
+          }
+        }
+      }
+
+      // If table was freed by the RPC, update local table state
+      if (data.tableFreed && order.tableId) {
+        await tablesStore.freeTable(order.tableId)
+      }
+
+      // Clear current order if this was selected
+      if (currentOrderId.value === orderId) {
+        currentOrderId.value = null
+        activeBillId.value = null
+      }
+
+      console.log('✅ [ordersStore] Order cancelled:', {
+        orderId,
+        cancelledItems: data.cancelledItems
+      })
+
+      return { success: true }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to cancel order'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  /**
    * Check if order can be deleted
-   * Only takeaway/delivery orders with no active/paid items can be deleted
+   * - Takeaway/delivery with no active items
+   * - Website dine_in with no active items
+   * - Any dine_in draft order with zero items (empty ghost order)
    */
   function canDeleteOrder(order: PosOrder): boolean {
-    // Only takeaway/delivery can be deleted
-    if (order.type === 'dine_in') return false
-
-    // Check if order has any non-deletable items
     const allItems = order.bills.flatMap(bill => bill.items)
     const hasActiveItems = allItems.some(
       item => !['draft', 'cancelled'].includes(item.status) || item.paymentStatus === 'paid'
     )
+
+    // Empty draft dine_in orders can always be deleted (ghost order cleanup)
+    if (order.type === 'dine_in' && order.status === 'draft' && allItems.length === 0) {
+      return true
+    }
+
+    // Dine_in with items: only allow for website orders
+    if (order.type === 'dine_in' && order.source !== 'website') return false
 
     return !hasActiveItems
   }
@@ -2471,6 +2558,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     closeOrder,
     releaseTable,
     completeOrder,
+    cancelOrder,
     deleteOrder,
     updateOrder,
     recalculateOrderTotals,

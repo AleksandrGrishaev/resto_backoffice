@@ -72,6 +72,7 @@ export interface AddStampsResult {
   stampsPerCycle: number
   availableRewards: StampReward[]
   newCycle: boolean
+  loyaltyUpgraded?: boolean
   error?: string
 }
 
@@ -82,6 +83,7 @@ export interface CashbackResult {
   tier: string
   newBalance: number
   totalVisits: number
+  skipped?: boolean
   error?: string
 }
 

@@ -28,9 +28,9 @@
           <!-- Online Order Details Bar -->
           <div v-if="currentOrder.source === 'website'" class="online-order-bar">
             <div class="online-order-bar-content">
-              <div v-if="currentOrder.customerName" class="online-field">
+              <div class="online-field">
                 <v-icon size="14" class="mr-1">mdi-account</v-icon>
-                {{ currentOrder.customerName }}
+                {{ currentOrder.customerName || 'Guest' }}
               </div>
               <div v-if="currentOrder.customerPhone" class="online-field">
                 <v-icon size="14" class="mr-1">mdi-phone</v-icon>
@@ -110,6 +110,7 @@
             @checkout="handleCheckoutFromActions"
             @release-table="handleReleaseTable"
             @complete-order="handleCompleteOrder"
+            @cancel-order="showCancelOrderDialog = true"
           />
         </div>
       </div>
@@ -252,6 +253,14 @@
       @cancel="handleTableSelectionCancel"
     />
 
+    <!-- Cancel Order Dialog -->
+    <CancelOrderDialog
+      v-model="showCancelOrderDialog"
+      :order="currentOrder"
+      @confirm="handleCancelOrderConfirm"
+      @cancel="showCancelOrderDialog = false"
+    />
+
     <!-- Print Receipt Dialog (after payment) -->
     <PrintReceiptDialog
       v-model="showPrintReceiptDialog"
@@ -308,6 +317,7 @@ import AddNoteDialog from './dialogs/AddNoteDialog.vue'
 import ItemDiscountDialog from './dialogs/ItemDiscountDialog.vue'
 import BillItemCancelDialog from './dialogs/BillItemCancelDialog.vue'
 import MoveItemsDialog from './dialogs/MoveItemsDialog.vue'
+import CancelOrderDialog from './dialogs/CancelOrderDialog.vue'
 import OrderTypeDialog from './dialogs/OrderTypeDialog.vue'
 import TableSelectionDialog from './dialogs/TableSelectionDialog.vue'
 import CancellationRequestBanner from './components/CancellationRequestBanner.vue'
@@ -518,6 +528,9 @@ const moveDialogData = computed(() => {
 
 // Order Type Dialog State
 const showOrderTypeDialog = ref(false)
+
+// Cancel Order Dialog State
+const showCancelOrderDialog = ref(false)
 
 // Table Selection Dialog State
 const showTableSelectionDialog = ref(false)
@@ -1807,8 +1820,9 @@ async function processLoyaltyAfterPayment(orderId: string, paidAmount: number): 
     }
   }
 
-  // 2. Apply cashback for digital loyalty customer (only if loyalty enabled)
-  if (order.customerId && !loyaltyDisabled) {
+  // 2. Apply cashback for digital loyalty customer (only if loyalty enabled AND on cashback program)
+  const onCashbackProgram = customer?.loyaltyProgram === 'cashback'
+  if (order.customerId && !loyaltyDisabled && onCashbackProgram) {
     try {
       const result = await loyaltyStore.applyCashback(order.customerId, orderId, paidAmount)
       if (result.success) {
@@ -1824,6 +1838,8 @@ async function processLoyaltyAfterPayment(orderId: string, paidAmount: number): 
     }
   } else if (loyaltyDisabled) {
     console.log('🎯 Cashback skipped: loyalty accrual disabled for', customer?.name)
+  } else if (!onCashbackProgram && order.customerId) {
+    console.log('🎯 Cashback skipped: customer on stamps program', customer?.name)
   }
 
   // 3. Add stamps for stamp card (also skip if loyalty disabled)
@@ -1840,6 +1856,11 @@ async function processLoyaltyAfterPayment(orderId: string, paidAmount: number): 
         )
         if (result.newCycle) {
           showSuccess('Stamp cycle complete! New cycle started.')
+          // Customer auto-upgraded to cashback — refresh to get new loyalty_program
+          if (order.customerId) {
+            await customersStore.refreshCustomer(order.customerId)
+            console.log('🎯 Customer upgraded to cashback program after stamp cycle completion')
+          }
         }
       }
     } catch (err) {
@@ -2424,6 +2445,30 @@ const handleDeleteOrder = async (): Promise<void> => {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to delete order'
+    showError(message)
+  } finally {
+    loading.value.actions = false
+    loadingMessage.value = ''
+  }
+}
+
+const handleCancelOrderConfirm = async (reason: string): Promise<void> => {
+  if (!currentOrder.value) return
+
+  try {
+    loading.value.actions = true
+    loadingMessage.value = 'Cancelling order...'
+    showCancelOrderDialog.value = false
+
+    const result = await ordersStore.cancelOrder(currentOrder.value.id, reason)
+
+    if (result.success) {
+      showSuccess('Order cancelled successfully')
+    } else {
+      showError(result.error || 'Failed to cancel order')
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to cancel order'
     showError(message)
   } finally {
     loading.value.actions = false

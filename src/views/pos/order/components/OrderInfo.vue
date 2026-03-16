@@ -104,7 +104,7 @@
               <v-list-item-title>Edit Customer Info</v-list-item-title>
             </v-list-item>
 
-            <!-- Delete Order (takeaway/delivery only when empty) -->
+            <!-- Delete Order (empty orders: takeaway/delivery, or empty draft dine_in) -->
             <template v-if="canDeleteCurrentOrder">
               <v-divider />
               <v-list-item prepend-icon="mdi-delete" class="text-error" @click="handleDeleteOrder">
@@ -229,7 +229,7 @@ const hasItemsInOrder = computed((): boolean => {
   return ordersStore.hasItemsInOrder(props.order)
 })
 
-// Check if current order can be deleted (takeaway/delivery only when empty)
+// Check if current order can be deleted (empty draft orders, including dine_in)
 const canDeleteCurrentOrder = computed((): boolean => {
   if (!props.order) return false
   return ordersStore.canDeleteOrder(props.order)

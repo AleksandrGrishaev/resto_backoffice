@@ -21,6 +21,7 @@ export function mapCustomerFromDb(row: any): Customer {
     lastVisitAt: row.last_visit_at || null,
     notes: row.notes || null,
     personalDiscount: Number(row.personal_discount) || 0,
+    loyaltyProgram: row.loyalty_program || 'stamps',
     disableLoyaltyAccrual: row.disable_loyalty_accrual || false,
     discountNote: row.discount_note || null,
     status: row.status || 'active',
@@ -39,6 +40,7 @@ export function mapCustomerToDb(customer: Partial<Customer>): Record<string, any
   if (customer.tierUpdatedAt !== undefined) result.tier_updated_at = customer.tierUpdatedAt
   if (customer.notes !== undefined) result.notes = customer.notes
   if (customer.personalDiscount !== undefined) result.personal_discount = customer.personalDiscount
+  if (customer.loyaltyProgram !== undefined) result.loyalty_program = customer.loyaltyProgram
   if (customer.disableLoyaltyAccrual !== undefined)
     result.disable_loyalty_accrual = customer.disableLoyaltyAccrual
   if (customer.discountNote !== undefined) result.discount_note = customer.discountNote

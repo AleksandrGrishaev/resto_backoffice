@@ -32,6 +32,20 @@ BEGIN
     );
   END IF;
 
+  -- 1b. Check loyalty_program — stamps-only customers don't earn cashback
+  IF COALESCE(v_customer.loyalty_program, 'stamps') = 'stamps' THEN
+    RETURN jsonb_build_object(
+      'success', true,
+      'cashback', 0,
+      'cashback_pct', 0,
+      'tier', v_customer.tier,
+      'new_balance', v_customer.loyalty_balance,
+      'total_visits', v_customer.total_visits,
+      'skipped', true,
+      'reason', 'Customer is on stamps program'
+    );
+  END IF;
+
   -- 2. Get settings and find cashback % for tier
   SELECT * INTO v_settings FROM loyalty_settings LIMIT 1;
 
