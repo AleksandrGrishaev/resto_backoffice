@@ -26,6 +26,16 @@ export const DISCOUNT_REASON_OPTIONS: Array<{
     description: 'Discount for loyalty card holders'
   },
   {
+    value: 'loyalty_points',
+    label: DISCOUNT_REASON_LABELS.loyalty_points,
+    description: 'Points redeemed from cashback balance'
+  },
+  {
+    value: 'stamp_card_reward',
+    label: DISCOUNT_REASON_LABELS.stamp_card_reward,
+    description: 'Free item from stamp card (up to max discount)'
+  },
+  {
     value: 'promo_review',
     label: DISCOUNT_REASON_LABELS.promo_review,
     description: 'Promotional discount for customer review or feedback'

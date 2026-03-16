@@ -117,6 +117,16 @@
         >
           {{ props.item.isActive ? 'Archive' : 'Restore' }}
         </v-btn>
+        <v-btn
+          v-if="isEditing && props.item"
+          color="info"
+          variant="outlined"
+          prepend-icon="mdi-swap-horizontal"
+          class="ml-2"
+          @click="showConvertDialog = true"
+        >
+          {{ type === 'recipe' ? 'To Preparation' : 'To Recipe' }}
+        </v-btn>
         <v-spacer />
         <v-btn
           v-if="!isEditing"
@@ -143,6 +153,15 @@
         </v-btn>
       </v-card-actions>
     </v-card>
+
+    <!-- Convert Entity Dialog -->
+    <convert-entity-dialog
+      v-if="isEditing && props.item"
+      v-model="showConvertDialog"
+      :item="props.item"
+      :from-type="type"
+      @converted="handleConverted"
+    />
   </v-dialog>
 </template>
 
@@ -166,6 +185,7 @@ import RecipeCostPreviewWidget from './widgets/RecipeCostPreviewWidget.vue'
 import RecipeComponentsEditorWidget from './widgets/RecipeComponentsEditorWidget.vue'
 import UsedInWidget from './widgets/UsedInWidget.vue' // ⭐ PHASE 1: Recipe Nesting
 import EntityHistoryTab from '@/views/kitchen/constructor/components/EntityHistoryTab.vue'
+import ConvertEntityDialog from './ConvertEntityDialog.vue'
 
 interface Props {
   modelValue: boolean
@@ -178,6 +198,7 @@ interface Emits {
   (e: 'update:modelValue', value: boolean): void
   (e: 'saved', item: Recipe | Preparation): void
   (e: 'archive', item: Recipe | Preparation): void
+  (e: 'converted', payload: { newId: string; newType: 'recipe' | 'preparation' }): void
 }
 
 const props = defineProps<Props>()
@@ -190,6 +211,7 @@ const loading = ref(false)
 const savingDraft = ref(false)
 const errorMessage = ref('')
 const activeTab = ref('general')
+const showConvertDialog = ref(false)
 
 const canSaveDraft = computed(() => {
   return formData.value.name?.trim().length > 0
@@ -397,6 +419,11 @@ function handleArchive() {
   }
 }
 
+function handleConverted(payload: { newId: string; newType: 'recipe' | 'preparation' }) {
+  dialogModel.value = false
+  emit('converted', payload)
+}
+
 function handleCancel() {
   errorMessage.value = ''
   dialogModel.value = false
@@ -528,7 +555,7 @@ watch(dialogModel, async newVal => {
         const prep = props.item as Preparation
         formData.value = {
           name: prep.name,
-          code: prep.code,
+          code: prep.code || generateNextCode('preparation'),
           description: prep.description || '',
           category: prep.type,
           department: prep.department, // ✅ ADD: Include department
@@ -554,7 +581,7 @@ watch(dialogModel, async newVal => {
         const recipe = props.item as Recipe
         formData.value = {
           name: recipe.name,
-          code: recipe.code || '',
+          code: recipe.code || generateNextCode('recipe'),
           description: recipe.description || '',
           category: recipe.category,
           department: recipe.department || 'kitchen', // ✅ NEW: Include department with fallback

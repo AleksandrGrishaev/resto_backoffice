@@ -21,6 +21,9 @@ export type ShiftAlertType =
   | 'cash_discrepancy' // Cash count doesn't match expected
   | 'large_refund' // Refund above threshold
   | 'suspicious_activity' // Other suspicious patterns
+  | 'expense_cancelled' // Expense cancelled during shift
+  | 'expense_modified' // Expense modified during shift
+  | 'post_shift_correction' // Expense corrected after shift close
 
 // Account-related alert types
 export type AccountAlertType =
@@ -193,6 +196,9 @@ export const ALERT_TYPE_LABELS: Record<AlertType, string> = {
   cash_discrepancy: 'Cash Discrepancy',
   large_refund: 'Large Refund',
   suspicious_activity: 'Suspicious Activity',
+  expense_cancelled: 'Expense Cancelled',
+  expense_modified: 'Expense Modified',
+  post_shift_correction: 'Post-Shift Correction',
   // Account
   manual_correction: 'Manual Correction',
   balance_discrepancy: 'Balance Discrepancy',

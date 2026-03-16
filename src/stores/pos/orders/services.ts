@@ -316,6 +316,7 @@ export class OrdersService {
         billId,
         menuItemId: menuItem.id,
         menuItemName: menuItem.name,
+        categoryId: menuItem.categoryId,
         variantId: selectedVariant.id,
         variantName: selectedVariant.name,
         quantity,
@@ -1113,6 +1114,93 @@ export class OrdersService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to update order'
+      }
+    }
+  }
+
+  /**
+   * Update only order-level fields (without re-upserting all items)
+   * Used when only order metadata changed (totals, payment status, etc.)
+   */
+  async updateOrderOnly(order: PosOrder): Promise<ServiceResponse<PosOrder>> {
+    try {
+      order.updatedAt = TimeUtils.getCurrentLocalISO()
+
+      if (this.isSupabaseAvailable()) {
+        try {
+          const supabaseRow = toSupabaseUpdate(order)
+          await executeSupabaseMutation(async () => {
+            const { error } = await supabase.from('orders').update(supabaseRow).eq('id', order.id)
+            if (error) throw error
+          }, 'OrdersService.updateOrderOnly')
+
+          console.log('✅ Order metadata updated in Supabase:', order.orderNumber)
+        } catch (error) {
+          console.error('❌ Supabase order metadata update failed:', extractErrorDetails(error))
+        }
+      }
+
+      // Update localStorage (full order with bills/items for offline support)
+      const storedOrders = localStorage.getItem(this.ORDERS_KEY)
+      const allOrders: PosOrder[] = storedOrders ? JSON.parse(storedOrders) : []
+
+      const orderIndex = allOrders.findIndex(o => o.id === order.id)
+      if (orderIndex !== -1) {
+        allOrders[orderIndex] = { ...order, bills: [] }
+      } else {
+        allOrders.push({ ...order, bills: [] })
+      }
+      localStorage.setItem(this.ORDERS_KEY, JSON.stringify(allOrders))
+
+      for (const bill of order.bills) {
+        const allBills = this.getAllStoredBills()
+        const billIndex = allBills.findIndex(b => b.id === bill.id)
+        if (billIndex !== -1) {
+          allBills[billIndex] = { ...bill, items: [] }
+        } else {
+          allBills.push({ ...bill, items: [] })
+        }
+        localStorage.setItem(this.BILLS_KEY, JSON.stringify(allBills))
+
+        const allItems = this.getAllStoredItems()
+        const filteredItems = allItems.filter(item => item.billId !== bill.id)
+        filteredItems.push(...bill.items)
+        await this.saveItemsSafely(filteredItems)
+      }
+
+      return { success: true, data: order }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update order metadata'
+      }
+    }
+  }
+
+  /**
+   * Update only payment-related fields on specific items
+   * Avoids full item upsert which triggers unnecessary realtime events
+   */
+  async updateItemsPaymentStatus(
+    items: Array<{ id: string; paymentStatus: string; paidByPaymentIds: string[] }>
+  ): Promise<void> {
+    if (!this.isSupabaseAvailable() || items.length === 0) return
+
+    for (const item of items) {
+      try {
+        const { error } = await supabase
+          .from('order_items')
+          .update({
+            payment_status: item.paymentStatus,
+            paid_by_payment_ids: item.paidByPaymentIds
+          })
+          .eq('id', item.id)
+
+        if (error) {
+          console.error('❌ Item payment status update failed:', item.id, error.message)
+        }
+      } catch (err) {
+        console.error('❌ Item payment status update error:', item.id, err)
       }
     }
   }

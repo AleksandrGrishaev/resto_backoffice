@@ -157,6 +157,16 @@ export const useChannelsStore = defineStore('channels', () => {
   // Actions
   async function initialize() {
     if (initialized.value) return
+    await loadAll()
+  }
+
+  async function refresh() {
+    DebugUtils.info(MODULE_NAME, '🔄 Force refreshing channels data...')
+    initialized.value = false
+    await loadAll()
+  }
+
+  async function loadAll() {
     isLoading.value = true
 
     try {
@@ -178,14 +188,14 @@ export const useChannelsStore = defineStore('channels', () => {
         DebugUtils.error(MODULE_NAME, 'Failed to load taxes (non-critical)', { taxError })
       }
 
-      DebugUtils.store(MODULE_NAME, 'Initialized', {
+      DebugUtils.store(MODULE_NAME, 'Refreshed', {
         channels: loadedChannels.length,
         prices: loadedPrices.length,
         menuItems: loadedItems.length,
         taxes: availableTaxes.value.length
       })
     } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Initialization failed', { error })
+      DebugUtils.error(MODULE_NAME, 'Load failed', { error })
       throw error
     } finally {
       isLoading.value = false
@@ -354,6 +364,7 @@ export const useChannelsStore = defineStore('channels', () => {
 
     // Actions
     initialize,
+    refresh,
     loadAvailableTaxes,
     createChannel,
     updateChannel,

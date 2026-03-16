@@ -7,6 +7,8 @@ import type { BaseEntity } from '@/types/common'
  */
 export type DiscountReason =
   | 'loyalty_card' // Loyalty card discount
+  | 'loyalty_points' // Loyalty points redemption (cashback balance)
+  | 'stamp_card_reward' // Stamp card reward (free item up to max discount)
   | 'promo_review' // Promo review/feedback discount
   | 'compliment' // Complimentary discount
   | 'senior_agreement' // Senior/special agreement discount
@@ -19,6 +21,8 @@ export type DiscountReason =
  */
 export const DISCOUNT_REASON_LABELS: Record<DiscountReason, string> = {
   loyalty_card: 'Loyalty Card',
+  loyalty_points: 'Loyalty Points',
+  stamp_card_reward: 'Stamp Card Reward',
   promo_review: 'Promo Review',
   compliment: 'Compliment',
   senior_agreement: 'Senior Agreement',
@@ -68,6 +72,7 @@ export interface DiscountEvent extends BaseEntity {
   billId?: string // For bill discounts or if item is in a bill
   itemId?: string // For item discounts
   shiftId?: string // Current shift when discount was applied
+  stampCardId?: string // Stamp card that granted the reward (for stamp_card_reward reason)
 
   // Calculated amounts
   originalAmount: number // Original price before discount

@@ -1,6 +1,6 @@
--- Migration: 164_receipt_corrections
--- Description: Receipt correction system - table + RPC function
--- Date: 2026-03-06
+-- Migration: 164_receipt_corrections (updated: 199_add_item_package_correction_type)
+-- Description: Receipt correction system - table + RPC function + package corrections
+-- Date: 2026-03-06, updated 2026-03-10
 
 -- =============================================
 -- TABLE: supplierstore_receipt_corrections
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS supplierstore_receipt_corrections (
   receipt_id TEXT NOT NULL REFERENCES supplierstore_receipts(id),
   order_id TEXT NOT NULL REFERENCES supplierstore_orders(id),
 
-  correction_type TEXT NOT NULL CHECK (correction_type IN ('item_quantity', 'item_price', 'supplier_change', 'full_reversal')),
+  correction_type TEXT NOT NULL CHECK (correction_type IN ('item_quantity', 'item_price', 'item_package', 'supplier_change', 'full_reversal')),
   reason TEXT NOT NULL,
   corrected_by TEXT,
 

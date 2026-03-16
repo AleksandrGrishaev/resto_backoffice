@@ -155,6 +155,7 @@ export type ExpenseOperationStatus =
   | 'confirmed' // Подтверждено
   | 'rejected' // Отклонено
   | 'completed' // Завершено (для прямых расходов)
+  | 'cancelled' // Отменено (кассиром или менеджером)
 
 /**
  * Расходная операция в смене
@@ -196,6 +197,58 @@ export interface ShiftExpenseOperation extends BaseEntity {
   syncStatus: SyncStatus
   lastSyncAt?: string
   notes?: string
+
+  // Cancellation / Edit tracking
+  cancelledAt?: string
+  cancelledBy?: TransactionPerformer
+  cancelReason?: string
+  reversalTransactionId?: string // ID обратной транзакции при отмене
+
+  // Edit history
+  editHistory?: ExpenseEditRecord[]
+  lastEditedAt?: string
+  lastEditedBy?: TransactionPerformer
+}
+
+/**
+ * Запись об изменении расхода
+ */
+export interface ExpenseEditRecord {
+  editedAt: string
+  editedBy: TransactionPerformer
+  changes: {
+    field: string
+    oldValue: any
+    newValue: any
+  }[]
+  reason?: string
+  reversalTransactionId?: string // ID reversal транзакции (если amount/category менялись)
+}
+
+/**
+ * DTO для отмены расхода
+ */
+export interface CancelExpenseDto {
+  shiftId: string
+  expenseId: string
+  reason: string
+  performedBy: TransactionPerformer
+}
+
+/**
+ * DTO для редактирования расхода
+ */
+export interface EditExpenseDto {
+  shiftId: string
+  expenseId: string
+  amount?: number
+  description?: string
+  category?: string
+  counteragentId?: string
+  counteragentName?: string
+  notes?: string
+  reason: string // Причина изменения (обязательно)
+  performedBy: TransactionPerformer
 }
 
 /**

@@ -93,6 +93,21 @@ export { default as MenuItemExportTemplate } from './templates/MenuItemExportTem
 export { default as CombinationsExportTemplate } from './templates/CombinationsExportTemplate.vue'
 export { default as InventorySheetTemplate } from './templates/InventorySheetTemplate.vue'
 export { default as PurchaseOrderTemplate } from './templates/PurchaseOrderTemplate.vue'
+export { default as ModifiersExportTemplate } from './templates/ModifiersExportTemplate.vue'
+export type {
+  ModifiersExportData,
+  ModifierGroupExportData,
+  ModifierOptionExportData,
+  ExportTreeNode
+} from './templates/ModifiersExportTemplate.vue'
+export { default as CatalogExportTemplate } from './templates/CatalogExportTemplate.vue'
+export type {
+  CatalogExportData,
+  CatalogExportItem,
+  CatalogExportVariant,
+  CatalogExportModifierGroup,
+  CatalogExportModifierOption
+} from './templates/CatalogExportTemplate.vue'
 
 // Utils
 export {

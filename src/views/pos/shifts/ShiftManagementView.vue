@@ -8,6 +8,10 @@
       </v-btn>
       <h1>Shift Management</h1>
       <div class="header-actions">
+        <v-btn icon variant="text" color="success" :loading="refreshing" @click="handleRefreshAll">
+          <v-icon>mdi-refresh</v-icon>
+          <v-tooltip activator="parent" location="bottom">Refresh shift data</v-tooltip>
+        </v-btn>
         <!-- ✅ Sprint 5: Hide End Shift button in read-only mode -->
         <v-btn
           v-if="currentShift && !readOnly"
@@ -187,7 +191,12 @@
 
         <!-- Expenses List -->
         <div class="mt-3">
-          <ShiftExpensesList :expenses="shiftExpenses" />
+          <ShiftExpensesList
+            :expenses="shiftExpenses"
+            :read-only="readOnly"
+            @edit-expense="handleEditExpenseClick"
+            @cancel-expense="handleCancelExpenseClick"
+          />
         </div>
       </div>
 
@@ -306,6 +315,24 @@
       @transfer-confirmed="handleTransferConfirmed"
       @transfer-rejected="handleTransferRejected"
     />
+
+    <!-- Cancel Expense Dialog -->
+    <CancelExpenseDialog
+      v-if="currentShift"
+      v-model="showCancelExpenseDialog"
+      :expense="selectedExpense"
+      :shift-id="currentShift.id"
+      @expense-cancelled="handleExpenseCancelled"
+    />
+
+    <!-- Edit Expense Dialog -->
+    <EditExpenseDialog
+      v-if="currentShift"
+      v-model="showEditExpenseDialog"
+      :expense="selectedExpense"
+      :shift-id="currentShift.id"
+      @expense-edited="handleExpenseEdited"
+    />
   </div>
 </template>
 
@@ -318,12 +345,15 @@ import { useAccountStore } from '@/stores/account'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import type { PosShift, PosPayment } from '@/stores/pos/types'
 import type { PendingPayment } from '@/stores/account/types'
+import type { ShiftExpenseOperation } from '@/stores/pos/shifts/types'
 import StartShiftDialog from './dialogs/StartShiftDialog.vue'
 import EndShiftDialog from './dialogs/EndShiftDialog.vue'
 import PaymentDetailsDialog from './dialogs/PaymentDetailsDialog.vue'
 import ExpenseOperationDialog from './dialogs/ExpenseOperationDialog.vue'
 import SupplierPaymentConfirmDialog from './dialogs/SupplierPaymentConfirmDialog.vue'
 import TransferConfirmDialog from './dialogs/TransferConfirmDialog.vue'
+import CancelExpenseDialog from './dialogs/CancelExpenseDialog.vue'
+import EditExpenseDialog from './dialogs/EditExpenseDialog.vue'
 import ShiftExpensesList from './components/ShiftExpensesList.vue'
 import PendingSupplierPaymentsList from './components/PendingSupplierPaymentsList.vue'
 import ShiftTransfersList from './components/ShiftTransfersList.vue'
@@ -358,6 +388,7 @@ const showEndShiftDialog = ref(false)
 const showPaymentDetailsDialog = ref(false)
 const selectedPaymentId = ref<string | null>(null)
 const loading = ref(false) // ✅ Sprint 8: Loading state for pending payments refresh
+const refreshing = ref(false)
 
 // Sprint 3: Expense operations state
 const showExpenseDialog = ref(false)
@@ -367,6 +398,11 @@ const selectedPayment = ref<PendingPayment | null>(null)
 // Sprint 10: Transfer confirmation state
 const showTransferConfirmDialog = ref(false)
 const selectedTransfer = ref<Transaction | null>(null)
+
+// Expense edit/cancel state
+const showCancelExpenseDialog = ref(false)
+const showEditExpenseDialog = ref(false)
+const selectedExpense = ref<ShiftExpenseOperation | null>(null)
 
 // Computed
 // ✅ Sprint 5: Support shiftId prop for viewing specific shift
@@ -672,6 +708,27 @@ const handleExpenseCreated = async (expenseId: string) => {
   }
 }
 
+// Expense edit/cancel handlers
+const handleEditExpenseClick = (expense: ShiftExpenseOperation) => {
+  selectedExpense.value = expense
+  showEditExpenseDialog.value = true
+}
+
+const handleCancelExpenseClick = (expense: ShiftExpenseOperation) => {
+  selectedExpense.value = expense
+  showCancelExpenseDialog.value = true
+}
+
+const handleExpenseEdited = () => {
+  console.log('✅ Expense edited')
+  selectedExpense.value = null
+}
+
+const handleExpenseCancelled = () => {
+  console.log('✅ Expense cancelled')
+  selectedExpense.value = null
+}
+
 const handleConfirmPaymentClick = (payment: PendingPayment) => {
   selectedPayment.value = payment
   showConfirmPaymentDialog.value = true
@@ -716,6 +773,31 @@ const handleTransferRejected = async (transactionId: string) => {
   selectedTransfer.value = null
 }
 
+const handleRefreshAll = async () => {
+  refreshing.value = true
+  try {
+    // Reset paymentsStore initialized flag to force re-fetch
+    paymentsStore.initialized = false
+
+    await Promise.all([
+      shiftsStore.loadShifts(),
+      paymentsStore.initialize().catch(() => {}),
+      shiftsStore.loadPendingPayments().catch(() => {}),
+      // Force-refresh account payments (bypass 2-min cache)
+      accountStore.fetchPayments(true).catch(() => {}),
+      // Force-refresh cash account transactions
+      cashAccount.value
+        ? accountStore.fetchTransactions(cashAccount.value.id).catch(() => {})
+        : Promise.resolve()
+    ])
+    console.log('✅ Shift data refreshed (full cache bypass)')
+  } catch (error) {
+    console.error('❌ Failed to refresh shift data:', error)
+  } finally {
+    refreshing.value = false
+  }
+}
+
 // ✅ Sprint 8: Refresh pending payments manually
 const refreshPendingPayments = async () => {
   loading.value = true
@@ -747,6 +829,18 @@ onMounted(async () => {
 
   // ✅ Sprint 8: Load pending payments ALWAYS (even without active shift)
   await shiftsStore.loadPendingPayments()
+
+  // ✅ FIX: Force-refresh cash account transactions on mount
+  // Without this, transfers created from backoffice are invisible
+  // because POS uses stale in-memory cache
+  if (cashAccount.value) {
+    try {
+      await accountStore.fetchTransactions(cashAccount.value.id)
+      console.log('✅ [ShiftManagementView] Cash account transactions refreshed')
+    } catch (err) {
+      console.warn('⚠️ [ShiftManagementView] Failed to refresh cash transactions:', err)
+    }
+  }
 
   if (currentShift.value) {
     // Start expense operations sync (polling every 30 sec)

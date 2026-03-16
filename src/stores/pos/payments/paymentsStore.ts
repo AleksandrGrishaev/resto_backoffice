@@ -681,8 +681,25 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       }
     }
 
-    // 🆕 Recalculate order totals and statuses (includes order.paymentStatus)
-    await ordersStore.recalculateOrderTotals(orderId)
+    // Recalculate order totals and statuses (includes order.paymentStatus)
+    // skipItemUpsert: only update order-level fields, don't re-upsert all items
+    // This prevents unnecessary realtime events that cause kitchen display issues
+    await ordersStore.recalculateOrderTotals(orderId, { skipItemUpsert: true })
+
+    // Targeted update: only payment fields on affected items
+    const paidItems: Array<{ id: string; paymentStatus: string; paidByPaymentIds: string[] }> = []
+    for (const bill of order.bills) {
+      for (const item of bill.items) {
+        if (itemIds.includes(item.id)) {
+          paidItems.push({
+            id: item.id,
+            paymentStatus: item.paymentStatus,
+            paidByPaymentIds: item.paidByPaymentIds || []
+          })
+        }
+      }
+    }
+    await ordersStore.updateItemsPaymentStatus(paidItems)
 
     console.log('💳 Order payment status updated:', {
       orderId,
@@ -754,8 +771,25 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       tableId: order.tableId
     })
 
-    // 🆕 Recalculate order totals (but we'll restore status if it was completed)
-    await ordersStore.recalculateOrderTotals(orderId)
+    // Recalculate order totals (but we'll restore status if it was completed)
+    // skipItemUpsert: avoid triggering kitchen realtime events
+    await ordersStore.recalculateOrderTotals(orderId, { skipItemUpsert: true })
+
+    // Targeted update: only payment fields on affected items
+    const refundedItems: Array<{ id: string; paymentStatus: string; paidByPaymentIds: string[] }> =
+      []
+    for (const bill of order.bills) {
+      for (const item of bill.items) {
+        if (itemIds.includes(item.id)) {
+          refundedItems.push({
+            id: item.id,
+            paymentStatus: item.paymentStatus,
+            paidByPaymentIds: item.paidByPaymentIds || []
+          })
+        }
+      }
+    }
+    await ordersStore.updateItemsPaymentStatus(refundedItems)
 
     // FIX: If order was completed, RESTORE its status and clear table link
     // Refund should not reopen a closed order onto a table
@@ -792,8 +826,8 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         order.tableId = undefined
       }
 
-      // Save the corrected order state
-      await ordersStore.updateOrder(order)
+      // Save the corrected order state (order-level only)
+      await ordersStore.updateOrderOnly(order)
     }
 
     console.log('🔍 REFUND: Order state after fix:', {

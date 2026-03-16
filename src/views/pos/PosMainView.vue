@@ -62,11 +62,7 @@
 
       <!-- Order Section -->
       <template #order>
-        <OrderSection
-          ref="orderSectionRef"
-          :current-order="currentOrder"
-          @order-changed="handleOrderChanged"
-        />
+        <OrderSection ref="orderSectionRef" @order-changed="handleOrderChanged" />
       </template>
     </PosLayout>
 
@@ -304,6 +300,14 @@ const initializePOS = async (): Promise<void> => {
 
     isInitialized.value = true
     DebugUtils.debug(MODULE_NAME, 'POS system initialized successfully')
+
+    // Register cancellation request notification handler
+    posStore.onCancellationRequested(order => {
+      showNotification(
+        `Customer requests cancellation for Order #${order.orderNumber}${order.reason ? ': ' + order.reason : ''}`,
+        'warning'
+      )
+    })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     initError.value = errorMessage

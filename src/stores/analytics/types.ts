@@ -655,11 +655,23 @@ export interface ProductVarianceDetail {
 // ============================================
 
 /**
- * Opening stock detail from inventory_snapshots
+ * Opening stock detail from inventory_snapshots + estimated InPreps
  */
 export interface OpeningStockDetail {
   quantity: number
   amount: number
+  rawStock?: StockAmount
+  inPreparations?: {
+    quantity: number
+    amount: number
+    isEstimate?: boolean
+    preparations?: Array<{
+      preparationName: string
+      batchDate: string
+      productQuantity: number
+      productCost: number
+    }>
+  }
   snapshot: {
     date: string
     source: 'inventory' | 'calculated' | 'shift_close' | 'manual'

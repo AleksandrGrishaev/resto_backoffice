@@ -23,6 +23,10 @@
               <v-icon icon="mdi-currency-usd" class="mr-1" size="16" />
               Price
             </v-btn>
+            <v-btn value="item_package" size="small">
+              <v-icon icon="mdi-package-variant" class="mr-1" size="16" />
+              Package
+            </v-btn>
             <v-btn value="supplier_change" size="small">
               <v-icon icon="mdi-truck" class="mr-1" size="16" />
               Supplier
@@ -82,7 +86,7 @@
           />
         </div>
 
-        <!-- Item Corrections Table -->
+        <!-- Item Corrections Table (Quantity / Price) -->
         <div
           v-if="correctionType === 'item_quantity' || correctionType === 'item_price'"
           class="mb-4"
@@ -149,6 +153,85 @@
           </v-table>
         </div>
 
+        <!-- Package Correction Table -->
+        <div v-if="correctionType === 'item_package'" class="mb-4">
+          <div class="text-subtitle-2 mb-2">Change Package</div>
+
+          <v-alert type="info" variant="tonal" class="mb-3" density="compact">
+            Select a new package for items. Quantity and price will be recalculated automatically
+            based on the package size.
+          </v-alert>
+
+          <v-table density="compact">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Current Package</th>
+                <th>New Package</th>
+                <th class="text-center">Pkg Qty</th>
+                <th class="text-right">New Base Qty</th>
+                <th class="text-right">New Cost/Unit</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in packageEditableItems" :key="item.id">
+                <td>
+                  <div class="text-subtitle-2">{{ item.itemName }}</div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ item.currentQuantity }} {{ item.unit }}
+                  </div>
+                </td>
+                <td>
+                  <div class="text-body-2">{{ item.currentPackageName }}</div>
+                  <div class="text-caption text-medium-emphasis">
+                    size: {{ item.currentPackageSize }}
+                  </div>
+                </td>
+                <td style="min-width: 180px">
+                  <v-select
+                    v-model="item.newPackageId"
+                    :items="item.availablePackages"
+                    item-title="label"
+                    item-value="id"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    @update:model-value="onPackageChanged(item)"
+                  />
+                </td>
+                <td style="width: 100px">
+                  <v-text-field
+                    v-model.number="item.packageQuantity"
+                    type="number"
+                    inputmode="decimal"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    :min="0.001"
+                    style="min-width: 80px"
+                    @update:model-value="recalculatePackageItem(item)"
+                  />
+                </td>
+                <td class="text-right">
+                  <div class="text-body-2 font-weight-bold">
+                    {{ item.newBaseQuantity }} {{ item.unit }}
+                  </div>
+                </td>
+                <td class="text-right">
+                  <div class="text-body-2">{{ formatCurrency(item.newBaseCost) }}</div>
+                  <div
+                    v-if="item.newBaseCost !== item.currentBaseCost"
+                    class="text-caption"
+                    :class="item.newBaseCost > item.currentBaseCost ? 'text-error' : 'text-success'"
+                  >
+                    was {{ formatCurrency(item.currentBaseCost) }}
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </v-table>
+        </div>
+
         <!-- Financial Impact Summary -->
         <v-card
           v-if="totalImpact !== 0 && correctionType !== 'full_reversal'"
@@ -202,6 +285,7 @@
 import { ref, computed, watch } from 'vue'
 import { useReceiptCorrections } from '@/stores/supplier_2/composables/useReceiptCorrections'
 import { useCounteragentsStore } from '@/stores/counteragents'
+import { useProductsStore } from '@/stores/productsStore'
 import type { Receipt, PurchaseOrder } from '@/stores/supplier_2/types'
 
 interface Props {
@@ -221,12 +305,14 @@ const emits = defineEmits<Emits>()
 const {
   isApplying,
   applyItemCorrection,
+  applyPackageCorrection,
   applySupplierChange,
   applyFullReversal,
   getBatchConsumptionStatus
 } = useReceiptCorrections()
 
 const counteragentsStore = useCounteragentsStore()
+const productsStore = useProductsStore()
 
 const isOpen = computed({
   get: () => props.modelValue,
@@ -249,7 +335,38 @@ interface EditableItem {
   newBaseCost: number
 }
 
+interface PackageOption {
+  id: string
+  label: string
+  packageName: string
+  packageSize: number
+  packageUnit: string
+  baseCostPerUnit: number
+  packagePrice: number
+}
+
+interface PackageEditableItem {
+  id: string
+  receiptItemId: string
+  itemId: string
+  itemName: string
+  unit: string
+  currentQuantity: number
+  currentBaseCost: number
+  currentPackageId: string
+  currentPackageName: string
+  currentPackageSize: number
+  currentPackageUnit: string
+  newPackageId: string
+  packageQuantity: number
+  newBaseQuantity: number
+  newBaseCost: number
+  newPackagePrice: number
+  availablePackages: PackageOption[]
+}
+
 const editableItems = ref<EditableItem[]>([])
+const packageEditableItems = ref<PackageEditableItem[]>([])
 
 const batchStatus = ref<{
   safe: boolean
@@ -283,6 +400,13 @@ const totalImpact = computed(() => {
       return sum + (newTotal - oldTotal)
     }, 0)
   }
+  if (correctionType.value === 'item_package') {
+    return packageEditableItems.value.reduce((sum, item) => {
+      const oldTotal = item.currentQuantity * item.currentBaseCost
+      const newTotal = item.newBaseQuantity * item.newBaseCost
+      return sum + (newTotal - oldTotal)
+    }, 0)
+  }
   return 0
 })
 
@@ -292,6 +416,9 @@ const hasChanges = computed(() => {
   }
   if (correctionType.value === 'item_price') {
     return editableItems.value.some(i => i.newBaseCost !== i.currentBaseCost)
+  }
+  if (correctionType.value === 'item_package') {
+    return packageEditableItems.value.some(i => i.newPackageId !== i.currentPackageId)
   }
   if (correctionType.value === 'supplier_change') {
     return !!newSupplierId.value && newSupplierId.value !== props.order?.supplierId
@@ -312,6 +439,7 @@ watch(
   async open => {
     if (open && props.receipt && props.order) {
       initializeItems()
+      initializePackageItems()
       reason.value = ''
       correctionType.value = 'item_quantity'
       newSupplierId.value = ''
@@ -336,6 +464,68 @@ function initializeItems() {
     newQuantity: item.receivedQuantity,
     newBaseCost: item.actualBaseCost || item.orderedBaseCost
   }))
+}
+
+function initializePackageItems() {
+  if (!props.receipt) return
+
+  packageEditableItems.value = props.receipt.items.map(item => {
+    const activePackages = productsStore.getActivePackages(item.itemId)
+    const currentPkg = productsStore.getPackageById(item.packageId)
+
+    // Build available packages list (active + current if inactive)
+    const packages: PackageOption[] = activePackages.map(pkg => ({
+      id: pkg.id,
+      label: `${pkg.packageName} (${pkg.packageSize} ${pkg.packageUnit})`,
+      packageName: pkg.packageName,
+      packageSize: pkg.packageSize,
+      packageUnit: pkg.packageUnit || pkg.unit || item.packageUnit,
+      baseCostPerUnit: pkg.baseCostPerUnit || 0,
+      packagePrice: pkg.packagePrice || 0
+    }))
+
+    // Skip inactive packages — only active packages should be selectable
+
+    const currentPackageSize = currentPkg?.packageSize || 1
+    const currentBaseCost = item.actualBaseCost || item.orderedBaseCost
+
+    return {
+      id: item.id,
+      receiptItemId: item.id,
+      itemId: item.itemId,
+      itemName: item.itemName,
+      unit: item.unit,
+      currentQuantity: item.receivedQuantity,
+      currentBaseCost,
+      currentPackageId: item.packageId,
+      currentPackageName: item.packageName || currentPkg?.packageName || 'Unknown',
+      currentPackageSize,
+      currentPackageUnit: item.packageUnit,
+      newPackageId: item.packageId,
+      packageQuantity: item.receivedPackageQuantity || item.receivedQuantity / currentPackageSize,
+      newBaseQuantity: item.receivedQuantity,
+      newBaseCost: currentBaseCost,
+      newPackagePrice: currentBaseCost * currentPackageSize,
+      availablePackages: packages
+    }
+  })
+}
+
+function onPackageChanged(item: PackageEditableItem) {
+  const selectedPkg = item.availablePackages.find(p => p.id === item.newPackageId)
+  if (!selectedPkg) return
+
+  // Recalculate based on new package
+  item.newBaseQuantity = Math.round(item.packageQuantity * selectedPkg.packageSize * 1000) / 1000
+  item.newBaseCost = selectedPkg.packagePrice / selectedPkg.packageSize
+  item.newPackagePrice = selectedPkg.packagePrice
+}
+
+function recalculatePackageItem(item: PackageEditableItem) {
+  const selectedPkg = item.availablePackages.find(p => p.id === item.newPackageId)
+  if (!selectedPkg) return
+
+  item.newBaseQuantity = Math.round(item.packageQuantity * selectedPkg.packageSize * 1000) / 1000
 }
 
 function getItemImpactClass(item: EditableItem): string {
@@ -393,6 +583,26 @@ async function applyCorrection() {
         changedItems,
         reason.value
       )
+    } else if (correctionType.value === 'item_package') {
+      const changedItems = packageEditableItems.value
+        .filter(i => i.newPackageId !== i.currentPackageId)
+        .map(i => {
+          const selectedPkg = i.availablePackages.find(p => p.id === i.newPackageId)
+          return {
+            receiptItemId: i.receiptItemId,
+            itemId: i.itemId,
+            newPackageId: i.newPackageId,
+            newPackageName: selectedPkg?.packageName || '',
+            newPackageSize: selectedPkg?.packageSize || 1,
+            newPackageUnit: selectedPkg?.packageUnit || '',
+            newPackagePrice: i.newPackagePrice,
+            packageQuantity: i.packageQuantity,
+            newBaseQuantity: i.newBaseQuantity,
+            newBaseCost: i.newBaseCost
+          }
+        })
+
+      await applyPackageCorrection(props.receipt.id, props.order.id, changedItems, reason.value)
     } else if (correctionType.value === 'supplier_change') {
       const supplier = suppliers.value.find(s => s.id === newSupplierId.value)
       await applySupplierChange(

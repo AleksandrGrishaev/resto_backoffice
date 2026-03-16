@@ -271,6 +271,7 @@
       v-if="dialogs.transactionDetail"
       v-model="dialogs.transactionDetail"
       :transaction="selectedTransaction"
+      @transaction-corrected="handleTransactionCorrected"
     />
   </div>
 </template>
@@ -435,6 +436,12 @@ async function handleTransferSuccess() {
 
 async function handleCorrectionSuccess() {
   dialogs.value.correction = false
+  await refreshAfterTransaction()
+}
+
+async function handleTransactionCorrected() {
+  dialogs.value.transactionDetail = false
+  selectedTransaction.value = null
   await refreshAfterTransaction()
 }
 

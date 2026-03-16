@@ -34,6 +34,10 @@ interface BillMetadata {
   paymentStatus: 'unpaid' | 'partial' | 'paid'
   paidAmount: number
   notes?: string
+  // Loyalty
+  customerId?: string
+  customerName?: string
+  stampCardId?: string
   createdAt: string
   updatedAt: string
 }
@@ -63,6 +67,9 @@ export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
     paymentStatus: bill.paymentStatus,
     paidAmount: bill.paidAmount,
     notes: bill.notes,
+    customerId: bill.customerId,
+    customerName: bill.customerName,
+    stampCardId: bill.stampCardId,
     createdAt: bill.createdAt,
     updatedAt: bill.updatedAt
   }))
@@ -81,6 +88,9 @@ export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
     table_id: order.tableId || null,
     shift_id: null, // TODO: Add shiftId to PosOrder type
     customer_name: order.customerName || null,
+    customer_id: order.customerId || null,
+    stamp_card_id: order.stampCardId || null,
+    guest_count: order.guestCount || 1,
 
     // Bills metadata (without items)
     bills: billsMetadata as any,
@@ -120,6 +130,20 @@ export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
     channel_code: order.channelCode || null,
     external_order_id: order.externalOrderId || null,
     external_status: order.externalStatus || null,
+
+    // Online ordering
+    source: order.source || 'pos',
+    fulfillment_method: order.fulfillmentMethod || null,
+    customer_phone: order.customerPhone || null,
+    table_number: order.tableNumber || null,
+    pickup_time: order.pickupTime || null,
+    comment: order.comment || null,
+
+    // Cancellation request
+    cancellation_requested_at: order.cancellationRequestedAt || null,
+    cancellation_reason: order.cancellationReason || null,
+    cancellation_resolved_at: order.cancellationResolvedAt || null,
+    cancellation_resolved_by: order.cancellationResolvedBy || null,
 
     // Timestamps
     created_at: order.createdAt
@@ -176,6 +200,9 @@ export function fromSupabase(supabaseOrder: SupabaseOrder, items?: PosBillItem[]
     paymentStatus: meta.paymentStatus,
     paidAmount: meta.paidAmount,
     notes: meta.notes,
+    customerId: meta.customerId,
+    customerName: meta.customerName,
+    stampCardId: meta.stampCardId,
     createdAt: meta.createdAt,
     updatedAt: meta.updatedAt
   }))
@@ -200,17 +227,19 @@ export function fromSupabase(supabaseOrder: SupabaseOrder, items?: PosBillItem[]
 
     // Links
     tableId: supabaseOrder.table_id || undefined,
-    customerId: undefined,
+    customerId: supabaseOrder.customer_id || undefined,
     customerName: supabaseOrder.customer_name || undefined,
+    stampCardId: supabaseOrder.stamp_card_id || undefined,
+    guestCount: supabaseOrder.guest_count ?? 1,
 
     // Reconstructed bills with items
     bills,
 
-    // Financial data
-    totalAmount: supabaseOrder.total_amount || 0,
-    discountAmount: supabaseOrder.discount_amount || 0,
-    taxAmount: supabaseOrder.tax_amount || 0,
-    finalAmount: supabaseOrder.final_amount || 0,
+    // Financial data (use ?? to preserve valid 0 values)
+    totalAmount: supabaseOrder.total_amount ?? 0,
+    discountAmount: supabaseOrder.discount_amount ?? 0,
+    taxAmount: supabaseOrder.tax_amount ?? 0,
+    finalAmount: supabaseOrder.final_amount ?? 0,
 
     // Revenue breakdown (Sprint 7)
     plannedRevenue: supabaseOrder.planned_revenue || undefined,
@@ -220,7 +249,7 @@ export function fromSupabase(supabaseOrder: SupabaseOrder, items?: PosBillItem[]
 
     // Payment tracking
     paymentIds: supabaseOrder.payment_ids || [],
-    paidAmount: supabaseOrder.paid_amount || 0,
+    paidAmount: supabaseOrder.paid_amount ?? 0,
 
     // Waiter & timing
     waiterName: supabaseOrder.waiter_name || undefined,
@@ -235,6 +264,20 @@ export function fromSupabase(supabaseOrder: SupabaseOrder, items?: PosBillItem[]
     channelCode: (supabaseOrder as any).channel_code || undefined,
     externalOrderId: (supabaseOrder as any).external_order_id || undefined,
     externalStatus: (supabaseOrder as any).external_status || undefined,
+
+    // Online ordering
+    source: (supabaseOrder as any).source || 'pos',
+    fulfillmentMethod: (supabaseOrder as any).fulfillment_method || undefined,
+    customerPhone: (supabaseOrder as any).customer_phone || undefined,
+    tableNumber: (supabaseOrder as any).table_number || undefined,
+    pickupTime: (supabaseOrder as any).pickup_time || undefined,
+    comment: (supabaseOrder as any).comment || undefined,
+
+    // Cancellation request
+    cancellationRequestedAt: (supabaseOrder as any).cancellation_requested_at || undefined,
+    cancellationReason: (supabaseOrder as any).cancellation_reason || undefined,
+    cancellationResolvedAt: (supabaseOrder as any).cancellation_resolved_at || undefined,
+    cancellationResolvedBy: (supabaseOrder as any).cancellation_resolved_by || undefined,
 
     // Timestamps
     createdAt: supabaseOrder.created_at,

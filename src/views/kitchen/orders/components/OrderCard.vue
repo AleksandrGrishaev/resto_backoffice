@@ -9,12 +9,32 @@
           <v-chip :color="getOrderTypeColor(order.type)" size="x-small" variant="flat">
             {{ getOrderTypeLabel(order.type) }}
           </v-chip>
+          <v-chip v-if="isOnlineOrder" color="teal" size="x-small" variant="flat">
+            <v-icon start size="x-small">mdi-web</v-icon>
+            Online
+          </v-chip>
           <span v-if="tableNumber" class="table-number">Table {{ tableNumber }}</span>
         </div>
       </div>
 
       <div class="order-time">
         {{ formatTime(order.createdAt) }}
+      </div>
+    </div>
+
+    <!-- Online Order Info Bar -->
+    <div v-if="isOnlineOrder" class="online-info-bar">
+      <div v-if="order.customerName" class="online-detail">
+        <v-icon size="x-small">mdi-account</v-icon>
+        {{ order.customerName }}
+      </div>
+      <div v-if="pickupLabel" class="online-detail">
+        <v-icon size="x-small">mdi-clock-outline</v-icon>
+        {{ pickupLabel }}
+      </div>
+      <div v-if="order.comment" class="online-detail online-comment">
+        <v-icon size="x-small" color="warning">mdi-message-text</v-icon>
+        {{ order.comment }}
       </div>
     </div>
 
@@ -86,7 +106,21 @@ const { getNextStatus, canUpdateStatus: checkCanUpdate } = useKitchenStatus()
 // COMPUTED PROPERTIES
 // =============================================
 
-const tableNumber = computed(() => getTableNumber(props.order))
+const tableNumber = computed(() => {
+  // For online dine-in orders, show table_number (free text preference) if no table assigned
+  if (props.order.source === 'website' && props.order.tableNumber && !getTableNumber(props.order)) {
+    return props.order.tableNumber
+  }
+  return getTableNumber(props.order)
+})
+
+const isOnlineOrder = computed(() => props.order.source === 'website')
+
+const pickupLabel = computed(() => {
+  if (!props.order.pickupTime) return null
+  if (props.order.pickupTime === 'asap') return 'ASAP'
+  return `Pickup: ${props.order.pickupTime}`
+})
 
 const canUpdateStatus = computed(() => checkCanUpdate(props.order.status))
 
@@ -189,6 +223,29 @@ const formatTime = (timestamp: string): string => {
   font-size: var(--text-xs);
   color: rgba(255, 255, 255, 0.6);
   white-space: nowrap;
+}
+
+/* Online Order Info Bar */
+.online-info-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-md);
+  background-color: rgba(0, 150, 136, 0.1);
+  border-bottom: 1px solid rgba(0, 150, 136, 0.2);
+  font-size: var(--text-xs);
+}
+
+.online-detail {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.online-comment {
+  width: 100%;
+  font-style: italic;
 }
 
 /* Order Items */

@@ -56,6 +56,9 @@ export interface StorageBatch extends BaseEntity {
   plannedDeliveryDate?: string
   actualDeliveryDate?: string
 
+  // Link to the storage_operation that created this batch
+  storageOperationId?: string
+
   // ✨ NEW: Negative inventory fields (Sprint 1)
   isNegative?: boolean
   sourceBatchId?: string
@@ -100,7 +103,14 @@ export interface StorageOperation extends BaseEntity {
   totalValue?: number
 
   correctionDetails?: {
-    reason: 'recipe_usage' | 'waste' | 'expired' | 'theft' | 'damage' | 'other'
+    reason:
+      | 'recipe_usage'
+      | 'waste'
+      | 'expired'
+      | 'theft'
+      | 'damage'
+      | 'other'
+      | 'receipt_arrival_adjustment'
     relatedId?: string
     relatedName?: string
     portionCount?: number
@@ -228,7 +238,14 @@ export interface CreateCorrectionData {
   responsiblePerson: string
   items: CorrectionItem[]
   correctionDetails: {
-    reason: 'recipe_usage' | 'waste' | 'expired' | 'theft' | 'damage' | 'other'
+    reason:
+      | 'recipe_usage'
+      | 'waste'
+      | 'expired'
+      | 'theft'
+      | 'damage'
+      | 'other'
+      | 'receipt_arrival_adjustment'
     relatedId?: string
     relatedName?: string
     portionCount?: number

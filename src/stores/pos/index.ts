@@ -15,6 +15,7 @@ import { useAccountStore } from '@/stores/account'
 
 // ✅ Sprint 9: Only essential stores for POS sync (recipes excluded - cost recalculation too slow)
 import { useMenuStore } from '@/stores/menu'
+import { useChannelsStore } from '@/stores/channels'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 
 // ✅ Sprint 6: SyncService integration
@@ -128,15 +129,12 @@ export const usePosStore = defineStore('pos', () => {
         currentShift: shiftsStore.currentShift?.shiftNumber || 'None'
       })
 
-      // Phase 2: Account Store (depends on nothing, can be parallel with phase 1 in future)
-      platform.debugLog('POS', '💰 Initializing Account Store...')
+      // Phase 2: Account Store — lightweight POS init (cash account only)
+      platform.debugLog('POS', '💰 Initializing Account Store (POS mode)...')
       const accountStore = useAccountStore()
-      await accountStore.initializeStore()
+      await accountStore.initializeForPOS()
 
-      // ✅ Lazy load pending payments - defer to when Receipt is opened
-      // This saves ~300ms on initial load
-      // await accountStore.fetchPayments(true) // DEFERRED - loaded on-demand
-      platform.debugLog('POS', '✅ Account Store initialized (payments deferred)', {
+      platform.debugLog('POS', '✅ Account Store initialized (POS mode, cash only)', {
         accountsCount: accountStore.accounts.length
       })
 
@@ -168,6 +166,11 @@ export const usePosStore = defineStore('pos', () => {
         platform.debugLog('POS', '📡 Initializing Realtime for Kitchen updates...')
         ordersRealtime = useOrdersRealtime()
         ordersRealtime.subscribe()
+
+        // Register cancellation request callback if already set
+        if (_cancellationCallback) {
+          ordersRealtime.onCancellationRequested(_cancellationCallback)
+        }
 
         // 🆕 Tables Realtime for sync between tabs/devices
         tablesRealtime = useTablesRealtime()
@@ -226,14 +229,16 @@ export const usePosStore = defineStore('pos', () => {
         shiftsStore.loadShifts()
       ])
 
-      // Phase 2: Перезагрузить каталоги для POS (меню + методы оплаты)
+      // Phase 2: Перезагрузить каталоги для POS (меню + каналы + методы оплаты)
       // ⚠️ НЕ обновляем recipes/products - это занимает 30+ сек из-за cost recalculation
       platform.debugLog('POS', '📦 Phase 2: Refreshing POS catalogs...')
       const menuStore = useMenuStore()
+      const channelsStore = useChannelsStore()
       const paymentSettingsStore = usePaymentSettingsStore()
 
       await Promise.all([
         menuStore.refresh(), // Меню и цены
+        channelsStore.refresh(), // Каналы + доступность позиций
         paymentSettingsStore.fetchPaymentMethods() // Методы оплаты (могли добавить новые)
       ])
 
@@ -251,6 +256,7 @@ export const usePosStore = defineStore('pos', () => {
         tables: tablesStore.tables.length,
         orders: ordersStore.orders.length,
         menuItems: menuStore.allMenuItems.length,
+        channelItems: channelsStore.channelMenuItems.length,
         paymentMethods: paymentSettingsStore.paymentMethods.length,
         syncQueue: {
           succeeded: syncReport.succeeded,
@@ -319,6 +325,9 @@ export const usePosStore = defineStore('pos', () => {
     syncService.stop()
     platform.debugLog('POS', '✅ SyncService stopped')
 
+    // Reset initialization flag so next login triggers full reload
+    isInitialized.value = false
+
     platform.debugLog('POS', '✅ POS cleanup complete')
   }
 
@@ -343,6 +352,22 @@ export const usePosStore = defineStore('pos', () => {
     }
   })
 
+  /**
+   * Register callback for cancellation request notifications from website orders
+   */
+  function onCancellationRequested(
+    callback: (order: { orderId: string; orderNumber: string; reason?: string }) => void
+  ) {
+    if (ordersRealtime) {
+      ordersRealtime.onCancellationRequested(callback)
+    }
+    // Store for late registration (if called before realtime init)
+    _cancellationCallback = callback
+  }
+  let _cancellationCallback:
+    | ((order: { orderId: string; orderNumber: string; reason?: string }) => void)
+    | null = null
+
   // ===== RETURN =====
 
   return {
@@ -363,6 +388,7 @@ export const usePosStore = defineStore('pos', () => {
     syncWithServer, // @deprecated - use syncData
     clearError,
     reset,
-    cleanup // ✅ FIX: Add cleanup method to exports
+    cleanup,
+    onCancellationRequested
   }
 })

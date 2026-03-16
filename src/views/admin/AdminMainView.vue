@@ -24,6 +24,9 @@
         <div class="admin-screen-content">
           <MenuScreen v-if="currentScreen === 'menu'" />
           <ChannelsScreen v-else-if="currentScreen === 'channels'" />
+          <LoyaltySettingsScreen
+            v-else-if="currentScreen === 'loyalty' || currentScreen === 'customers'"
+          />
           <DashboardScreen v-else-if="currentScreen === 'dashboard'" />
         </div>
       </template>
@@ -56,6 +59,9 @@ import type { AdminScreenName } from './types'
 import { defineAsyncComponent } from 'vue'
 const MenuScreen = defineAsyncComponent(() => import('./menu/MenuScreen.vue'))
 const ChannelsScreen = defineAsyncComponent(() => import('./channels/ChannelsScreen.vue'))
+const LoyaltySettingsScreen = defineAsyncComponent(
+  () => import('./loyalty/LoyaltySettingsScreen.vue')
+)
 const DashboardScreen = defineAsyncComponent(() => import('./dashboard/DashboardScreen.vue'))
 
 const authStore = useAuthStore()
@@ -70,25 +76,41 @@ const canAccess = computed(() => {
 })
 
 onMounted(async () => {
-  // Ensure menuCollections store is loaded
-  try {
-    const { useMenuCollectionsStore } = await import('@/stores/menuCollections')
-    const store = useMenuCollectionsStore()
-    if (!store.initialized) {
-      await store.initialize()
+  // M7 FIX: Independent try-catch per store so one failure doesn't block others
+  const inits = [
+    async () => {
+      const { useMenuCollectionsStore } = await import('@/stores/menuCollections')
+      const s = useMenuCollectionsStore()
+      if (!s.initialized) await s.initialize()
+    },
+    async () => {
+      const { useChannelsStore } = await import('@/stores/channels')
+      const s = useChannelsStore()
+      if (!s.initialized) await s.initialize()
+    },
+    async () => {
+      const { useCustomersStore } = await import('@/stores/customers')
+      const s = useCustomersStore()
+      if (!s.initialized) await s.initialize()
+    },
+    async () => {
+      const { useLoyaltyStore } = await import('@/stores/loyalty')
+      const s = useLoyaltyStore()
+      if (!s.initialized) await s.initialize()
     }
+  ]
 
-    // Ensure channels store is loaded (Gap #18)
-    const { useChannelsStore } = await import('@/stores/channels')
-    const channelsStore = useChannelsStore()
-    if (!channelsStore.initialized) {
-      await channelsStore.initialize()
-    }
-  } catch (error) {
-    console.error('Admin initialization error:', error)
-  } finally {
-    loading.value = false
-  }
+  await Promise.allSettled(
+    inits.map(async fn => {
+      try {
+        await fn()
+      } catch (e) {
+        console.error('Admin store init error:', e)
+      }
+    })
+  )
+
+  loading.value = false
 })
 </script>
 

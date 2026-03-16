@@ -152,15 +152,13 @@
 
                 <!-- Единицы -->
                 <!-- ⭐ PHASE 2: Lock unit selector for portion-type preparations -->
-                <v-select
-                  v-model="component.unit"
-                  :items="unitOptions"
+                <v-text-field
+                  :model-value="getUnitDisplayName(component.unit)"
                   label="Unit"
                   hide-details="auto"
                   bg-color="background"
                   style="width: 100px"
-                  :disabled="isComponentPortionType(component)"
-                  @update:model-value="emitUpdate"
+                  readonly
                 />
 
                 <!-- Роль -->
@@ -465,6 +463,18 @@ function getUnitLabel(unit: string): string {
     portion: 'ptn'
   }
   return unitMap[unit] || unit
+}
+
+function getUnitDisplayName(unit: string): string {
+  const map: Record<string, string> = {
+    gram: 'Grams',
+    ml: 'Milliliters',
+    piece: 'Pieces',
+    liter: 'Liters',
+    kg: 'Kilograms',
+    portion: 'Portions'
+  }
+  return map[unit] || unit
 }
 
 // ⭐ PHASE 2: Check if component is portion-type (unit selector should be locked)

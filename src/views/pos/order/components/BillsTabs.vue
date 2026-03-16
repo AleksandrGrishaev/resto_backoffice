@@ -75,6 +75,31 @@
             </div>
           </div>
 
+          <!-- Loyalty Indicators (compact, next to bill info) -->
+          <div v-if="bill.customerName || bill.stampCardId" class="bill-loyalty-chips d-flex gap-1">
+            <v-chip
+              v-if="bill.customerName"
+              size="x-small"
+              color="blue"
+              variant="tonal"
+              class="loyalty-chip"
+              @click.stop="emit('open-loyalty', bill.id, 'customer')"
+            >
+              <v-icon start size="10">mdi-account-star</v-icon>
+              {{ bill.customerName }}
+            </v-chip>
+            <v-chip
+              v-if="bill.stampCardId"
+              size="x-small"
+              color="amber-darken-2"
+              variant="tonal"
+              class="loyalty-chip"
+              @click.stop="emit('open-loyalty', bill.id, 'card')"
+            >
+              <v-icon size="10">mdi-stamper</v-icon>
+            </v-chip>
+          </div>
+
           <!-- Tab Actions Menu -->
           <div v-if="canEditBill" class="tab-actions">
             <v-menu location="bottom end">
@@ -89,6 +114,46 @@
               </template>
 
               <v-list density="compact">
+                <!-- Loyalty: Stamp Card -->
+                <v-list-item @click="emit('open-loyalty', bill.id, 'card')">
+                  <template #prepend>
+                    <v-icon color="amber-darken-2">mdi-stamper</v-icon>
+                  </template>
+                  <v-list-item-title>
+                    {{ bill.stampCardId ? 'Change Card' : 'Attach Card' }}
+                  </v-list-item-title>
+                </v-list-item>
+                <v-list-item
+                  v-if="bill.stampCardId"
+                  @click="emit('detach-loyalty', bill.id, 'card')"
+                >
+                  <template #prepend>
+                    <v-icon color="error" size="small">mdi-stamper</v-icon>
+                  </template>
+                  <v-list-item-title class="text-error">Detach Card</v-list-item-title>
+                </v-list-item>
+
+                <!-- Loyalty: Customer -->
+                <v-list-item @click="emit('open-loyalty', bill.id, 'customer')">
+                  <template #prepend>
+                    <v-icon color="blue">mdi-account-star</v-icon>
+                  </template>
+                  <v-list-item-title>
+                    {{ bill.customerName ? bill.customerName : 'Attach Customer' }}
+                  </v-list-item-title>
+                </v-list-item>
+                <v-list-item
+                  v-if="bill.customerId"
+                  @click="emit('detach-loyalty', bill.id, 'customer')"
+                >
+                  <template #prepend>
+                    <v-icon color="error" size="small">mdi-account-off</v-icon>
+                  </template>
+                  <v-list-item-title class="text-error">Detach Customer</v-list-item-title>
+                </v-list-item>
+
+                <v-divider />
+
                 <v-list-item @click="openRenameDialog(bill)">
                   <template #prepend>
                     <v-icon>mdi-pencil</v-icon>
@@ -208,6 +273,8 @@ const emit = defineEmits<{
   'rename-bill': [billId: string, newName: string]
   'remove-bill': [billId: string]
   'toggle-bill-selection': [billId: string]
+  'open-loyalty': [billId: string, tab: 'card' | 'customer']
+  'detach-loyalty': [billId: string, what: 'card' | 'customer']
 }>()
 
 // Computed
@@ -477,6 +544,21 @@ const getBillCheckboxState = (billId: string) => {
 
 .payment-status-icon {
   opacity: 0.8;
+}
+
+.bill-loyalty-chips {
+  flex-shrink: 0;
+}
+
+.loyalty-chip {
+  cursor: pointer;
+  max-width: 80px;
+}
+
+.loyalty-chip :deep(.v-chip__content) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tab-actions {

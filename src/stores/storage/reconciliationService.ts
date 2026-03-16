@@ -193,12 +193,32 @@ class ReconciliationService {
   /**
    * Bulk reconcile negative batches for multiple products.
    * Used after inventory finalization.
+   *
+   * ⚡ OPTIMIZATION: Pre-filters with a single query to find products that have
+   * BOTH negative unreconciled batches AND positive active batches.
+   * Only those products need reconciliation processing.
    */
   async autoReconcileMultipleProducts(productIds: string[]): Promise<ReconciliationResult[]> {
     const uniqueIds = [...new Set(productIds)]
     const results: ReconciliationResult[] = []
 
-    for (const productId of uniqueIds) {
+    // ⚡ Single query to find products that actually have reconcilable state
+    const reconcilableIds = await this.findReconcilableProducts(uniqueIds)
+
+    if (reconcilableIds.length === 0) {
+      DebugUtils.info(
+        MODULE_NAME,
+        `No reconcilable products found among ${uniqueIds.length} inventoried items`
+      )
+      return results
+    }
+
+    DebugUtils.info(
+      MODULE_NAME,
+      `Found ${reconcilableIds.length} reconcilable products out of ${uniqueIds.length} inventoried`
+    )
+
+    for (const productId of reconcilableIds) {
       try {
         const result = await this.autoReconcileOnNewBatch(productId)
         if (result.reconciled) {
@@ -213,6 +233,64 @@ class ReconciliationService {
     }
 
     return results
+  }
+
+  /**
+   * Find products that have BOTH negative unreconciled batches AND positive active batches.
+   * These are the only products where reconciliation can actually do something useful.
+   *
+   * ⚡ PERFORMANCE: Single query replaces N×2 sequential queries.
+   */
+  private async findReconcilableProducts(productIds: string[]): Promise<string[]> {
+    if (productIds.length === 0) return []
+
+    const { data, error } = await supabase.rpc('find_reconcilable_products', {
+      p_product_ids: productIds
+    })
+
+    if (error) {
+      // Fallback: if RPC doesn't exist, use two separate queries
+      DebugUtils.warn(MODULE_NAME, 'RPC find_reconcilable_products failed, using fallback', {
+        error: error.message
+      })
+      return this.findReconcilableProductsFallback(productIds)
+    }
+
+    return (data || []).map((r: any) => r.product_id)
+  }
+
+  /**
+   * Fallback for finding reconcilable products using two queries instead of RPC.
+   * Still much faster than N×2 queries.
+   */
+  private async findReconcilableProductsFallback(productIds: string[]): Promise<string[]> {
+    // Query 1: Products with unreconciled negative batches
+    const { data: negProducts } = await supabase
+      .from('storage_batches')
+      .select('item_id')
+      .in('item_id', productIds)
+      .eq('item_type', 'product')
+      .eq('is_negative', true)
+      .is('reconciled_at', null)
+      .eq('is_active', true)
+
+    if (!negProducts || negProducts.length === 0) return []
+
+    const negProductIds = [...new Set(negProducts.map(r => r.item_id))]
+
+    // Query 2: Among those, which also have positive active batches?
+    const { data: posProducts } = await supabase
+      .from('storage_batches')
+      .select('item_id')
+      .in('item_id', negProductIds)
+      .eq('item_type', 'product')
+      .eq('is_active', true)
+      .or('is_negative.eq.false,is_negative.is.null')
+      .gt('current_quantity', 0)
+
+    if (!posProducts || posProducts.length === 0) return []
+
+    return [...new Set(posProducts.map(r => r.item_id))]
   }
 
   /**

@@ -8,10 +8,28 @@
       <div class="text-body-2 text-medium-emphasis mb-4">
         Add modifier groups to let customers customize this dish.
       </div>
-      <v-btn color="deep-purple" variant="flat" size="large" height="48" @click="addModifierGroup">
-        <v-icon icon="mdi-plus" size="20" class="mr-2" />
-        Add First Modifier Group
-      </v-btn>
+      <div class="d-flex ga-3">
+        <v-btn
+          color="deep-purple"
+          variant="flat"
+          size="large"
+          height="48"
+          @click="addModifierGroup"
+        >
+          <v-icon icon="mdi-plus" size="20" class="mr-2" />
+          Add Modifier Group
+        </v-btn>
+        <v-btn
+          color="deep-purple"
+          variant="outlined"
+          size="large"
+          height="48"
+          @click="showCopyFromDialog"
+        >
+          <v-icon icon="mdi-content-copy" size="20" class="mr-2" />
+          Copy from Dish
+        </v-btn>
+      </div>
     </div>
 
     <!-- Modifier Groups List -->
@@ -175,7 +193,7 @@
                 </div>
                 <v-btn
                   color="deep-purple"
-                  variant="tonal"
+                  variant="flat"
                   size="default"
                   height="36"
                   @click="addOption(groupIndex)"
@@ -381,6 +399,7 @@
                               </span>
                               <NumericInputField
                                 v-model="comp.quantity"
+                                :allow-decimal="true"
                                 variant="outlined"
                                 hide-details
                                 density="compact"
@@ -422,19 +441,30 @@
         </v-expansion-panel>
       </v-expansion-panels>
 
-      <!-- Add Group Button -->
-      <v-btn
-        class="mt-5"
-        block
-        variant="outlined"
-        color="deep-purple"
-        size="large"
-        height="48"
-        @click="addModifierGroup"
-      >
-        <v-icon icon="mdi-plus" size="20" class="mr-2" />
-        Add Modifier Group
-      </v-btn>
+      <!-- Add Group / Copy Buttons -->
+      <div class="d-flex ga-3 mt-5">
+        <v-btn
+          class="flex-grow-1"
+          variant="outlined"
+          color="deep-purple"
+          size="large"
+          height="48"
+          @click="addModifierGroup"
+        >
+          <v-icon icon="mdi-plus" size="20" class="mr-2" />
+          Add Modifier Group
+        </v-btn>
+        <v-btn
+          variant="outlined"
+          color="deep-purple"
+          size="large"
+          height="48"
+          @click="showCopyFromDialog"
+        >
+          <v-icon icon="mdi-content-copy" size="20" class="mr-2" />
+          Copy from Dish
+        </v-btn>
+      </div>
     </div>
 
     <!-- Dish selector dialog -->
@@ -477,6 +507,91 @@
         </v-card-text>
       </v-card>
     </v-dialog>
+
+    <!-- Copy modifiers from another dish dialog -->
+    <v-dialog v-model="copyFromDialog.show" max-width="700">
+      <v-card>
+        <v-card-title class="d-flex align-center justify-space-between pa-4">
+          <span>Copy Modifiers from Dish</span>
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            size="small"
+            @click="copyFromDialog.show = false"
+          />
+        </v-card-title>
+        <v-divider />
+        <v-card-text class="pa-4">
+          <!-- Search -->
+          <v-text-field
+            v-model="copyFromDialog.search"
+            label="Search dishes..."
+            variant="outlined"
+            prepend-inner-icon="mdi-magnify"
+            hide-details
+            clearable
+            autofocus
+            class="mb-4"
+          />
+
+          <!-- Dishes with modifiers -->
+          <div
+            v-if="dishesWithModifiers.length === 0"
+            class="text-center text-medium-emphasis pa-6"
+          >
+            No dishes with modifiers found
+          </div>
+          <v-list v-else class="copy-from-list" density="compact">
+            <v-list-item
+              v-for="dish in dishesWithModifiers"
+              :key="dish.id"
+              :class="{ 'copy-from-list__item--selected': copyFromDialog.selectedId === dish.id }"
+              class="copy-from-list__item"
+              @click="copyFromDialog.selectedId = dish.id"
+            >
+              <template #prepend>
+                <v-radio-group v-model="copyFromDialog.selectedId" hide-details class="ma-0 pa-0">
+                  <v-radio :value="dish.id" density="compact" />
+                </v-radio-group>
+              </template>
+              <v-list-item-title class="font-weight-medium">
+                {{ dish.name }}
+              </v-list-item-title>
+              <v-list-item-subtitle>
+                {{ dish.modifierGroups!.length }} group{{
+                  dish.modifierGroups!.length !== 1 ? 's' : ''
+                }}:
+                {{ dish.modifierGroups!.map(g => g.name).join(', ') }}
+              </v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
+
+          <!-- Copy mode -->
+          <div v-if="copyFromDialog.selectedId" class="mt-4">
+            <v-divider class="mb-4" />
+            <div class="text-body-2 font-weight-bold mb-2">Copy mode</div>
+            <v-radio-group v-model="copyFromDialog.mode" hide-details class="mt-0">
+              <v-radio value="append" label="Append to existing modifier groups" />
+              <v-radio value="replace" label="Replace all current modifier groups" />
+            </v-radio-group>
+          </div>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-4">
+          <v-spacer />
+          <v-btn variant="text" @click="copyFromDialog.show = false">Cancel</v-btn>
+          <v-btn
+            color="deep-purple"
+            variant="flat"
+            :disabled="!copyFromDialog.selectedId"
+            @click="copyModifiersFromDish"
+          >
+            <v-icon icon="mdi-content-copy" size="18" class="mr-1" />
+            Copy Modifiers
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -494,6 +609,7 @@ import type {
 import type { Recipe, RecipeComponent } from '@/stores/recipes/types'
 import { useRecipesStore } from '@/stores/recipes'
 import { useProductsStore } from '@/stores/productsStore'
+import { useMenuStore } from '@/stores/menu'
 import {
   calculateOptionCompositionCost,
   calculateReplacedComponentsCost
@@ -522,6 +638,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const recipesStore = useRecipesStore()
 const productsStore = useProductsStore()
+const menuStore = useMenuStore()
 
 const costContext = computed<CostCalculationContext>(() => ({
   productsStore,
@@ -597,6 +714,18 @@ const productSelectorDialog = ref<{
   optionIndex: null
 })
 
+const copyFromDialog = ref<{
+  show: boolean
+  search: string
+  selectedId: string | null
+  mode: 'append' | 'replace'
+}>({
+  show: false,
+  search: '',
+  selectedId: null,
+  mode: 'append'
+})
+
 const modifierTypes = [
   { title: 'Add-on (adds to base)', value: 'addon' },
   { title: 'Replacement (replaces base)', value: 'replacement' },
@@ -605,6 +734,50 @@ const modifierTypes = [
 
 // Computed
 const hasModifiers = computed(() => props.modifierGroups.length > 0)
+
+// Copy from dish - filtered list of dishes that have modifier groups
+const dishesWithModifiers = computed(() => {
+  const search = copyFromDialog.value.search?.toLowerCase() || ''
+  return menuStore.menuItems
+    .filter(
+      item =>
+        item.modifierGroups &&
+        item.modifierGroups.length > 0 &&
+        (!search || item.name.toLowerCase().includes(search))
+    )
+    .sort((a, b) => a.name.localeCompare(b.name))
+})
+
+function showCopyFromDialog(): void {
+  copyFromDialog.value = {
+    show: true,
+    search: '',
+    selectedId: null,
+    mode: hasModifiers.value ? 'append' : 'replace'
+  }
+}
+
+function copyModifiersFromDish(): void {
+  const sourceItem = menuStore.menuItems.find(i => i.id === copyFromDialog.value.selectedId)
+  if (!sourceItem?.modifierGroups?.length) return
+
+  // Deep clone and generate new IDs to make independent copies
+  const clonedGroups = JSON.parse(JSON.stringify(sourceItem.modifierGroups)) as ModifierGroup[]
+  for (const group of clonedGroups) {
+    group.id = `mg-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`
+    for (const option of group.options) {
+      option.id = `mo-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`
+    }
+  }
+
+  if (copyFromDialog.value.mode === 'replace') {
+    emit('update:modifierGroups', clonedGroups)
+  } else {
+    emit('update:modifierGroups', [...props.modifierGroups, ...clonedGroups])
+  }
+
+  copyFromDialog.value.show = false
+}
 
 interface TargetComponentOption {
   label: string
@@ -1107,6 +1280,29 @@ function resolveCompositionUnit(comp: MenuComposition): string {
     flex-shrink: 0;
     min-width: 60px;
     justify-content: center;
+  }
+}
+
+// ==========================================
+// Copy from dialog
+// ==========================================
+.copy-from-list {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+
+  &__item {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+
+    &--selected {
+      background: rgba(163, 149, 233, 0.1);
+    }
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.04);
+    }
   }
 }
 

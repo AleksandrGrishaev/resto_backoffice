@@ -1,0 +1,11 @@
+-- Migration: 217_rpc_input_validation
+-- Description: Add input validation guards to online ordering RPCs
+-- Date: 2026-03-16
+--
+-- Changes applied via CREATE OR REPLACE on 3 functions:
+-- - create_online_order: max 50 items, customerName max 200 chars, customerPhone max 30 chars
+-- - add_to_online_order: max 50 items
+-- - update_online_order: max 50 items
+--
+-- Full function bodies are in src/supabase/functions/*.sql
+-- Applied to DEV and PROD via mcp__supabase_*__apply_migration

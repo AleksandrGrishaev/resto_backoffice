@@ -187,7 +187,7 @@ function findMinFoodCostCombination(
   const selectedOptions: SelectedOptionForCost[] = []
 
   for (const group of groups) {
-    const activeOptions = group.options.filter(opt => opt.isActive !== false)
+    const activeOptions = (group.options || []).filter(opt => opt.isActive !== false)
 
     // Calculate FC% impact for each option
     const optionImpacts = activeOptions.map(option => {
@@ -248,7 +248,7 @@ function findMaxFoodCostCombination(
   const selectedOptions: SelectedOptionForCost[] = []
 
   for (const group of groups) {
-    const activeOptions = group.options.filter(opt => opt.isActive !== false)
+    const activeOptions = (group.options || []).filter(opt => opt.isActive !== false)
 
     // Calculate FC% impact for each option
     const optionImpacts = activeOptions.map(option => {
@@ -308,7 +308,7 @@ function findDefaultCombination(
   const selectedOptions: SelectedOptionForCost[] = []
 
   for (const group of groups) {
-    const activeOptions = group.options.filter(opt => opt.isActive !== false)
+    const activeOptions = (group.options || []).filter(opt => opt.isActive !== false)
 
     // Find default option
     let selectedOption: ModifierOption | null = null

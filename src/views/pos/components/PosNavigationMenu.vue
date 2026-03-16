@@ -208,6 +208,14 @@ const menuSections = computed(() => [
         label: 'Sync Data',
         loading: syncing.value,
         disabled: loading.value
+      },
+      {
+        id: POS_ACTIONS.FULL_RESET,
+        icon: 'mdi-database-refresh',
+        label: 'Full Reset',
+        loading: syncing.value,
+        disabled: loading.value,
+        color: 'warning' as const
       }
     ]
   },
@@ -280,6 +288,10 @@ const handleAction = async (actionId: string) => {
 
       case POS_ACTIONS.SYNC_DATA:
         await handleSyncData()
+        break
+
+      case POS_ACTIONS.FULL_RESET:
+        await handleFullReset()
         break
 
       case POS_ACTIONS.GOODS_RECEIPT:
@@ -355,6 +367,31 @@ const handleSyncData = async () => {
     DebugUtils.info(MODULE_NAME, 'Data synced successfully')
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Sync failed', error)
+  } finally {
+    syncing.value = false
+  }
+}
+
+const handleFullReset = async () => {
+  syncing.value = true
+
+  try {
+    DebugUtils.info(MODULE_NAME, '🔄 Full POS reset — clearing all caches...')
+
+    // Clear all SWR/localStorage caches related to POS
+    const cacheKeys = Object.keys(localStorage).filter(
+      k =>
+        k.includes('_cache') || k.includes('swr_') || k.includes('menu_') || k.includes('channel')
+    )
+    cacheKeys.forEach(k => localStorage.removeItem(k))
+    DebugUtils.info(MODULE_NAME, `Cleared ${cacheKeys.length} cache keys`)
+
+    // Full sync (reloads all POS stores + menu + channels + payment methods)
+    await posStore.syncData()
+
+    DebugUtils.info(MODULE_NAME, '✅ Full POS reset completed')
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Full reset failed', error)
   } finally {
     syncing.value = false
   }

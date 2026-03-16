@@ -252,7 +252,9 @@ const orderSubtitle = computed((): string => {
 
   switch (props.order.type) {
     case 'dine_in':
-      return props.tableNumber ? `Table ${props.tableNumber}` : 'No table assigned'
+      if (props.tableNumber) return `Table ${props.tableNumber}`
+      if (props.order.tableNumber) return `Table ${props.order.tableNumber} (requested)`
+      return 'No table assigned'
     case 'takeaway':
     case 'delivery':
       return `Order #${props.order.orderNumber}`

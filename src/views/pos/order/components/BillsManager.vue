@@ -15,6 +15,8 @@
       @toggle-bill-selection="handleToggleBillSelection"
       @rename-bill="handleRenameBill"
       @remove-bill="handleRemoveBill"
+      @open-loyalty="(billId, tab) => emit('open-loyalty', billId, tab)"
+      @detach-loyalty="(billId, what) => emit('detach-loyalty', billId, what)"
     />
 
     <!-- Bill Content -->
@@ -102,6 +104,8 @@ const emit = defineEmits<{
   'add-note': [itemId: string]
   'add-item': [itemData: any] // Добавить эту строку
   'apply-discount': [itemId: string]
+  'open-loyalty': [billId: string, tab: 'card' | 'customer']
+  'detach-loyalty': [billId: string, what: 'card' | 'customer']
 }>()
 
 // Computed

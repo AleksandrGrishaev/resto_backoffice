@@ -134,6 +134,30 @@
 
           <!-- RIGHT COLUMN: Discount Controls -->
           <v-col cols="12" md="6" class="controls-column pl-md-4">
+            <!-- Stamp Card Reward Info -->
+            <v-alert
+              v-if="selectedReason === 'stamp_card_reward' && stampCardReward"
+              :type="qualifyingItems.length > 0 ? 'info' : 'warning'"
+              variant="tonal"
+              density="compact"
+              class="mb-3"
+            >
+              <div>
+                <v-icon start size="16">mdi-gift</v-icon>
+                Free {{ stampCardReward.category }} — up to
+                {{ formatIDR(stampCardReward.maxDiscount) }}
+              </div>
+              <div v-if="qualifyingItems.length < activeItems.length" class="text-caption mt-1">
+                {{ qualifyingItems.length }}/{{ activeItems.length }} items qualify ({{
+                  stampCardReward.category
+                }}
+                category). Max discount: {{ formatIDR(qualifyingSubtotal) }}
+              </div>
+              <div v-if="qualifyingItems.length === 0" class="text-caption mt-1 font-weight-medium">
+                No items in this bill match the reward category.
+              </div>
+            </v-alert>
+
             <!-- Discount Type Toggle (Compact) -->
             <div class="mb-3">
               <label class="text-caption font-weight-medium mb-1 d-block">Discount Type</label>
@@ -143,6 +167,7 @@
                 color="primary"
                 density="compact"
                 class="w-100"
+                :disabled="selectedReason === 'stamp_card_reward'"
               >
                 <v-btn value="percentage" class="flex-grow-1" size="small">
                   <v-icon start size="small">mdi-percent</v-icon>
@@ -251,6 +276,7 @@ import { DISCOUNT_REASON_OPTIONS, DISCOUNT_VALIDATION } from '@/stores/discounts
 import type { DiscountReason, DiscountValueType } from '@/stores/discounts/types'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
+import { useMenuStore } from '@/stores/menu'
 import { DebugUtils } from '@/utils'
 import { NumericInputField } from '@/components/input'
 
@@ -262,22 +288,43 @@ interface Props {
   modelValue: boolean
   bill: PosBill | null
   applyToOrder?: boolean // If false, only return discount data without saving to order
+  stampCardReward?: {
+    stamps: number
+    category: string
+    categoryIds: string[]
+    maxDiscount: number
+  } | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  applyToOrder: true
+  applyToOrder: true,
+  stampCardReward: null
 })
 
 // Emits
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  success: [discountData: { amount: number; reason: string; type: string; value: number }]
+  success: [
+    discountData: {
+      amount: number
+      reason: string
+      type: string
+      value: number
+      stampCardReward?: {
+        stamps: number
+        category: string
+        categoryIds: string[]
+        maxDiscount: number
+      }
+    }
+  ]
   cancel: []
 }>()
 
 // Stores
 const ordersStore = usePosOrdersStore()
 const paymentSettingsStore = usePaymentSettingsStore()
+const menuStore = useMenuStore()
 
 // Form state
 const discountType = ref<DiscountValueType>('percentage')
@@ -327,6 +374,31 @@ const billSubtotal = computed(() => {
     const itemDiscountAmount = calculateItemDiscountAmount(item)
     const itemFinalPrice = item.totalPrice - itemDiscountAmount
     return sum + itemFinalPrice
+  }, 0)
+})
+
+// Resolve item's category ID: from PosBillItem.categoryId or lookup via menuStore
+const getItemCategoryId = (item: PosBillItem): string => {
+  if (item.categoryId) return item.categoryId
+  // Fallback: lookup from menu store by menuItemId
+  const menuItem = menuStore.menuItems.find(mi => mi.id === item.menuItemId)
+  return menuItem?.categoryId || ''
+}
+
+// Items qualifying for stamp card reward (filtered by category)
+const qualifyingItems = computed(() => {
+  if (!props.stampCardReward) return activeItems.value
+  const catIds = props.stampCardReward.categoryIds
+  // Empty categoryIds = "any" category, all items qualify
+  if (!catIds || catIds.length === 0) return activeItems.value
+  return activeItems.value.filter(item => catIds.includes(getItemCategoryId(item)))
+})
+
+// Subtotal of only qualifying items (for stamp reward cap)
+const qualifyingSubtotal = computed(() => {
+  return qualifyingItems.value.reduce((sum, item) => {
+    const itemDiscountAmount = calculateItemDiscountAmount(item)
+    return sum + (item.totalPrice - itemDiscountAmount)
   }, 0)
 })
 
@@ -479,7 +551,11 @@ const totalAllocated = computed(() => {
 })
 
 // Computed - Other
-const discountReasonOptions = computed(() => DISCOUNT_REASON_OPTIONS)
+const discountReasonOptions = computed(() => {
+  // Only show stamp_card_reward if reward prop is provided
+  if (props.stampCardReward) return DISCOUNT_REASON_OPTIONS
+  return DISCOUNT_REASON_OPTIONS.filter(o => o.value !== 'stamp_card_reward')
+})
 
 // Validation
 const valueErrorMessage = computed(() => {
@@ -576,11 +652,27 @@ const handleApply = async () => {
     }
 
     // Reset form and emit success with discount data
-    const discountData = {
+    const discountData: {
+      amount: number
+      reason: string
+      type: string
+      value: number
+      stampCardReward?: {
+        stamps: number
+        category: string
+        categoryIds: string[]
+        maxDiscount: number
+      }
+    } = {
       amount: discountAmount.value,
       reason: selectedReason.value,
       type: discountType.value,
       value: discountValue.value
+    }
+
+    // Include reward metadata for post-payment consumption
+    if (selectedReason.value === 'stamp_card_reward' && props.stampCardReward) {
+      discountData.stampCardReward = { ...props.stampCardReward }
     }
 
     resetForm()
@@ -630,6 +722,23 @@ const handleRemoveDiscount = async () => {
   }
 }
 
+// Auto-configure when stamp_card_reward is selected
+watch(selectedReason, reason => {
+  if (reason === 'stamp_card_reward' && props.stampCardReward) {
+    discountType.value = 'fixed'
+    // Cap at qualifying items subtotal (category-filtered), not whole bill
+    const maxCap = Math.min(props.stampCardReward.maxDiscount, qualifyingSubtotal.value)
+    discountValue.value = maxCap
+    const catLabel = props.stampCardReward.category
+    const qualCount = qualifyingItems.value.length
+    const totalCount = activeItems.value.length
+    notes.value =
+      qualCount < totalCount
+        ? `Stamp card reward: free ${catLabel} (${qualCount}/${totalCount} items qualify, up to ${formatIDR(props.stampCardReward.maxDiscount)})`
+        : `Stamp card reward: free ${catLabel} (up to ${formatIDR(props.stampCardReward.maxDiscount)})`
+  }
+})
+
 // Watch for dialog open/close to reset form
 watch(
   () => props.modelValue,
@@ -645,6 +754,11 @@ watch(
         itemsCount: activeItems.value.length,
         subtotal: billSubtotal.value
       })
+
+      // Auto-select stamp_card_reward if reward is available
+      if (props.stampCardReward) {
+        selectedReason.value = 'stamp_card_reward'
+      }
     }
   }
 )

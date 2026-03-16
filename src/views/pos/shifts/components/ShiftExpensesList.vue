@@ -19,7 +19,7 @@
 
     <v-divider />
 
-    <!-- ✅ Sprint 4: Improved empty state -->
+    <!-- Empty state -->
     <v-card-text v-if="expenses.length === 0" class="text-center py-8">
       <v-icon icon="mdi-receipt-text-off-outline" size="64" color="grey-lighten-2" />
       <div class="text-h6 mt-4 text-grey">No expenses yet</div>
@@ -33,15 +33,33 @@
         v-for="expense in sortedExpenses"
         :key="expense.id"
         :prepend-icon="getExpenseIcon(expense)"
-        :subtitle="expense.description"
+        :class="{ 'cancelled-expense': expense.status === 'cancelled' }"
       >
+        <template #subtitle>
+          <span :class="{ 'text-decoration-line-through': expense.status === 'cancelled' }">
+            {{ expense.description }}
+          </span>
+          <div v-if="expense.status === 'cancelled'" class="text-caption text-error mt-1">
+            Cancelled: {{ expense.cancelReason }}
+          </div>
+          <div v-if="expense.editHistory?.length" class="text-caption text-blue mt-1">
+            Edited {{ expense.editHistory.length }}x — last:
+            {{ expense.editHistory[expense.editHistory.length - 1].reason }}
+          </div>
+        </template>
+
         <template #title>
           <div class="d-flex align-center justify-space-between">
             <div>
-              <span class="font-weight-medium">
+              <span
+                class="font-weight-medium"
+                :class="{
+                  'text-decoration-line-through text-grey': expense.status === 'cancelled'
+                }"
+              >
                 {{ expense.counteragentName || 'Direct Expense' }}
               </span>
-              <!-- ✅ Sprint 8: Category chip -->
+              <!-- Category chip -->
               <v-chip
                 size="x-small"
                 :color="getCategoryColor(expense.category)"
@@ -70,14 +88,44 @@
                 {{ expense.status }}
               </v-chip>
             </div>
-            <span class="text-h6 text-error">-Rp {{ formatCurrency(expense.amount) }}</span>
+            <span
+              class="text-h6 text-error"
+              :class="{ 'text-decoration-line-through': expense.status === 'cancelled' }"
+            >
+              -Rp {{ formatCurrency(expense.amount) }}
+            </span>
           </div>
         </template>
 
         <template #append>
-          <div class="text-caption text-grey text-right">
-            <div>{{ formatDate(expense.createdAt) }}</div>
-            <div>{{ formatTime(expense.createdAt) }}</div>
+          <div class="d-flex align-center gap-1">
+            <!-- Edit/Cancel buttons — only for active expenses -->
+            <template v-if="isEditable(expense)">
+              <v-btn
+                icon="mdi-pencil"
+                size="x-small"
+                variant="text"
+                color="primary"
+                @click="$emit('edit-expense', expense)"
+              >
+                <v-icon size="small">mdi-pencil</v-icon>
+                <v-tooltip activator="parent" location="top">Edit expense</v-tooltip>
+              </v-btn>
+              <v-btn
+                icon="mdi-cancel"
+                size="x-small"
+                variant="text"
+                color="error"
+                @click="$emit('cancel-expense', expense)"
+              >
+                <v-icon size="small">mdi-cancel</v-icon>
+                <v-tooltip activator="parent" location="top">Cancel expense</v-tooltip>
+              </v-btn>
+            </template>
+            <div class="text-caption text-grey text-right ml-2">
+              <div>{{ formatDate(expense.createdAt) }}</div>
+              <div>{{ formatTime(expense.createdAt) }}</div>
+            </div>
           </div>
         </template>
       </v-list-item>
@@ -90,8 +138,17 @@ import { computed } from 'vue'
 import type { ShiftExpenseOperation } from '@/stores/pos/shifts/types'
 import { useAccountStore } from '@/stores/account'
 
-const props = defineProps<{
-  expenses: ShiftExpenseOperation[]
+const props = withDefaults(
+  defineProps<{
+    expenses: ShiftExpenseOperation[]
+    readOnly?: boolean
+  }>(),
+  { readOnly: false }
+)
+
+defineEmits<{
+  'edit-expense': [expense: ShiftExpenseOperation]
+  'cancel-expense': [expense: ShiftExpenseOperation]
 }>()
 
 const accountStore = useAccountStore()
@@ -102,7 +159,7 @@ const totalExpenses = computed(() => {
     .reduce((sum, e) => sum + e.amount, 0)
 })
 
-// ✅ Sprint 8: Category breakdown
+// Category breakdown
 const productExpenses = computed(() => {
   return props.expenses
     .filter(
@@ -125,7 +182,13 @@ const sortedExpenses = computed(() => {
   )
 })
 
+function isEditable(expense: ShiftExpenseOperation): boolean {
+  if (props.readOnly) return false
+  return expense.status === 'completed' || expense.status === 'confirmed'
+}
+
 function getExpenseIcon(expense: ShiftExpenseOperation): string {
+  if (expense.status === 'cancelled') return 'mdi-cancel'
   const icons: Record<string, string> = {
     direct_expense: 'mdi-cash-minus',
     supplier_payment: 'mdi-truck-delivery',
@@ -134,31 +197,21 @@ function getExpenseIcon(expense: ShiftExpenseOperation): string {
   return icons[expense.type] || 'mdi-cash'
 }
 
-// ✅ Sprint 8: Category functions - now using dynamic categories from DB
 function getCategoryLabel(category?: string): string {
   if (!category) return 'Other'
-
-  // Look up category name from transaction_categories table
   const categoryObj = accountStore.getCategoryByCode(category)
   if (categoryObj) return categoryObj.name
-
-  // Fallback: capitalize the code
   return category.charAt(0).toUpperCase() + category.slice(1).replace(/_/g, ' ')
 }
 
 function getCategoryColor(category?: string): string {
   if (!category) return 'grey'
-
-  // Look up category from DB to check type
   const categoryObj = accountStore.getCategoryByCode(category)
   if (categoryObj) {
-    // Income categories = green, OPEX = blue, non-OPEX expense = purple
     if (categoryObj.type === 'income') return 'success'
     if (categoryObj.isOpex) return 'blue'
     return 'purple'
   }
-
-  // Fallback
   return category === 'supplier' ? 'purple' : 'blue'
 }
 
@@ -167,7 +220,8 @@ function getStatusColor(status: string): string {
     completed: 'success',
     confirmed: 'success',
     pending: 'warning',
-    rejected: 'error'
+    rejected: 'error',
+    cancelled: 'grey'
   }
   return colors[status] || 'default'
 }
@@ -184,3 +238,9 @@ function formatTime(dateString: string): string {
   return new Date(dateString).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
 }
 </script>
+
+<style scoped>
+.cancelled-expense {
+  opacity: 0.5;
+}
+</style>

@@ -12,6 +12,9 @@
       <div class="item-number">{{ displayNumber }}</div>
     </div>
 
+    <!-- Cancellation Request Indicator -->
+    <div v-if="hasCancellationRequest" class="cancellation-dot" />
+
     <!-- Status Badge (если нужен) -->
     <div v-if="shouldShowStatusBadge" class="status-badge">
       <v-chip :color="statusBadgeColor" size="x-small" variant="flat">
@@ -105,6 +108,11 @@ const displayIcon = computed((): string => {
   }
 
   if (isOrder.value && props.order) {
+    // Online dine-in without table — needs table assignment
+    if (props.order.source === 'website' && props.order.type === 'dine_in' && !props.order.tableId)
+      return 'mdi-table-alert'
+    // Other online orders (takeaway, delivery)
+    if (props.order.source === 'website') return 'mdi-web'
     return getOrderVisual(props.order.type, props.order.channelCode).icon
   }
 
@@ -145,6 +153,10 @@ const iconColor = computed((): string | undefined => {
   }
 
   if (isOrder.value && props.order) {
+    // Online dine-in without table — orange to indicate needs assignment
+    if (props.order.source === 'website' && props.order.type === 'dine_in' && !props.order.tableId)
+      return 'orange'
+    if (props.order.source === 'website') return 'teal'
     return getOrderVisual(props.order.type, props.order.channelCode).color
   }
 
@@ -177,12 +189,20 @@ const itemClasses = computed((): Record<string, boolean> => {
 })
 
 /**
+ * Has pending cancellation request from website customer
+ */
+const hasCancellationRequest = computed((): boolean => {
+  if (!isOrder.value || !props.order) return false
+  return !!props.order.cancellationRequestedAt && !props.order.cancellationResolvedAt
+})
+
+/**
  * Нужно ли показывать статусный бейдж
  */
 const shouldShowStatusBadge = computed((): boolean => {
   if (isOrder.value && props.order) {
     // Показываем статус если заказ готовится или готов
-    return ['preparing', 'ready'].includes(props.order.status)
+    return ['cooking', 'ready'].includes(props.order.status)
   }
   return false
 })
@@ -397,6 +417,8 @@ const handleClick = (): void => {
   background: color-mix(in srgb, #00b14f 6%, transparent);
 }
 
+/* Online orders (source = website) - handled via inline color from teal */
+
 .sidebar-item--order.sidebar-item--order-preparing {
   animation: pulse 2s infinite;
 }
@@ -430,6 +452,30 @@ const handleClick = (): void => {
   margin-top: 2px;
   white-space: pre-line;
   text-align: center;
+}
+
+.cancellation-dot {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgb(var(--v-theme-error));
+  z-index: 3;
+  animation: cancel-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes cancel-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.7;
+  }
 }
 
 .status-badge {

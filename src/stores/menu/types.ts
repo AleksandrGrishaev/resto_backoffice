@@ -173,6 +173,7 @@ export interface VariantTemplate {
 export interface TemplateModifierSelection {
   groupId: string // ID группы модификаторов
   optionIds: string[] // IDs опций (может быть несколько для addon)
+  quantities?: Record<string, number> // optionId → количество (default 1)
 }
 
 // =============================================
@@ -223,6 +224,7 @@ export interface CreateMenuItemDto {
   preparationTime?: number
   allergens?: string[]
   tags?: string[]
+  imageUrl?: string
 
   // ✨ NEW: Модификаторы и шаблоны на уровне блюда
   modifierGroups?: ModifierGroup[]

@@ -39,6 +39,8 @@ export function mapBatchFromDB(dbBatch: DBStorageBatch): StorageBatch {
     supplierName: dbBatch.supplier_name ?? undefined,
     plannedDeliveryDate: dbBatch.planned_delivery_date ?? undefined,
     actualDeliveryDate: dbBatch.actual_delivery_date ?? undefined,
+    // Link to the storage_operation that created this batch
+    storageOperationId: (dbBatch as any).storage_operation_id ?? undefined,
     // ✅ ДОБАВЛЕНО: Поля для негативных батчей (Sprint 1 Phase 2.5)
     isNegative: (dbBatch as any).is_negative ?? false,
     sourceBatchId: (dbBatch as any).source_batch_id ?? undefined,
@@ -78,6 +80,8 @@ export function mapBatchToDB(batch: Partial<StorageBatch>): Partial<DBStorageBat
     supplier_name: batch.supplierName ?? null,
     planned_delivery_date: batch.plannedDeliveryDate ?? null,
     actual_delivery_date: batch.actualDeliveryDate ?? null,
+    // Link to the storage_operation that created this batch
+    storage_operation_id: batch.storageOperationId ?? null,
     // ✅ ДОБАВЛЕНО: Поля для негативных батчей (Sprint 1 Phase 2.5)
     is_negative: batch.isNegative ?? null,
     source_batch_id: batch.sourceBatchId ?? null,

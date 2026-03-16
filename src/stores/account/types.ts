@@ -139,6 +139,23 @@ export interface CreateCorrectionDto {
   performedBy: TransactionPerformer
 }
 
+/**
+ * DTO for correcting an existing transaction (reversal + new transaction)
+ * Used when a transaction was created with wrong category/counteragent/amount
+ */
+export interface CorrectTransactionDto {
+  originalTransactionId: string
+  accountId: string
+  // New values (only changed fields)
+  amount?: number
+  description?: string
+  category?: string
+  counteragentId?: string
+  counteragentName?: string
+  reason: string
+  performedBy: TransactionPerformer
+}
+
 export interface TransactionFilters {
   dateFrom?: string | null
   dateTo?: string | null

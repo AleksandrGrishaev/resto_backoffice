@@ -18,7 +18,26 @@
 
     <!-- Scrollable Content - Single scroll for orders and tables -->
     <div class="scrollable-content">
-      <!-- Active Delivery/Takeaway Orders -->
+      <!-- Online Orders (from website) -->
+      <template v-if="onlineOrders.length > 0">
+        <div class="section-title online-section-title">
+          <v-icon size="12" color="teal" class="mr-1">mdi-web</v-icon>
+          Online ({{ onlineOrders.length }})
+        </div>
+        <div class="items-list">
+          <SidebarItem
+            v-for="order in onlineOrders"
+            :key="order.id"
+            type="order"
+            :order="order"
+            :is-selected="isOrderSelected(order.id)"
+            @select="handleOrderSelect"
+          />
+        </div>
+        <div class="separator" />
+      </template>
+
+      <!-- Active Delivery/Takeaway Orders (POS-created) -->
       <template v-if="deliveryOrders.length > 0">
         <div class="section-title">Orders</div>
         <div class="items-list">
@@ -149,25 +168,39 @@ const tables = computed((): PosTable[] => {
 })
 
 /**
- * Активные заказы на доставку и самовывоз
+ * Online orders from website (source = 'website')
+ * Includes both dine_in (unassigned) and takeaway orders
+ */
+const onlineOrders = computed((): PosOrder[] => {
+  return ordersStore.orders
+    .filter(order => {
+      const isOnline = order.source === 'website'
+      const isNotCompleted = !['cancelled', 'delivered', 'collected', 'served'].includes(
+        order.status
+      )
+      // Exclude orders already assigned to a table (they appear in Tables section)
+      const isNotAssignedToTable = !order.tableId
+      return isOnline && isNotCompleted && isNotAssignedToTable
+    })
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+})
+
+/**
+ * Активные заказы на доставку и самовывоз (POS-created only)
  * Сортируем по времени создания от старых к новым
  */
 const deliveryOrders = computed((): PosOrder[] => {
-  // Removed verbose logging - use browser DevTools for debugging
-
   return ordersStore.orders
     .filter(order => {
       const isDeliveryOrTakeaway = ['takeaway', 'delivery'].includes(order.type)
       const isNotCompleted = !['cancelled', 'delivered', 'collected', 'served'].includes(
         order.status
       )
+      const isNotOnline = order.source !== 'website'
 
-      return isDeliveryOrTakeaway && isNotCompleted
+      return isDeliveryOrTakeaway && isNotCompleted && isNotOnline
     })
-    .sort((a, b) => {
-      // Сортируем по времени создания (старые первыми)
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    })
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 })
 
 /**
@@ -566,6 +599,15 @@ onMounted(async () => {
   background-color: rgba(255, 255, 255, 0.02);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   text-align: center;
+}
+
+.online-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #009688;
+  background-color: rgba(0, 150, 136, 0.06);
+  border-bottom-color: rgba(0, 150, 136, 0.15);
 }
 
 /* =============================================

@@ -12,6 +12,8 @@ import type {
   PosMenuItem
 } from '../types'
 import type { MenuItemVariant } from '@/stores/menu'
+import { supabase } from '@/supabase/client'
+import { DebugUtils } from '@/utils'
 import { OrdersService } from './services'
 import {
   useOrdersComposables,
@@ -1068,7 +1070,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
    */
   async function recalculateOrderTotals(
     orderId: string,
-    options?: { skipTableUpdate?: boolean }
+    options?: { skipTableUpdate?: boolean; skipItemUpsert?: boolean }
   ): Promise<void> {
     const order = orders.value.find(o => o.id === orderId)
     if (!order) return
@@ -1080,7 +1082,13 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     order.updatedAt = new Date().toISOString()
 
     // CRITICAL: Save order to Supabase after recalculation (dual-write)
-    await updateOrder(order)
+    if (options?.skipItemUpsert) {
+      // Only update order-level fields, skip items upsert
+      // Used during payment to avoid triggering unnecessary kitchen realtime events
+      await ordersService.updateOrderOnly(order)
+    } else {
+      await updateOrder(order)
+    }
 
     // Автоматически управлять статусом стола после пересчета
     // (ловит изменения paymentStatus и order.status)
@@ -1088,6 +1096,22 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     if (!options?.skipTableUpdate) {
       await updateTableStatusForOrder(orderId)
     }
+  }
+
+  /**
+   * Update only payment-related fields on specific items (targeted, no full upsert)
+   */
+  async function updateItemsPaymentStatus(
+    items: Array<{ id: string; paymentStatus: string; paidByPaymentIds: string[] }>
+  ): Promise<void> {
+    await ordersService.updateItemsPaymentStatus(items)
+  }
+
+  /**
+   * Update only order-level fields without re-upserting items
+   */
+  async function updateOrderOnly(order: PosOrder): Promise<ServiceResponse<PosOrder>> {
+    return await ordersService.updateOrderOnly(order)
   }
 
   /**
@@ -2354,6 +2378,39 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     }
   }
 
+  // ===== CANCELLATION =====
+
+  /**
+   * Resolve a cancellation request for an order (accept or dismiss)
+   * Calls the resolve_cancellation_request RPC
+   *
+   * @param orderId - Order ID to resolve cancellation for
+   * @param action - 'accept' to cancel the order, 'dismiss' to keep it
+   * @returns Service response with success status
+   */
+  async function resolveCancellationRequest(
+    orderId: string,
+    action: 'accept' | 'dismiss'
+  ): Promise<ServiceResponse<void>> {
+    try {
+      const { data, error: rpcError } = await supabase.rpc('resolve_cancellation_request', {
+        p_order_id: orderId,
+        p_action: action
+      })
+
+      if (rpcError) throw rpcError
+      if (data && !(data as any).success) throw new Error((data as any).error)
+
+      DebugUtils.info('ordersStore', `Cancellation ${action}ed`, { orderId })
+
+      return { success: true }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to resolve cancellation'
+      DebugUtils.error('ordersStore', 'Failed to resolve cancellation', { error: message })
+      return { success: false, error: message }
+    }
+  }
+
   // ===== COMPOSABLES =====
   const {
     canAddItemToOrder,
@@ -2411,6 +2468,8 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     deleteOrder,
     updateOrder,
     recalculateOrderTotals,
+    updateItemsPaymentStatus,
+    updateOrderOnly,
     setFilters,
     clearFilters,
     clearError,
@@ -2440,6 +2499,9 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     mergeBillsIntoOrder,
     repriceItemsForChannel,
     getUnavailableItemsForChannel,
+
+    // Cancellation
+    resolveCancellationRequest,
 
     // Discount Methods (Sprint 7)
     applyItemDiscount,

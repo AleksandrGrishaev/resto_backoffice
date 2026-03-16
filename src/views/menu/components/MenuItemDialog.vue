@@ -68,14 +68,24 @@
             <!-- ====== BASIC TAB ====== -->
             <v-window-item value="basic">
               <div class="tab-content">
-                <!-- Name (first!) -->
-                <v-text-field
-                  v-model="formData.name"
-                  label="Dish Name"
-                  :rules="[v => !!v || 'Required field']"
-                  hide-details="auto"
-                  class="mb-5"
-                />
+                <!-- Image + Name row -->
+                <div class="d-flex align-start mb-5" style="gap: 16px">
+                  <image-uploader
+                    v-if="canUploadImage"
+                    :model-value="formData.imageUrl"
+                    :item-id="imageUploadId"
+                    :item-name="formData.name"
+                    @update:model-value="handleImageUpdate"
+                  />
+                  <div class="flex-grow-1">
+                    <v-text-field
+                      v-model="formData.name"
+                      label="Dish Name"
+                      :rules="[v => !!v || 'Required field']"
+                      hide-details="auto"
+                    />
+                  </div>
+                </div>
 
                 <!-- Category -->
                 <v-select
@@ -336,6 +346,7 @@ import type { MenuItem, CreateMenuItemDto, MenuItemVariant, DishType } from '@/s
 import MenuItemVariantComponent from './MenuItemVariant.vue'
 import ModifiersEditorWidget from '@/views/recipes/components/widgets/ModifiersEditorWidget.vue'
 import TemplatesEditorWidget from './widgets/TemplatesEditorWidget.vue'
+import ImageUploader from '@/components/common/ImageUploader.vue'
 
 const MODULE_NAME = 'MenuItemDialog'
 
@@ -394,7 +405,8 @@ const formData = ref({
   modifierGroups: [] as any[],
   templates: [] as any[],
   channelIds: [] as string[],
-  onlyModifiers: false
+  onlyModifiers: false,
+  imageUrl: ''
 })
 
 // Computed
@@ -600,6 +612,21 @@ const isDraft = computed(() => {
   return isEdit.value && props.item?.status === 'draft'
 })
 
+// Image upload: only available when editing (item has an ID)
+const canUploadImage = computed(() => isEdit.value && !!props.item?.id)
+const imageUploadId = computed(() => props.item?.id || '')
+
+function handleImageUpdate(url: string) {
+  formData.value.imageUrl = url
+  // Persist imageUrl immediately to DB (no need to wait for form submit)
+  if (props.item) {
+    menuStore.updateMenuItem(props.item.id, {
+      imageUrl: url || undefined,
+      department: props.item.department
+    })
+  }
+}
+
 const canSaveDraft = computed(() => {
   return formData.value.name.trim().length > 0
 })
@@ -672,9 +699,22 @@ function getNextSortOrder(categoryId: string): number {
   return Math.max(...categoryItems.map(item => item.sortOrder || 0)) + 1
 }
 
+/**
+ * Deep-clone modifierGroups/templates to decouple form state from the store.
+ * Without this, Vuetify's form.reset() sets v-model-bound fields to null,
+ * corrupting the reactive store objects through shared references.
+ */
+function deepCloneModifiers(groups: any[]): any[] {
+  if (!groups || groups.length === 0) return []
+  return JSON.parse(JSON.stringify(groups))
+}
+
 function resetForm() {
+  // NOTE: Do NOT call form.value.reset() here.
+  // Vuetify's VForm.reset() sets all v-model values to null, which corrupts
+  // store objects when modifierGroups/templates share references with the store.
   if (form.value) {
-    form.value.reset()
+    form.value.resetValidation()
   }
   formData.value = {
     categoryId: '',
@@ -690,7 +730,8 @@ function resetForm() {
     channelIds: channelsStore.activeChannels
       .filter(c => c.type !== 'delivery_platform')
       .map(c => c.id),
-    onlyModifiers: false
+    onlyModifiers: false,
+    imageUrl: ''
   }
   currentTab.value = 'basic'
   showAdvancedTab.value = false
@@ -905,10 +946,11 @@ watch(
           ...variant,
           composition: variant.composition || []
         })),
-        modifierGroups: newItem.modifierGroups || [],
-        templates: newItem.templates || [],
+        modifierGroups: deepCloneModifiers(newItem.modifierGroups || []),
+        templates: deepCloneModifiers(newItem.templates || []),
         channelIds: channelsStore.getMenuItemChannelIds(newItem.id),
-        onlyModifiers: isOnlyModifiers
+        onlyModifiers: isOnlyModifiers,
+        imageUrl: newItem.imageUrl || ''
       }
     } else {
       resetForm()
@@ -947,10 +989,11 @@ watch(
             ...variant,
             composition: variant.composition || []
           })),
-          modifierGroups: props.item.modifierGroups || [],
-          templates: props.item.templates || [],
+          modifierGroups: deepCloneModifiers(props.item.modifierGroups || []),
+          templates: deepCloneModifiers(props.item.templates || []),
           channelIds: channelsStore.getMenuItemChannelIds(props.item.id),
-          onlyModifiers: isOnlyMods
+          onlyModifiers: isOnlyMods,
+          imageUrl: props.item.imageUrl || ''
         }
         // Show modifiers tab if item has modifiers or templates
         showAdvancedTab.value =

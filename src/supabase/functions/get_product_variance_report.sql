@@ -1,6 +1,6 @@
 -- Function: get_product_variance_report_v4
 -- Description: Product Variance Report with full stock movement tracking
--- Version: v4.0 (2026-02-02)
+-- Version: v4.3 (2026-03-10)
 --
 -- CHANGELOG:
 -- v3.0: Initial version with theoretical sales from orders
@@ -9,31 +9,31 @@
 -- v3.3: Fixed products_from_preparations - prep_qty is PORTIONS, not grams
 -- v3.4: Handle BOTH portion-type and weight-type preparations correctly
 -- v4.0: Clean refactoring with cleaner CTE organization
---   - Same calculations as v3 (verified matching results)
---   - Cleaner code structure
---   - Helper functions available for details_v3
---
--- Key concepts:
--- - Write-offs = sales_consumption (products + decomposed preparations)
--- - Loss = expired/spoiled/other (products + decomposed preparations) + negative corrections
--- - Gain = positive corrections
+-- v4.1: CRITICAL FIX - portion_size unit normalization for portion-type preparations
+--   - recipe_prep_orders/direct_prep_orders now normalize to GRAMS
+--   - Recursive sub-prep decomposition handles portion/gram units
+--   - Was under-counting Sales by factor of portion_size (e.g., 30x for Salmon)
+--   - All 6 functions updated: report_v4, theoretical_sales, decomposition_factors,
+--     writeoffs_decomposed, loss_decomposed, inpreps
+-- v4.2: Opening now includes InPreps (products frozen in preparations at period start)
+--   - New helper: calc_opening_inpreps_bulk(date) estimates historical prep batch quantities
+--   - Active batches: use current_quantity; Depleted after opening: use initial_quantity
+--   - Formula: Expected = Opening(raw+inPreps) + Received - Sales - Loss + Gain
+--   - Detail dialog shows opening breakdown: rawStock + inPreparations (with per-prep detail)
+--   - Detail version bumped to v3.3
+-- v4.3: Snapshot InPreps — prefer exact data stored during Shift Close
+--   - inventory_snapshots extended: in_preps_quantity, in_preps_cost columns (NULL = pre-migration)
+--   - Trigger updated: stores InPreps per product at shift close via calc_opening_inpreps_bulk
+--   - COALESCE pattern: snapshot InPreps → estimation fallback → 0
+--   - Report v4.3, Detail v3.4
+--   - Migration: src/supabase/migrations/198_snapshot_inpreps_columns.sql
 --
 -- Key formulas:
--- - Expected = Opening + Received - Sales - Loss + Gain
+-- - Expected = Opening(raw+inPreps) + Received - Sales - Loss + Gain
 -- - Actual = Closing + InPreps
 -- - Variance = Actual - Expected (positive = surplus, negative = shortage)
 --
--- Decomposition:
--- When a preparation is written off (sales_consumption or loss), it gets
--- decomposed recursively to its constituent products for accurate tracking.
---
--- Helper functions (for single-product queries in details_v3):
--- - calc_product_theoretical_sales(product_id, start_date, end_date)
--- - calc_product_writeoffs_decomposed(product_id, start_date, end_date)
--- - calc_product_loss_decomposed(product_id, start_date, end_date)
--- - calc_product_inpreps(product_id)
---
--- Migration: src/supabase/migrations/131_variance_report_v4.sql
+-- Migration: src/supabase/migrations/197_add_opening_inpreps_to_variance.sql
 -- Store: src/stores/analytics/varianceReportStore.ts (generateReportV2 function)
 --
 -- For full SQL implementation, see the migration file.
