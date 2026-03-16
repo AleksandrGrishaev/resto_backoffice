@@ -187,6 +187,12 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     customerName?: string
   ): Promise<ServiceResponse<PosOrder>> {
     try {
+      // Debounce: if already creating an order, wait for it to finish
+      if (loading.value.create) {
+        console.warn('⚠️ [ordersStore] createOrder already in progress, skipping')
+        return { success: false, error: 'Order creation already in progress' }
+      }
+
       loading.value.create = true
       error.value = null
 

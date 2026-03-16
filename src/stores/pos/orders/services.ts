@@ -242,14 +242,19 @@ export class OrdersService {
 
           // Note: No items to insert yet (order is empty)
           console.log('✅ Order saved to Supabase:', newOrder.orderNumber)
-        } catch (error) {
-          console.error('❌ Supabase save failed after retries:', extractErrorDetails(error))
-          // CRITICAL: Return error instead of continuing with localStorage-only order
-          // This prevents "ghost" orders where table is occupied but order doesn't exist in DB
-          // TODO: In the future, implement offline sync queue for true offline support
+        } catch (error: any) {
+          const errorDetails = extractErrorDetails(error)
+          console.error('❌ Supabase save failed after retries:', errorDetails)
+
+          // Propagate DB error code (e.g. 23505 unique violation) so caller can handle
+          const dbCode = error?.code || error?.cause?.code || ''
+          const errorMsg = dbCode
+            ? `[${dbCode}] ${error?.message || 'Failed to save order'}`
+            : 'Failed to save order to server. Please check your connection and try again.'
+
           return {
             success: false,
-            error: 'Failed to save order to server. Please check your connection and try again.'
+            error: errorMsg
           }
         }
       }
