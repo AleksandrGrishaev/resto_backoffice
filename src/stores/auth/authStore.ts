@@ -265,7 +265,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // ===== AUTHENTICATION METHOD 1: Email + Password (Admin/Manager) =====
-  async function loginWithEmail(email: string, password: string): Promise<boolean> {
+  async function loginWithEmail(
+    email: string,
+    password: string,
+    captchaToken?: string
+  ): Promise<boolean> {
     state.value.isLoading = true
     state.value.error = null
 
@@ -274,7 +278,8 @@ export const useAuthStore = defineStore('auth', () => {
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        password
+        password,
+        options: captchaToken ? { captchaToken } : undefined
       })
 
       if (error) throw error
@@ -300,7 +305,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // ===== AUTHENTICATION METHOD 2 & 3: PIN (Cashier/Kitchen/Bar) =====
-  async function loginWithPin(pin: string): Promise<boolean> {
+  async function loginWithPin(pin: string, captchaToken?: string): Promise<boolean> {
     state.value.isLoading = true
     state.value.error = null
 
@@ -359,7 +364,8 @@ export const useAuthStore = defineStore('auth', () => {
       DebugUtils.info(MODULE_NAME, 'Calling signInWithPassword', { email: credentials.user_email })
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: credentials.user_email,
-        password: credentials.user_password
+        password: credentials.user_password,
+        options: captchaToken ? { captchaToken } : undefined
       })
 
       DebugUtils.info(MODULE_NAME, 'signInWithPassword response', {

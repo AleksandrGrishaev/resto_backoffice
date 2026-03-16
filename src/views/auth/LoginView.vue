@@ -259,6 +259,9 @@
               </v-window-item>
             </v-window>
 
+            <!-- Turnstile captcha (invisible in managed mode) -->
+            <div v-if="turnstileSiteKey" ref="turnstileRef" class="turnstile-container"></div>
+
             <!-- Error Alert -->
             <v-alert
               v-if="error"
@@ -278,7 +281,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth/authStore'
 import { DebugUtils } from '@/utils'
@@ -286,6 +289,7 @@ import PinInput from '@/components/atoms/inputs/PinInput.vue'
 
 // ===== CONSTANTS =====
 const MODULE_NAME = 'LoginView'
+const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || ''
 
 // ===== COMPOSABLES =====
 const router = useRouter()
@@ -296,6 +300,9 @@ const authStore = useAuthStore()
 const activeTab = ref<'email' | 'pos' | 'kitchen' | 'admin'>('pos') // Default to POS for quick access
 const isLoading = ref(false)
 const error = ref('')
+const turnstileRef = ref<HTMLElement>()
+const captchaToken = ref('')
+let turnstileWidgetId: string | undefined
 
 // Email form state
 const email = ref('')
@@ -322,6 +329,81 @@ const showDevHelpers = computed(() => {
   return import.meta.env.DEV
 })
 
+// ===== TURNSTILE CAPTCHA =====
+
+function loadTurnstileScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if ((window as any).turnstile) {
+      resolve()
+      return
+    }
+    const script = document.createElement('script')
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+    script.async = true
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error('Failed to load Turnstile script'))
+    document.head.appendChild(script)
+  })
+}
+
+function renderTurnstile() {
+  if (!turnstileSiteKey || !turnstileRef.value || !(window as any).turnstile) return
+  turnstileWidgetId = (window as any).turnstile.render(turnstileRef.value, {
+    sitekey: turnstileSiteKey,
+    callback: (token: string) => {
+      captchaToken.value = token
+      DebugUtils.info(MODULE_NAME, 'Turnstile token received')
+    },
+    'expired-callback': () => {
+      captchaToken.value = ''
+      DebugUtils.info(MODULE_NAME, 'Turnstile token expired, resetting')
+      resetTurnstile()
+    },
+    'error-callback': () => {
+      DebugUtils.error(MODULE_NAME, 'Turnstile error')
+    },
+    theme: 'dark',
+    size: 'flexible'
+  })
+}
+
+function resetTurnstile() {
+  if (turnstileWidgetId !== undefined && (window as any).turnstile) {
+    ;(window as any).turnstile.reset(turnstileWidgetId)
+    captchaToken.value = ''
+  }
+}
+
+/** Wait for captcha token (up to 10s) or return empty if no captcha configured */
+async function getCaptchaToken(): Promise<string> {
+  if (!turnstileSiteKey) return ''
+  // If token already available, use it
+  if (captchaToken.value) return captchaToken.value
+  // Wait for token (Turnstile managed mode may take a moment)
+  for (let i = 0; i < 20; i++) {
+    await new Promise(r => setTimeout(r, 500))
+    if (captchaToken.value) return captchaToken.value
+  }
+  DebugUtils.error(MODULE_NAME, 'Turnstile token timeout')
+  return ''
+}
+
+onMounted(async () => {
+  if (!turnstileSiteKey) return
+  try {
+    await loadTurnstileScript()
+    renderTurnstile()
+  } catch (e) {
+    DebugUtils.error(MODULE_NAME, 'Failed to init Turnstile', { error: e })
+  }
+})
+
+onBeforeUnmount(() => {
+  if (turnstileWidgetId !== undefined && (window as any).turnstile) {
+    ;(window as any).turnstile.remove(turnstileWidgetId)
+  }
+})
+
 // ===== METHODS =====
 
 /**
@@ -338,7 +420,8 @@ const handleEmailLogin = async () => {
 
     DebugUtils.info(MODULE_NAME, 'Email login attempt', { email: email.value })
 
-    const success = await authStore.loginWithEmail(email.value, password.value)
+    const token = await getCaptchaToken()
+    const success = await authStore.loginWithEmail(email.value, password.value, token)
 
     if (success) {
       DebugUtils.info(MODULE_NAME, 'Email login successful')
@@ -355,6 +438,7 @@ const handleEmailLogin = async () => {
     DebugUtils.error(MODULE_NAME, 'Email login failed', { error: errorMessage })
   } finally {
     isLoading.value = false
+    resetTurnstile()
   }
 }
 
@@ -368,7 +452,8 @@ const handlePinLogin = async (pin: string) => {
 
     DebugUtils.info(MODULE_NAME, 'POS PIN login attempt')
 
-    const success = await authStore.loginWithPin(pin)
+    const token = await getCaptchaToken()
+    const success = await authStore.loginWithPin(pin, token)
 
     if (success) {
       DebugUtils.info(MODULE_NAME, 'POS PIN login successful')
@@ -385,6 +470,7 @@ const handlePinLogin = async (pin: string) => {
     DebugUtils.error(MODULE_NAME, 'POS PIN login failed', { error: errorMessage })
   } finally {
     isLoading.value = false
+    resetTurnstile()
   }
 }
 
@@ -398,7 +484,8 @@ const handleKitchenPinLogin = async (pin: string) => {
 
     DebugUtils.info(MODULE_NAME, 'Kitchen PIN login attempt')
 
-    const success = await authStore.loginWithPin(pin)
+    const token = await getCaptchaToken()
+    const success = await authStore.loginWithPin(pin, token)
 
     if (success) {
       DebugUtils.info(MODULE_NAME, 'Kitchen PIN login successful')
@@ -415,6 +502,7 @@ const handleKitchenPinLogin = async (pin: string) => {
     DebugUtils.error(MODULE_NAME, 'Kitchen PIN login failed', { error: errorMessage })
   } finally {
     isLoading.value = false
+    resetTurnstile()
   }
 }
 
@@ -431,7 +519,8 @@ const handleAdminLogin = async () => {
 
     DebugUtils.info(MODULE_NAME, 'Admin login attempt', { email: adminEmail.value })
 
-    const success = await authStore.loginWithEmail(adminEmail.value, adminPassword.value)
+    const token = await getCaptchaToken()
+    const success = await authStore.loginWithEmail(adminEmail.value, adminPassword.value, token)
 
     if (success) {
       DebugUtils.info(MODULE_NAME, 'Admin login successful')
@@ -445,6 +534,7 @@ const handleAdminLogin = async () => {
     DebugUtils.error(MODULE_NAME, 'Admin login failed', { error: errorMessage })
   } finally {
     isLoading.value = false
+    resetTurnstile()
   }
 }
 
@@ -570,6 +660,13 @@ const fillPin = (pin: string) => {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(var(--v-theme-primary), 0.3);
   }
+}
+
+// ===== TURNSTILE =====
+.turnstile-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
 }
 
 // ===== ERROR ALERT =====
