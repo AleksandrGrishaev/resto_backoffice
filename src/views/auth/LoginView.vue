@@ -356,8 +356,7 @@ function renderTurnstile() {
     },
     'expired-callback': () => {
       captchaToken.value = ''
-      DebugUtils.info(MODULE_NAME, 'Turnstile token expired, resetting')
-      resetTurnstile()
+      DebugUtils.info(MODULE_NAME, 'Turnstile token expired')
     },
     'error-callback': () => {
       DebugUtils.error(MODULE_NAME, 'Turnstile error')
