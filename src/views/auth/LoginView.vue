@@ -329,6 +329,8 @@ const showDevHelpers = computed(() => {
 })
 
 // ===== TURNSTILE CAPTCHA =====
+// Tracks whether Turnstile is operational (loaded + no errors)
+const turnstileReady = ref(false)
 
 function loadTurnstileScript(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -347,42 +349,57 @@ function loadTurnstileScript(): Promise<void> {
 
 function renderTurnstile() {
   if (!turnstileSiteKey || !turnstileRef.value || !(window as any).turnstile) return
-  turnstileWidgetId = (window as any).turnstile.render(turnstileRef.value, {
-    sitekey: turnstileSiteKey,
-    callback: (token: string) => {
-      captchaToken.value = token
-      DebugUtils.info(MODULE_NAME, 'Turnstile token received')
-    },
-    'expired-callback': () => {
-      captchaToken.value = ''
-      DebugUtils.info(MODULE_NAME, 'Turnstile token expired')
-    },
-    'error-callback': () => {
-      DebugUtils.error(MODULE_NAME, 'Turnstile error')
-    },
-    theme: 'dark',
-    size: 'invisible'
-  })
+  try {
+    turnstileWidgetId = (window as any).turnstile.render(turnstileRef.value, {
+      sitekey: turnstileSiteKey,
+      callback: (token: string) => {
+        captchaToken.value = token
+        turnstileReady.value = true
+        DebugUtils.info(MODULE_NAME, 'Turnstile token received')
+      },
+      'expired-callback': () => {
+        captchaToken.value = ''
+        DebugUtils.info(MODULE_NAME, 'Turnstile token expired')
+      },
+      'error-callback': () => {
+        // Turnstile failed (wrong domain, network, etc.) — disable it for this session
+        turnstileReady.value = false
+        DebugUtils.error(MODULE_NAME, 'Turnstile error — captcha disabled for this session')
+      },
+      theme: 'dark',
+      size: 'invisible'
+    })
+  } catch (e) {
+    turnstileReady.value = false
+    DebugUtils.error(MODULE_NAME, 'Turnstile render failed', { error: e })
+  }
 }
 
 function resetTurnstile() {
-  if (turnstileWidgetId !== undefined && (window as any).turnstile) {
-    ;(window as any).turnstile.reset(turnstileWidgetId)
+  if (!turnstileReady.value || turnstileWidgetId === undefined) return
+  try {
+    ;(window as any).turnstile?.reset(turnstileWidgetId)
     captchaToken.value = ''
+  } catch {
+    // Widget may already be destroyed — ignore
   }
 }
 
-/** Wait for captcha token (up to 10s) or return empty if no captcha configured */
+/**
+ * Get captcha token — returns immediately if Turnstile is not operational.
+ * If Turnstile is ready but token not yet available, waits up to 3s.
+ */
 async function getCaptchaToken(): Promise<string> {
-  if (!turnstileSiteKey) return ''
-  // If token already available, use it
+  // No sitekey configured or Turnstile errored out — skip entirely
+  if (!turnstileSiteKey || !turnstileReady.value) return ''
+  // Token already available
   if (captchaToken.value) return captchaToken.value
-  // Wait for token (Turnstile managed mode may take a moment)
-  for (let i = 0; i < 20; i++) {
+  // Wait briefly for token (3s max instead of 10s)
+  for (let i = 0; i < 6; i++) {
     await new Promise(r => setTimeout(r, 500))
     if (captchaToken.value) return captchaToken.value
   }
-  DebugUtils.error(MODULE_NAME, 'Turnstile token timeout')
+  DebugUtils.error(MODULE_NAME, 'Turnstile token timeout (3s)')
   return ''
 }
 
@@ -392,13 +409,18 @@ onMounted(async () => {
     await loadTurnstileScript()
     renderTurnstile()
   } catch (e) {
+    turnstileReady.value = false
     DebugUtils.error(MODULE_NAME, 'Failed to init Turnstile', { error: e })
   }
 })
 
 onBeforeUnmount(() => {
   if (turnstileWidgetId !== undefined && (window as any).turnstile) {
-    ;(window as any).turnstile.remove(turnstileWidgetId)
+    try {
+      ;(window as any).turnstile.remove(turnstileWidgetId)
+    } catch {
+      // Ignore cleanup errors
+    }
   }
 })
 

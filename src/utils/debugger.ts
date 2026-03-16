@@ -219,12 +219,33 @@ export class DebugUtils {
   private static sanitizeData(data: LogData): unknown {
     try {
       if (typeof data === 'object' && data !== null) {
-        return JSON.parse(JSON.stringify(data))
+        // Extract safe representations from Error objects before serializing
+        const safe = this.extractErrors(data)
+        return JSON.parse(JSON.stringify(safe))
       }
       return data
     } catch {
       return '[Complex Object]'
     }
+  }
+
+  /**
+   * Recursively replace Error instances with safe {message, name} objects
+   * to prevent "Converting circular structure to JSON" when errors contain
+   * Vue component references or Supabase channel objects.
+   */
+  private static extractErrors(obj: Record<string, unknown>): Record<string, unknown> {
+    const result: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(obj)) {
+      if (value instanceof Error) {
+        result[key] = { message: value.message, name: value.name }
+      } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        result[key] = this.extractErrors(value as Record<string, unknown>)
+      } else {
+        result[key] = value
+      }
+    }
+    return result
   }
 
   // =============================================
