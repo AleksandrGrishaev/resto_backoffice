@@ -519,8 +519,11 @@ const refreshMenu = async (): Promise<void> => {
     loading.value = true
     error.value = null
 
-    await menuStore.fetchCategories()
-    await menuStore.fetchMenuItems()
+    await Promise.all([
+      menuStore.fetchCategories(),
+      menuStore.fetchMenuItems(),
+      channelsStore.refresh()
+    ])
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Failed to refresh menu'
     error.value = errorMessage
