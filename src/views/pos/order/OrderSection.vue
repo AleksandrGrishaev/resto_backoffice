@@ -2462,7 +2462,10 @@ const handleDeleteOrder = async (): Promise<void> => {
   }
 }
 
-const handleCancelOrderConfirm = async (reason: string): Promise<void> => {
+const handleCancelOrderConfirm = async (data: {
+  reason: import('@/stores/pos/types').CancellationReason
+  notes: string
+}): Promise<void> => {
   if (!currentOrder.value) return
 
   try {
@@ -2480,7 +2483,7 @@ const handleCancelOrderConfirm = async (reason: string): Promise<void> => {
     )
 
     // Cancel the order via RPC (sets status in DB, cancels all items)
-    const result = await ordersStore.cancelOrder(order.id, reason)
+    const result = await ordersStore.cancelOrder(order.id, data.reason, data.notes)
 
     if (result.success) {
       // Run write-offs for prepared items (non-blocking, fire-and-forget)
@@ -2530,7 +2533,7 @@ const handleCancelOrderConfirm = async (reason: string): Promise<void> => {
                       quantity: wi.quantity,
                       unit: wi.unit
                     })),
-                    notes: `Order ${order.orderNumber} cancelled: ${item.menuItemName} (${reason})`
+                    notes: `Order ${order.orderNumber} cancelled: ${item.menuItemName} (${data.reason}${data.notes ? ': ' + data.notes : ''})`
                   })
                 }
               } catch {

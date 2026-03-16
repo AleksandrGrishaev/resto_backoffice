@@ -244,20 +244,12 @@ const canCompleteOrder = computed((): boolean => {
   )
 })
 
-// Can cancel order (website order not in final status, OR all items already cancelled)
+// Can cancel order (any non-final-status order)
 const canCancelOrder = computed((): boolean => {
   if (!props.order) return false
   const finalStatuses = ['cancelled', 'served', 'collected', 'delivered']
   if (finalStatuses.includes(props.order.status)) return false
-
-  // Show for website orders
-  if (props.order.source === 'website') return true
-
-  // Show when all items are cancelled (stuck order)
-  const allItems = props.order.bills.flatMap(b => b.items)
-  if (allItems.length > 0 && allItems.every(i => i.status === 'cancelled')) return true
-
-  return false
+  return true
 })
 
 // Computed - Amounts

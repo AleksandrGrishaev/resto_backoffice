@@ -179,7 +179,7 @@ const isFormValid = computed(() => {
   return true
 })
 
-const reasonOptions = CANCELLATION_REASON_OPTIONS
+const reasonOptions = CANCELLATION_REASON_OPTIONS.filter(o => o.value !== 'staff_cancelled')
 
 // Reset form when dialog opens
 watch(

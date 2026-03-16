@@ -1194,7 +1194,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
    * Cancel an entire order via server-side RPC (staff action)
    * Works for any order type including dine_in with no table
    */
-  async function cancelOrder(orderId: string, reason: string): Promise<ServiceResponse<void>> {
+  async function cancelOrder(
+    orderId: string,
+    reason: string,
+    notes?: string
+  ): Promise<ServiceResponse<void>> {
     try {
       loading.value.update = true
       const order = orders.value.find(o => o.id === orderId)
@@ -1207,11 +1211,12 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         return { success: false, error: `Order is already in final status: ${order.status}` }
       }
 
-      console.log('🚫 [ordersStore] Cancelling order:', { orderId, reason })
+      console.log('🚫 [ordersStore] Cancelling order:', { orderId, reason, notes })
 
       const { data, error: rpcError } = await supabase.rpc('staff_cancel_order', {
         p_order_id: orderId,
-        p_reason: reason
+        p_reason: reason,
+        p_notes: notes || null
       })
 
       if (rpcError) {
@@ -1232,7 +1237,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
             item.status = 'cancelled'
             item.cancelledAt = new Date().toISOString()
             item.cancellationReason = 'staff_cancelled'
-            item.cancellationNotes = reason
+            item.cancellationNotes = notes || reason
           }
         }
       }

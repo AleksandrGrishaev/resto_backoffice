@@ -1,17 +1,12 @@
--- RPC: staff_cancel_order
--- Cancels an entire order from POS (staff action)
--- Auth: is_staff() check
--- Returns: { success, orderId }
---
--- Logic:
--- 1. Validates order exists and is not already in a final status
--- 2. Sets order status = 'cancelled'
--- 3. Records cancellation metadata (reason, resolved_at, resolved_by)
--- 4. Cancels all non-cancelled order_items
--- 5. If order has a table_id — frees the table (status='free')
---
--- p_reason: structured CancellationReason enum value (e.g. 'customer_refused')
--- p_notes: optional free-text notes for additional context
+-- Migration: 225_staff_cancel_order_structured_reason
+-- Description: Update staff_cancel_order RPC to accept structured reason + notes
+-- Date: 2026-03-16
+
+-- CONTEXT: Order cancellation previously used free-text reason only.
+-- Now we pass structured CancellationReason enum value as p_reason
+-- and optional p_notes for additional details.
+-- orders.cancellation_reason stores the enum value (e.g. 'customer_refused')
+-- order_items.cancellation_notes stores COALESCE(p_notes, p_reason) for display
 
 CREATE OR REPLACE FUNCTION public.staff_cancel_order(
   p_order_id UUID,

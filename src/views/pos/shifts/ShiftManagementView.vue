@@ -153,6 +153,95 @@
         </v-card-text>
       </v-card>
 
+      <!-- Cancellations Summary -->
+      <v-card v-if="hasCancellations" class="cancellations-card mt-4">
+        <v-card-title class="d-flex align-center">
+          <v-icon icon="mdi-cancel" color="error" class="me-3" />
+          <span>Cancellations</span>
+        </v-card-title>
+        <v-card-text>
+          <!-- Summary Cards -->
+          <div class="summary-grid mb-4">
+            <div class="summary-item">
+              <div class="label">Cancelled Orders</div>
+              <div class="value negative">{{ cancellationStats.cancelledOrdersCount }}</div>
+            </div>
+            <div class="summary-item">
+              <div class="label">Cancelled Items</div>
+              <div class="value negative">{{ cancellationStats.cancelledItemsCount }}</div>
+            </div>
+            <div class="summary-item">
+              <div class="label">Lost Revenue</div>
+              <div class="value negative">
+                {{ formatPrice(cancellationStats.totalCancelledAmount) }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Reason Breakdown -->
+          <v-table
+            v-if="cancellationStats.reasonBreakdown.length > 0"
+            density="compact"
+            class="mb-4"
+          >
+            <thead>
+              <tr>
+                <th>Reason</th>
+                <th>Count</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="rb in cancellationStats.reasonBreakdown" :key="rb.reason">
+                <td>{{ rb.label }}</td>
+                <td>{{ rb.count }}</td>
+                <td class="text-error">{{ formatPrice(rb.amount) }}</td>
+              </tr>
+            </tbody>
+          </v-table>
+
+          <!-- Details -->
+          <v-expansion-panels v-if="cancellationStats.details.length > 0" variant="accordion">
+            <v-expansion-panel>
+              <v-expansion-panel-title>
+                All Cancellations ({{ cancellationStats.details.length }})
+              </v-expansion-panel-title>
+              <v-expansion-panel-text>
+                <div
+                  v-for="(detail, idx) in cancellationStats.details"
+                  :key="idx"
+                  class="d-flex justify-space-between align-center py-2"
+                  :class="{ 'border-b': idx < cancellationStats.details.length - 1 }"
+                >
+                  <div>
+                    <strong>{{ detail.orderNumber }}</strong>
+                    <v-chip
+                      :color="detail.type === 'order' ? 'error' : 'warning'"
+                      size="x-small"
+                      variant="flat"
+                      class="ml-1"
+                    >
+                      {{ detail.type === 'order' ? 'Full Order' : 'Item' }}
+                    </v-chip>
+                    <div class="text-caption text-medium-emphasis">
+                      <span v-if="detail.itemName">
+                        {{ detail.itemName }} x{{ detail.quantity }} ·
+                      </span>
+                      {{ detail.reasonLabel }}
+                      <span v-if="detail.notes">· {{ detail.notes }}</span>
+                      <span v-if="detail.hadWriteOff" class="ml-1 text-warning">(write-off)</span>
+                    </div>
+                  </div>
+                  <span class="text-error font-weight-bold">
+                    {{ formatPrice(detail.totalAmount) }}
+                  </span>
+                </div>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+          </v-expansion-panels>
+        </v-card-text>
+      </v-card>
+
       <!-- Sprint 3: Negative Balance Warning -->
       <v-alert v-if="hasNegativeBalance" type="error" variant="tonal" prominent class="mt-4">
         <template #prepend>
@@ -343,7 +432,8 @@ import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
 import { usePosPaymentsStore } from '@/stores/pos/payments/paymentsStore'
 import { useAccountStore } from '@/stores/account'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
-import type { PosShift, PosPayment } from '@/stores/pos/types'
+import type { PosPayment } from '@/stores/pos/types'
+import { useCancellationStats } from '@/stores/pos/shifts/composables/useCancellationStats'
 import type { PendingPayment } from '@/stores/account/types'
 import type { ShiftExpenseOperation } from '@/stores/pos/shifts/types'
 import StartShiftDialog from './dialogs/StartShiftDialog.vue'
@@ -412,6 +502,9 @@ const currentShift = computed(() => {
   }
   return shiftsStore.currentShift
 })
+
+// Cancellation stats
+const { cancellationStats, hasCancellations } = useCancellationStats(() => currentShift.value)
 
 // Get payments for current shift
 const shiftPayments = computed(() => {

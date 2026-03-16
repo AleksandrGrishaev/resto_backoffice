@@ -66,6 +66,11 @@ export const CANCELLATION_REASON_OPTIONS = [
   { value: 'customer_refused' as CancellationReason, label: 'Customer Refused', color: 'warning' },
   { value: 'wrong_order' as CancellationReason, label: 'Wrong Order', color: 'info' },
   { value: 'out_of_stock' as CancellationReason, label: 'Out of Stock', color: 'secondary' },
+  {
+    value: 'staff_cancelled' as CancellationReason,
+    label: 'Staff Cancelled',
+    color: 'error'
+  },
   { value: 'other' as CancellationReason, label: 'Other', color: 'grey' }
 ] as const
 
