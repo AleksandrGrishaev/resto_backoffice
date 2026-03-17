@@ -159,7 +159,12 @@ BEGIN
           'optionId', v_modifier->>'optionId',
           'optionName', v_mod_option->>'name',
           'priceAdjustment', COALESCE((v_mod_option->>'priceAdjustment')::numeric, 0),
-          'quantity', COALESCE((v_modifier->>'quantity')::integer, 1)
+          'quantity', COALESCE((v_modifier->>'quantity')::integer, 1),
+          -- Fields required by DecompositionEngine for ingredient write-offs
+          'groupType', v_mod_group->>'type',
+          'isDefault', COALESCE((v_mod_option->>'isDefault')::boolean, false),
+          'composition', COALESCE(v_mod_option->'composition', '[]'::jsonb),
+          'targetComponents', COALESCE(v_mod_group->'targetComponents', '[]'::jsonb)
         ));
       END LOOP;
     END IF;
