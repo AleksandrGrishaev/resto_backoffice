@@ -82,15 +82,15 @@ export function useOrdersRealtime() {
         ordersConnected.value = status === 'SUBSCRIBED'
 
         if (status === 'SUBSCRIBED') {
-          DebugUtils.info(MODULE_NAME, '📡 POS orders Realtime connected')
+          console.log('📡 [POSRealtime] orders channel SUBSCRIBED')
         } else if (status === 'CHANNEL_ERROR') {
-          DebugUtils.warn(
-            MODULE_NAME,
-            '⚠️ POS orders Realtime channel error (will auto-reconnect)',
-            {
-              error: err?.message || 'WebSocket disconnected'
-            }
-          )
+          console.error('❌ [POSRealtime] orders channel ERROR:', err?.message)
+        } else if (status === 'TIMED_OUT') {
+          console.error('⏰ [POSRealtime] orders channel TIMED_OUT')
+        } else if (status === 'CLOSED') {
+          console.warn('🔌 [POSRealtime] orders channel CLOSED')
+        } else {
+          console.log(`🔄 [POSRealtime] orders channel status: ${status}`)
         }
       })
 
@@ -114,15 +114,15 @@ export function useOrdersRealtime() {
         itemsConnected.value = status === 'SUBSCRIBED'
 
         if (status === 'SUBSCRIBED') {
-          DebugUtils.info(MODULE_NAME, '📡 POS order_items Realtime connected')
+          console.log('📡 [POSRealtime] order_items channel SUBSCRIBED')
         } else if (status === 'CHANNEL_ERROR') {
-          DebugUtils.warn(
-            MODULE_NAME,
-            '⚠️ POS order_items Realtime channel error (will auto-reconnect)',
-            {
-              error: err?.message || 'WebSocket disconnected'
-            }
-          )
+          console.error('❌ [POSRealtime] order_items channel ERROR:', err?.message)
+        } else if (status === 'TIMED_OUT') {
+          console.error('⏰ [POSRealtime] order_items channel TIMED_OUT')
+        } else if (status === 'CLOSED') {
+          console.warn('🔌 [POSRealtime] order_items channel CLOSED')
+        } else {
+          console.log(`🔄 [POSRealtime] order_items channel status: ${status}`)
         }
       })
   }
@@ -133,15 +133,21 @@ export function useOrdersRealtime() {
    */
   async function handleOrderInsert(payload: any) {
     const newOrder = payload.new
+    console.log('🔔 [POSRealtime] RAW ORDER INSERT EVENT:', {
+      id: newOrder?.id,
+      order_number: newOrder?.order_number,
+      source: newOrder?.source,
+      type: newOrder?.type,
+      status: newOrder?.status,
+      timestamp: new Date().toISOString()
+    })
+
     if (!newOrder?.id) return
 
     // Only auto-load online orders (source = 'website')
     // POS-created orders are already in local state
     if (newOrder.source !== 'website') {
-      DebugUtils.debug(MODULE_NAME, 'Non-website order INSERT, ignoring', {
-        orderId: newOrder.id,
-        source: newOrder.source
-      })
+      console.log('🔔 [POSRealtime] Ignoring non-website order:', newOrder.source)
       return
     }
 
@@ -207,9 +213,12 @@ export function useOrdersRealtime() {
   function handleOrderUpdate(payload: any) {
     const updatedOrder = payload.new
 
-    DebugUtils.info(MODULE_NAME, '🔄 POS order update received', {
-      orderNumber: updatedOrder?.order_number,
-      status: updatedOrder?.status
+    console.log('🔔 [POSRealtime] RAW ORDER UPDATE EVENT:', {
+      id: updatedOrder?.id,
+      order_number: updatedOrder?.order_number,
+      status: updatedOrder?.status,
+      source: updatedOrder?.source,
+      timestamp: new Date().toISOString()
     })
 
     const index = ordersStore.orders.findIndex(o => o.id === updatedOrder?.id)
@@ -285,6 +294,16 @@ export function useOrdersRealtime() {
     const oldItem = payload.old
     const orderId = item?.order_id || oldItem?.order_id
 
+    console.log('🔔 [POSRealtime] RAW order_items EVENT:', {
+      eventType,
+      itemId: item?.id || oldItem?.id,
+      orderId,
+      itemName: item?.menu_item_name,
+      status: item?.status,
+      oldStatus: oldItem?.status,
+      timestamp: new Date().toISOString()
+    })
+
     if (!orderId) {
       DebugUtils.debug(MODULE_NAME, 'Item update without order_id, ignoring')
       return
@@ -299,7 +318,56 @@ export function useOrdersRealtime() {
 
     const order = ordersStore.orders[orderIndex]
 
-    if (eventType === 'UPDATE') {
+    if (eventType === 'INSERT') {
+      // New item added to existing order (e.g., customer adds item via website)
+      const newItem = fromOrderItemRow(item)
+      const billId = item.bill_id
+
+      // Check if item already exists (dedup)
+      const alreadyExists = order.bills.some(b => b.items.some(i => i.id === item.id))
+      if (alreadyExists) {
+        DebugUtils.debug(MODULE_NAME, 'Item already exists in order, skipping INSERT', {
+          itemId: item.id
+        })
+        return
+      }
+
+      // Find the matching bill or use the first one
+      let targetBill = order.bills.find(b => b.id === billId)
+      if (!targetBill && order.bills.length > 0) {
+        targetBill = order.bills[0]
+      }
+
+      if (targetBill) {
+        targetBill.items.push(newItem)
+        console.log('✅ [POSRealtime] New item added to existing order', {
+          orderNumber: order.orderNumber,
+          itemName: item.menu_item_name,
+          billId: targetBill.id,
+          status: item.status
+        })
+      } else {
+        console.warn('⚠️ [POSRealtime] No bill found for new item, creating placeholder bill', {
+          orderNumber: order.orderNumber,
+          billId
+        })
+        // Create a minimal bill to hold the item
+        order.bills.push({
+          id: billId,
+          billNumber: item.bill_number || '1',
+          orderId: order.id,
+          name: `Bill ${item.bill_number || '1'}`,
+          items: [newItem],
+          subtotal: 0,
+          discountAmount: 0,
+          taxAmount: 0,
+          total: 0,
+          status: 'active',
+          paymentStatus: 'unpaid',
+          paidAmount: 0
+        } as any)
+      }
+    } else if (eventType === 'UPDATE') {
       // Find item in any bill and update it
       for (const bill of order.bills) {
         const itemIndex = bill.items.findIndex(i => i.id === item.id)
@@ -347,7 +415,6 @@ export function useOrdersRealtime() {
         }
       }
     }
-    // INSERT is handled by POS when adding items, not from Kitchen
   }
 
   /**

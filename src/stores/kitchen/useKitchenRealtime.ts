@@ -64,6 +64,17 @@ export function useKitchenRealtime() {
           const item = payload.new as any
           const oldItem = payload.old as any
 
+          console.log('🔔 [KitchenRealtime] RAW order_items EVENT:', {
+            eventType,
+            itemId: item?.id || oldItem?.id,
+            itemName: item?.menu_item_name || oldItem?.menu_item_name,
+            orderId: item?.order_id || oldItem?.order_id,
+            status: item?.status,
+            oldStatus: oldItem?.status,
+            department: item?.department,
+            timestamp: new Date().toISOString()
+          })
+
           // Kitchen statuses we care about
           const kitchenStatuses = ['scheduled', 'waiting', 'cooking', 'ready']
           const isKitchenItem = item && kitchenStatuses.includes(item.status)
@@ -150,13 +161,18 @@ export function useKitchenRealtime() {
           }
         }
       )
-      .subscribe(status => {
-        DebugUtils.info(MODULE_NAME, 'Items channel status', { status })
+      .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
-          DebugUtils.info(MODULE_NAME, '📡 order_items Realtime connected')
+          console.log('📡 [KitchenRealtime] order_items channel SUBSCRIBED')
           isConnected.value = true
         } else if (status === 'CHANNEL_ERROR') {
-          DebugUtils.error(MODULE_NAME, '❌ order_items Realtime error')
+          console.error('❌ [KitchenRealtime] order_items channel ERROR:', err?.message)
+        } else if (status === 'TIMED_OUT') {
+          console.error('⏰ [KitchenRealtime] order_items channel TIMED_OUT')
+        } else if (status === 'CLOSED') {
+          console.warn('🔌 [KitchenRealtime] order_items channel CLOSED')
+        } else {
+          console.log(`🔄 [KitchenRealtime] order_items channel status: ${status}`)
         }
       })
 
