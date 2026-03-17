@@ -50,6 +50,22 @@ export class OrdersService {
   }
 
   /**
+   * Update or insert an order in the localStorage backup.
+   */
+  private updateOrderInLocalStorage(order: PosOrder): void {
+    const stored = localStorage.getItem(this.ORDERS_KEY)
+    const ordersList: PosOrder[] = stored ? JSON.parse(stored) : []
+    const idx = ordersList.findIndex(o => o.id === order.id)
+    const stripped = { ...order, bills: [] }
+    if (idx !== -1) {
+      ordersList[idx] = stripped as PosOrder
+    } else {
+      ordersList.push(stripped as PosOrder)
+    }
+    localStorage.setItem(this.ORDERS_KEY, JSON.stringify(ordersList))
+  }
+
+  /**
    * Find order by ID from in-memory Pinia store (no network call).
    * Falls back to getAllOrders() only if store is empty.
    */
@@ -717,11 +733,7 @@ export class OrdersService {
       // Save to localStorage
       await this.saveItemsSafely(allItems)
 
-      orders.data[orderIndex] = updatedOrder
-      localStorage.setItem(
-        this.ORDERS_KEY,
-        JSON.stringify(orders.data.map(o => ({ ...o, bills: [] })))
-      )
+      this.updateOrderInLocalStorage(updatedOrder)
 
       return { success: true, data: updatedOrder }
     } catch (error) {
@@ -998,22 +1010,14 @@ export class OrdersService {
       order.updatedAt = new Date().toISOString()
 
       // Save to localStorage
-      const orderIndex = orders.data.findIndex(o => o.id === orderId)
-      if (orderIndex !== -1) {
-        orders.data[orderIndex] = order
+      this.updateOrderInLocalStorage(order)
 
-        localStorage.setItem(
-          this.ORDERS_KEY,
-          JSON.stringify(orders.data.map(o => ({ ...o, bills: [] })))
-        )
-
-        // Save items
-        for (const bill of order.bills) {
-          const allItems = this.getAllStoredItems()
-          const filteredItems = allItems.filter(item => item.billId !== bill.id)
-          filteredItems.push(...bill.items)
-          await this.saveItemsSafely(filteredItems)
-        }
+      // Save items
+      for (const bill of order.bills) {
+        const allItems = this.getAllStoredItems()
+        const filteredItems = allItems.filter(item => item.billId !== bill.id)
+        filteredItems.push(...bill.items)
+        await this.saveItemsSafely(filteredItems)
       }
 
       return {
@@ -1326,11 +1330,7 @@ export class OrdersService {
       }
 
       // Update localStorage
-      orders.data[orderIndex] = updatedOrder
-      localStorage.setItem(
-        this.ORDERS_KEY,
-        JSON.stringify(orders.data.map(o => ({ ...o, bills: [] })))
-      )
+      this.updateOrderInLocalStorage(updatedOrder)
 
       return { success: true, data: updatedOrder }
     } catch (error) {
@@ -1374,11 +1374,7 @@ export class OrdersService {
         }
       }
 
-      orders.data[orderIndex] = updatedOrder
-      localStorage.setItem(
-        this.ORDERS_KEY,
-        JSON.stringify(orders.data.map(o => ({ ...o, bills: [] })))
-      )
+      this.updateOrderInLocalStorage(updatedOrder)
 
       return { success: true, data: updatedOrder }
     } catch (error) {
@@ -1423,11 +1419,7 @@ export class OrdersService {
         }
       }
 
-      orders.data[orderIndex] = updatedOrder
-      localStorage.setItem(
-        this.ORDERS_KEY,
-        JSON.stringify(orders.data.map(o => ({ ...o, bills: [] })))
-      )
+      this.updateOrderInLocalStorage(updatedOrder)
 
       return { success: true, data: updatedOrder }
     } catch (error) {
