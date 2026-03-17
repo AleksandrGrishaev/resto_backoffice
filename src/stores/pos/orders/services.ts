@@ -1225,21 +1225,8 @@ export class OrdersService {
       if (this.isSupabaseAvailable()) {
         try {
           await executeSupabaseMutation(async () => {
-            // SAFETY: Free any table linked to this order BEFORE deleting
-            // This prevents "ghost" tables (occupied with non-existent order)
-            const { error: tableError } = await supabase
-              .from('tables')
-              .update({
-                status: 'available',
-                current_order_id: null,
-                updated_at: new Date().toISOString()
-              })
-              .eq('current_order_id', orderId)
-
-            if (tableError) {
-              console.warn('⚠️ Failed to free table before order deletion:', tableError)
-              // Continue anyway - table cleanup is secondary
-            }
+            // Table freeing is handled by ordersStore.deleteOrder() → tablesStore.freeTable()
+            // which updates both Supabase and localStorage consistently
 
             // Delete all order items first (foreign key constraint)
             const { error: itemsError } = await supabase
