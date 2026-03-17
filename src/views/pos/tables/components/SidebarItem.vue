@@ -14,19 +14,12 @@
 
     <!-- Cancellation Request Indicator -->
     <div v-if="hasCancellationRequest" class="cancellation-dot" />
-
-    <!-- Status Badge (если нужен) -->
-    <div v-if="shouldShowStatusBadge" class="status-badge">
-      <v-chip :color="statusBadgeColor" size="x-small" variant="flat">
-        {{ statusBadgeText }}
-      </v-chip>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { PosTable, PosOrder, TableStatus, OrderStatus } from '@/stores/pos/types'
+import type { PosTable, PosOrder, TableStatus } from '@/stores/pos/types'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { getOrderVisual } from '@/stores/channels'
 
@@ -215,41 +208,6 @@ const hasCancellationRequest = computed((): boolean => {
   return !!props.order.cancellationRequestedAt && !props.order.cancellationResolvedAt
 })
 
-/**
- * Нужно ли показывать статусный бейдж
- */
-const shouldShowStatusBadge = computed((): boolean => {
-  if (isOrder.value && props.order) {
-    // Показываем статус если заказ готовится или готов
-    return ['cooking', 'ready'].includes(props.order.status)
-  }
-  return false
-})
-
-/**
- * Цвет статусного бейджа
- */
-const statusBadgeColor = computed((): string => {
-  if (isOrder.value && props.order) {
-    return getOrderStatusColor(props.order.status)
-  }
-  return 'grey'
-})
-
-/**
- * Текст статусного бейджа
- */
-const statusBadgeText = computed((): string => {
-  if (isOrder.value && props.order) {
-    const statusTexts = {
-      preparing: 'In Progress',
-      ready: 'Ready'
-    }
-    return statusTexts[props.order.status as keyof typeof statusTexts] || ''
-  }
-  return ''
-})
-
 // =============================================
 // HELPER FUNCTIONS
 // =============================================
@@ -279,22 +237,6 @@ function getTableStatusColor(status: TableStatus | 'occupied_unpaid' | 'occupied
     reserved: 'secondary'
   }
   return colors[status as keyof typeof colors] || 'grey'
-}
-
-/**
- * Получить цвет статуса заказа
- */
-function getOrderStatusColor(status: OrderStatus): string {
-  const colors = {
-    draft: 'grey',
-    confirmed: 'primary',
-    preparing: 'warning',
-    ready: 'success',
-    served: 'info',
-    paid: 'success',
-    cancelled: 'error'
-  }
-  return colors[status] || 'grey'
 }
 
 // =============================================
@@ -495,13 +437,6 @@ const handleClick = (): void => {
     transform: scale(1.3);
     opacity: 0.7;
   }
-}
-
-.status-badge {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  z-index: 2;
 }
 
 /* =============================================

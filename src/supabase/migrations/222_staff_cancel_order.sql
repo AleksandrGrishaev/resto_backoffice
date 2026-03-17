@@ -242,7 +242,7 @@ BEGIN
   DO UPDATE SET last_number = order_counters.last_number + 1, updated_at = now()
   RETURNING last_number INTO v_counter;
 
-  v_order_number := 'SK-' || v_counter;
+  v_order_number := 'SK-' || to_char(CURRENT_DATE, 'MMDD') || '-' || v_counter;
 
   -- ============================================================
   -- 7. Create order
