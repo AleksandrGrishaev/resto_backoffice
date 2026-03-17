@@ -1,7 +1,15 @@
--- RPC: create_online_order
--- Creates a new order from the website with full server-side price validation
--- Auth: Required (authenticated users only)
--- Returns: { success, order_id, order_number, total, items }
+-- Migration: 228_add_scheduled_item_status
+-- Description: Add 'scheduled' status for order items with future pickup times.
+--              Online orders with pickup_time != 'asap' will use 'scheduled' status
+--              instead of 'waiting', so kitchen doesn't see them until it's time to cook.
+-- Date: 2026-03-17
+
+-- ============================================================
+-- 1. Update create_online_order RPC
+--    - When pickup_time is a specific time (not 'asap'), set items to 'scheduled'
+--    - Set sent_to_kitchen_at = NULL for scheduled items
+--    - Set estimated_ready_time on the order
+-- ============================================================
 
 CREATE OR REPLACE FUNCTION public.create_online_order(p_data JSONB)
 RETURNS JSONB
@@ -41,6 +49,12 @@ DECLARE
   v_now_time TIME;
   v_open_time TIME;
   v_close_time TIME;
+  -- NEW: scheduled order support
+  v_pickup_time TEXT;
+  v_is_scheduled BOOLEAN := false;
+  v_item_status TEXT;
+  v_sent_to_kitchen TIMESTAMPTZ;
+  v_estimated_ready TIMESTAMPTZ;
 BEGIN
   -- ============================================================
   -- 1. Extract and validate input
@@ -48,6 +62,7 @@ BEGIN
   v_type := p_data->>'type';
   v_fulfillment := p_data->>'fulfillmentMethod';
   v_items := p_data->'items';
+  v_pickup_time := p_data->>'pickupTime';
 
   IF v_type IS NULL OR v_type NOT IN ('dine_in', 'takeaway') THEN
     RETURN jsonb_build_object('success', false, 'error', 'Invalid order type. Must be dine_in or takeaway');
@@ -75,6 +90,25 @@ BEGIN
     IF (p_data->>'customerName') IS NULL OR (p_data->>'customerPhone') IS NULL THEN
       RETURN jsonb_build_object('success', false, 'error', 'Customer name and phone are required for takeaway orders');
     END IF;
+  END IF;
+
+  -- ============================================================
+  -- 1b. Determine if this is a scheduled order
+  -- ============================================================
+  v_is_scheduled := (v_pickup_time IS NOT NULL AND v_pickup_time != 'asap' AND v_pickup_time ~ '^\d{1,2}:\d{2}$');
+
+  IF v_is_scheduled THEN
+    v_item_status := 'scheduled';
+    v_sent_to_kitchen := NULL;
+    -- Calculate estimated_ready_time from pickup_time (today, Jakarta timezone)
+    v_estimated_ready := (
+      (now() AT TIME ZONE 'Asia/Jakarta')::date
+      + v_pickup_time::time
+    ) AT TIME ZONE 'Asia/Jakarta';
+  ELSE
+    v_item_status := 'waiting';
+    v_sent_to_kitchen := now();
+    v_estimated_ready := NULL;
   END IF;
 
   -- ============================================================
@@ -173,15 +207,17 @@ BEGIN
     channel_id, channel_code,
     subtotal, discount, tax, total,
     total_amount, discount_amount, tax_amount, final_amount,
+    estimated_ready_time,
     bills, created_by
   ) VALUES (
     v_order_id, v_order_number, v_type, 'waiting', 'unpaid',
     v_customer_id, v_customer_name, v_customer_phone,
-    p_data->>'tableNumber', p_data->>'pickupTime', p_data->>'comment',
+    p_data->>'tableNumber', v_pickup_time, p_data->>'comment',
     'website', v_fulfillment,
     v_channel_id, v_channel_code,
     0, 0, 0, 0,
     0, 0, 0, 0,
+    v_estimated_ready,
     '[]'::jsonb, auth.uid()
   );
 
@@ -302,9 +338,9 @@ BEGIN
       v_item->>'variantId', COALESCE(v_variant->>'name', NULL),
       COALESCE((v_item->>'quantity')::integer, 1), v_unit_price, v_modifiers_total, v_item_total,
       CASE WHEN jsonb_array_length(v_selected_modifiers) > 0 THEN v_selected_modifiers ELSE NULL END,
-      'waiting', v_menu_item.department,
+      v_item_status, v_menu_item.department,
       v_item->>'kitchenNotes',
-      now(), now(), now(), now()
+      now(), v_sent_to_kitchen, now(), now()
     );
 
     -- Collect for bill and result
@@ -367,6 +403,8 @@ BEGIN
     'orderId', v_order_id,
     'orderNumber', v_order_number,
     'total', v_order_subtotal,
+    'scheduled', v_is_scheduled,
+    'estimatedReadyTime', v_estimated_ready,
     'items', v_result_items
   );
 
