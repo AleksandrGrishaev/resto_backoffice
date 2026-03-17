@@ -511,17 +511,20 @@ async function hydrateOnlineOrderBills(
       updated = true
     }
 
-    // Auto-attach stamp card if customer has one and bill doesn't
+    // Auto-attach stamp card if customer is on stamps program and bill doesn't have one
     if (bill.customerId && !bill.stampCardId) {
-      try {
-        const card = await loyaltyStore.getActiveCardByCustomerId(bill.customerId)
-        if (card) {
-          bill.stampCardId = card.cardId
-          updated = true
-          console.log('🎯 Auto-attached stamp card to bill:', card.cardNumber, bill.name)
+      const billCustomer = customersStore.getById(bill.customerId)
+      if (billCustomer?.loyaltyProgram === 'stamps') {
+        try {
+          const card = await loyaltyStore.getActiveCardByCustomerId(bill.customerId)
+          if (card) {
+            bill.stampCardId = card.cardId
+            updated = true
+            console.log('🎯 Auto-attached stamp card to bill:', card.cardNumber, bill.name)
+          }
+        } catch {
+          // Not critical
         }
-      } catch {
-        // Not critical
       }
     }
   }
@@ -2156,8 +2159,8 @@ const handleLoyaltyCustomer = async (customer: Customer | null): Promise<void> =
       /* not critical */
     }
 
-    // Auto-attach stamp card if customer has one and no card is attached yet
-    if (!bill.stampCardId && !loyaltyCard.value) {
+    // Auto-attach stamp card only if customer is on stamps program
+    if (!bill.stampCardId && !loyaltyCard.value && customer.loyaltyProgram === 'stamps') {
       try {
         const card = await loyaltyStore.getActiveCardByCustomerId(customer.id)
         if (card) {
