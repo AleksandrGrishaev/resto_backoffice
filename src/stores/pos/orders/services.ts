@@ -50,6 +50,23 @@ export class OrdersService {
   }
 
   /**
+   * Find order by ID from in-memory Pinia store (no network call).
+   * Falls back to getAllOrders() only if store is empty.
+   */
+  private async findOrderById(orderId: string): Promise<PosOrder | null> {
+    // Try in-memory store first (instant)
+    const { usePosOrdersStore } = await import('./ordersStore')
+    const store = usePosOrdersStore()
+    const memOrder = store.orders.find(o => o.id === orderId)
+    if (memOrder) return JSON.parse(JSON.stringify(memOrder))
+
+    // Fallback: full reload (should rarely happen)
+    const orders = await this.getAllOrders()
+    if (!orders.success || !orders.data) return null
+    return orders.data.find(o => o.id === orderId) || null
+  }
+
+  /**
    * Get orders from storage (with smart filtering)
    * Sprint 8: Only load active orders + today's orders by default
    * @param options.all - загрузить ВСЕ заказы (для отчётов)
@@ -615,18 +632,13 @@ export class OrdersService {
    */
   async sendOrderToKitchen(orderId: string): Promise<ServiceResponse<PosOrder>> {
     try {
-      const orders = await this.getAllOrders()
-      if (!orders.success || !orders.data) {
-        throw new Error('Failed to load orders')
-      }
-
-      const orderIndex = orders.data.findIndex(o => o.id === orderId)
-      if (orderIndex === -1) {
+      const foundOrder = await this.findOrderById(orderId)
+      if (!foundOrder) {
         throw new Error('Order not found')
       }
 
       const updatedOrder: PosOrder = {
-        ...orders.data[orderIndex],
+        ...foundOrder,
         status: 'waiting',
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
@@ -890,12 +902,7 @@ export class OrdersService {
     }>
   > {
     try {
-      const orders = await this.getAllOrders()
-      if (!orders.success || !orders.data) {
-        throw new Error('Failed to load orders')
-      }
-
-      const order = orders.data.find(o => o.id === orderId)
+      const order = await this.findOrderById(orderId)
       if (!order) {
         throw new Error('Order not found')
       }
@@ -1278,18 +1285,13 @@ export class OrdersService {
 
   async sendItemsToKitchen(orderId: string, itemIds: string[]): Promise<ServiceResponse<PosOrder>> {
     try {
-      const orders = await this.getAllOrders()
-      if (!orders.success || !orders.data) {
-        throw new Error('Failed to load orders')
-      }
-
-      const orderIndex = orders.data.findIndex(o => o.id === orderId)
-      if (orderIndex === -1) {
+      const foundOrder = await this.findOrderById(orderId)
+      if (!foundOrder) {
         throw new Error('Order not found')
       }
 
       const updatedOrder: PosOrder = {
-        ...orders.data[orderIndex],
+        ...foundOrder,
         status: 'waiting',
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
@@ -1341,18 +1343,13 @@ export class OrdersService {
 
   async closeOrder(orderId: string): Promise<ServiceResponse<PosOrder>> {
     try {
-      const orders = await this.getAllOrders()
-      if (!orders.success || !orders.data) {
-        throw new Error('Failed to load orders')
-      }
-
-      const orderIndex = orders.data.findIndex(o => o.id === orderId)
-      if (orderIndex === -1) {
+      const foundOrder = await this.findOrderById(orderId)
+      if (!foundOrder) {
         throw new Error('Order not found')
       }
 
       const updatedOrder: PosOrder = {
-        ...orders.data[orderIndex],
+        ...foundOrder,
         status: 'served',
         paymentStatus: 'paid',
         updatedAt: TimeUtils.getCurrentLocalISO()
@@ -1397,18 +1394,13 @@ export class OrdersService {
     newPaymentStatus: OrderPaymentStatus
   ): Promise<ServiceResponse<PosOrder>> {
     try {
-      const orders = await this.getAllOrders()
-      if (!orders.success || !orders.data) {
-        throw new Error('Failed to load orders')
-      }
-
-      const orderIndex = orders.data.findIndex(o => o.id === orderId)
-      if (orderIndex === -1) {
+      const foundOrder = await this.findOrderById(orderId)
+      if (!foundOrder) {
         throw new Error('Order not found')
       }
 
       const updatedOrder: PosOrder = {
-        ...orders.data[orderIndex],
+        ...foundOrder,
         paymentStatus: newPaymentStatus,
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
