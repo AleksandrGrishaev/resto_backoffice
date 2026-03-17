@@ -1135,9 +1135,12 @@ export class OrdersService {
 
       if (this.isSupabaseAvailable()) {
         try {
+          // Only send metadata fields — exclude table_id/status to avoid
+          // triggering idx_unique_active_order_per_table unique constraint
           const supabaseRow = toSupabaseUpdate(order)
+          const { table_id: _tableId, ...metadataOnly } = supabaseRow
           await executeSupabaseMutation(async () => {
-            const { error } = await supabase.from('orders').update(supabaseRow).eq('id', order.id)
+            const { error } = await supabase.from('orders').update(metadataOnly).eq('id', order.id)
             if (error) throw error
           }, 'OrdersService.updateOrderOnly')
 
