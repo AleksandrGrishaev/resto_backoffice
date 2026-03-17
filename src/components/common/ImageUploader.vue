@@ -76,6 +76,7 @@ interface Props {
   modelValue: string // current image URL
   itemId: string
   itemName: string // dish name — used for SEO-friendly file slug
+  subfolder?: string // storage subfolder (default: 'items')
 }
 
 const props = defineProps<Props>()
@@ -127,7 +128,8 @@ async function uploadFile(file: File) {
       file,
       props.itemId,
       props.itemName,
-      props.modelValue || undefined
+      props.modelValue || undefined,
+      props.subfolder || 'items'
     )
     emit('update:modelValue', result.url)
     showSuccess('Image uploaded')

@@ -276,6 +276,7 @@
                 <templates-editor-widget
                   :templates="formData.templates"
                   :modifier-groups="formData.modifierGroups"
+                  :parent-item-id="item?.id"
                   @update:templates="formData.templates = $event"
                 />
               </div>
