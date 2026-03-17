@@ -84,6 +84,10 @@
     <div v-else class="loyalty-expanded px-3 py-2">
       <div class="d-flex align-center justify-space-between mb-2">
         <v-btn-toggle v-model="activeTab" mandatory density="compact" variant="outlined">
+          <v-btn value="scan" size="small">
+            <v-icon start size="16">mdi-qrcode-scan</v-icon>
+            Scan
+          </v-btn>
           <v-btn value="card" size="small">
             <v-icon start size="16">mdi-stamper</v-icon>
             Card
@@ -96,6 +100,78 @@
         <v-btn v-if="!dialogMode" icon size="x-small" variant="text" @click="expanded = false">
           <v-icon size="16">mdi-chevron-up</v-icon>
         </v-btn>
+      </div>
+
+      <!-- QR Scan Tab -->
+      <div v-if="activeTab === 'scan'">
+        <!-- Found customer result -->
+        <div v-if="scannedCustomer" class="scanned-result pa-3 rounded loyalty-surface mb-2">
+          <div class="d-flex align-center justify-space-between mb-2">
+            <div class="d-flex align-center gap-2">
+              <v-icon size="20" color="success">mdi-check-circle</v-icon>
+              <span class="text-body-1 font-weight-medium">{{ scannedCustomer.name }}</span>
+            </div>
+            <v-chip
+              size="x-small"
+              :color="
+                scannedCustomer.personalDiscount > 0 ? 'orange' : getTierColor(scannedCustomer.tier)
+              "
+              variant="flat"
+              class="text-white"
+            >
+              {{
+                scannedCustomer.personalDiscount > 0
+                  ? `DISCOUNT ${scannedCustomer.personalDiscount}%`
+                  : scannedCustomer.tier.toUpperCase()
+              }}
+            </v-chip>
+          </div>
+          <div class="d-flex align-center gap-4 text-body-2 mb-3">
+            <span>
+              <v-icon size="14" class="mr-1">mdi-wallet</v-icon>
+              {{ formatIDR(scannedCustomer.loyaltyBalance) }}
+            </span>
+            <span class="text-medium-emphasis">{{ scannedCustomer.totalVisits }} visits</span>
+            <span v-if="scannedCustomer.phone" class="text-medium-emphasis">
+              {{ scannedCustomer.phone }}
+            </span>
+          </div>
+          <div class="d-flex gap-2">
+            <v-btn color="primary" variant="flat" size="small" @click="confirmScannedCustomer">
+              Attach
+            </v-btn>
+            <v-btn variant="outlined" size="small" @click="resetScan">Scan Again</v-btn>
+          </div>
+        </div>
+
+        <!-- Scanner -->
+        <QrScanner
+          v-if="!scannedCustomer && !scanLoading"
+          ref="qrScannerRef"
+          @scanned="onQrScanned"
+          @error="onQrError"
+        />
+
+        <!-- Scan status -->
+        <v-alert
+          v-if="scanError"
+          type="error"
+          variant="tonal"
+          density="compact"
+          closable
+          class="mt-2"
+          @click:close="scanError = ''"
+        >
+          {{ scanError }}
+          <template #append>
+            <v-btn size="small" variant="text" @click="resetScan">Retry</v-btn>
+          </template>
+        </v-alert>
+
+        <div v-if="scanLoading" class="d-flex align-center justify-center pa-4 gap-2">
+          <v-progress-circular size="20" width="2" indeterminate />
+          <span class="text-body-2 text-medium-emphasis">Looking up customer...</span>
+        </div>
       </div>
 
       <!-- Stamp Card Tab -->
@@ -372,16 +448,17 @@ import type { Customer } from '@/stores/customers'
 import type { StampCardInfo, ConvertResult } from '@/stores/loyalty'
 import { useCustomersStore } from '@/stores/customers'
 import { useLoyaltyStore } from '@/stores/loyalty'
-import { formatIDR } from '@/utils'
+import { formatIDR, DebugUtils } from '@/utils'
 import { TimeUtils } from '@/utils'
 import { usePhoneCodes, buildFullPhone } from '@/composables/usePhoneCodes'
+import QrScanner from './QrScanner.vue'
 
 const props = defineProps<{
   orderId?: string
   customerId?: string | null
   stampCardId?: string | null
   dialogMode?: boolean
-  initialTab?: 'card' | 'customer'
+  initialTab?: 'scan' | 'card' | 'customer'
 }>()
 
 const emit = defineEmits<{
@@ -396,12 +473,62 @@ const { phoneCodes, defaultPhoneCode } = usePhoneCodes()
 
 // State
 const expanded = ref(props.dialogMode || false)
-const activeTab = ref<'card' | 'customer'>(props.initialTab || 'card')
+const activeTab = ref<'scan' | 'card' | 'customer'>(props.initialTab || 'card')
 const loading = ref(false)
 
 function openTab(tab: 'card' | 'customer') {
   expanded.value = true
   activeTab.value = tab
+}
+
+// QR scan state
+const qrScannerRef = ref<InstanceType<typeof QrScanner>>()
+const scannedCustomer = ref<Customer | null>(null)
+const scanLoading = ref(false)
+const scanError = ref('')
+
+async function onQrScanned(token: string) {
+  scanLoading.value = true
+  scanError.value = ''
+  DebugUtils.info('LoyaltyPanel', 'QR token scanned, looking up customer', {
+    token: token.slice(0, 8) + '...'
+  })
+
+  try {
+    const customer = await customersStore.findByToken(token)
+    if (customer) {
+      DebugUtils.info('LoyaltyPanel', 'Customer found via QR', {
+        name: customer.name,
+        tier: customer.tier
+      })
+      scannedCustomer.value = customer
+    } else {
+      DebugUtils.info('LoyaltyPanel', 'Customer not found for token')
+      scanError.value = 'Customer not found. QR code may be invalid or account is inactive.'
+    }
+  } catch (err) {
+    DebugUtils.error('LoyaltyPanel', 'QR customer lookup failed', { error: String(err) })
+    scanError.value = 'Failed to look up customer. Please try again.'
+  } finally {
+    scanLoading.value = false
+  }
+}
+
+function onQrError(message: string) {
+  scanError.value = message
+}
+
+function confirmScannedCustomer() {
+  if (!scannedCustomer.value) return
+  selectCustomer(scannedCustomer.value)
+  scannedCustomer.value = null
+}
+
+function resetScan() {
+  scannedCustomer.value = null
+  scanError.value = ''
+  scanLoading.value = false
+  // QrScanner is re-created via v-if, auto-starts on mount
 }
 const issuingCard = ref(false)
 const creatingCustomer = ref(false)
@@ -454,6 +581,26 @@ watch(
     if (tab) activeTab.value = tab
   }
 )
+
+// Stop camera when leaving scan tab or panel collapses
+watch(activeTab, (newTab, oldTab) => {
+  if (oldTab === 'scan' && newTab !== 'scan') {
+    cleanupScan()
+  }
+})
+
+watch(expanded, val => {
+  if (!val && activeTab.value === 'scan') {
+    cleanupScan()
+  }
+})
+
+function cleanupScan() {
+  qrScannerRef.value?.stop()
+  scannedCustomer.value = null
+  scanError.value = ''
+  scanLoading.value = false
+}
 
 // In dialog mode, always stay expanded
 watch(
@@ -576,7 +723,7 @@ function selectCustomer(customer: Customer) {
   searchResults.value = []
   customerQuery.value = ''
   emit('update:customer', customer)
-  expanded.value = false
+  if (!props.dialogMode) expanded.value = false
 }
 
 function detachCustomer() {
@@ -651,7 +798,8 @@ async function createNewCustomer() {
 
 .card-info,
 .customer-info,
-.new-customer {
+.new-customer,
+.scanned-result {
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 

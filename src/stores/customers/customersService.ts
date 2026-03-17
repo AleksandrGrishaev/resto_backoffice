@@ -50,6 +50,22 @@ export class CustomersService {
     return (data || []).map(mapCustomerFromDb)
   }
 
+  async fetchByToken(token: string): Promise<Customer | null> {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('token', token)
+      .eq('status', 'active')
+      .maybeSingle()
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch customer by token', { error })
+      throw error
+    }
+
+    return data ? mapCustomerFromDb(data) : null
+  }
+
   async create(data: Partial<Customer>): Promise<Customer> {
     const { data: row, error } = await supabase
       .from('customers')

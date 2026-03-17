@@ -469,7 +469,7 @@ const printReceiptData = ref<{
 const loyaltyCard = ref<StampCardInfo | null>(null)
 const showConvertCardDialog = ref(false)
 const showLoyaltyDialog = ref(false)
-const loyaltyDialogTab = ref<'card' | 'customer'>('card')
+const loyaltyDialogTab = ref<'scan' | 'card' | 'customer'>('card')
 const loyaltyBillId = ref<string | null>(null) // which bill the loyalty dialog is for
 let _loadingCardForBillId: string | null = null // prevent duplicate loads
 
