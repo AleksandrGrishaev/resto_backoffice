@@ -463,7 +463,8 @@ export class StorageService {
 
   async getBalances(): Promise<StorageBalance[]> {
     if (!this.initialized) {
-      throw new Error('StorageService not initialized')
+      DebugUtils.warn(MODULE_NAME, 'getBalances called before init, auto-initializing...')
+      await this.initialize()
     }
 
     // Calculate balances from Supabase data
@@ -772,10 +773,8 @@ export class StorageService {
    */
   async createReceipt(data: CreateReceiptData): Promise<ServiceResponse<StorageOperation>> {
     if (!this.initialized) {
-      return {
-        success: false,
-        error: 'StorageService not initialized'
-      }
+      DebugUtils.warn(MODULE_NAME, 'createReceipt called before init, auto-initializing...')
+      await this.initialize()
     }
 
     try {
@@ -946,10 +945,8 @@ export class StorageService {
    */
   async createWriteOff(data: CreateWriteOffData): Promise<ServiceResponse<StorageOperation>> {
     if (!this.initialized) {
-      return {
-        success: false,
-        error: 'StorageService not initialized'
-      }
+      DebugUtils.warn(MODULE_NAME, 'createWriteOff called before init, auto-initializing...')
+      await this.initialize()
     }
 
     try {
@@ -1349,10 +1346,8 @@ export class StorageService {
    */
   async createCorrection(data: CreateCorrectionData): Promise<ServiceResponse<StorageOperation>> {
     if (!this.initialized) {
-      return {
-        success: false,
-        error: 'StorageService not initialized'
-      }
+      DebugUtils.warn(MODULE_NAME, 'createCorrection called before init, auto-initializing...')
+      await this.initialize()
     }
 
     try {
@@ -1619,7 +1614,8 @@ export class StorageService {
    */
   async startInventory(data: CreateInventoryData): Promise<InventoryDocument> {
     if (!this.initialized) {
-      throw new Error('StorageService not initialized')
+      DebugUtils.warn(MODULE_NAME, 'startInventory called before init, auto-initializing...')
+      await this.initialize()
     }
 
     try {
@@ -1704,7 +1700,8 @@ export class StorageService {
    */
   async updateInventory(inventoryId: string, items: InventoryItem[]): Promise<InventoryDocument> {
     if (!this.initialized) {
-      throw new Error('StorageService not initialized')
+      DebugUtils.warn(MODULE_NAME, 'updateInventory called before init, auto-initializing...')
+      await this.initialize()
     }
 
     try {
@@ -1773,7 +1770,8 @@ export class StorageService {
    */
   async finalizeInventory(inventoryId: string): Promise<StorageOperation[]> {
     if (!this.initialized) {
-      throw new Error('StorageService not initialized')
+      DebugUtils.warn(MODULE_NAME, 'finalizeInventory called before init, auto-initializing...')
+      await this.initialize()
     }
 
     try {
@@ -2031,7 +2029,8 @@ export class StorageService {
    */
   async getInventories(department?: Department | 'all'): Promise<InventoryDocument[]> {
     if (!this.initialized) {
-      throw new Error('StorageService not initialized')
+      DebugUtils.warn(MODULE_NAME, 'getInventories called before init, auto-initializing...')
+      await this.initialize()
     }
 
     try {
@@ -2069,7 +2068,8 @@ export class StorageService {
    */
   async getInventory(inventoryId: string): Promise<InventoryDocument | null> {
     if (!this.initialized) {
-      throw new Error('StorageService not initialized')
+      DebugUtils.warn(MODULE_NAME, 'getInventory called before init, auto-initializing...')
+      await this.initialize()
     }
 
     try {
