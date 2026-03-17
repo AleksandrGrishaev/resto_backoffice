@@ -1,7 +1,6 @@
--- Function: update_customer_stats
--- Description: Update customer visit/spend statistics after payment + inline tier upgrade
--- Independent of loyalty accrual - always called when customer is attached to order
--- Usage: SELECT update_customer_stats('customer-uuid', 'order-uuid', 46575);
+-- Migration: 231_update_customer_stats_with_tier_upgrade
+-- Description: Extend update_customer_stats RPC with inline tier upgrade at payment time
+-- Date: 2026-03-17
 
 CREATE OR REPLACE FUNCTION update_customer_stats(
   p_customer_id UUID,

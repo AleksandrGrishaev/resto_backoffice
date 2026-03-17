@@ -3,6 +3,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase } from '@/supabase'
+import { customersService } from '@/stores/customers/customersService'
 import type {
   PosShift,
   ShiftStatus,
@@ -206,6 +207,14 @@ export const useShiftsStore = defineStore('posShifts', () => {
         // Создать начальные балансы счетов
         await initializeShiftAccountBalances(newShift)
         startHeartbeat()
+
+        // Fire-and-forget: recalculate customer tiers at shift start
+        customersService
+          .recalculateTiers()
+          .then(r => {
+            if (r.success) console.log(`🔄 Tiers: ↑${r.upgraded} ↓${r.downgraded} =${r.unchanged}`)
+          })
+          .catch(() => {})
 
         console.log('✅ Смена начата:', newShift.shiftNumber)
       }

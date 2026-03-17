@@ -75,6 +75,10 @@ export class CustomersService {
     totalSpent?: number
     totalVisits?: number
     averageCheck?: number
+    tier?: string
+    previousTier?: string
+    tierChanged?: boolean
+    spentWindow?: number
   }> {
     const { data, error } = await supabase.rpc('update_customer_stats', {
       p_customer_id: customerId,
@@ -97,7 +101,39 @@ export class CustomersService {
       success: true,
       totalSpent: result.total_spent,
       totalVisits: result.total_visits,
-      averageCheck: result.average_check
+      averageCheck: result.average_check,
+      tier: result.tier,
+      previousTier: result.previous_tier,
+      tierChanged: result.tier_changed,
+      spentWindow: result.spent_window
+    }
+  }
+
+  /** Recalculate tiers for all digital customers (upgrades + downgrades) */
+  async recalculateTiers(): Promise<{
+    success: boolean
+    upgraded?: number
+    downgraded?: number
+    unchanged?: number
+  }> {
+    const { data, error } = await supabase.rpc('recalculate_tiers')
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to recalculate tiers', { error })
+      return { success: false }
+    }
+
+    const result = data as any
+    if (!result.success) {
+      DebugUtils.error(MODULE_NAME, 'recalculate_tiers RPC failed', { error: result.error })
+      return { success: false }
+    }
+
+    return {
+      success: true,
+      upgraded: result.upgraded,
+      downgraded: result.downgraded,
+      unchanged: result.unchanged
     }
   }
 

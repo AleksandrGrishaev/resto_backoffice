@@ -1,7 +1,6 @@
--- Function: recalculate_tiers
--- Description: Recalculate customer tiers based on spending in the sliding window
--- Called at shift start (fire-and-forget) — handles both upgrades and downgrades
--- Usage: SELECT recalculate_tiers();
+-- Migration: 232_recalculate_tiers_v2
+-- Description: Fix recalculate_tiers — remove degradation limit, fix index-based comparison
+-- Date: 2026-03-17
 
 CREATE OR REPLACE FUNCTION recalculate_tiers()
 RETURNS JSONB

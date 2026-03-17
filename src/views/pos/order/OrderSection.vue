@@ -1908,6 +1908,9 @@ async function processLoyaltyAfterPayment(
       console.log(
         `📊 Customer stats updated: ${customer?.name} — visits: ${statsResult.totalVisits}, spent: ${formatIDR(statsResult.totalSpent || 0)}`
       )
+      if (statsResult.tierChanged) {
+        showSuccess(`${customer?.name} upgraded to ${statsResult.tier?.toUpperCase()}!`)
+      }
       await customersStore.refreshCustomer(billCustomerId)
     }
   } catch (err) {
