@@ -1,17 +1,12 @@
--- RPC: staff_cancel_order
--- Cancels an entire order from POS (staff action)
--- Auth: is_staff() check
--- Returns: { success, orderId }
+-- Migration: 226_fix_staff_cancel_order_table_guard
+-- Description: Fix staff_cancel_order RPC — conditional table free + accurate tableFreed response
+-- Date: 2026-03-17
 --
--- Logic:
--- 1. Validates order exists and is not already in a final status
--- 2. Sets order status = 'cancelled'
--- 3. Records cancellation metadata (reason, resolved_at, resolved_by)
--- 4. Cancels all non-cancelled order_items
--- 5. If order has a table_id — frees the table (status='free')
---
--- p_reason: structured CancellationReason enum value (e.g. 'customer_refused')
--- p_notes: optional free-text notes for additional context
+-- CONTEXT: Two bugs fixed:
+-- 1. When cancelling old/stale orders, the RPC was unconditionally freeing the table,
+--    even if the table was already occupied by a newer order.
+-- 2. tableFreed returned true whenever table_id was set, even if the conditional UPDATE
+--    matched zero rows. Now uses GET DIAGNOSTICS to report accurately.
 
 CREATE OR REPLACE FUNCTION public.staff_cancel_order(
   p_order_id UUID,
@@ -64,8 +59,6 @@ BEGIN
   WHERE id = p_order_id;
 
   -- 5. Cancel all non-cancelled items
-  -- cancellation_reason = 'staff_cancelled' (item-level reason)
-  -- cancellation_notes = COALESCE(p_notes, p_reason) for display
   UPDATE order_items SET
     status = 'cancelled',
     cancellation_reason = 'staff_cancelled',

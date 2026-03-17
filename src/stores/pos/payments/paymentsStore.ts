@@ -815,7 +815,7 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         const tablesStore = usePosTablesStore()
         const table = tablesStore.tables.find(t => t.id === tableIdToFree)
         if (table && table.currentOrderId === orderId) {
-          await tablesStore.freeTable(tableIdToFree)
+          await tablesStore.freeTable(tableIdToFree, orderId)
           console.log('✅ REFUND: Table freed (was occupied by refunded order):', {
             tableId: tableIdToFree
           })

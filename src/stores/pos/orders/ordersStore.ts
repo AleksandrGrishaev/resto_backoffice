@@ -883,9 +883,9 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         if (orderIndex !== -1) {
           orders.value[orderIndex] = response.data
 
-          // Освободить стол если заказ был за столом
+          // Освободить стол если заказ был за столом (conditional: only if table still belongs to this order)
           if (response.data.tableId) {
-            await tablesStore.freeTable(response.data.tableId)
+            await tablesStore.freeTable(response.data.tableId, orderId)
           }
 
           // Очистить текущий заказ если это был он
@@ -1001,9 +1001,9 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         return deleteResponse
       }
 
-      // Free the table if this was a dine_in order with a table
+      // Free the table if this was a dine_in order with a table (conditional: only if table still belongs to this order)
       if (order.type === 'dine_in' && order.tableId) {
-        await tablesStore.freeTable(order.tableId)
+        await tablesStore.freeTable(order.tableId, orderId)
       }
 
       // Remove from local state
@@ -1074,8 +1074,8 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         return updateResponse
       }
 
-      // Free the table
-      const tableResponse = await tablesStore.freeTable(order.tableId)
+      // Free the table (conditional: only if table still belongs to this order)
+      const tableResponse = await tablesStore.freeTable(order.tableId, orderId)
       if (!tableResponse.success) {
         return {
           success: false,
@@ -1242,13 +1242,13 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         }
       }
 
-      // If table was freed by the RPC, update local table state only (DB already updated)
+      // If table was freed by the RPC, sync local state + localStorage (DB already updated)
       if (data.tableFreed && order.tableId) {
-        const table = tablesStore.tables.find(t => t.id === order.tableId)
-        if (table) {
-          table.status = 'free'
-          table.currentOrderId = undefined
-        }
+        tablesStore.updateTableLocally(order.tableId, {
+          status: 'free',
+          currentOrderId: undefined,
+          updatedAt: new Date().toISOString()
+        })
       }
 
       // Clear current order and selection if this was selected
@@ -1302,17 +1302,17 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
-   * Cleanup all empty draft orders (no items).
+   * Cleanup stale orders:
+   * Phase 1: Delete empty draft orders (no items) older than maxAgeMinutes
+   * Phase 2: Evict orders >48h from local state (not DB) — terminal/paid orders
    * Called before shift end and periodically in background.
    * Returns the number of cleaned-up orders.
    */
-  async function cleanupEmptyDraftOrders(
-    options: { maxAgeMinutes?: number } = {}
-  ): Promise<number> {
+  async function cleanupStaleOrders(options: { maxAgeMinutes?: number } = {}): Promise<number> {
     const { maxAgeMinutes } = options
     let cleanedCount = 0
 
-    // Find all empty draft orders
+    // Phase 1: Delete empty draft orders from DB + local
     const emptyDrafts = orders.value.filter(order => {
       if (order.status !== 'draft') return false
       const allItems = order.bills.flatMap(b => b.items)
@@ -1327,33 +1327,79 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       return true
     })
 
-    if (emptyDrafts.length === 0) return 0
+    if (emptyDrafts.length > 0) {
+      DebugUtils.info(MODULE_NAME, `Cleaning up ${emptyDrafts.length} empty draft orders`, {
+        maxAgeMinutes,
+        orderIds: emptyDrafts.map(o => o.id)
+      })
 
-    DebugUtils.info(MODULE_NAME, `Cleaning up ${emptyDrafts.length} empty draft orders`, {
-      maxAgeMinutes,
-      orderIds: emptyDrafts.map(o => o.id)
-    })
-
-    for (const order of emptyDrafts) {
-      try {
-        const result = await deleteOrder(order.id)
-        if (result.success) {
-          cleanedCount++
+      for (const order of emptyDrafts) {
+        try {
+          const result = await deleteOrder(order.id)
+          if (result.success) {
+            cleanedCount++
+          }
+        } catch (err) {
+          DebugUtils.warn(MODULE_NAME, 'Failed to cleanup empty draft order', {
+            orderId: order.id,
+            error: err instanceof Error ? err.message : String(err)
+          })
         }
-      } catch (err) {
-        DebugUtils.warn(MODULE_NAME, 'Failed to cleanup empty draft order', {
-          orderId: order.id,
-          error: err instanceof Error ? err.message : String(err)
-        })
       }
     }
 
+    // Phase 2: Evict stale orders from local state only (>48h, terminal or paid)
+    const EVICT_AGE_MS = 48 * 60 * 60 * 1000
+    const now = Date.now()
+    const terminalStatuses = ['cancelled', 'served', 'collected', 'delivered']
+
+    const staleToEvict = orders.value.filter(order => {
+      const ageMs = now - new Date(order.createdAt).getTime()
+      if (ageMs < EVICT_AGE_MS) return false
+      // Evict terminal-status orders or paid orders
+      return terminalStatuses.includes(order.status) || order.paymentStatus === 'paid'
+    })
+
+    if (staleToEvict.length > 0) {
+      const staleIds = new Set(staleToEvict.map(o => o.id))
+
+      // Free any tables still held by these stale orders
+      for (const order of staleToEvict) {
+        if (order.type === 'dine_in' && order.tableId) {
+          const table = tablesStore.getTableById(order.tableId)
+          if (table && table.currentOrderId === order.id) {
+            tablesStore.updateTableLocally(order.tableId, {
+              status: 'free',
+              currentOrderId: undefined,
+              updatedAt: new Date().toISOString()
+            })
+          }
+        }
+      }
+
+      orders.value = orders.value.filter(o => !staleIds.has(o.id))
+
+      // Clear current order if it was evicted
+      if (currentOrderId.value && staleIds.has(currentOrderId.value)) {
+        currentOrderId.value = null
+        activeBillId.value = null
+      }
+
+      DebugUtils.info(MODULE_NAME, `Evicted ${staleToEvict.length} stale orders from local state`, {
+        orderIds: [...staleIds]
+      })
+      cleanedCount += staleToEvict.length
+    }
+
     if (cleanedCount > 0) {
-      DebugUtils.info(MODULE_NAME, `Cleaned up ${cleanedCount} empty draft orders`)
+      DebugUtils.info(MODULE_NAME, `Total cleanup: ${cleanedCount} orders`)
     }
 
     return cleanedCount
   }
+
+  // Backward-compatible alias
+  const cleanupEmptyDraftOrders = cleanupStaleOrders
 
   // Background cleanup timer
   let _cleanupInterval: ReturnType<typeof setInterval> | null = null
@@ -1363,11 +1409,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   function startBackgroundCleanup(): void {
     stopBackgroundCleanup()
     _cleanupInterval = setInterval(async () => {
-      await cleanupEmptyDraftOrders({ maxAgeMinutes: CLEANUP_MAX_AGE_MINUTES })
+      await cleanupStaleOrders({ maxAgeMinutes: CLEANUP_MAX_AGE_MINUTES })
     }, CLEANUP_INTERVAL)
     DebugUtils.debug(
       MODULE_NAME,
-      'Background empty order cleanup started (every 5 min, >15 min old)'
+      'Background stale order cleanup started (every 5 min, drafts >15 min, evict >48h)'
     )
   }
 
@@ -1395,6 +1441,16 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       return
     }
 
+    // Defense-in-depth: stale orders (>24h) must not manage table state
+    const ORDER_MAX_AGE_MS = 24 * 60 * 60 * 1000
+    if (Date.now() - new Date(order.createdAt).getTime() > ORDER_MAX_AGE_MS) {
+      console.log('⏭️ Skipping table update for stale order (>24h):', {
+        orderId,
+        createdAt: order.createdAt
+      })
+      return
+    }
+
     // FIX: Завершенный заказ не должен привязываться обратно к столу после refund
     // Refund меняет paymentStatus, но order.status остается финальным
     const finalStatuses = ['served', 'collected', 'delivered']
@@ -1418,11 +1474,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     const isServed = order.status === 'served'
     const isPaid = order.paymentStatus === 'paid'
 
-    // Автоматическое освобождение стола
+    // Автоматическое освобождение стола (conditional: only if table still belongs to this order)
     if (!hasItems || (isServed && isPaid)) {
-      await tablesStore.freeTable(order.tableId)
+      await tablesStore.freeTable(order.tableId, orderId)
 
-      // 🆕 Синхронизировать currentOrderId если это текущий заказ
+      // Синхронизировать currentOrderId если это текущий заказ
       if (currentOrderId.value === orderId) {
         currentOrderId.value = null
         console.log('🔄 Cleared currentOrderId after table freed:', { orderId })
@@ -1436,8 +1492,17 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       return
     }
 
-    // Автоматическое занятие стола (если есть items)
+    // Автоматическое занятие стола (conditional: only if table is free or already belongs to this order)
     if (hasItems) {
+      const table = tablesStore.getTableById(order.tableId)
+      if (table && table.currentOrderId && table.currentOrderId !== orderId) {
+        console.log('⏭️ Table already occupied by different order, skipping auto-occupy:', {
+          tableId: order.tableId,
+          orderId,
+          currentOwner: table.currentOrderId
+        })
+        return
+      }
       await tablesStore.occupyTable(order.tableId, orderId)
       console.log('✅ Table auto-occupied:', { tableId: order.tableId, orderId })
     }
@@ -1708,7 +1773,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
         // Release the source table (if any)
         if (orderToMove.tableId) {
-          await tablesStore.freeTable(orderToMove.tableId)
+          await tablesStore.freeTable(orderToMove.tableId, orderToMove.id)
         }
 
         // Delete source order from database (all bills moved to target)
@@ -1742,7 +1807,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
       // Release the current table (if any)
       if (orderToMove.tableId) {
-        await tablesStore.freeTable(orderToMove.tableId)
+        await tablesStore.freeTable(orderToMove.tableId, orderToMove.id)
       }
 
       // Update order with new table
@@ -2724,6 +2789,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     hasItemsInOrder,
     hasItemsInBill,
     canDeleteOrder,
+    cleanupStaleOrders,
     cleanupEmptyDraftOrders,
     startBackgroundCleanup,
     stopBackgroundCleanup,

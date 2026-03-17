@@ -104,16 +104,17 @@ export class TablesService {
 
   /**
    * Обновить статус стола
+   * @param expectedOrderId — conditional guard: free/occupy only if current_order_id matches
+   *   (prevents stale orders from hijacking tables occupied by newer orders)
    */
   async updateTableStatus(
     tableId: string,
     status: TableStatus,
-    orderId?: string
+    orderId?: string,
+    expectedOrderId?: string
   ): Promise<ServiceResponse<PosTable>> {
     try {
       // ✅ EGRESS FIX: Read from localStorage instead of calling getAllTables()
-      // Previously: getAllTables() loaded ALL tables from Supabase on every status update
-      // Now: Read from localStorage cache (always populated during initialization)
       const cachedData = localStorage.getItem(this.STORAGE_KEY)
       if (!cachedData) {
         throw new Error('Tables not loaded - localStorage cache empty')
@@ -123,6 +124,23 @@ export class TablesService {
       const tableIndex = tables.findIndex(t => t.id === tableId)
       if (tableIndex === -1) {
         throw new Error('Table not found')
+      }
+
+      // Conditional guard: skip if table is owned by a different order
+      if (expectedOrderId) {
+        const currentTable = tables[tableIndex]
+        if (currentTable.currentOrderId && currentTable.currentOrderId !== expectedOrderId) {
+          console.log('⏭️ Table ownership mismatch, skipping update:', {
+            tableNumber: currentTable.number,
+            expectedOrderId,
+            actualOrderId: currentTable.currentOrderId,
+            requestedStatus: status
+          })
+          return {
+            success: true,
+            data: currentTable
+          }
+        }
       }
 
       const updatedTable: PosTable = {
@@ -149,15 +167,39 @@ export class TablesService {
           query = query.in('status', ['available'])
         }
 
-        const { error, count } = await query.select('id').maybeSingle()
+        // Conditional guard in DB: only free/update if current_order_id matches
+        if (expectedOrderId && status === 'free') {
+          query = query.eq('current_order_id', expectedOrderId)
+        }
 
-        if (error) {
-          console.error('❌ Supabase table status update failed:', error.message)
-          // If occupying failed due to optimistic lock, return error so caller can handle
-          if (status === 'occupied' && !count) {
+        const { error: sbError, data } = await query.select('id').maybeSingle()
+
+        if (sbError) {
+          console.error('❌ Supabase table status update failed:', sbError.message)
+          if (status === 'occupied') {
+            // Table not available — do NOT write rejected state to localStorage
             return {
               success: false,
               error: 'Table is already occupied by another device'
+            }
+          }
+          // For non-occupy errors, fall through to localStorage (offline resilience)
+        } else if (!data) {
+          // No row returned — conditional guard prevented the update
+          if (status === 'occupied') {
+            // Optimistic lock failed: table was not available
+            console.log('⏭️ Supabase: table not available for occupy, skipping localStorage')
+            return {
+              success: false,
+              error: 'Table is already occupied by another device'
+            }
+          }
+          if (expectedOrderId) {
+            // Ownership mismatch on free — table owned by different order
+            console.log('⏭️ Supabase: table ownership mismatch, update skipped')
+            return {
+              success: true,
+              data: tables[tableIndex]
             }
           }
         } else {
@@ -165,7 +207,7 @@ export class TablesService {
         }
       }
 
-      // 2. Always update localStorage (offline resilience)
+      // 2. Update localStorage (offline resilience — only reached when Supabase succeeded or offline)
       tables[tableIndex] = updatedTable
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(tables))
       console.log(`💾 Table ${updatedTable.number} status saved to localStorage (backup)`)

@@ -74,7 +74,11 @@ export class OrdersService {
         let query = supabase.from('orders').select('*')
 
         if (!options?.all) {
-          query = query.or(`payment_status.neq.paid,created_at.gte.${dateFilter}`)
+          // Cap unpaid order loading to 48h — prevents ancient unpaid orders from re-occupying tables
+          const cutoff48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
+          query = query.or(
+            `and(payment_status.neq.paid,created_at.gte.${cutoff48h}),created_at.gte.${dateFilter}`
+          )
         }
 
         const { data: ordersData, error: ordersError } = await query

@@ -843,7 +843,7 @@ const handleOrderTypeConfirm = async (data: {
         currentOrder.value.tableId = undefined
 
         // Free the table
-        await tablesStore.freeTable(tableId)
+        await tablesStore.freeTable(tableId, currentOrder.value.id)
       }
 
       // Recalculate totals with new channel taxes
