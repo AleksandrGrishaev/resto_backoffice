@@ -7,7 +7,6 @@ export interface LoyaltySettings {
   stampLifetimeDays: number
   stampRewards: StampReward[]
   pointsLifetimeDays: number
-  conversionBonusPct: number
   tierWindowDays: number
   maxTierDegradation: number
   tiers: TierConfig[]
@@ -111,11 +110,8 @@ export interface RewardRedemption {
 export interface ConvertResult {
   success: boolean
   stamps: number
-  baseAmount: number
-  cashbackPct: number
-  points: number
-  bonus: number
-  totalPoints: number
+  rewardPoints: number
+  rewardDetails: string[]
   newBalance: number
   error?: string
 }

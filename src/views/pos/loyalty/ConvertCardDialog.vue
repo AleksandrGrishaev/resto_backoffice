@@ -27,23 +27,19 @@
               <span class="text-body-2">Stamps converted:</span>
               <span class="text-body-2 font-weight-medium">{{ result.stamps }}</span>
             </div>
-            <div class="d-flex justify-space-between mb-1">
-              <span class="text-body-2">Base value:</span>
-              <span class="text-body-2">{{ formatIDR(result.baseAmount) }}</span>
-            </div>
-            <div class="d-flex justify-space-between mb-1">
-              <span class="text-body-2">Cashback ({{ result.cashbackPct }}%):</span>
-              <span class="text-body-2">{{ formatIDR(result.points) }}</span>
-            </div>
-            <div v-if="result.bonus > 0" class="d-flex justify-space-between mb-1">
-              <span class="text-body-2 text-success">Conversion bonus:</span>
-              <span class="text-body-2 text-success">+{{ formatIDR(result.bonus) }}</span>
+            <div
+              v-for="(detail, i) in result.rewardDetails"
+              :key="i"
+              class="d-flex align-center mb-1"
+            >
+              <v-icon size="14" color="success" class="mr-1">mdi-check</v-icon>
+              <span class="text-body-2">{{ detail }}</span>
             </div>
             <v-divider class="my-2" />
             <div class="d-flex justify-space-between">
-              <span class="text-body-1 font-weight-bold">Total points:</span>
+              <span class="text-body-1 font-weight-bold">Points awarded:</span>
               <span class="text-body-1 font-weight-bold text-deep-purple">
-                {{ formatIDR(result.totalPoints) }}
+                {{ formatIDR(result.rewardPoints) }}
               </span>
             </div>
             <div class="d-flex justify-space-between mt-1">
@@ -70,9 +66,8 @@
           </div>
           <v-alert type="info" variant="tonal" density="compact" class="mb-2">
             <div class="text-body-2">
-              {{ stamps }} stamp(s) will be converted using {{ cashbackPct }}% cashback rate
-              <template v-if="bonusPct > 0">+ {{ bonusPct }}% conversion bonus</template>
-              . The card will be closed after conversion.
+              {{ stamps }} stamp(s) — unredeemed rewards will be converted to points. The card will
+              be closed after conversion.
             </div>
           </v-alert>
         </div>
@@ -106,8 +101,6 @@ const props = defineProps<{
   customerId: string
   customerName: string
   stamps: number
-  cashbackPct: number
-  bonusPct: number
 }>()
 
 const emit = defineEmits<{

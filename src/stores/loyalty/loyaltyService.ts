@@ -416,11 +416,8 @@ export class LoyaltyService {
     return {
       success: true,
       stamps: result.stamps,
-      baseAmount: result.base_amount,
-      cashbackPct: result.cashback_pct,
-      points: result.points,
-      bonus: result.bonus,
-      totalPoints: result.total_points,
+      rewardPoints: result.reward_points,
+      rewardDetails: result.reward_details || [],
       newBalance: result.new_balance
     }
   }

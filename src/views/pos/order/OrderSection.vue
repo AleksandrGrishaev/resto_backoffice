@@ -193,8 +193,6 @@
       :customer-id="convertCardCustomerId"
       :customer-name="convertCardCustomerName"
       :stamps="loyaltyCard?.stamps || 0"
-      :cashback-pct="convertCardCustomerId ? loyaltyStore.cashbackRateForTier(convertCardTier) : 5"
-      :bonus-pct="loyaltyStore.settings?.conversionBonusPct || 0"
       @converted="handleCardConverted"
     />
 
