@@ -1964,7 +1964,8 @@ async function processLoyaltyAfterPayment(
     }
   }
 
-  if (card && card.status === 'active' && !loyaltyDisabled) {
+  const onStampsProgram = customer?.loyaltyProgram !== 'cashback'
+  if (card && card.status === 'active' && !loyaltyDisabled && onStampsProgram) {
     try {
       const result = await loyaltyStore.addStamps(card.cardNumber, orderId, paidAmount)
       if (result.success && result.stampsAdded > 0) {
@@ -1985,6 +1986,8 @@ async function processLoyaltyAfterPayment(
     }
   } else if (loyaltyDisabled && card) {
     console.log('🎯 Stamps skipped: loyalty accrual disabled for', customer?.name)
+  } else if (card && !onStampsProgram) {
+    console.log('🎯 Stamps skipped: customer on cashback program', customer?.name)
   }
 }
 

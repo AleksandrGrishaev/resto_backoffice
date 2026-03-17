@@ -1,6 +1,11 @@
--- Function: add_stamps
--- Description: Add stamps to a physical card based on order amount
--- Usage: SELECT add_stamps('001', 'order-uuid-or-null', 160000);
+-- Migration: 233_fix_stamp_accrual_for_cashback
+-- Description: Close stamp card on cycle completion (cashback upgrade) to prevent dual accrual
+-- Date: 2026-03-17
+
+-- CONTEXT: When a customer completes a stamp cycle, add_stamps RPC upgrades them to cashback.
+-- But the stamp card remained 'active', causing stamps to still accrue alongside cashback
+-- on subsequent payments. This migration updates add_stamps to set the card status to 'converted'
+-- when the cycle completes, preventing dual accrual at the DB level.
 
 CREATE OR REPLACE FUNCTION add_stamps(
   p_card_number TEXT,
@@ -81,7 +86,7 @@ BEGIN
     UPDATE stamp_cards SET cycle = cycle + 1 WHERE id = v_card.id;
     v_new_cycle := true;
 
-    -- Auto-transition customer from stamps → cashback on first cycle completion
+    -- Auto-transition customer from stamps -> cashback on first cycle completion
     IF v_card.customer_id IS NOT NULL THEN
       UPDATE customers
       SET loyalty_program = 'cashback'
