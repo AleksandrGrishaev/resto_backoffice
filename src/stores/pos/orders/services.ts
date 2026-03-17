@@ -263,15 +263,12 @@ export class OrdersService {
         }
       }
 
-      // Always save to localStorage (backup)
-      const orders = await this.getAllOrders()
-      const ordersList = orders.success && orders.data ? orders.data : []
-      ordersList.push(newOrder)
+      // Save to localStorage (backup) — read existing list directly, no Supabase reload
+      const stored = localStorage.getItem(this.ORDERS_KEY)
+      const ordersList = stored ? JSON.parse(stored) : []
+      ordersList.push({ ...newOrder, bills: [] })
 
-      localStorage.setItem(
-        this.ORDERS_KEY,
-        JSON.stringify(ordersList.map(o => ({ ...o, bills: [] })))
-      )
+      localStorage.setItem(this.ORDERS_KEY, JSON.stringify(ordersList))
 
       console.log('💾 Order saved to localStorage (backup):', {
         id: newOrder.id,

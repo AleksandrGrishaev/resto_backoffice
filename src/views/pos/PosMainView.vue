@@ -366,6 +366,9 @@ const handleOrderSelect = async (orderId: string): Promise<void> => {
   try {
     DebugUtils.debug(MODULE_NAME, 'Order selected from sidebar', { orderId })
 
+    // Skip if already selected (TablesSidebar or createOrder already called selectOrder)
+    if (ordersStore.currentOrderId === orderId) return
+
     // Выбираем заказ в store
     ordersStore.selectOrder(orderId)
 

@@ -279,14 +279,13 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
         orders.value.unshift(response.data)
 
-        // ✅ FIX: Occupy table IMMEDIATELY on order creation (not after first item)
-        // This prevents "lost orders" where table stays free but order exists
-        if (response.data.type === 'dine_in' && response.data.tableId) {
-          await tablesStore.occupyTable(response.data.tableId, response.data.id)
-        }
-
-        // Автоматически выбираем новый заказ
+        // Автоматически выбираем новый заказ (sync, no await needed)
         selectOrder(response.data.id)
+
+        // Occupy table in background — don't block order selection
+        if (response.data.type === 'dine_in' && response.data.tableId) {
+          tablesStore.occupyTable(response.data.tableId, response.data.id)
+        }
 
         // Автоматически создаем первый счет если нужно
         if (response.data.bills.length === 0) {
