@@ -39,7 +39,7 @@ export async function getActiveKitchenOrders(): Promise<PosOrder[]> {
     const { data: itemsData, error: itemsError } = await supabase
       .from('order_items')
       .select('*')
-      .in('status', ['waiting', 'cooking', 'ready']) // Filter by item status
+      .in('status', ['scheduled', 'waiting', 'cooking', 'ready']) // Filter by item status
       .gte('created_at', startOfDay) // Only today's items
 
     if (itemsError) {
@@ -81,6 +81,7 @@ export async function getActiveKitchenOrders(): Promise<PosOrder[]> {
     DebugUtils.info(MODULE_NAME, 'Kitchen orders loaded (filtered by items, today only)', {
       count: orders.length,
       totalItems: itemsData.length,
+      scheduledItems: itemsData.filter(i => i.status === 'scheduled').length,
       waitingItems: itemsData.filter(i => i.status === 'waiting').length,
       cookingItems: itemsData.filter(i => i.status === 'cooking').length,
       readyItems: itemsData.filter(i => i.status === 'ready').length,
@@ -118,7 +119,7 @@ export async function getOrderById(orderId: string): Promise<PosOrder | null> {
       .from('order_items')
       .select('*')
       .eq('order_id', orderId)
-      .in('status', ['waiting', 'cooking', 'ready'])
+      .in('status', ['scheduled', 'waiting', 'cooking', 'ready'])
 
     if (itemsError) {
       DebugUtils.error(MODULE_NAME, 'Failed to load items for order', {
@@ -159,7 +160,8 @@ export function calculateOrderStatus(
 
   // Check for minimum status (priority order)
   if (items.some(i => i.status === 'draft')) return 'draft'
-  if (items.some(i => i.status === 'waiting')) return 'waiting'
+  // Scheduled items treated as 'waiting' for order-level status calculation
+  if (items.some(i => i.status === 'scheduled' || i.status === 'waiting')) return 'waiting'
   if (items.some(i => i.status === 'cooking')) return 'cooking'
 
   // All items ready

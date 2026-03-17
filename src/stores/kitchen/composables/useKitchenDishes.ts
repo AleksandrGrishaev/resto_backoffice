@@ -19,7 +19,7 @@ export interface KitchenDish {
   name: string
   variantName?: string // Variant name (e.g., "with fries", "330ml")
   quantity: 1 // Всегда 1, так как каждое блюдо - отдельная карточка
-  status: 'waiting' | 'cooking' | 'ready'
+  status: 'scheduled' | 'waiting' | 'cooking' | 'ready'
   kitchenNotes?: string
   department?: Department // Which department should prepare this item (kitchen or bar)
 
@@ -38,6 +38,9 @@ export interface KitchenDish {
   sentToKitchenAt?: string // When item sent to kitchen
   cookingStartedAt?: string // When cooking started
   readyAt?: string // When item ready
+
+  // Scheduled order info
+  pickupTime?: string // 'asap' | 'HH:MM'
 
   // Bill context (для группировки)
   billId: string
@@ -87,7 +90,7 @@ export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'b
         name: item.menuItemName,
         variantName: item.variantName,
         quantity: 1, // Всегда 1
-        status: item.status as 'waiting' | 'cooking' | 'ready',
+        status: item.status as 'scheduled' | 'waiting' | 'cooking' | 'ready',
         kitchenNotes: item.kitchenNotes,
         department: item.department || 'kitchen', // Default to kitchen if not specified
         selectedModifiers: item.selectedModifiers,
@@ -100,6 +103,7 @@ export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'b
         sentToKitchenAt: item.sentToKitchenAt,
         cookingStartedAt: item.cookingStartedAt,
         readyAt: item.readyAt,
+        pickupTime: order.pickupTime,
         billId: bill.id,
         billNumber: bill.billNumber
       })
@@ -171,7 +175,7 @@ export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'b
 
           // Фильтруем только Kitchen/Bar статусы И разрешенные департаменты
           if (
-            ['waiting', 'cooking', 'ready'].includes(item.status) &&
+            ['scheduled', 'waiting', 'cooking', 'ready'].includes(item.status) &&
             allowed.includes(itemDepartment)
           ) {
             // Разворачиваем item в отдельные блюда
@@ -190,6 +194,14 @@ export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'b
    * Сортировка по времени создания (старые сверху)
    */
   const dishesByStatus = computed(() => ({
+    scheduled: kitchenDishes.value
+      .filter(d => d.status === 'scheduled')
+      .sort((a, b) => {
+        // Sort by pickup time (earliest first)
+        const timeA = a.pickupTime || '99:99'
+        const timeB = b.pickupTime || '99:99'
+        return timeA.localeCompare(timeB)
+      }),
     waiting: kitchenDishes.value
       .filter(d => d.status === 'waiting')
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
@@ -240,6 +252,7 @@ export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'b
    */
   const dishesStats = computed(() => ({
     total: kitchenDishes.value.length,
+    scheduled: dishesByStatus.value.scheduled.length,
     waiting: dishesByStatus.value.waiting.length,
     cooking: dishesByStatus.value.cooking.length,
     ready: dishesByStatus.value.ready.length,

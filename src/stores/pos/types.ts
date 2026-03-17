@@ -44,7 +44,14 @@ export type OrderStatus =
   | 'cancelled'
 export type OrderPaymentStatus = 'unpaid' | 'partial' | 'paid' | 'refunded'
 
-export type ItemStatus = 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled'
+export type ItemStatus =
+  | 'draft'
+  | 'scheduled'
+  | 'waiting'
+  | 'cooking'
+  | 'ready'
+  | 'served'
+  | 'cancelled'
 export type ItemPaymentStatus = 'unpaid' | 'paid' | 'refunded'
 
 // Cancellation reasons for order items
@@ -75,9 +82,30 @@ export const CANCELLATION_REASON_OPTIONS = [
 ] as const
 
 // ДОБАВИТЬ: Типы статусов для разных типов заказов
-export type DineInStatus = 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled'
-export type TakeawayStatus = 'draft' | 'waiting' | 'cooking' | 'ready' | 'collected' | 'cancelled'
-export type DeliveryStatus = 'draft' | 'waiting' | 'cooking' | 'ready' | 'delivered' | 'cancelled'
+export type DineInStatus =
+  | 'draft'
+  | 'scheduled'
+  | 'waiting'
+  | 'cooking'
+  | 'ready'
+  | 'served'
+  | 'cancelled'
+export type TakeawayStatus =
+  | 'draft'
+  | 'scheduled'
+  | 'waiting'
+  | 'cooking'
+  | 'ready'
+  | 'collected'
+  | 'cancelled'
+export type DeliveryStatus =
+  | 'draft'
+  | 'scheduled'
+  | 'waiting'
+  | 'cooking'
+  | 'ready'
+  | 'delivered'
+  | 'cancelled'
 
 // ДОБАВИТЬ: Правила переходов статусов
 export interface StatusTransition {
@@ -97,43 +125,62 @@ export interface OrderTypeStatusConfig {
 // ДОБАВИТЬ: Маппинг типов заказов к конфигурации статусов
 export const ORDER_TYPE_STATUS_CONFIG: Record<OrderType, OrderTypeStatusConfig> = {
   dine_in: {
-    allowedStatuses: ['draft', 'waiting', 'cooking', 'ready', 'served', 'cancelled'],
+    allowedStatuses: ['draft', 'scheduled', 'waiting', 'cooking', 'ready', 'served', 'cancelled'],
     finalStatus: 'served',
     transitions: {
       draft: ['waiting', 'cancelled'],
+      scheduled: ['waiting', 'cancelled'],
       waiting: ['cooking', 'cancelled'],
       cooking: ['ready', 'cancelled'],
       ready: ['served', 'cancelled'],
       served: ['cancelled'],
-      collected: [], // Неиспользуемый статус
-      delivered: [], // Неиспользуемый статус
+      collected: [],
+      delivered: [],
       cancelled: []
     }
   },
   takeaway: {
-    allowedStatuses: ['draft', 'waiting', 'cooking', 'ready', 'collected', 'cancelled'],
+    allowedStatuses: [
+      'draft',
+      'scheduled',
+      'waiting',
+      'cooking',
+      'ready',
+      'collected',
+      'cancelled'
+    ],
     finalStatus: 'collected',
     transitions: {
       draft: ['waiting', 'cancelled'],
+      scheduled: ['waiting', 'cancelled'],
       waiting: ['cooking', 'cancelled'],
       cooking: ['ready', 'cancelled'],
       ready: ['collected', 'cancelled'],
-      served: [], // Неиспользуемый статус
+      served: [],
       collected: ['cancelled'],
-      delivered: [], // Неиспользуемый статус
+      delivered: [],
       cancelled: []
     }
   },
   delivery: {
-    allowedStatuses: ['draft', 'waiting', 'cooking', 'ready', 'delivered', 'cancelled'],
+    allowedStatuses: [
+      'draft',
+      'scheduled',
+      'waiting',
+      'cooking',
+      'ready',
+      'delivered',
+      'cancelled'
+    ],
     finalStatus: 'delivered',
     transitions: {
       draft: ['waiting', 'cancelled'],
+      scheduled: ['waiting', 'cancelled'],
       waiting: ['cooking', 'cancelled'],
       cooking: ['ready', 'cancelled'],
       ready: ['delivered', 'cancelled'],
-      served: [], // Неиспользуемый статус
-      collected: [], // Неиспользуемый статус
+      served: [],
+      collected: [],
       delivered: ['cancelled'],
       cancelled: []
     }

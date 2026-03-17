@@ -9,6 +9,7 @@ import {
   fromSupabase as orderFromSupabase,
   fromOrderItemRow
 } from '@/stores/pos/orders/supabaseMappers'
+import { startScheduledOrdersService, stopScheduledOrdersService } from './scheduledOrdersService'
 import { DebugUtils, syncServerTime } from '@/utils'
 import { ENV } from '@/config/environment'
 
@@ -84,6 +85,9 @@ export const useKitchenStore = defineStore('kitchen', () => {
       )
 
       realtimeConnected.value = isConnected.value
+
+      // Start scheduled orders monitoring service
+      startScheduledOrdersService()
 
       initialized.value = true
 
@@ -317,7 +321,7 @@ export const useKitchenStore = defineStore('kitchen', () => {
 
           // Check if order should be removed (no more kitchen items)
           const hasKitchenItems = order.bills.some(b =>
-            b.items.some(i => ['waiting', 'cooking', 'ready'].includes(i.status))
+            b.items.some(i => ['scheduled', 'waiting', 'cooking', 'ready'].includes(i.status))
           )
 
           if (!hasKitchenItems) {
@@ -377,12 +381,25 @@ export const useKitchenStore = defineStore('kitchen', () => {
    * Order status = min status of all items (waiting < cooking < ready)
    */
   function recalculateOrderStatus(order: any) {
+    // Note: 'scheduled' is an ITEM-level status, not order-level.
+    // At order level, scheduled items are treated as 'waiting'.
     const statusPriority: Record<string, number> = {
+      scheduled: 1, // Same priority as waiting (order-level = waiting)
       waiting: 1,
       cooking: 2,
       ready: 3,
       served: 4,
       cancelled: 5
+    }
+
+    // Map item statuses to valid order statuses
+    const statusToOrderStatus: Record<string, string> = {
+      scheduled: 'waiting', // scheduled items → order shows as 'waiting'
+      waiting: 'waiting',
+      cooking: 'cooking',
+      ready: 'ready',
+      served: 'served',
+      cancelled: 'cancelled'
     }
 
     let minPriority = Infinity
@@ -398,9 +415,12 @@ export const useKitchenStore = defineStore('kitchen', () => {
       }
     }
 
+    // Map to valid order-level status (e.g., scheduled → waiting)
+    const orderStatus = statusToOrderStatus[minStatus] || minStatus
+
     // Update order status if changed (allow all statuses including served/cancelled)
-    if (order.status !== minStatus && minPriority !== Infinity) {
-      order.status = minStatus
+    if (order.status !== orderStatus && minPriority !== Infinity) {
+      order.status = orderStatus as any
       DebugUtils.debug(MODULE_NAME, 'Order status recalculated', {
         orderNumber: order.orderNumber,
         newStatus: minStatus
@@ -413,6 +433,7 @@ export const useKitchenStore = defineStore('kitchen', () => {
    */
   function cleanup() {
     unsubscribe()
+    stopScheduledOrdersService()
     initialized.value = false
     realtimeConnected.value = false
     DebugUtils.info(MODULE_NAME, 'Kitchen store cleaned up')

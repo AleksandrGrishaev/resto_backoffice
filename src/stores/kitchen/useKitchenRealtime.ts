@@ -65,7 +65,7 @@ export function useKitchenRealtime() {
           const oldItem = payload.old as any
 
           // Kitchen statuses we care about
-          const kitchenStatuses = ['waiting', 'cooking', 'ready']
+          const kitchenStatuses = ['scheduled', 'waiting', 'cooking', 'ready']
           const isKitchenItem = item && kitchenStatuses.includes(item.status)
           const wasKitchenItem = oldItem && kitchenStatuses.includes(oldItem.status)
 
@@ -179,7 +179,7 @@ export function useKitchenRealtime() {
             const order = payload.new || payload.old
 
             // We only care about orders that might have items in kitchen
-            const kitchenStatuses = ['waiting', 'cooking', 'ready']
+            const kitchenStatuses = ['scheduled', 'waiting', 'cooking', 'ready']
             const isKitchenOrder = order && kitchenStatuses.includes(order.status)
 
             if (eventType === 'DELETE' || isKitchenOrder) {
