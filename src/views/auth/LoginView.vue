@@ -17,8 +17,8 @@
           <!-- Authentication Tabs -->
           <v-tabs v-model="activeTab" class="mb-6 auth-tabs" bg-color="transparent" grow>
             <v-tab value="email" class="auth-tab">
-              <v-icon class="mr-2">mdi-email</v-icon>
-              Email
+              <v-icon class="mr-2">mdi-monitor</v-icon>
+              Desktop
             </v-tab>
             <v-tab value="pos" class="auth-tab">
               <v-icon class="mr-2">mdi-point-of-sale</v-icon>
@@ -442,16 +442,18 @@ const handleEmailLogin = async () => {
     DebugUtils.info(MODULE_NAME, 'Email login attempt', { email: email.value })
 
     const token = await getCaptchaToken()
-    const success = await authStore.loginWithEmail(email.value, password.value, token)
 
-    if (!success) {
-      throw new Error(authStore.state.error || 'Login failed')
-    }
-
-    // Set target route AFTER successful login (avoids stale route on failed attempts)
+    // Set target route BEFORE login — watcher in App.vue fires immediately on auth change
     const redirectPath = (route.query.redirect as string) || null
     if (redirectPath) {
       authStore.setTargetRoute(redirectPath)
+    }
+
+    const success = await authStore.loginWithEmail(email.value, password.value, token)
+
+    if (!success) {
+      if (redirectPath) authStore.setTargetRoute(null as unknown as string)
+      throw new Error(authStore.state.error || 'Login failed')
     }
 
     DebugUtils.info(MODULE_NAME, 'Email login successful — App.vue will handle redirect')
@@ -477,14 +479,17 @@ const handlePinLogin = async (pin: string) => {
     DebugUtils.info(MODULE_NAME, 'POS PIN login attempt')
 
     const token = await getCaptchaToken()
+    const targetRoute = (route.query.redirect as string) || '/pos'
+
+    // Set target route BEFORE login — watcher in App.vue fires immediately on auth change
+    authStore.setTargetRoute(targetRoute)
+
     const success = await authStore.loginWithPin(pin, token)
 
     if (!success) {
+      authStore.setTargetRoute(null as unknown as string)
       throw new Error(authStore.state.error || 'Invalid PIN')
     }
-
-    // Set target route AFTER successful login
-    authStore.setTargetRoute((route.query.redirect as string) || '/pos')
 
     DebugUtils.info(MODULE_NAME, 'POS PIN login successful — App.vue will handle redirect')
   } catch (e) {
@@ -509,14 +514,17 @@ const handleKitchenPinLogin = async (pin: string) => {
     DebugUtils.info(MODULE_NAME, 'Kitchen PIN login attempt')
 
     const token = await getCaptchaToken()
+    const targetRoute = (route.query.redirect as string) || '/kitchen'
+
+    // Set target route BEFORE login — watcher in App.vue fires immediately on auth change
+    authStore.setTargetRoute(targetRoute)
+
     const success = await authStore.loginWithPin(pin, token)
 
     if (!success) {
+      authStore.setTargetRoute(null as unknown as string)
       throw new Error(authStore.state.error || 'Invalid PIN')
     }
-
-    // Set target route AFTER successful login
-    authStore.setTargetRoute((route.query.redirect as string) || '/kitchen')
 
     DebugUtils.info(MODULE_NAME, 'Kitchen PIN login successful — App.vue will handle redirect')
   } catch (e) {
@@ -544,14 +552,16 @@ const handleAdminLogin = async () => {
     DebugUtils.info(MODULE_NAME, 'Admin login attempt', { email: adminEmail.value })
 
     const token = await getCaptchaToken()
+
+    // Set target route BEFORE login — watcher in App.vue fires immediately on auth change
+    authStore.setTargetRoute('/admin')
+
     const success = await authStore.loginWithEmail(adminEmail.value, adminPassword.value, token)
 
     if (!success) {
+      authStore.setTargetRoute(null as unknown as string) // Clear on failure
       throw new Error(authStore.state.error || 'Login failed')
     }
-
-    // Set target route AFTER successful login
-    authStore.setTargetRoute('/admin')
 
     DebugUtils.info(MODULE_NAME, 'Admin login successful — App.vue will handle redirect')
   } catch (e) {
