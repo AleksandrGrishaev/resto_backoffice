@@ -211,6 +211,8 @@ const canMove = computed((): boolean => {
 
 const canCheckout = computed((): boolean => {
   if (!props.order) return false
+  // SECURITY: Block checkout for draft orders (not yet sent to kitchen)
+  if (props.order.status === 'draft') return false
   const hasItems = props.bills.some(bill => bill.items.length > 0)
   const hasUnpaidBills = props.bills.some(bill => bill.paymentStatus !== 'paid')
   return hasItems && hasUnpaidBills

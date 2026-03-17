@@ -1057,6 +1057,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         return { success: false, error: 'Order must be fully paid before releasing table' }
       }
 
+      // SECURITY: Block release for orders never sent to kitchen
+      if (order.status === 'draft') {
+        return { success: false, error: 'Cannot release table: Order was never sent to kitchen' }
+      }
+
       console.log('🍽️ [ordersStore] Releasing table:', {
         orderId,
         tableId: order.tableId,
