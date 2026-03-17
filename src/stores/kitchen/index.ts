@@ -359,8 +359,16 @@ export const useKitchenStore = defineStore('kitchen', () => {
         // Order metadata updated (table_id, notes, etc.)
         const index = posOrdersStore.orders.findIndex(o => o.id === updatedOrder.id)
         if (index !== -1) {
-          // Update only metadata, preserve items from local state
+          // Update metadata + status from DB (safety net for recalculateOrderStatus)
           const localOrder = posOrdersStore.orders[index]
+          if (updatedOrder.status && updatedOrder.status !== localOrder.status) {
+            DebugUtils.info(MODULE_NAME, '📝 Order status synced from DB', {
+              orderNumber: localOrder.orderNumber,
+              oldStatus: localOrder.status,
+              newStatus: updatedOrder.status
+            })
+            localOrder.status = updatedOrder.status
+          }
           localOrder.tableId = updatedOrder.table_id || undefined
           localOrder.notes = updatedOrder.notes || undefined
           localOrder.customerName = updatedOrder.customer_name || undefined
