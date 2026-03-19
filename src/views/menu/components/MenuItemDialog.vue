@@ -227,6 +227,7 @@
                     :index="index"
                     :can-delete="formData.variants.length > 1"
                     :item-name="formData.name"
+                    :menu-item-id="isEdit ? props.item?.id : undefined"
                     :dish-type="effectiveDishType"
                     :dish-options="dishOptions"
                     :product-options="productOptions"

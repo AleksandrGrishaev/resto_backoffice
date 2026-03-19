@@ -157,6 +157,13 @@
           <v-row>
             <v-col v-for="variant in itemVariants" :key="variant.id" cols="12" sm="6" md="4">
               <v-card class="variant-card" hover @click="handleAddItem(selectedItem!, variant)">
+                <v-img
+                  v-if="variant.imageUrl || selectedItem?.imageUrl"
+                  :src="variant.imageUrl || selectedItem?.imageUrl"
+                  height="120"
+                  cover
+                  class="variant-card__image"
+                />
                 <v-card-text class="pa-4">
                   <div class="text-h6 font-weight-medium mb-1">
                     {{ variant.name }}
@@ -573,6 +580,11 @@ onMounted(async () => {
   transition: all 0.2s ease;
   border-radius: 12px;
   min-height: 44px;
+  overflow: hidden;
+}
+
+.variant-card__image {
+  border-radius: 12px 12px 0 0;
 }
 
 .variant-card:hover {
