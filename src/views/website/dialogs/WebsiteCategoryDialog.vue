@@ -31,17 +31,9 @@ const tempId = ref(generateId())
 
 const imageUploadId = computed(() => props.category?.id || tempId.value)
 
-// Is this a group (top-level)? Groups can't have a parent
-const isGroup = computed(() => {
-  if (!props.category) return false
-  return !props.category.parentId
-})
-
-// Group options for the select
+// Group options for the select (exclude self and own children to prevent cycles)
 const groupOptions = computed(() =>
-  props.groups
-    .filter(g => g.id !== props.category?.id) // Can't be parent of itself
-    .map(g => ({ title: g.name, value: g.id }))
+  props.groups.filter(g => g.id !== props.category?.id).map(g => ({ title: g.name, value: g.id }))
 )
 
 watch(dialog, open => {
@@ -172,9 +164,8 @@ async function save() {
           persistent-hint
         />
 
-        <!-- Group selector (not shown when editing a group itself) -->
+        <!-- Group selector -->
         <v-select
-          v-if="!isGroup"
           v-model="form.parentId"
           :items="groupOptions"
           label="Group"

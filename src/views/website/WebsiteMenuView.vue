@@ -93,6 +93,32 @@ async function handleItemDropped(categoryId: string, menuItemId: string) {
     variantDisplayMode: 'options'
   })
 }
+
+// Group deletion
+const deleteGroupDialog = ref(false)
+const groupToDelete = ref<WebsiteMenuCategory | null>(null)
+
+function confirmDeleteGroup(group: WebsiteMenuCategory) {
+  const children = getGroupChildren(group.id)
+  if (children.length > 0) {
+    groupToDelete.value = group
+    deleteGroupDialog.value = true
+  } else {
+    websiteMenuStore.deleteCategory(group.id)
+  }
+}
+
+async function deleteGroupWithChildren() {
+  if (!groupToDelete.value) return
+  const children = getGroupChildren(groupToDelete.value.id)
+  // Delete all children first
+  for (const child of children) {
+    await websiteMenuStore.deleteCategory(child.id)
+  }
+  await websiteMenuStore.deleteCategory(groupToDelete.value.id)
+  deleteGroupDialog.value = false
+  groupToDelete.value = null
+}
 </script>
 
 <template>
@@ -169,6 +195,13 @@ async function handleItemDropped(categoryId: string, menuItemId: string) {
                 @click.stop="openEditCategory(group)"
               />
               <v-btn
+                icon="mdi-delete"
+                size="x-small"
+                variant="text"
+                color="error"
+                @click.stop="confirmDeleteGroup(group)"
+              />
+              <v-btn
                 :icon="group.isActive ? 'mdi-eye' : 'mdi-eye-off'"
                 size="x-small"
                 variant="text"
@@ -235,6 +268,25 @@ async function handleItemDropped(categoryId: string, menuItemId: string) {
       :groups="groups"
       @saved="handleCategorySaved"
     />
+
+    <!-- Delete group confirmation -->
+    <v-dialog v-model="deleteGroupDialog" max-width="420">
+      <v-card>
+        <v-card-title class="text-subtitle-1">Delete Group?</v-card-title>
+        <v-card-text>
+          Group "{{ groupToDelete?.name }}" contains
+          <strong>
+            {{ groupToDelete ? getGroupChildren(groupToDelete.id).length : 0 }} categories
+          </strong>
+          with their items. All will be deleted.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="deleteGroupDialog = false">Cancel</v-btn>
+          <v-btn color="error" variant="flat" @click="deleteGroupWithChildren">Delete All</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
