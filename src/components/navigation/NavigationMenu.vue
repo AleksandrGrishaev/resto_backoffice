@@ -61,6 +61,12 @@
           </template>
         </v-list-item>
 
+        <v-list-item to="/website/menu" prepend-icon="mdi-silverware" color="primary" class="ps-8">
+          <template #title>
+            <span>Menu</span>
+          </template>
+        </v-list-item>
+
         <v-list-item to="/website/settings" prepend-icon="mdi-cog" color="primary" class="ps-8">
           <template #title>
             <span>Settings</span>

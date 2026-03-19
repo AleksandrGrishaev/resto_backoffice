@@ -65,6 +65,7 @@ export const STORE_DEPENDENCIES: Record<StoreName, StoreName[]> = {
   // Website management
   website: [],
   websiteSettings: [],
+  websiteMenu: ['menu'],
 
   // Debug system
   debug: []
@@ -165,6 +166,7 @@ export const STORE_CATEGORIES: Record<StoreName, StoreCategory> = {
   // Website management
   website: 'backoffice',
   websiteSettings: 'backoffice',
+  websiteMenu: 'backoffice',
 
   // Опциональные
   debug: 'optional'
@@ -277,6 +279,7 @@ export function getStoresForContext(context: AppContext, userRoles: UserRole[]):
       // Website management
       stores.add('website')
       stores.add('websiteSettings')
+      stores.add('websiteMenu')
       break
   }
 

@@ -38,7 +38,6 @@
         <v-tab value="social">Social</v-tab>
         <v-tab value="auth">Auth</v-tab>
         <v-tab value="seo">SEO</v-tab>
-        <v-tab value="menu">Menu Display</v-tab>
       </v-tabs>
 
       <v-card-text>
@@ -365,42 +364,6 @@
               </v-btn>
             </div>
           </v-tabs-window-item>
-
-          <!-- Menu Display -->
-          <v-tabs-window-item value="menu">
-            <v-alert type="info" variant="tonal" class="mb-4">
-              Control which menu categories are visible on the website. Hidden categories and all
-              their dishes will not appear on the public site.
-            </v-alert>
-
-            <div v-if="loadingCategories" class="d-flex justify-center py-4">
-              <v-progress-circular indeterminate size="24" />
-            </div>
-
-            <v-list v-else-if="categories.length">
-              <v-list-item v-for="cat in categories" :key="cat.id" class="px-0">
-                <template #prepend>
-                  <v-switch
-                    :model-value="!store.settings.menu.excluded_categories.includes(cat.id)"
-                    color="primary"
-                    hide-details
-                    density="compact"
-                    class="mr-2"
-                    @update:model-value="toggleCategory(cat.id, $event as boolean)"
-                  />
-                </template>
-                <v-list-item-title>{{ cat.name }}</v-list-item-title>
-              </v-list-item>
-            </v-list>
-
-            <v-alert v-else type="warning" variant="tonal">No active categories found.</v-alert>
-
-            <div class="d-flex justify-end mt-4">
-              <v-btn color="primary" :loading="store.saving === 'menu'" @click="save('menu')">
-                Save Menu Display
-              </v-btn>
-            </div>
-          </v-tabs-window-item>
         </v-tabs-window>
       </v-card-text>
     </v-card>
@@ -415,7 +378,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useWebsiteSettingsStore } from '@/stores/website/settingsStore'
-import { supabase } from '@/supabase/client'
 import type { SettingsKey } from '@/stores/website/settingsTypes'
 
 const store = useWebsiteSettingsStore()
@@ -437,40 +399,10 @@ const snackbar = ref(false)
 const snackbarText = ref('')
 const snackbarColor = ref('success')
 
-// Menu categories for Menu Display tab
-const categories = ref<{ id: string; name: string }[]>([])
-const loadingCategories = ref(false)
-
-async function loadCategories() {
-  loadingCategories.value = true
-  try {
-    const { data } = await supabase
-      .from('menu_categories')
-      .select('id, name')
-      .eq('is_active', true)
-      .order('sort_order')
-    categories.value = data || []
-  } finally {
-    loadingCategories.value = false
-  }
-}
-
-function toggleCategory(categoryId: string, show: boolean) {
-  const excluded = store.settings.menu.excluded_categories
-  if (show) {
-    store.settings.menu.excluded_categories = excluded.filter(id => id !== categoryId)
-  } else {
-    if (!excluded.includes(categoryId)) {
-      excluded.push(categoryId)
-    }
-  }
-}
-
 onMounted(() => {
   if (!store.loaded) {
     store.loadAll()
   }
-  loadCategories()
 })
 
 async function save(key: SettingsKey) {

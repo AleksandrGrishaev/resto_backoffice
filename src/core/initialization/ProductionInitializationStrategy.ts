@@ -401,6 +401,8 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
         return this.loadWebsiteFromAPI()
       case 'websiteSettings':
         return this.loadWebsiteSettingsFromAPI()
+      case 'websiteMenu':
+        return this.loadWebsiteMenuFromAPI()
       default:
         DebugUtils.warn(MODULE_NAME, `Unknown store: ${storeName}`)
         return null
@@ -1184,6 +1186,38 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
 
       return {
         name: 'websiteSettings',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadWebsiteMenuFromAPI(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const { useWebsiteMenuStore } = await import('@/stores/websiteMenu')
+      const store = useWebsiteMenuStore()
+
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading website menu from API...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'websiteMenu',
+        success: true,
+        count: store.categories.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load website menu'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [PROD] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'websiteMenu',
         success: false,
         error: message,
         duration: Date.now() - start
