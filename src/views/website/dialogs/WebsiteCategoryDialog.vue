@@ -7,6 +7,7 @@ import type { WebsiteMenuCategory, CreateWebsiteCategoryDto } from '@/stores/web
 const props = defineProps<{
   category: WebsiteMenuCategory | null
   store: any
+  groups: WebsiteMenuCategory[]
 }>()
 
 const emit = defineEmits<{
@@ -20,6 +21,7 @@ const form = ref({
   description: '',
   slug: '',
   imageUrl: '',
+  parentId: null as string | null,
   isActive: true
 })
 
@@ -28,6 +30,19 @@ const errorMessage = ref('')
 const tempId = ref(generateId())
 
 const imageUploadId = computed(() => props.category?.id || tempId.value)
+
+// Is this a group (top-level)? Groups can't have a parent
+const isGroup = computed(() => {
+  if (!props.category) return false
+  return !props.category.parentId
+})
+
+// Group options for the select
+const groupOptions = computed(() =>
+  props.groups
+    .filter(g => g.id !== props.category?.id) // Can't be parent of itself
+    .map(g => ({ title: g.name, value: g.id }))
+)
 
 watch(dialog, open => {
   if (open) {
@@ -38,6 +53,7 @@ watch(dialog, open => {
         description: props.category.description || '',
         slug: props.category.slug || '',
         imageUrl: props.category.imageUrl || '',
+        parentId: props.category.parentId || null,
         isActive: props.category.isActive
       }
     } else {
@@ -47,6 +63,7 @@ watch(dialog, open => {
         description: '',
         slug: '',
         imageUrl: '',
+        parentId: null,
         isActive: true
       }
     }
@@ -83,6 +100,7 @@ async function save() {
       description: form.value.description.trim() || undefined,
       slug: form.value.slug.trim() || undefined,
       imageUrl: form.value.imageUrl.trim() || undefined,
+      parentId: form.value.parentId || null,
       isActive: form.value.isActive
     }
 
@@ -152,6 +170,19 @@ async function save() {
           class="mb-3"
           hint="Auto-generated from name"
           persistent-hint
+        />
+
+        <!-- Group selector (not shown when editing a group itself) -->
+        <v-select
+          v-if="!isGroup"
+          v-model="form.parentId"
+          :items="groupOptions"
+          label="Group"
+          variant="outlined"
+          density="compact"
+          clearable
+          class="mb-3"
+          placeholder="No group (top-level)"
         />
 
         <v-textarea

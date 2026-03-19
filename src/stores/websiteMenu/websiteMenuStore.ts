@@ -59,10 +59,7 @@ export const useWebsiteMenuStore = defineStore('websiteMenu', () => {
     try {
       // Set sort order to append at end
       const maxSort = categories.value.reduce((max, c) => Math.max(max, c.sortOrder), -1)
-      const category = await websiteMenuService.createCategory({ ...dto })
-      category.sortOrder = maxSort + 1
-      // Update sort order in DB
-      await websiteMenuService.reorderCategories([{ id: category.id, sortOrder: maxSort + 1 }])
+      const category = await websiteMenuService.createCategory(dto)
       categories.value.push(category)
       return category
     } catch (error) {
