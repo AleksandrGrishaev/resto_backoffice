@@ -24,12 +24,14 @@ const form = ref({
 })
 
 const saving = ref(false)
+const errorMessage = ref('')
 const tempId = ref(generateId())
 
 const imageUploadId = computed(() => props.category?.id || tempId.value)
 
 watch(dialog, open => {
   if (open) {
+    errorMessage.value = ''
     if (props.category) {
       form.value = {
         name: props.category.name,
@@ -74,6 +76,7 @@ async function save() {
   if (!form.value.name.trim()) return
 
   saving.value = true
+  errorMessage.value = ''
   try {
     const dto: CreateWebsiteCategoryDto = {
       name: form.value.name.trim(),
@@ -86,10 +89,16 @@ async function save() {
     if (props.category) {
       await props.store.updateCategory(props.category.id, dto)
     } else {
-      await props.store.createCategory(dto)
+      const result = await props.store.createCategory(dto)
+      if (!result) {
+        errorMessage.value = 'Category with this slug already exists. Try a different name.'
+        return
+      }
     }
 
     emit('saved')
+  } catch {
+    errorMessage.value = 'Failed to save category. Please try again.'
   } finally {
     saving.value = false
   }
@@ -104,6 +113,17 @@ async function save() {
       </v-card-title>
 
       <v-card-text>
+        <v-alert
+          v-if="errorMessage"
+          type="error"
+          variant="tonal"
+          class="mb-4"
+          closable
+          @click:close="errorMessage = ''"
+        >
+          {{ errorMessage }}
+        </v-alert>
+
         <!-- Image uploader -->
         <div class="d-flex justify-center mb-4">
           <image-uploader
