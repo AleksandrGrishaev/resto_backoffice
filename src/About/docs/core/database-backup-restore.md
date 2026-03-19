@@ -9,10 +9,10 @@ This document describes the backup and restore process for Supabase databases. T
 
 ## Database Configuration
 
-| Database | Project Ref            | Pooler Host                                |
-| -------- | ---------------------- | ------------------------------------------ |
-| DEV      | `fjkfckjpnbcyuknsnchy` | `aws-1-ap-southeast-1.pooler.supabase.com` |
-| PROD     | `bkntdcvzatawencxghob` | `aws-1-ap-southeast-2.pooler.supabase.com` |
+| Database | Project Ref            | Pooler Host                                | Direct Host                           |
+| -------- | ---------------------- | ------------------------------------------ | ------------------------------------- |
+| DEV      | `fjkfckjpnbcyuknsnchy` | `aws-1-ap-southeast-1.pooler.supabase.com` | `db.fjkfckjpnbcyuknsnchy.supabase.co` |
+| PROD     | `bkntdcvzatawencxghob` | `aws-1-ap-southeast-2.pooler.supabase.com` | `db.bkntdcvzatawencxghob.supabase.co` |
 
 ## Commands
 
@@ -35,39 +35,57 @@ pnpm restore:dev prod_2025-12-09T15-53-46
 
 ### What It Does
 
-1. Connects to PROD database via session pooler
-2. Creates full backup with `pg_dump` (schema + data)
-3. Creates schema-only backup
-4. Saves metadata (timestamp, source, etc.)
+1. Tries direct connection first, falls back to session pooler
+2. Creates schema-only backup (`schema.sql`)
+3. Dumps each table individually in compressed custom format (`tables/*.dump`)
+4. Tables that fail COPY mode are retried with INSERT mode (`tables/*.sql`)
+5. Exports grants, real-time publication, extensions, auth users
+6. Saves metadata (`metadata.json`)
+
+### Why Table-by-Table?
+
+Supabase session pooler drops SSL connections during long-running `COPY` operations on large tables (e.g., `recipe_write_offs` ~20MB). Dumping each table in a separate connection avoids this. Tables that still fail via COPY are automatically retried using INSERT statements (`--inserts --rows-per-insert=100`).
+
+### Connection Strategy
+
+1. **Direct connection** (`db.xxx.supabase.co:5432`) — tried first, more stable
+2. **Session pooler** (`aws-1-ap-southeast-2.pooler.supabase.com:5432`) — fallback for IPv4-only networks
+3. **Password** via `PGPASSWORD` env var — avoids special character issues in URL
+4. **Keepalives** enabled (`keepalives_idle=30s`) to prevent idle timeout
 
 ### Output Structure
 
 ```
 backups/
 └── prod_YYYY-MM-DDTHH-MM-SS/
-    ├── backup.sql       # Full backup (schema + data)
-    ├── schema.sql       # Schema only
+    ├── schema.sql       # Full schema (DDL, functions, triggers, indexes, RLS)
+    ├── tables/          # Individual table data dumps
+    │   ├── users.dump           # Custom format (compressed)
+    │   ├── products.dump
+    │   ├── recipe_write_offs.sql  # INSERT fallback (if COPY failed)
+    │   └── ...                    # One file per table
+    ├── backup.sql       # Schema-only SQL (human-readable reference)
     ├── grants.sql       # GRANT permissions for Supabase roles
     ├── realtime.sql     # Real-time publication table memberships
     ├── extensions.sql   # Enabled PostgreSQL extensions
     ├── auth_users.sql   # Auth users metadata (SECURITY SENSITIVE!)
-    └── metadata.json    # Backup metadata
+    └── metadata.json    # Backup info (tables count, sizes, timing)
 ```
 
 ### What's Included
 
-| Component                 | Included | File               |
-| ------------------------- | -------- | ------------------ |
-| Tables                    | Yes      | backup.sql         |
-| Data (COPY)               | Yes      | backup.sql         |
-| Functions                 | Yes      | backup.sql         |
-| RLS Policies              | Yes      | backup.sql         |
-| Triggers                  | Yes      | backup.sql         |
-| Indexes                   | Yes      | backup.sql         |
-| **GRANT permissions**     | **Yes**  | **grants.sql**     |
-| **Real-time publication** | **Yes**  | **realtime.sql**   |
-| **PostgreSQL extensions** | **Yes**  | **extensions.sql** |
-| **Auth users metadata**   | **Yes**  | **auth_users.sql** |
+| Component                 | Included | Location             |
+| ------------------------- | -------- | -------------------- |
+| Schema (DDL)              | Yes      | `schema.sql`         |
+| Table data                | Yes      | `tables/*.dump/sql`  |
+| Functions                 | Yes      | `schema.sql`         |
+| RLS Policies              | Yes      | `schema.sql`         |
+| Triggers                  | Yes      | `schema.sql`         |
+| Indexes                   | Yes      | `schema.sql`         |
+| **GRANT permissions**     | **Yes**  | **`grants.sql`**     |
+| **Real-time publication** | **Yes**  | **`realtime.sql`**   |
+| **PostgreSQL extensions** | **Yes**  | **`extensions.sql`** |
+| **Auth users metadata**   | **Yes**  | **`auth_users.sql`** |
 
 ### What's NOT Included
 
@@ -83,6 +101,8 @@ Create `.env.backup` file:
 DB_PASSWORD=your_prod_database_password
 ```
 
+Password can contain special characters (`*`, `@`, etc.) — it's passed via `PGPASSWORD` env var, not in the URL.
+
 Get password from: https://supabase.com/dashboard/project/bkntdcvzatawencxghob/settings/database
 
 ## Restore Process
@@ -97,9 +117,10 @@ Get password from: https://supabase.com/dashboard/project/bkntdcvzatawencxghob/s
 2. Cleans backup file (removes problematic directives)
 3. **DROPS entire public schema** in DEV database
 4. Recreates public schema with proper grants
-5. Restores backup data
-6. Reloads PostgREST schema cache
-7. Verifies restore (table/function count)
+5. Restores schema from `schema.sql`
+6. Restores data from `tables/` directory (custom format via `pg_restore`, SQL via `psql`)
+7. Reloads PostgREST schema cache
+8. Verifies restore (table/function count)
 
 ### Configuration
 
@@ -117,12 +138,11 @@ Get password from: https://supabase.com/dashboard/project/fjkfckjpnbcyuknsnchy/s
 ### Important Notes
 
 1. **Restore is DESTRUCTIVE** - it completely replaces DEV database
-2. **Password must not contain special characters** (like `*`, `@`, etc.) - regenerate if needed
-3. **Extensions must be pre-enabled** in DEV database (`pgcrypto`, `uuid-ossp`)
+2. **Extensions must be pre-enabled** in DEV database (`pgcrypto`, `uuid-ossp`)
 
 ## Requirements
 
-- PostgreSQL client tools (`pg_dump`, `psql`)
+- PostgreSQL client tools (`pg_dump`, `psql`, `pg_restore`)
 - macOS: `brew install libpq`
 - Ubuntu: `sudo apt install postgresql-client`
 
@@ -131,7 +151,7 @@ Get password from: https://supabase.com/dashboard/project/fjkfckjpnbcyuknsnchy/s
 ### Sync DEV with PROD data
 
 ```bash
-# 1. Create fresh backup of prod (includes all components now!)
+# 1. Create fresh backup of prod
 pnpm backup:prod
 
 # 2. Restore to dev
@@ -141,7 +161,7 @@ pnpm restore:dev
 # See "Post-Restore Steps" section below
 
 # 4. Verify in app or via MCP
-mcp__supabase__list_tables({ schemas: ['public'] })
+mcp__supabase_dev__list_tables({ schemas: ['public'] })
 ```
 
 ### Post-Restore Steps
@@ -175,7 +195,7 @@ cat backups/prod_YYYY-MM-DDTHH-MM-SS/realtime.sql
 **4. Auth users (optional, if needed):**
 
 ```bash
-# ⚠️ SECURITY SENSITIVE! Only if you need to restore test users
+# SECURITY SENSITIVE! Only if you need to restore test users
 cat backups/prod_YYYY-MM-DDTHH-MM-SS/auth_users.sql
 # NOTE: Passwords are NOT included, users will need to reset passwords
 ```
@@ -209,13 +229,8 @@ pnpm restore:dev prod_2025-12-09T15-53-46
 ### "password authentication failed"
 
 - Check password in `.env.backup` or `.env.restore.dev`
-- Ensure password has no special characters
+- Password with special characters is OK (passed via `PGPASSWORD` env var)
 - Reset password in Supabase Dashboard if needed
-
-### "duplicate SASL authentication request"
-
-- Password contains special characters that break URL parsing
-- Reset database password without special characters
 
 ### "pg_dump/psql not found"
 
@@ -227,6 +242,16 @@ echo 'export PATH="/opt/homebrew/opt/libpq/bin:$PATH"' >> ~/.zshrc
 # Ubuntu
 sudo apt install postgresql-client
 ```
+
+### SSL connection drops during backup
+
+This is handled automatically by the table-by-table strategy:
+
+1. Each table is dumped in a separate connection (avoids long-running COPY)
+2. Failed tables are retried with INSERT mode (slower but avoids COPY/SSL issues)
+3. Keepalives are enabled to prevent idle timeout
+
+If a table still fails both COPY and INSERT modes, it will be listed in `metadata.json` under `tables_failed`.
 
 ### Restore shows errors but completes
 
@@ -244,7 +269,7 @@ After restoring from backup, Supabase real-time stops working because the `supab
 **Symptoms:**
 
 - Kitchen/POS views don't update in real-time
-- Console shows `[KitchenRealtime]: 📡 Kitchen Realtime connected` (SUBSCRIBED) but no update events
+- Console shows `[KitchenRealtime]: Kitchen Realtime connected` (SUBSCRIBED) but no update events
 - Changes only appear after page refresh
 
 **Diagnosis:**
@@ -254,22 +279,14 @@ SELECT tablename FROM pg_publication_tables WHERE pubname = 'supabase_realtime';
 -- If empty (tablename: null), real-time is broken
 ```
 
-**Fix - Add tables to publication:**
+**Fix — apply `realtime.sql` from backup, or manually:**
 
 ```sql
--- Add orders table (required for Kitchen/POS real-time sync)
 ALTER PUBLICATION supabase_realtime ADD TABLE orders;
 
 -- Verify
 SELECT tablename FROM pg_publication_tables WHERE pubname = 'supabase_realtime';
--- Should show: orders
 ```
-
-**Why this happens:**
-
-- `pg_dump` doesn't export publication table memberships
-- The `supabase_realtime` publication exists but has no tables after restore
-- Supabase real-time subscription shows "SUBSCRIBED" but receives no events
 
 ---
 
@@ -277,13 +294,7 @@ SELECT tablename FROM pg_publication_tables WHERE pubname = 'supabase_realtime';
 
 This is the most common issue! `pg_dump` doesn't export GRANT permissions for Supabase-specific roles (`anon`, `authenticated`, `service_role`).
 
-**Symptoms:**
-
-- HTTP 401/403 errors when accessing tables
-- Error code `42501` in PostgreSQL
-- "permission denied for table users" in console
-
-**Fix - Run this SQL via MCP or Supabase SQL Editor:**
+**Fix — apply `grants.sql` from backup, or run this SQL:**
 
 ```sql
 -- 1. Grant permissions on all tables
