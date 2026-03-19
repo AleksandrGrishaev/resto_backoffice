@@ -16,6 +16,7 @@ const emit = defineEmits<{
 
 const search = ref('')
 const filterCategory = ref<string | null>(null)
+const showOnlyNotAdded = ref(false)
 
 const categories = computed<Category[]>(() => props.menuStore.categories || [])
 const websiteCategories = computed<WebsiteMenuCategory[]>(
@@ -38,6 +39,11 @@ function addViaButton(menuItemId: string) {
   }
 }
 
+function getCategoryName(categoryId: string): string {
+  const cat = categories.value.find((c: Category) => c.id === categoryId)
+  return cat?.name || ''
+}
+
 // Filtered and sorted flat list
 const filteredItems = computed(() => {
   const allItems: MenuItem[] = props.menuStore.activeMenuItems || []
@@ -53,28 +59,16 @@ const filteredItems = computed(() => {
     items = items.filter((item: MenuItem) => familyIds.includes(item.categoryId))
   }
 
+  if (showOnlyNotAdded.value) {
+    items = items.filter((item: MenuItem) => !isItemAdded(item.id))
+  }
+
   return items
 })
 
-// Group by category for display headers
-const groupedItems = computed(() => {
-  const grouped: { category: Category; items: MenuItem[] }[] = []
-  const catMap = new Map<string, MenuItem[]>()
-
-  for (const item of filteredItems.value) {
-    const list = catMap.get(item.categoryId) || []
-    list.push(item)
-    catMap.set(item.categoryId, list)
-  }
-
-  for (const [catId, catItems] of catMap) {
-    const cat = categories.value.find((c: Category) => c.id === catId)
-    if (cat) {
-      grouped.push({ category: cat, items: catItems })
-    }
-  }
-
-  return grouped.sort((a, b) => a.category.sortOrder - b.category.sortOrder)
+const notAddedCount = computed(() => {
+  const allItems: MenuItem[] = props.menuStore.activeMenuItems || []
+  return allItems.filter((item: MenuItem) => !isItemAdded(item.id)).length
 })
 
 function getCategoryFamily(categoryId: string): string[] {
@@ -124,8 +118,19 @@ function isItemAdded(menuItemId: string): boolean {
         placeholder="All categories"
         clearable
         hide-details
-        class="mb-3"
+        class="mb-2"
       />
+
+      <!-- Not added filter -->
+      <v-chip
+        :color="showOnlyNotAdded ? 'primary' : undefined"
+        :variant="showOnlyNotAdded ? 'flat' : 'outlined'"
+        size="small"
+        class="mb-3"
+        @click="showOnlyNotAdded = !showOnlyNotAdded"
+      >
+        Not added ({{ notAddedCount }})
+      </v-chip>
 
       <!-- Items list with drag support -->
       <div class="source-items-list">
@@ -152,9 +157,10 @@ function isItemAdded(menuItemId: string): boolean {
               <div class="font-weight-medium text-truncate">
                 {{ item.name }}
               </div>
-              <div class="text-caption text-grey">
+              <div class="text-caption text-grey-lighten-1">
                 {{ formatIDR(getMinPrice(item)) }}
-                <span v-if="getVariantCount(item) > 1">· {{ getVariantCount(item) }} variants</span>
+                <span v-if="getVariantCount(item) > 1">· {{ getVariantCount(item) }} var.</span>
+                <span class="ml-1 text-grey">· {{ getCategoryName(item.categoryId) }}</span>
               </div>
             </div>
 
@@ -213,7 +219,7 @@ function isItemAdded(menuItemId: string): boolean {
 
 .source-items-list {
   overflow-y: auto;
-  max-height: calc(100vh - 280px);
+  max-height: calc(100vh - 310px);
 }
 
 .source-item {

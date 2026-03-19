@@ -14,6 +14,7 @@ const menuStore = useMenuStore()
 const loading = ref(true)
 const categoryDialog = ref(false)
 const editingCategory = ref<WebsiteMenuCategory | null>(null)
+const allCollapsed = ref(true)
 
 onMounted(async () => {
   if (!menuStore.initialized) {
@@ -88,6 +89,19 @@ async function handleItemDropped(categoryId: string, menuItemId: string) {
 
       <!-- Categories Panel (right) -->
       <v-col cols="7">
+        <div v-if="orderedCategories.length > 0" class="d-flex justify-end mb-2">
+          <v-btn
+            size="small"
+            variant="text"
+            :prepend-icon="
+              allCollapsed ? 'mdi-unfold-more-horizontal' : 'mdi-unfold-less-horizontal'
+            "
+            @click="allCollapsed = !allCollapsed"
+          >
+            {{ allCollapsed ? 'Expand All' : 'Collapse All' }}
+          </v-btn>
+        </div>
+
         <div v-if="orderedCategories.length === 0" class="text-center py-12">
           <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-folder-plus-outline</v-icon>
           <p class="text-grey">No website categories yet. Create one to get started.</p>
@@ -108,6 +122,7 @@ async function handleItemDropped(categoryId: string, menuItemId: string) {
             :items="websiteMenuStore.itemsByCategory.get(category.id) || []"
             :menu-store="menuStore"
             :website-menu-store="websiteMenuStore"
+            :force-collapsed="allCollapsed"
             class="mb-3"
             @edit="openEditCategory"
             @delete="handleDeleteCategory"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import WebsiteMenuItemRow from './WebsiteMenuItemRow.vue'
 import type { WebsiteMenuCategory, WebsiteMenuItem } from '@/stores/websiteMenu'
@@ -10,6 +10,7 @@ const props = defineProps<{
   items: WebsiteMenuItem[]
   menuStore: any
   websiteMenuStore: any
+  forceCollapsed?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -18,7 +19,14 @@ const emit = defineEmits<{
   itemDropped: [categoryId: string, menuItemId: string]
 }>()
 
-const collapsed = ref(false)
+const collapsed = ref(props.forceCollapsed ?? false)
+
+watch(
+  () => props.forceCollapsed,
+  val => {
+    if (val !== undefined) collapsed.value = val
+  }
+)
 const confirmDelete = ref(false)
 
 const orderedItems = computed({
