@@ -96,6 +96,7 @@ async function handleItemDropped(categoryId: string, menuItemId: string) {
         <VueDraggable
           v-else
           v-model="orderedCategories"
+          :group="{ name: 'website-categories', pull: false, put: false }"
           handle=".category-drag-handle"
           animation="200"
           ghost-class="ghost"
