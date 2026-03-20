@@ -242,7 +242,11 @@ export function useOrdersRealtime() {
       if (updatedOrder.source) existingOrder.source = updatedOrder.source
       if (updatedOrder.fulfillment_method)
         existingOrder.fulfillmentMethod = updatedOrder.fulfillment_method
+      if (updatedOrder.customer_name !== undefined)
+        existingOrder.customerName = updatedOrder.customer_name
       if (updatedOrder.customer_phone) existingOrder.customerPhone = updatedOrder.customer_phone
+      if (updatedOrder.customer_id !== undefined)
+        existingOrder.customerId = updatedOrder.customer_id
       if (updatedOrder.comment) existingOrder.comment = updatedOrder.comment
 
       // Cancellation request fields

@@ -28,6 +28,7 @@
           <!-- Online Order Details Bar -->
           <div v-if="currentOrder.source === 'website'" class="online-order-bar">
             <div class="online-order-bar-content">
+              <div class="online-order-number">#{{ currentOrder.orderNumber }}</div>
               <div class="online-field">
                 <v-icon size="14" class="mr-1">mdi-account</v-icon>
                 {{ currentOrder.customerName || 'Guest' }}
@@ -2809,6 +2810,13 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
+}
+
+.online-order-number {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: rgb(var(--v-theme-primary));
+  letter-spacing: 0.5px;
 }
 
 .online-field {
