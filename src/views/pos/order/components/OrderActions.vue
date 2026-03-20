@@ -129,14 +129,11 @@
           v-if="canCancelOrder"
           color="error"
           variant="outlined"
-          size="large"
+          size="small"
           class="flex-shrink-0"
-          :icon="isCompact ? 'mdi-cancel' : undefined"
-          :start-icon="isCompact ? undefined : 'mdi-cancel'"
+          icon="mdi-cancel"
           @click="emit('cancelOrder')"
-        >
-          <template v-if="!isCompact">Cancel</template>
-        </BaseButton>
+        />
       </div>
 
       <!-- Checkout Summary (only when items selected) -->
