@@ -539,8 +539,8 @@
         <div v-if="usedInItems.length === 0" class="empty-state">Not used in any other items</div>
         <div v-else class="usage-list">
           <div
-            v-for="usage in usedInItems"
-            :key="usage.id + usage.type"
+            v-for="(usage, idx) in usedInItems"
+            :key="`${usage.id}-${usage.type}-${usage.detail ?? idx}`"
             class="usage-row"
             :class="{ 'usage-row--inactive': !usage.isActive }"
             @click="emit('navigate', { id: usage.id, type: usage.type })"
@@ -553,7 +553,10 @@
             >
               {{ usage.typeLabel }}
             </v-chip>
-            <span class="usage-name">{{ usage.name }}</span>
+            <span class="usage-name">
+              {{ usage.name }}
+              <span v-if="usage.detail" class="usage-detail">{{ usage.detail }}</span>
+            </span>
             <span class="usage-dots" />
             <span v-if="usage.quantity" class="usage-quantity">
               {{ usage.quantity }} {{ usage.unit }}
@@ -1054,12 +1057,41 @@ interface UsageItem {
   quantity?: number
   unit?: string
   isActive: boolean
+  detail?: string // e.g. "Modifier: Protein - Sausage"
 }
 
 const usedInItems = computed<UsageItem[]>(() => {
   const results: UsageItem[] = []
   const itemId = props.item.id
   const itemType = props.item.type
+
+  // Helper: check modifier groups of a menu item for usage of a given composition type
+  const checkModifiers = (
+    mi: MenuItem,
+    compType: 'product' | 'preparation' | 'recipe',
+    foundMenuIds: Set<string>
+  ) => {
+    for (const group of mi.modifierGroups ?? []) {
+      for (const option of group.options ?? []) {
+        const comp = option.composition?.find(c => c.type === compType && c.id === itemId)
+        if (comp) {
+          const key = `${mi.id}:mod:${group.id}:${option.id}`
+          if (foundMenuIds.has(key)) continue
+          foundMenuIds.add(key)
+          results.push({
+            id: mi.id,
+            name: mi.name,
+            type: 'menu',
+            typeLabel: 'Modifier',
+            quantity: comp.quantity,
+            unit: comp.unit,
+            isActive: mi.isActive,
+            detail: `${group.name} → ${option.name}`
+          })
+        }
+      }
+    }
+  }
 
   // Products → used in preparations, recipes, menu items
   if (itemType === 'product') {
@@ -1093,10 +1125,12 @@ const usedInItems = computed<UsageItem[]>(() => {
         })
       }
     }
+    const foundMenuIds = new Set<string>()
     for (const mi of menuStore.menuItems as MenuItem[]) {
       for (const v of mi.variants ?? []) {
         const comp = v.composition?.find(c => c.type === 'product' && c.id === itemId)
         if (comp) {
+          foundMenuIds.add(mi.id)
           results.push({
             id: mi.id,
             name: mi.name,
@@ -1109,6 +1143,7 @@ const usedInItems = computed<UsageItem[]>(() => {
           break
         }
       }
+      checkModifiers(mi, 'product', foundMenuIds)
     }
   }
 
@@ -1145,10 +1180,12 @@ const usedInItems = computed<UsageItem[]>(() => {
         })
       }
     }
+    const foundMenuIds = new Set<string>()
     for (const mi of menuStore.menuItems as MenuItem[]) {
       for (const v of mi.variants ?? []) {
         const comp = v.composition?.find(c => c.type === 'preparation' && c.id === itemId)
         if (comp) {
+          foundMenuIds.add(mi.id)
           results.push({
             id: mi.id,
             name: mi.name,
@@ -1161,6 +1198,7 @@ const usedInItems = computed<UsageItem[]>(() => {
           break
         }
       }
+      checkModifiers(mi, 'preparation', foundMenuIds)
     }
   }
 
@@ -1183,10 +1221,12 @@ const usedInItems = computed<UsageItem[]>(() => {
         })
       }
     }
+    const foundMenuIds = new Set<string>()
     for (const mi of menuStore.menuItems as MenuItem[]) {
       for (const v of mi.variants ?? []) {
         const comp = v.composition?.find(c => c.type === 'recipe' && c.id === itemId)
         if (comp) {
+          foundMenuIds.add(mi.id)
           results.push({
             id: mi.id,
             name: mi.name,
@@ -1199,6 +1239,7 @@ const usedInItems = computed<UsageItem[]>(() => {
           break
         }
       }
+      checkModifiers(mi, 'recipe', foundMenuIds)
     }
   }
 
@@ -1673,6 +1714,13 @@ const usedInItems = computed<UsageItem[]>(() => {
 .usage-name {
   font-weight: 500;
   white-space: nowrap;
+}
+
+.usage-detail {
+  font-weight: 400;
+  opacity: 0.6;
+  margin-left: 6px;
+  font-size: 0.85em;
 }
 
 .usage-dots {
