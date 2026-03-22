@@ -182,15 +182,16 @@ export function useOrdersComposables() {
    * Получить цвет статуса готовности позиции
    */
   function getItemStatusColor(
-    status: 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled'
+    status: 'draft' | 'scheduled' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled'
   ): string {
     const colors = {
       draft: 'orange',
-      waiting: 'info', // синий
-      cooking: 'purple', // фиолетовый
-      ready: 'success', // зеленый
-      served: 'primary', // основной цвет
-      cancelled: 'error' // красный
+      scheduled: 'cyan',
+      waiting: 'info',
+      cooking: 'purple',
+      ready: 'success',
+      served: 'primary',
+      cancelled: 'error'
     }
     return colors[status] || 'grey'
   }
@@ -199,10 +200,11 @@ export function useOrdersComposables() {
    * Получить текст статуса готовности позиции
    */
   function getItemStatusText(
-    status: 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled'
+    status: 'draft' | 'scheduled' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled'
   ): string {
     const texts = {
       draft: 'Draft',
+      scheduled: 'Scheduled',
       waiting: 'Waiting',
       cooking: 'Cooking',
       ready: 'Ready',

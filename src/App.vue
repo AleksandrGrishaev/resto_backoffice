@@ -104,7 +104,9 @@ async function validateSessionAndLoadStores() {
 }
 
 /**
- * Load stores based on user roles after authentication
+ * Load stores based on user roles after authentication.
+ * Uses authStore.consumeTargetRoute() (set by LoginView) to determine context.
+ * This is the SINGLE place that handles post-login redirect.
  */
 async function loadStoresAfterAuth() {
   if (storesLoaded.value || isLoadingStores.value) {
@@ -131,9 +133,8 @@ async function loadStoresAfterAuth() {
       throw new Error('No authenticated user found after waiting')
     }
 
-    // ✅ Sprint 9: Определяем context по default route пользователя, не по текущему URL
-    // Это важно, потому что при login мы ещё на /auth/login, а не на целевом маршруте
-    const targetRoute = authStore.getDefaultRoute()
+    // Determine target route: LoginView's targetRoute > role-based default
+    const targetRoute = authStore.consumeTargetRoute() || authStore.getDefaultRoute()
 
     DebugUtils.info(MODULE_NAME, 'Loading stores for user', {
       userId: user.id,
@@ -147,21 +148,15 @@ async function loadStoresAfterAuth() {
     await appInitializer.initialize(user.roles || [], { initialPath: targetRoute })
 
     storesLoaded.value = true
-    DebugUtils.info(MODULE_NAME, '✅ Stores loaded successfully')
+    DebugUtils.info(MODULE_NAME, 'Stores loaded successfully')
 
-    // Check if we need to redirect after successful store loading
-    const redirectPath = router.currentRoute.value.query.redirect as string
-    if (redirectPath && !redirectPath.startsWith('/auth') && redirectPath !== '/unauthorized') {
-      DebugUtils.info(MODULE_NAME, `Redirecting to saved path: ${redirectPath}`)
-      await router.replace(redirectPath)
-    } else if (
+    // Single redirect logic: if still on auth/unauthorized page, redirect to target
+    if (
       router.currentRoute.value.path.startsWith('/auth') ||
       router.currentRoute.value.path === '/unauthorized'
     ) {
-      // If on auth page but no redirect specified, go to default route
-      const defaultRoute = authStore.getDefaultRoute()
-      DebugUtils.info(MODULE_NAME, `Redirecting to default route: ${defaultRoute}`)
-      await router.replace(defaultRoute)
+      DebugUtils.info(MODULE_NAME, `Redirecting to: ${targetRoute}`)
+      await router.replace(targetRoute)
     }
   } catch (error) {
     DebugUtils.error(MODULE_NAME, 'Failed to load stores', { error })

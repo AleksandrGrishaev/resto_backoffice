@@ -92,7 +92,8 @@ export class LoyaltyService {
         maxDiscount: r.max_discount,
         redeemed: r.redeemed ?? false
       })),
-      newCycle: result.new_cycle
+      newCycle: result.new_cycle,
+      loyaltyUpgraded: result.loyalty_upgraded ?? false
     }
   }
 
@@ -101,6 +102,19 @@ export class LoyaltyService {
       .from('stamp_cards')
       .select('card_number')
       .eq('id', cardId)
+      .single()
+
+    if (error || !data) return null
+    return this.getCardInfo((data as any).card_number)
+  }
+
+  async getActiveCardByCustomerId(customerId: string): Promise<StampCardInfo | null> {
+    const { data, error } = await supabase
+      .from('stamp_cards')
+      .select('card_number')
+      .eq('customer_id', customerId)
+      .eq('status', 'active')
+      .limit(1)
       .single()
 
     if (error || !data) return null
@@ -354,7 +368,8 @@ export class LoyaltyService {
       cashbackPct: result.cashback_pct,
       tier: result.tier,
       newBalance: result.new_balance,
-      totalVisits: result.total_visits
+      totalVisits: result.total_visits,
+      skipped: result.skipped ?? false
     }
   }
 
@@ -401,11 +416,8 @@ export class LoyaltyService {
     return {
       success: true,
       stamps: result.stamps,
-      baseAmount: result.base_amount,
-      cashbackPct: result.cashback_pct,
-      points: result.points,
-      bonus: result.bonus,
-      totalPoints: result.total_points,
+      rewardPoints: result.reward_points,
+      rewardDetails: result.reward_details || [],
       newBalance: result.new_balance
     }
   }

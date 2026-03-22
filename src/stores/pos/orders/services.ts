@@ -50,6 +50,39 @@ export class OrdersService {
   }
 
   /**
+   * Update or insert an order in the localStorage backup.
+   */
+  private updateOrderInLocalStorage(order: PosOrder): void {
+    const stored = localStorage.getItem(this.ORDERS_KEY)
+    const ordersList: PosOrder[] = stored ? JSON.parse(stored) : []
+    const idx = ordersList.findIndex(o => o.id === order.id)
+    const stripped = { ...order, bills: [] }
+    if (idx !== -1) {
+      ordersList[idx] = stripped as PosOrder
+    } else {
+      ordersList.push(stripped as PosOrder)
+    }
+    localStorage.setItem(this.ORDERS_KEY, JSON.stringify(ordersList))
+  }
+
+  /**
+   * Find order by ID from in-memory Pinia store (no network call).
+   * Falls back to getAllOrders() only if store is empty.
+   */
+  private async findOrderById(orderId: string): Promise<PosOrder | null> {
+    // Try in-memory store first (instant)
+    const { usePosOrdersStore } = await import('./ordersStore')
+    const store = usePosOrdersStore()
+    const memOrder = store.orders.find(o => o.id === orderId)
+    if (memOrder) return JSON.parse(JSON.stringify(memOrder))
+
+    // Fallback: full reload (should rarely happen)
+    const orders = await this.getAllOrders()
+    if (!orders.success || !orders.data) return null
+    return orders.data.find(o => o.id === orderId) || null
+  }
+
+  /**
    * Get orders from storage (with smart filtering)
    * Sprint 8: Only load active orders + today's orders by default
    * @param options.all - загрузить ВСЕ заказы (для отчётов)
@@ -74,7 +107,11 @@ export class OrdersService {
         let query = supabase.from('orders').select('*')
 
         if (!options?.all) {
-          query = query.or(`payment_status.neq.paid,created_at.gte.${dateFilter}`)
+          // Cap unpaid order loading to 48h — prevents ancient unpaid orders from re-occupying tables
+          const cutoff48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
+          query = query.or(
+            `and(payment_status.neq.paid,created_at.gte.${cutoff48h}),created_at.gte.${dateFilter}`
+          )
         }
 
         const { data: ordersData, error: ordersError } = await query
@@ -242,27 +279,29 @@ export class OrdersService {
 
           // Note: No items to insert yet (order is empty)
           console.log('✅ Order saved to Supabase:', newOrder.orderNumber)
-        } catch (error) {
-          console.error('❌ Supabase save failed after retries:', extractErrorDetails(error))
-          // CRITICAL: Return error instead of continuing with localStorage-only order
-          // This prevents "ghost" orders where table is occupied but order doesn't exist in DB
-          // TODO: In the future, implement offline sync queue for true offline support
+        } catch (error: any) {
+          const errorDetails = extractErrorDetails(error)
+          console.error('❌ Supabase save failed after retries:', errorDetails)
+
+          // Propagate DB error code (e.g. 23505 unique violation) so caller can handle
+          const dbCode = error?.code || error?.cause?.code || ''
+          const errorMsg = dbCode
+            ? `[${dbCode}] ${error?.message || 'Failed to save order'}`
+            : 'Failed to save order to server. Please check your connection and try again.'
+
           return {
             success: false,
-            error: 'Failed to save order to server. Please check your connection and try again.'
+            error: errorMsg
           }
         }
       }
 
-      // Always save to localStorage (backup)
-      const orders = await this.getAllOrders()
-      const ordersList = orders.success && orders.data ? orders.data : []
-      ordersList.push(newOrder)
+      // Save to localStorage (backup) — read existing list directly, no Supabase reload
+      const stored = localStorage.getItem(this.ORDERS_KEY)
+      const ordersList = stored ? JSON.parse(stored) : []
+      ordersList.push({ ...newOrder, bills: [] })
 
-      localStorage.setItem(
-        this.ORDERS_KEY,
-        JSON.stringify(ordersList.map(o => ({ ...o, bills: [] })))
-      )
+      localStorage.setItem(this.ORDERS_KEY, JSON.stringify(ordersList))
 
       console.log('💾 Order saved to localStorage (backup):', {
         id: newOrder.id,
@@ -527,22 +566,20 @@ export class OrdersService {
       const allItems = this.getAllStoredItems()
       const itemIndex = allItems.findIndex(item => item.id === itemId)
 
-      if (itemIndex === -1) {
-        throw new Error('Item not found')
-      }
+      if (itemIndex !== -1) {
+        allItems[itemIndex] = {
+          ...allItems[itemIndex],
+          status: 'cancelled',
+          cancelledAt,
+          cancelledBy: cancellationData.cancelledBy,
+          cancellationReason: cancellationData.reason,
+          cancellationNotes: cancellationData.notes,
+          writeOffOperationId: cancellationData.writeOffOperationId,
+          updatedAt: cancelledAt
+        }
 
-      allItems[itemIndex] = {
-        ...allItems[itemIndex],
-        status: 'cancelled',
-        cancelledAt,
-        cancelledBy: cancellationData.cancelledBy,
-        cancellationReason: cancellationData.reason,
-        cancellationNotes: cancellationData.notes,
-        writeOffOperationId: cancellationData.writeOffOperationId,
-        updatedAt: cancelledAt
+        await this.saveItemsSafely(allItems)
       }
-
-      await this.saveItemsSafely(allItems)
 
       return { success: true }
     } catch (error) {
@@ -611,18 +648,13 @@ export class OrdersService {
    */
   async sendOrderToKitchen(orderId: string): Promise<ServiceResponse<PosOrder>> {
     try {
-      const orders = await this.getAllOrders()
-      if (!orders.success || !orders.data) {
-        throw new Error('Failed to load orders')
-      }
-
-      const orderIndex = orders.data.findIndex(o => o.id === orderId)
-      if (orderIndex === -1) {
+      const foundOrder = await this.findOrderById(orderId)
+      if (!foundOrder) {
         throw new Error('Order not found')
       }
 
       const updatedOrder: PosOrder = {
-        ...orders.data[orderIndex],
+        ...foundOrder,
         status: 'waiting',
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
@@ -701,11 +733,7 @@ export class OrdersService {
       // Save to localStorage
       await this.saveItemsSafely(allItems)
 
-      orders.data[orderIndex] = updatedOrder
-      localStorage.setItem(
-        this.ORDERS_KEY,
-        JSON.stringify(orders.data.map(o => ({ ...o, bills: [] })))
-      )
+      this.updateOrderInLocalStorage(updatedOrder)
 
       return { success: true, data: updatedOrder }
     } catch (error) {
@@ -886,12 +914,7 @@ export class OrdersService {
     }>
   > {
     try {
-      const orders = await this.getAllOrders()
-      if (!orders.success || !orders.data) {
-        throw new Error('Failed to load orders')
-      }
-
-      const order = orders.data.find(o => o.id === orderId)
+      const order = await this.findOrderById(orderId)
       if (!order) {
         throw new Error('Order not found')
       }
@@ -987,22 +1010,14 @@ export class OrdersService {
       order.updatedAt = new Date().toISOString()
 
       // Save to localStorage
-      const orderIndex = orders.data.findIndex(o => o.id === orderId)
-      if (orderIndex !== -1) {
-        orders.data[orderIndex] = order
+      this.updateOrderInLocalStorage(order)
 
-        localStorage.setItem(
-          this.ORDERS_KEY,
-          JSON.stringify(orders.data.map(o => ({ ...o, bills: [] })))
-        )
-
-        // Save items
-        for (const bill of order.bills) {
-          const allItems = this.getAllStoredItems()
-          const filteredItems = allItems.filter(item => item.billId !== bill.id)
-          filteredItems.push(...bill.items)
-          await this.saveItemsSafely(filteredItems)
-        }
+      // Save items
+      for (const bill of order.bills) {
+        const allItems = this.getAllStoredItems()
+        const filteredItems = allItems.filter(item => item.billId !== bill.id)
+        filteredItems.push(...bill.items)
+        await this.saveItemsSafely(filteredItems)
       }
 
       return {
@@ -1128,9 +1143,12 @@ export class OrdersService {
 
       if (this.isSupabaseAvailable()) {
         try {
+          // Only send metadata fields — exclude table_id/status to avoid
+          // triggering idx_unique_active_order_per_table unique constraint
           const supabaseRow = toSupabaseUpdate(order)
+          const { table_id: _tableId, ...metadataOnly } = supabaseRow
           await executeSupabaseMutation(async () => {
-            const { error } = await supabase.from('orders').update(supabaseRow).eq('id', order.id)
+            const { error } = await supabase.from('orders').update(metadataOnly).eq('id', order.id)
             if (error) throw error
           }, 'OrdersService.updateOrderOnly')
 
@@ -1215,21 +1233,8 @@ export class OrdersService {
       if (this.isSupabaseAvailable()) {
         try {
           await executeSupabaseMutation(async () => {
-            // SAFETY: Free any table linked to this order BEFORE deleting
-            // This prevents "ghost" tables (occupied with non-existent order)
-            const { error: tableError } = await supabase
-              .from('tables')
-              .update({
-                status: 'available',
-                current_order_id: null,
-                updated_at: new Date().toISOString()
-              })
-              .eq('current_order_id', orderId)
-
-            if (tableError) {
-              console.warn('⚠️ Failed to free table before order deletion:', tableError)
-              // Continue anyway - table cleanup is secondary
-            }
+            // Table freeing is handled by ordersStore.deleteOrder() → tablesStore.freeTable()
+            // which updates both Supabase and localStorage consistently
 
             // Delete all order items first (foreign key constraint)
             const { error: itemsError } = await supabase
@@ -1284,18 +1289,13 @@ export class OrdersService {
 
   async sendItemsToKitchen(orderId: string, itemIds: string[]): Promise<ServiceResponse<PosOrder>> {
     try {
-      const orders = await this.getAllOrders()
-      if (!orders.success || !orders.data) {
-        throw new Error('Failed to load orders')
-      }
-
-      const orderIndex = orders.data.findIndex(o => o.id === orderId)
-      if (orderIndex === -1) {
+      const foundOrder = await this.findOrderById(orderId)
+      if (!foundOrder) {
         throw new Error('Order not found')
       }
 
       const updatedOrder: PosOrder = {
-        ...orders.data[orderIndex],
+        ...foundOrder,
         status: 'waiting',
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
@@ -1330,11 +1330,7 @@ export class OrdersService {
       }
 
       // Update localStorage
-      orders.data[orderIndex] = updatedOrder
-      localStorage.setItem(
-        this.ORDERS_KEY,
-        JSON.stringify(orders.data.map(o => ({ ...o, bills: [] })))
-      )
+      this.updateOrderInLocalStorage(updatedOrder)
 
       return { success: true, data: updatedOrder }
     } catch (error) {
@@ -1347,18 +1343,13 @@ export class OrdersService {
 
   async closeOrder(orderId: string): Promise<ServiceResponse<PosOrder>> {
     try {
-      const orders = await this.getAllOrders()
-      if (!orders.success || !orders.data) {
-        throw new Error('Failed to load orders')
-      }
-
-      const orderIndex = orders.data.findIndex(o => o.id === orderId)
-      if (orderIndex === -1) {
+      const foundOrder = await this.findOrderById(orderId)
+      if (!foundOrder) {
         throw new Error('Order not found')
       }
 
       const updatedOrder: PosOrder = {
-        ...orders.data[orderIndex],
+        ...foundOrder,
         status: 'served',
         paymentStatus: 'paid',
         updatedAt: TimeUtils.getCurrentLocalISO()
@@ -1383,11 +1374,7 @@ export class OrdersService {
         }
       }
 
-      orders.data[orderIndex] = updatedOrder
-      localStorage.setItem(
-        this.ORDERS_KEY,
-        JSON.stringify(orders.data.map(o => ({ ...o, bills: [] })))
-      )
+      this.updateOrderInLocalStorage(updatedOrder)
 
       return { success: true, data: updatedOrder }
     } catch (error) {
@@ -1403,18 +1390,13 @@ export class OrdersService {
     newPaymentStatus: OrderPaymentStatus
   ): Promise<ServiceResponse<PosOrder>> {
     try {
-      const orders = await this.getAllOrders()
-      if (!orders.success || !orders.data) {
-        throw new Error('Failed to load orders')
-      }
-
-      const orderIndex = orders.data.findIndex(o => o.id === orderId)
-      if (orderIndex === -1) {
+      const foundOrder = await this.findOrderById(orderId)
+      if (!foundOrder) {
         throw new Error('Order not found')
       }
 
       const updatedOrder: PosOrder = {
-        ...orders.data[orderIndex],
+        ...foundOrder,
         paymentStatus: newPaymentStatus,
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
@@ -1437,11 +1419,7 @@ export class OrdersService {
         }
       }
 
-      orders.data[orderIndex] = updatedOrder
-      localStorage.setItem(
-        this.ORDERS_KEY,
-        JSON.stringify(orders.data.map(o => ({ ...o, bills: [] })))
-      )
+      this.updateOrderInLocalStorage(updatedOrder)
 
       return { success: true, data: updatedOrder }
     } catch (error) {

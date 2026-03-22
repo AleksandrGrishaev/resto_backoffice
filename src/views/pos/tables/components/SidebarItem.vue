@@ -14,19 +14,12 @@
 
     <!-- Cancellation Request Indicator -->
     <div v-if="hasCancellationRequest" class="cancellation-dot" />
-
-    <!-- Status Badge (если нужен) -->
-    <div v-if="shouldShowStatusBadge" class="status-badge">
-      <v-chip :color="statusBadgeColor" size="x-small" variant="flat">
-        {{ statusBadgeText }}
-      </v-chip>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { PosTable, PosOrder, TableStatus, OrderStatus } from '@/stores/pos/types'
+import type { PosTable, PosOrder, TableStatus } from '@/stores/pos/types'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { getOrderVisual } from '@/stores/channels'
 
@@ -100,10 +93,23 @@ const displayNumber = computed((): string => {
 })
 
 /**
+ * Check if a table's order has 0 items (just opened, nothing added yet)
+ * For display purposes, empty orders = free table
+ */
+const isEmptyOrder = computed((): boolean => {
+  if (!props.table || props.table.status !== 'occupied' || !props.table.currentOrderId) return false
+  const order = ordersStore.orders.find(o => o.id === props.table?.currentOrderId)
+  if (!order) return false
+  return order.bills.every(bill => bill.items.length === 0)
+})
+
+/**
  * Иконка для отображения
  */
 const displayIcon = computed((): string => {
   if (isTable.value && props.table) {
+    // Empty order looks like a free table
+    if (isEmptyOrder.value) return getTableStatusIcon('free')
     return getTableStatusIcon(props.table.status)
   }
 
@@ -149,6 +155,7 @@ const tableDisplayStatus = computed(
  */
 const iconColor = computed((): string | undefined => {
   if (isTable.value && props.table) {
+    if (isEmptyOrder.value) return getTableStatusColor('free')
     return getTableStatusColor(tableDisplayStatus.value)
   }
 
@@ -173,7 +180,12 @@ const itemClasses = computed((): Record<string, boolean> => {
 
   if (isTable.value && props.table) {
     classes['sidebar-item--table'] = true
-    classes[`sidebar-item--${props.table.status}`] = true
+    // Empty order (0 items) looks like a free table to the cashier
+    if (isEmptyOrder.value) {
+      classes['sidebar-item--free'] = true
+    } else {
+      classes[`sidebar-item--${tableDisplayStatus.value}`] = true
+    }
   }
 
   if (isOrder.value && props.order) {
@@ -194,41 +206,6 @@ const itemClasses = computed((): Record<string, boolean> => {
 const hasCancellationRequest = computed((): boolean => {
   if (!isOrder.value || !props.order) return false
   return !!props.order.cancellationRequestedAt && !props.order.cancellationResolvedAt
-})
-
-/**
- * Нужно ли показывать статусный бейдж
- */
-const shouldShowStatusBadge = computed((): boolean => {
-  if (isOrder.value && props.order) {
-    // Показываем статус если заказ готовится или готов
-    return ['cooking', 'ready'].includes(props.order.status)
-  }
-  return false
-})
-
-/**
- * Цвет статусного бейджа
- */
-const statusBadgeColor = computed((): string => {
-  if (isOrder.value && props.order) {
-    return getOrderStatusColor(props.order.status)
-  }
-  return 'grey'
-})
-
-/**
- * Текст статусного бейджа
- */
-const statusBadgeText = computed((): string => {
-  if (isOrder.value && props.order) {
-    const statusTexts = {
-      preparing: 'In Progress',
-      ready: 'Ready'
-    }
-    return statusTexts[props.order.status as keyof typeof statusTexts] || ''
-  }
-  return ''
 })
 
 // =============================================
@@ -260,22 +237,6 @@ function getTableStatusColor(status: TableStatus | 'occupied_unpaid' | 'occupied
     reserved: 'secondary'
   }
   return colors[status as keyof typeof colors] || 'grey'
-}
-
-/**
- * Получить цвет статуса заказа
- */
-function getOrderStatusColor(status: OrderStatus): string {
-  const colors = {
-    draft: 'grey',
-    confirmed: 'primary',
-    preparing: 'warning',
-    ready: 'success',
-    served: 'info',
-    paid: 'success',
-    cancelled: 'error'
-  }
-  return colors[status] || 'grey'
 }
 
 // =============================================
@@ -374,12 +335,12 @@ const handleClick = (): void => {
   background: color-mix(in srgb, var(--color-success, #92c9af) 6%, transparent);
 }
 
-.sidebar-item--table.sidebar-item--occupied-unpaid {
+.sidebar-item--table.sidebar-item--occupied_unpaid {
   border-color: var(--color-warning, #ffb076);
   background: color-mix(in srgb, var(--color-warning, #ffb076) 6%, transparent);
 }
 
-.sidebar-item--table.sidebar-item--occupied-paid {
+.sidebar-item--table.sidebar-item--occupied_paid {
   border-color: var(--color-primary, #a395e9);
   background: color-mix(in srgb, var(--color-primary, #a395e9) 6%, transparent);
 }
@@ -476,13 +437,6 @@ const handleClick = (): void => {
     transform: scale(1.3);
     opacity: 0.7;
   }
-}
-
-.status-badge {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  z-index: 2;
 }
 
 /* =============================================

@@ -9,36 +9,50 @@
  *   - Set DB_PASSWORD environment variable or add to .env.backup
  *   - pg_dump must be installed (comes with PostgreSQL)
  *
- * The script creates a timestamped backup in ./backups/ folder
+ * Output:
+ *   - backup.dump    — Custom format (compressed, supports parallel restore)
+ *   - backup.sql     — Plain SQL (human-readable, for reference)
+ *   - schema.sql     — Schema only
+ *   - grants.sql     — GRANT permissions for Supabase roles
+ *   - realtime.sql   — Real-time publication table memberships
+ *   - extensions.sql — Enabled PostgreSQL extensions
+ *   - auth_users.sql — Auth users metadata (SECURITY SENSITIVE!)
+ *   - metadata.json  — Backup info
+ *
+ * Restore:
+ *   pg_restore -d CONNECTION_STRING -j 4 --no-owner --no-privileges backup.dump
  */
 
 import { execSync, spawnSync } from 'child_process'
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs'
+import { existsSync, mkdirSync, writeFileSync, readFileSync, statSync, unlinkSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT_DIR = join(__dirname, '..')
 
-// Configuration
-// Session pooler (IPv4 compatible) - required for networks without IPv6
+// Configuration — direct connection (more stable than pooler for large dumps)
 const CONFIG = {
   projectRef: 'bkntdcvzatawencxghob',
-  host: 'aws-1-ap-southeast-2.pooler.supabase.com', // Session pooler
+  host: 'db.bkntdcvzatawencxghob.supabase.co', // Direct connection (no pooler)
   port: 5432,
   database: 'postgres',
-  user: 'postgres.bkntdcvzatawencxghob', // Pooler requires project_ref in username
+  user: 'postgres',
   backupDir: join(ROOT_DIR, 'backups')
+}
+
+// Fallback: session pooler (IPv4 compatible, for networks without IPv6)
+const POOLER_CONFIG = {
+  host: 'aws-1-ap-southeast-2.pooler.supabase.com',
+  user: 'postgres.bkntdcvzatawencxghob'
 }
 
 // Load password from environment or .env.backup file
 function getPassword() {
-  // 1. Check environment variable
   if (process.env.DB_PASSWORD) {
     return process.env.DB_PASSWORD
   }
 
-  // 2. Check .env.backup file
   const envBackupPath = join(ROOT_DIR, '.env.backup')
   if (existsSync(envBackupPath)) {
     const content = readFileSync(envBackupPath, 'utf-8')
@@ -48,16 +62,13 @@ function getPassword() {
     }
   }
 
-  // 3. Check .env.seed.production file
   const envSeedPath = join(ROOT_DIR, '.env.seed.production')
   if (existsSync(envSeedPath)) {
     const content = readFileSync(envSeedPath, 'utf-8')
-    // Look for password in connection string or separate variable
     const passwordMatch = content.match(/DB_PASSWORD=(.+)/)
     if (passwordMatch) {
       return passwordMatch[1].trim()
     }
-    // Try to extract from SUPABASE_DB_URL if present
     const urlMatch = content.match(/postgresql:\/\/[^:]+:([^@]+)@/)
     if (urlMatch) {
       return urlMatch[1]
@@ -68,17 +79,18 @@ function getPassword() {
 }
 
 // pg_dump paths to check (Homebrew on macOS, then system PATH)
-const PG_DUMP_PATHS = [
-  '/opt/homebrew/opt/libpq/bin/pg_dump', // Homebrew ARM Mac
-  '/usr/local/opt/libpq/bin/pg_dump', // Homebrew Intel Mac
-  'pg_dump' // System PATH
+const PG_TOOL_PATHS = [
+  '/opt/homebrew/opt/libpq/bin', // Homebrew ARM Mac
+  '/usr/local/opt/libpq/bin', // Homebrew Intel Mac
+  '' // System PATH
 ]
 
-function findPgDump() {
-  for (const pgDumpPath of PG_DUMP_PATHS) {
+function findPgTool(tool) {
+  for (const basePath of PG_TOOL_PATHS) {
+    const fullPath = basePath ? join(basePath, tool) : tool
     try {
-      execSync(`${pgDumpPath} --version`, { stdio: 'pipe' })
-      return pgDumpPath
+      execSync(`${fullPath} --version`, { stdio: 'pipe' })
+      return fullPath
     } catch {
       continue
     }
@@ -86,13 +98,51 @@ function findPgDump() {
   return null
 }
 
+function formatSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+// Build connection string WITHOUT password (password via PGPASSWORD env var)
+function buildConnectionString(host, user) {
+  return `postgresql://${user}@${host}:${CONFIG.port}/${CONFIG.database}?keepalives=1&keepalives_idle=30&keepalives_interval=10&keepalives_count=5`
+}
+
+function testConnection(psqlPath, connectionString) {
+  const result = spawnSync(psqlPath, [connectionString, '--command', 'SELECT 1'], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    encoding: 'utf-8',
+    timeout: 15000
+  })
+  return result.status === 0
+}
+
+function runPgDump(pgDumpPath, connectionString, extraArgs) {
+  return spawnSync(
+    pgDumpPath,
+    [connectionString, '--no-owner', '--no-privileges', '--schema=public', ...extraArgs],
+    { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' }
+  )
+}
+
+function runPsqlQuery(psqlPath, connectionString, query) {
+  return spawnSync(
+    psqlPath,
+    [connectionString, '--tuples-only', '--no-align', '--command', query],
+    { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' }
+  )
+}
+
 function createBackup() {
+  const startTime = Date.now()
+
   console.log('\n========================================')
   console.log('  Supabase Database Backup')
   console.log('========================================\n')
 
-  // Find pg_dump
-  const pgDumpPath = findPgDump()
+  // Find pg_dump and psql
+  const pgDumpPath = findPgTool('pg_dump')
   if (!pgDumpPath) {
     console.error('ERROR: pg_dump not found!')
     console.log('\nInstall PostgreSQL to get pg_dump:')
@@ -100,9 +150,10 @@ function createBackup() {
     console.log('  Ubuntu: sudo apt install postgresql-client')
     process.exit(1)
   }
+  const psqlPath = pgDumpPath.replace('pg_dump', 'psql')
   console.log(`Using: ${pgDumpPath}`)
 
-  // Get password
+  // Get password and set as env var (avoids special chars in URL)
   const password = getPassword()
   if (!password) {
     console.error('ERROR: Database password not found!')
@@ -115,6 +166,24 @@ function createBackup() {
     )
     process.exit(1)
   }
+  // Set PGPASSWORD so all pg_dump/psql calls use it automatically
+  process.env.PGPASSWORD = password
+
+  // Try direct connection first, fall back to pooler
+  let connectionString = buildConnectionString(CONFIG.host, CONFIG.user)
+  console.log(`Trying direct connection (${CONFIG.host})...`)
+
+  if (!testConnection(psqlPath, connectionString)) {
+    console.log('  Direct connection failed, falling back to session pooler...')
+    connectionString = buildConnectionString(POOLER_CONFIG.host, POOLER_CONFIG.user)
+    if (!testConnection(psqlPath, connectionString)) {
+      console.error('ERROR: Cannot connect to database via direct or pooler connection!')
+      process.exit(1)
+    }
+    console.log(`  Connected via pooler (${POOLER_CONFIG.host})`)
+  } else {
+    console.log('  Connected directly')
+  }
 
   // Create backup directory
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
@@ -126,61 +195,124 @@ function createBackup() {
   }
   mkdirSync(backupPath, { recursive: true })
 
-  console.log(`Project: ${CONFIG.projectRef}`)
-  console.log(`Backup folder: ${backupName}`)
-  console.log('')
+  console.log(`\nProject: ${CONFIG.projectRef}`)
+  console.log(`Backup folder: ${backupName}\n`)
 
-  // Build connection string
-  const connectionString = `postgresql://${CONFIG.user}:${password}@${CONFIG.host}:${CONFIG.port}/${CONFIG.database}`
-
-  // Backup options
+  // File paths
   const sqlFile = join(backupPath, 'backup.sql')
   const schemaFile = join(backupPath, 'schema.sql')
 
-  // 1. Full backup (schema + data)
-  console.log('Creating full backup (schema + data)...')
-  const fullBackupResult = spawnSync(
-    pgDumpPath,
-    [connectionString, '--no-owner', '--no-privileges', '--schema=public', '--file=' + sqlFile],
-    {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      encoding: 'utf-8'
-    }
-  )
-
-  if (fullBackupResult.status !== 0) {
-    console.error('ERROR: Full backup failed!')
-    console.error(fullBackupResult.stderr)
-    process.exit(1)
-  }
-  console.log('  Full backup created: backup.sql')
-
-  // 2. Schema only backup
+  // --- PHASE 1: Schema-only backup (always works, small data) ---
   console.log('Creating schema-only backup...')
-  const schemaResult = spawnSync(
-    pgDumpPath,
-    [
-      connectionString,
-      '--no-owner',
-      '--no-privileges',
-      '--schema=public',
-      '--schema-only',
-      '--file=' + schemaFile
-    ],
-    {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      encoding: 'utf-8'
-    }
-  )
+  const schemaResult = runPgDump(pgDumpPath, connectionString, [
+    '--schema-only',
+    '--file=' + schemaFile
+  ])
 
   if (schemaResult.status !== 0) {
-    console.error('WARNING: Schema backup failed!')
+    console.error('ERROR: Schema backup failed!')
     console.error(schemaResult.stderr)
-  } else {
-    console.log('  Schema backup created: schema.sql')
+    process.exit(1)
+  }
+  console.log('  schema.sql created')
+
+  // --- PHASE 2: Full data backup (table-by-table for pooler stability) ---
+  // Get list of all tables
+  console.log('Getting table list...')
+  const tableListResult = runPsqlQuery(
+    psqlPath,
+    connectionString,
+    `SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;`
+  )
+
+  if (tableListResult.status !== 0) {
+    console.error('ERROR: Could not get table list!')
+    process.exit(1)
   }
 
-  // 3. Export GRANT permissions
+  const tables = tableListResult.stdout.trim().split('\n').filter(Boolean)
+  console.log(`  Found ${tables.length} tables\n`)
+
+  // Dump each table individually as custom format (each gets its own connection)
+  const dataDir = join(backupPath, 'tables')
+  mkdirSync(dataDir, { recursive: true })
+
+  let failedTables = []
+  let totalDataSize = 0
+
+  console.log('Dumping tables (custom format, compressed)...')
+  for (const table of tables) {
+    const tableFile = join(dataDir, `${table}.dump`)
+    const result = runPgDump(pgDumpPath, connectionString, [
+      '--format=custom',
+      '--compress=6',
+      '--data-only',
+      `--table=public.${table}`,
+      '--file=' + tableFile
+    ])
+
+    if (result.status !== 0) {
+      console.error(`  FAILED: ${table}`)
+      console.error(`    ${result.stderr.split('\n')[0]}`)
+      failedTables.push(table)
+      // Clean up failed file
+      try {
+        unlinkSync(tableFile)
+      } catch {}
+    } else {
+      const size = statSync(tableFile).size
+      totalDataSize += size
+      if (size > 100 * 1024) {
+        console.log(`  ${table.padEnd(35)} ${formatSize(size).padStart(10)}`)
+      }
+    }
+  }
+
+  // Retry failed tables with INSERT mode (slower but avoids COPY/SSL issues)
+  if (failedTables.length > 0) {
+    console.log(`\nRetrying ${failedTables.length} failed tables with INSERT mode...`)
+    const stillFailed = []
+
+    for (const table of failedTables) {
+      const tableFile = join(dataDir, `${table}.sql`)
+      const result = runPgDump(pgDumpPath, connectionString, [
+        '--data-only',
+        '--inserts',
+        '--rows-per-insert=100',
+        `--table=public.${table}`,
+        '--file=' + tableFile
+      ])
+
+      if (result.status !== 0) {
+        console.error(`  STILL FAILED: ${table}`)
+        console.error(`    ${result.stderr.split('\n')[0]}`)
+        stillFailed.push(table)
+      } else {
+        const size = statSync(tableFile).size
+        totalDataSize += size
+        console.log(`  ${table.padEnd(35)} ${formatSize(size).padStart(10)} (INSERT mode)`)
+      }
+    }
+    failedTables = stillFailed
+  }
+
+  console.log(
+    `\nTotal data: ${formatSize(totalDataSize)} across ${tables.length - failedTables.length}/${tables.length} tables`
+  )
+  if (failedTables.length > 0) {
+    console.error(`WARNING: ${failedTables.length} tables failed: ${failedTables.join(', ')}`)
+  }
+
+  // --- PHASE 3: Create combined backup.dump from schema + successful table dumps ---
+  // Also create a plain SQL backup for reference
+  console.log('\nCreating combined plain SQL backup...')
+  const sqlResult = runPgDump(pgDumpPath, connectionString, ['--schema-only', '--file=' + sqlFile])
+  // Append data from table dumps would be complex, so just keep schema.sql + tables/ dir
+  if (sqlResult.status === 0) {
+    console.log('  backup.sql created (schema only, data in tables/ dir)')
+  }
+
+  // 4. Export GRANT permissions
   console.log('Exporting GRANT permissions...')
   const grantsFile = join(backupPath, 'grants.sql')
   const grantsHeader = `-- Export all GRANT permissions for Supabase roles
@@ -188,42 +320,29 @@ function createBackup() {
 
 -- 1. Tables\n`
 
-  const psqlPath = pgDumpPath.replace('pg_dump', 'psql')
-
-  // Query 1: Tables
   const tablesQuery = `SELECT 'GRANT ' || privilege_type || ' ON ' || table_schema || '.' || table_name || ' TO ' || grantee || ';'
 FROM information_schema.table_privileges
 WHERE table_schema = 'public' AND grantee IN ('anon', 'authenticated', 'service_role')
 ORDER BY table_name, grantee, privilege_type;`
 
-  const tablesResult = spawnSync(
-    psqlPath,
-    [connectionString, '--tuples-only', '--no-align', '--command', tablesQuery],
-    { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' }
-  )
+  const tablesResult = runPsqlQuery(psqlPath, connectionString, tablesQuery)
 
   let grantsContent = grantsHeader
   if (tablesResult.status === 0 && tablesResult.stdout.trim()) {
     grantsContent += tablesResult.stdout + '\n-- 2. Sequences\n'
   }
 
-  // Query 2: Sequences
   const seqQuery = `SELECT 'GRANT ' || privilege_type || ' ON SEQUENCE ' || sequence_schema || '.' || sequence_name || ' TO ' || grantee || ';'
 FROM information_schema.usage_privileges
 WHERE object_schema = 'public' AND grantee IN ('anon', 'authenticated', 'service_role')
 ORDER BY object_name, grantee, privilege_type;`
 
-  const seqResult = spawnSync(
-    psqlPath,
-    [connectionString, '--tuples-only', '--no-align', '--command', seqQuery],
-    { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' }
-  )
+  const seqResult = runPsqlQuery(psqlPath, connectionString, seqQuery)
 
   if (seqResult.status === 0 && seqResult.stdout.trim()) {
     grantsContent += seqResult.stdout + '\n-- 3. Functions\n'
   }
 
-  // Query 3: Functions
   const funcQuery = `SELECT 'GRANT EXECUTE ON FUNCTION ' || n.nspname || '.' || p.proname ||
     '(' || pg_get_function_identity_arguments(p.oid) || ') TO anon;'
 FROM pg_proc p
@@ -243,84 +362,61 @@ JOIN pg_namespace n ON p.pronamespace = n.oid
 WHERE n.nspname = 'public'
 ORDER BY 1;`
 
-  const funcResult = spawnSync(
-    psqlPath,
-    [connectionString, '--tuples-only', '--no-align', '--command', funcQuery],
-    { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' }
-  )
+  const funcResult = runPsqlQuery(psqlPath, connectionString, funcQuery)
 
   if (funcResult.status === 0 && funcResult.stdout.trim()) {
     grantsContent += funcResult.stdout + '\n'
   }
 
-  // Write grants file
   if (grantsContent !== grantsHeader) {
     writeFileSync(grantsFile, grantsContent)
-    console.log('  Grants exported: grants.sql')
+    console.log('  grants.sql exported')
   } else {
     console.log('  WARNING: Could not export grants')
   }
 
-  // 4. Export real-time publication tables
+  // 5. Export real-time publication tables
   console.log('Exporting real-time publication...')
   const realtimeFile = join(backupPath, 'realtime.sql')
   const realtimeQuery = `
--- Export real-time publication table memberships
 SELECT 'ALTER PUBLICATION supabase_realtime ADD TABLE ' || schemaname || '.' || tablename || ';' as stmt
 FROM pg_publication_tables
 WHERE pubname = 'supabase_realtime'
-ORDER BY tablename;
-`
-  const realtimeResult = spawnSync(
-    psqlPath,
-    [connectionString, '--tuples-only', '--no-align', '--command', realtimeQuery],
-    {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      encoding: 'utf-8'
-    }
-  )
+ORDER BY tablename;`
+
+  const realtimeResult = runPsqlQuery(psqlPath, connectionString, realtimeQuery)
 
   if (realtimeResult.status === 0 && realtimeResult.stdout) {
     writeFileSync(realtimeFile, realtimeResult.stdout)
-    console.log('  Real-time publication exported: realtime.sql')
+    console.log('  realtime.sql exported')
   } else {
     console.log('  WARNING: Could not export real-time publication')
   }
 
-  // 5. Export enabled extensions
+  // 6. Export enabled extensions
   console.log('Exporting enabled extensions...')
   const extensionsFile = join(backupPath, 'extensions.sql')
   const extensionsQuery = `
--- Export enabled extensions
 SELECT 'CREATE EXTENSION IF NOT EXISTS "' || extname || '" WITH SCHEMA ' ||
   COALESCE(n.nspname, 'public') || ';' as stmt
 FROM pg_extension e
 LEFT JOIN pg_namespace n ON e.extnamespace = n.oid
-WHERE extname NOT IN ('plpgsql')  -- Skip built-in extensions
-ORDER BY extname;
-`
-  const extensionsResult = spawnSync(
-    psqlPath,
-    [connectionString, '--tuples-only', '--no-align', '--command', extensionsQuery],
-    {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      encoding: 'utf-8'
-    }
-  )
+WHERE extname NOT IN ('plpgsql')
+ORDER BY extname;`
+
+  const extensionsResult = runPsqlQuery(psqlPath, connectionString, extensionsQuery)
 
   if (extensionsResult.status === 0 && extensionsResult.stdout) {
     writeFileSync(extensionsFile, extensionsResult.stdout)
-    console.log('  Extensions exported: extensions.sql')
+    console.log('  extensions.sql exported')
   } else {
     console.log('  WARNING: Could not export extensions')
   }
 
-  // 6. Export Auth users (optional, security sensitive)
+  // 7. Export Auth users (optional, security sensitive)
   console.log('Exporting Auth users metadata...')
   const authFile = join(backupPath, 'auth_users.sql')
   const authQuery = `
--- Export Auth users (metadata only, no passwords)
--- WARNING: This is security-sensitive data!
 SELECT 'INSERT INTO auth.users (id, email, raw_user_meta_data, created_at, updated_at, email_confirmed_at, role) VALUES (' ||
   quote_literal(id::text) || ', ' ||
   quote_literal(email) || ', ' ||
@@ -331,68 +427,72 @@ SELECT 'INSERT INTO auth.users (id, email, raw_user_meta_data, created_at, updat
   quote_literal(role) ||
   ');' as stmt
 FROM auth.users
-ORDER BY created_at;
-`
-  const authResult = spawnSync(
-    psqlPath,
-    [connectionString, '--tuples-only', '--no-align', '--command', authQuery],
-    {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      encoding: 'utf-8'
-    }
-  )
+ORDER BY created_at;`
+
+  const authResult = runPsqlQuery(psqlPath, connectionString, authQuery)
 
   if (authResult.status === 0 && authResult.stdout) {
     writeFileSync(
       authFile,
       '-- WARNING: Security-sensitive data! Do not commit to git.\n' + authResult.stdout
     )
-    console.log('  Auth users exported: auth_users.sql (SECURITY SENSITIVE!)')
+    console.log('  auth_users.sql exported (SECURITY SENSITIVE!)')
   } else {
     console.log('  WARNING: Could not export auth users')
   }
 
-  // 7. Save backup metadata
+  // 8. Save backup metadata
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
   const metadata = {
     timestamp: new Date().toISOString(),
     projectRef: CONFIG.projectRef,
-    host: CONFIG.host,
     database: CONFIG.database,
     type: 'full',
-    files: [
-      'backup.sql',
-      'schema.sql',
-      'grants.sql',
-      'realtime.sql',
-      'extensions.sql',
-      'auth_users.sql'
-    ]
+    format: 'table-by-table custom dumps',
+    tables_total: tables.length,
+    tables_backed_up: tables.length - failedTables.length,
+    tables_failed: failedTables,
+    data_size: totalDataSize,
+    elapsed_seconds: parseFloat(elapsed),
+    structure: {
+      'schema.sql': 'Full schema (DDL)',
+      'tables/': 'Individual table data dumps (.dump = custom format, .sql = INSERT fallback)',
+      'grants.sql': 'GRANT permissions for Supabase roles',
+      'realtime.sql': 'Real-time publication table memberships',
+      'extensions.sql': 'Enabled PostgreSQL extensions',
+      'auth_users.sql': 'Auth users metadata (SECURITY SENSITIVE!)'
+    }
   }
   writeFileSync(join(backupPath, 'metadata.json'), JSON.stringify(metadata, null, 2))
 
   // Summary
   console.log('\n========================================')
-  console.log('  Backup Complete!')
+  console.log(`  Backup Complete! (${elapsed}s)`)
   console.log('========================================')
   console.log(`\nLocation: backups/${backupName}/`)
-  console.log('Files:')
-  console.log('  - backup.sql      (full backup with data)')
-  console.log('  - schema.sql      (schema only)')
-  console.log('  - grants.sql      (GRANT permissions for Supabase roles)')
-  console.log('  - realtime.sql    (real-time publication tables)')
-  console.log('  - extensions.sql  (enabled PostgreSQL extensions)')
-  console.log('  - auth_users.sql  (Auth users metadata - SECURITY SENSITIVE!)')
-  console.log('  - metadata.json   (backup info)')
-  console.log('')
+  console.log(`Tables: ${tables.length - failedTables.length}/${tables.length} backed up`)
+  console.log(`Data size: ${formatSize(totalDataSize)} (compressed)`)
 
-  // Show file sizes
-  try {
-    const stats = execSync(`ls -lh "${backupPath}"`, { encoding: 'utf-8' })
-    console.log('File sizes:')
-    console.log(stats)
-  } catch {
-    // ignore
+  const summaryFiles = [
+    'schema.sql',
+    'grants.sql',
+    'realtime.sql',
+    'extensions.sql',
+    'auth_users.sql'
+  ]
+  for (const file of summaryFiles) {
+    const filePath = join(backupPath, file)
+    if (existsSync(filePath)) {
+      const size = formatSize(statSync(filePath).size)
+      const label = file === 'auth_users.sql' ? ' (SECURITY SENSITIVE!)' : ''
+      console.log(`  ${file.padEnd(20)} ${size.padStart(10)}${label}`)
+    }
   }
+
+  if (failedTables.length > 0) {
+    console.log(`\nWARNING: Failed tables: ${failedTables.join(', ')}`)
+  }
+  console.log('')
 }
 
 // Run

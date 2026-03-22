@@ -428,7 +428,14 @@ export function fromOrderItemRow(row: SupabaseOrderItem): PosBillItem {
     discounts: (row.discounts as any) || [],
 
     // Status
-    status: row.status as 'draft' | 'waiting' | 'cooking' | 'ready' | 'served' | 'cancelled',
+    status: row.status as
+      | 'draft'
+      | 'scheduled'
+      | 'waiting'
+      | 'cooking'
+      | 'ready'
+      | 'served'
+      | 'cancelled',
     paymentStatus: (row.payment_status || 'unpaid') as 'unpaid' | 'paid' | 'refunded',
 
     // Department

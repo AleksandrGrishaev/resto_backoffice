@@ -324,6 +324,8 @@ export class DevInitializationStrategy implements InitializationStrategy {
         return this.loadWebsite()
       case 'websiteSettings':
         return this.loadWebsiteSettings()
+      case 'websiteMenu':
+        return this.loadWebsiteMenu()
       default:
         DebugUtils.warn(MODULE_NAME, `Unknown store: ${storeName}`)
         return null
@@ -758,6 +760,9 @@ export class DevInitializationStrategy implements InitializationStrategy {
     if (!this.loadedStores.has('websiteSettings')) {
       parallelPromises.push(this.loadWebsiteSettings())
     }
+    if (!this.loadedStores.has('websiteMenu')) {
+      parallelPromises.push(this.loadWebsiteMenu())
+    }
 
     if (parallelPromises.length > 0) {
       const parallelResults = await Promise.all(parallelPromises)
@@ -1137,6 +1142,38 @@ export class DevInitializationStrategy implements InitializationStrategy {
 
       return {
         name: 'websiteSettings',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadWebsiteMenu(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const { useWebsiteMenuStore } = await import('@/stores/websiteMenu')
+      const store = useWebsiteMenuStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading website menu...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'websiteMenu',
+        success: true,
+        count: store.categories.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load website menu'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [DEV] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'websiteMenu',
         success: false,
         error: message,
         duration: Date.now() - start

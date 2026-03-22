@@ -16,6 +16,7 @@ export function useKitchenStatus() {
     if (department === 'bar') {
       const barTransitions: Record<OrderStatus, OrderStatus | null> = {
         draft: null,
+        scheduled: null, // Scheduled items transition via ScheduledOrdersService, not manual click
         waiting: 'ready', // Bar: waiting → ready (skip cooking)
         cooking: 'ready', // Fallback if somehow in cooking state
         ready: null,
@@ -29,10 +30,11 @@ export function useKitchenStatus() {
 
     // Kitchen items: standard 3-step flow
     const kitchenTransitions: Record<OrderStatus, OrderStatus | null> = {
-      draft: null, // Kitchen не работает с draft
+      draft: null,
+      scheduled: null, // Scheduled items transition via ScheduledOrdersService, not manual click
       waiting: 'cooking',
       cooking: 'ready',
-      ready: null, // Kitchen не меняет дальше (POS меняет на served/collected/delivered)
+      ready: null,
       served: null,
       collected: null,
       delivered: null,
@@ -51,8 +53,9 @@ export function useKitchenStatus() {
     if (department === 'bar') {
       const barTexts: Record<OrderStatus, string> = {
         draft: '',
-        waiting: 'Mark Ready', // Bar: waiting → ready (no cooking)
-        cooking: 'Mark Ready', // Fallback
+        scheduled: 'Scheduled',
+        waiting: 'Mark Ready',
+        cooking: 'Mark Ready',
         ready: 'Ready',
         served: '',
         collected: '',
@@ -65,9 +68,10 @@ export function useKitchenStatus() {
     // Kitchen items: standard flow
     const kitchenTexts: Record<OrderStatus, string> = {
       draft: '',
+      scheduled: 'Scheduled',
       waiting: 'Start Cooking',
       cooking: 'Mark Ready',
-      ready: 'Ready', // disabled button
+      ready: 'Ready',
       served: '',
       collected: '',
       delivered: '',
@@ -82,6 +86,7 @@ export function useKitchenStatus() {
   function getStatusColor(status: OrderStatus): string {
     const colors: Record<OrderStatus, string> = {
       draft: 'grey',
+      scheduled: 'cyan',
       waiting: 'orange',
       cooking: 'blue',
       ready: 'green',
@@ -99,6 +104,7 @@ export function useKitchenStatus() {
   function getStatusIcon(status: OrderStatus): string {
     const icons: Record<OrderStatus, string> = {
       draft: 'mdi-file-document-outline',
+      scheduled: 'mdi-timer-sand',
       waiting: 'mdi-clock-outline',
       cooking: 'mdi-fire',
       ready: 'mdi-check-circle',
@@ -123,6 +129,7 @@ export function useKitchenStatus() {
   function getStatusLabel(status: OrderStatus): string {
     const labels: Record<OrderStatus, string> = {
       draft: 'Draft',
+      scheduled: 'Scheduled',
       waiting: 'Waiting',
       cooking: 'Cooking',
       ready: 'Ready',

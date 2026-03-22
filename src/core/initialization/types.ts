@@ -52,6 +52,7 @@ export type StoreName =
   | 'loyalty'
   | 'website'
   | 'websiteSettings'
+  | 'websiteMenu'
   | 'debug'
 
 /**

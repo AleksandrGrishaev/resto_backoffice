@@ -2,7 +2,7 @@
 <template>
   <v-dialog
     :model-value="modelValue"
-    max-width="480"
+    max-width="520"
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-card>
@@ -39,7 +39,7 @@ defineProps<{
   orderId?: string
   customerId?: string | null
   stampCardId?: string | null
-  initialTab?: 'card' | 'customer'
+  initialTab?: 'scan' | 'card' | 'customer'
 }>()
 
 defineEmits<{

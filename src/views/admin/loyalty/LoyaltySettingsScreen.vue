@@ -206,19 +206,6 @@
                       class="mb-3"
                     />
                     <v-text-field
-                      v-model.number="form.conversionBonusPct"
-                      label="Conversion bonus (%)"
-                      type="number"
-                      :min="0"
-                      :max="100"
-                      variant="outlined"
-                      density="compact"
-                      hint="Extra % when converting stamps to points"
-                      persistent-hint
-                      suffix="%"
-                      class="mb-3"
-                    />
-                    <v-text-field
                       v-model.number="form.tierWindowDays"
                       label="Tier window (days)"
                       type="number"
@@ -1099,7 +1086,6 @@ interface FormData {
   stampLifetimeDays: number
   stampRewards: StampReward[]
   pointsLifetimeDays: number
-  conversionBonusPct: number
   tierWindowDays: number
   maxTierDegradation: number
   tiers: TierConfig[]
@@ -1539,7 +1525,6 @@ onMounted(async () => {
           ...s.stampRewards.map(r => ({ ...r, categoryIds: [...(r.categoryIds || [])] }))
         ],
         pointsLifetimeDays: s.pointsLifetimeDays,
-        conversionBonusPct: s.conversionBonusPct,
         tierWindowDays: s.tierWindowDays,
         maxTierDegradation: s.maxTierDegradation,
         tiers: [...s.tiers.map(t => ({ ...t }))],

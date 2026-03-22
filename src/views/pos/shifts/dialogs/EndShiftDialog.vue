@@ -65,6 +65,27 @@
           </v-alert>
         </div>
 
+        <!-- Unpaid Orders Warning -->
+        <div v-if="unpaidOrdersWithItems.length > 0" class="mb-4">
+          <v-alert color="warning" variant="tonal" icon="mdi-alert">
+            <div class="font-weight-bold mb-1">
+              {{ unpaidOrdersWithItems.length }} unpaid order(s) with items
+            </div>
+            <div class="text-body-2">
+              These orders have items but haven't been paid. They will remain open after shift ends.
+            </div>
+          </v-alert>
+        </div>
+
+        <!-- Empty Draft Orders Info -->
+        <div v-if="emptyDraftOrders.length > 0" class="mb-4">
+          <v-alert color="info" variant="tonal" icon="mdi-broom">
+            <div class="text-body-2">
+              {{ emptyDraftOrders.length }} empty draft order(s) will be automatically cleaned up.
+            </div>
+          </v-alert>
+        </div>
+
         <!-- Shift Summary -->
         <div class="shift-summary mb-4">
           <div class="text-subtitle-1 mb-3 d-flex align-center">
@@ -100,6 +121,102 @@
               </v-card>
             </v-col>
           </v-row>
+        </div>
+
+        <!-- Cancellation Summary (if any) -->
+        <div v-if="hasCancellations" class="cancellation-section mb-4">
+          <div class="text-subtitle-1 mb-3 d-flex align-center">
+            <v-icon icon="mdi-cancel" color="error" class="me-2" />
+            Cancellations
+          </div>
+
+          <v-row class="mb-3">
+            <v-col cols="4">
+              <v-card variant="outlined" class="pa-3 text-center">
+                <div class="text-h4 font-weight-bold text-error">
+                  {{ cancellationStats.cancelledOrdersCount }}
+                </div>
+                <div class="text-caption text-medium-emphasis">Cancelled Orders</div>
+              </v-card>
+            </v-col>
+            <v-col cols="4">
+              <v-card variant="outlined" class="pa-3 text-center">
+                <div class="text-h4 font-weight-bold text-warning">
+                  {{ cancellationStats.cancelledItemsCount }}
+                </div>
+                <div class="text-caption text-medium-emphasis">Cancelled Items</div>
+              </v-card>
+            </v-col>
+            <v-col cols="4">
+              <v-card variant="outlined" class="pa-3 text-center">
+                <div class="text-h4 font-weight-bold text-error">
+                  {{ formatCurrency(cancellationStats.totalCancelledAmount) }}
+                </div>
+                <div class="text-caption text-medium-emphasis">Lost Revenue</div>
+              </v-card>
+            </v-col>
+          </v-row>
+
+          <!-- Reason Breakdown -->
+          <div v-if="cancellationStats.reasonBreakdown.length > 0" class="mb-3">
+            <div
+              v-for="rb in cancellationStats.reasonBreakdown"
+              :key="rb.reason"
+              class="d-flex justify-space-between align-center pa-2 border rounded mb-1"
+            >
+              <div class="d-flex align-center">
+                <v-chip size="small" variant="tonal" class="mr-2">{{ rb.count }}</v-chip>
+                {{ rb.label }}
+              </div>
+              <span class="text-error font-weight-medium">
+                {{ formatCurrency(rb.amount) }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Expandable Details -->
+          <v-expansion-panels v-if="cancellationStats.details.length > 0" variant="accordion">
+            <v-expansion-panel>
+              <v-expansion-panel-title>
+                Details ({{ cancellationStats.details.length }} entries)
+              </v-expansion-panel-title>
+              <v-expansion-panel-text>
+                <div
+                  v-for="detail in cancellationStats.details"
+                  :key="`${detail.orderId}-${detail.itemName || 'order'}`"
+                  class="detail-item pa-2 border-b"
+                >
+                  <div class="d-flex justify-space-between align-center">
+                    <div>
+                      <strong>{{ detail.orderNumber }}</strong>
+                      <v-chip
+                        :color="detail.type === 'order' ? 'error' : 'warning'"
+                        size="x-small"
+                        variant="flat"
+                        class="ml-1"
+                      >
+                        {{ detail.type === 'order' ? 'Full Order' : 'Item' }}
+                      </v-chip>
+                    </div>
+                    <span class="text-error font-weight-bold">
+                      {{ formatCurrency(detail.totalAmount) }}
+                    </span>
+                  </div>
+                  <div class="text-caption text-medium-emphasis mt-1">
+                    <span v-if="detail.itemName">
+                      {{ detail.itemName }} x{{ detail.quantity }} ·
+                    </span>
+                    {{ detail.reasonLabel }}
+                    <span v-if="detail.notes">· {{ detail.notes }}</span>
+                    <span v-if="detail.hadWriteOff" class="ml-1">
+                      <v-icon size="12" color="warning">mdi-package-down</v-icon>
+                      write-off
+                    </span>
+                  </div>
+                </div>
+              </v-expansion-panel-text>
+            </v-expansion-panel>
+          </v-expansion-panels>
         </div>
 
         <!-- Payment Methods Breakdown -->
@@ -308,7 +425,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
 import { usePosPaymentsStore } from '@/stores/pos/payments/paymentsStore'
-// usePosOrdersStore removed - no longer needed after removing refunded items check
+import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { useShiftsComposables } from '@/stores/pos/shifts/composables'
 import { useAccountStore } from '@/stores/account'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
@@ -319,6 +436,7 @@ import type {
   ShiftAccountBalance
 } from '@/stores/pos/shifts/types'
 import type { PosPayment } from '@/stores/pos/types'
+import { useCancellationStats } from '@/stores/pos/shifts/composables/useCancellationStats'
 
 // Props
 interface Props {
@@ -338,8 +456,8 @@ const emit = defineEmits<{
 // Stores
 const shiftsStore = useShiftsStore()
 const paymentsStore = usePosPaymentsStore()
+const ordersStore = usePosOrdersStore()
 const accountStore = useAccountStore()
-// ordersStore removed - no longer needed after removing refunded items check
 const paymentSettingsStore = usePaymentSettingsStore()
 const {
   formatShiftDuration,
@@ -347,6 +465,9 @@ const {
   canEndShift: checkCanEndShift,
   getCashDiscrepancyColor
 } = useShiftsComposables()
+
+// Cancellation stats
+const { cancellationStats, hasCancellations } = useCancellationStats(() => shiftsStore.currentShift)
 
 // State
 const dialog = ref(props.modelValue)
@@ -409,6 +530,25 @@ const isAccountStoreReady = computed(() => {
 const ordersWithRefundedItems = computed(() => [] as { order: any; refundedItems: any[] }[])
 
 const hasRefundedOrders = computed(() => false)
+
+// Empty draft orders that will be auto-cleaned on shift end
+const emptyDraftOrders = computed(() => {
+  return ordersStore.orders.filter(order => {
+    if (order.status !== 'draft') return false
+    const allItems = order.bills.flatMap(b => b.items)
+    return allItems.length === 0
+  })
+})
+
+// Unpaid orders with items (warning only, doesn't block shift end)
+const unpaidOrdersWithItems = computed(() => {
+  return ordersStore.orders.filter(order => {
+    if (['cancelled', 'served', 'collected', 'delivered'].includes(order.status)) return false
+    if (order.paymentStatus === 'paid') return false
+    const allItems = order.bills.flatMap(b => b.items)
+    return allItems.some(item => !['cancelled'].includes(item.status))
+  })
+})
 
 const canEndShift = computed(
   () =>

@@ -28,9 +28,10 @@
           <!-- Online Order Details Bar -->
           <div v-if="currentOrder.source === 'website'" class="online-order-bar">
             <div class="online-order-bar-content">
-              <div v-if="currentOrder.customerName" class="online-field">
+              <div class="online-order-number">#{{ currentOrder.orderNumber }}</div>
+              <div class="online-field">
                 <v-icon size="14" class="mr-1">mdi-account</v-icon>
-                {{ currentOrder.customerName }}
+                {{ currentOrder.customerName || 'Guest' }}
               </div>
               <div v-if="currentOrder.customerPhone" class="online-field">
                 <v-icon size="14" class="mr-1">mdi-phone</v-icon>
@@ -110,6 +111,7 @@
             @checkout="handleCheckoutFromActions"
             @release-table="handleReleaseTable"
             @complete-order="handleCompleteOrder"
+            @cancel-order="showCancelOrderDialog = true"
           />
         </div>
       </div>
@@ -192,8 +194,6 @@
       :customer-id="convertCardCustomerId"
       :customer-name="convertCardCustomerName"
       :stamps="loyaltyCard?.stamps || 0"
-      :cashback-pct="convertCardCustomerId ? loyaltyStore.cashbackRateForTier(convertCardTier) : 5"
-      :bonus-pct="loyaltyStore.settings?.conversionBonusPct || 0"
       @converted="handleCardConverted"
     />
 
@@ -252,6 +252,14 @@
       @cancel="handleTableSelectionCancel"
     />
 
+    <!-- Cancel Order Dialog -->
+    <CancelOrderDialog
+      v-model="showCancelOrderDialog"
+      :order="currentOrder"
+      @confirm="handleCancelOrderConfirm"
+      @cancel="showCancelOrderDialog = false"
+    />
+
     <!-- Print Receipt Dialog (after payment) -->
     <PrintReceiptDialog
       v-model="showPrintReceiptDialog"
@@ -308,6 +316,7 @@ import AddNoteDialog from './dialogs/AddNoteDialog.vue'
 import ItemDiscountDialog from './dialogs/ItemDiscountDialog.vue'
 import BillItemCancelDialog from './dialogs/BillItemCancelDialog.vue'
 import MoveItemsDialog from './dialogs/MoveItemsDialog.vue'
+import CancelOrderDialog from './dialogs/CancelOrderDialog.vue'
 import OrderTypeDialog from './dialogs/OrderTypeDialog.vue'
 import TableSelectionDialog from './dialogs/TableSelectionDialog.vue'
 import CancellationRequestBanner from './components/CancellationRequestBanner.vue'
@@ -433,6 +442,11 @@ const paymentBillLoyaltyCard = computed(() => {
   if (loyaltyCard.value && paymentBill.value?.stampCardId) {
     return loyaltyCard.value
   }
+  // If bill has stampCardId but loyaltyCard wasn't loaded yet,
+  // trigger async load (the computed will re-evaluate when loyaltyCard updates)
+  if (paymentBill.value?.stampCardId && !loyaltyCard.value) {
+    loadLoyaltyCardForBill(paymentBill.value.stampCardId)
+  }
   return null
 })
 
@@ -456,8 +470,70 @@ const printReceiptData = ref<{
 const loyaltyCard = ref<StampCardInfo | null>(null)
 const showConvertCardDialog = ref(false)
 const showLoyaltyDialog = ref(false)
-const loyaltyDialogTab = ref<'card' | 'customer'>('card')
+const loyaltyDialogTab = ref<'scan' | 'card' | 'customer'>('card')
 const loyaltyBillId = ref<string | null>(null) // which bill the loyalty dialog is for
+let _loadingCardForBillId: string | null = null // prevent duplicate loads
+
+/**
+ * Load stamp card info from stampCardId (async, updates loyaltyCard ref).
+ * Called when bill has stampCardId but loyaltyCard wasn't hydrated.
+ */
+async function loadLoyaltyCardForBill(stampCardId: string): Promise<void> {
+  if (_loadingCardForBillId === stampCardId) return // already loading
+  _loadingCardForBillId = stampCardId
+  try {
+    const card = await loyaltyStore.getCardById(stampCardId)
+    if (card) {
+      loyaltyCard.value = card
+      console.log('🎯 Auto-loaded stamp card for bill:', card.cardNumber)
+    }
+  } catch (err) {
+    console.error('🎯 Failed to auto-load stamp card:', err)
+  } finally {
+    _loadingCardForBillId = null
+  }
+}
+
+/**
+ * Auto-hydrate bill customer data from order-level customer (for online orders).
+ * Also auto-attach stamp card if customer has one.
+ */
+async function hydrateOnlineOrderBills(
+  order: import('@/stores/pos/types').PosOrder
+): Promise<void> {
+  if (!order.customerId) return
+
+  let updated = false
+  for (const bill of order.bills) {
+    // Copy customer from order to bill if missing
+    if (!bill.customerId && order.customerId) {
+      bill.customerId = order.customerId
+      bill.customerName = order.customerName
+      updated = true
+    }
+
+    // Auto-attach stamp card if customer is on stamps program and bill doesn't have one
+    if (bill.customerId && !bill.stampCardId) {
+      const billCustomer = customersStore.getById(bill.customerId)
+      if (billCustomer?.loyaltyProgram === 'stamps') {
+        try {
+          const card = await loyaltyStore.getActiveCardByCustomerId(bill.customerId)
+          if (card) {
+            bill.stampCardId = card.cardId
+            updated = true
+            console.log('🎯 Auto-attached stamp card to bill:', card.cardNumber, bill.name)
+          }
+        } catch {
+          // Not critical
+        }
+      }
+    }
+  }
+
+  if (updated) {
+    await ordersStore.updateOrder(order)
+  }
+}
 
 // Printer
 const { settings: printerSettings, isConnected: isPrinterConnected } = usePrinter()
@@ -519,6 +595,9 @@ const moveDialogData = computed(() => {
 // Order Type Dialog State
 const showOrderTypeDialog = ref(false)
 
+// Cancel Order Dialog State
+const showCancelOrderDialog = ref(false)
+
 // Table Selection Dialog State
 const showTableSelectionDialog = ref(false)
 
@@ -527,12 +606,17 @@ const currentOrder = computed((): PosOrder | null => {
   return ordersStore.currentOrder
 })
 
-// P1 FIX: Clear loyaltyCard when switching orders
+// P1 FIX: Clear loyaltyCard when switching orders + hydrate online order bills
 watch(
   () => currentOrder.value?.id,
-  () => {
+  newId => {
     loyaltyCard.value = null
     loyaltyBillId.value = null
+
+    // Auto-hydrate bills for online orders (copy customer to bills, attach stamp card)
+    if (newId && currentOrder.value?.source === 'website' && currentOrder.value.customerId) {
+      hydrateOnlineOrderBills(currentOrder.value)
+    }
   }
 )
 
@@ -761,7 +845,7 @@ const handleOrderTypeConfirm = async (data: {
         currentOrder.value.tableId = undefined
 
         // Free the table
-        await tablesStore.freeTable(tableId)
+        await tablesStore.freeTable(tableId, currentOrder.value.id)
       }
 
       // Recalculate totals with new channel taxes
@@ -1032,6 +1116,16 @@ const handleConfirmCancel = async (data: {
 
       // Recalculate order totals
       await ordersStore.recalculateOrderTotals(orderId)
+
+      // Watchdog: track prepared item cancellations (non-blocking)
+      if (item.status === 'cooking' || item.status === 'ready') {
+        import('@/core/watchdog/WatchdogService').then(({ onItemCancelled }) => {
+          const currentShift = shiftsStore.currentShift
+          if (currentShift) {
+            onItemCancelled(currentShift.id, item.menuItemName, authStore.user?.name || 'Unknown')
+          }
+        })
+      }
     } else {
       throw new Error(result.error || 'Failed to cancel item')
     }
@@ -1755,7 +1849,12 @@ const handlePaymentConfirm = async (paymentData: {
 
       // 🎯 Post-payment loyalty hooks (non-blocking)
       // Cashback/stamps based on actual money paid, NOT including redeemed points
-      processLoyaltyAfterPayment(paymentDialogData.value.orderId, paymentData.amount)
+      // Use bill-level customer (not order-level) for correct multi-bill loyalty
+      processLoyaltyAfterPayment(
+        paymentDialogData.value.orderId,
+        paymentDialogData.value.billIds,
+        paymentData.amount
+      )
     } else {
       // ❌ Rollback UI on failure
       showError(result.error || 'Payment failed')
@@ -1779,38 +1878,54 @@ const handlePaymentCancel = (): void => {
 // ===== LOYALTY HANDLERS =====
 
 /**
- * Non-blocking post-payment processing:
+ * Non-blocking post-payment processing (BILL-LEVEL customer):
  * 1. ALWAYS update customer stats (total_spent, total_visits, etc.)
  * 2. If loyalty enabled → apply cashback (tier-based %)
  * 3. If stamp card attached & loyalty enabled → add stamps
+ *
+ * Customer is resolved from BILL first, then falls back to ORDER.
+ * Stamp card is resolved: loyaltyCard ref → bill.stampCardId → customer's active card.
  */
-async function processLoyaltyAfterPayment(orderId: string, paidAmount: number): Promise<void> {
+async function processLoyaltyAfterPayment(
+  orderId: string,
+  billIds: string[],
+  paidAmount: number
+): Promise<void> {
   const order = ordersStore.orders.find(o => o.id === orderId)
   if (!order) return
 
-  const customer = order.customerId ? customersStore.getById(order.customerId) : null
+  // Resolve customer from BILL level (first bill with a customer wins)
+  const paidBills = billIds
+    .map(id => order.bills.find(b => b.id === id))
+    .filter(Boolean) as import('@/stores/pos/types').PosBill[]
+  const billCustomerId = paidBills.find(b => b.customerId)?.customerId || order.customerId || null
+
+  if (!billCustomerId) return // No customer — nothing to do
+
+  const customer = customersStore.getById(billCustomerId)
   const loyaltyDisabled = customer?.disableLoyaltyAccrual === true
 
   // 1. ALWAYS update customer stats (regardless of loyalty settings)
-  if (order.customerId) {
-    try {
-      const statsResult = await customersService.updateStats(order.customerId, orderId, paidAmount)
-      if (statsResult.success) {
-        console.log(
-          `📊 Customer stats updated: ${customer?.name} — visits: ${statsResult.totalVisits}, spent: ${formatIDR(statsResult.totalSpent || 0)}`
-        )
-        // Refresh customer in store to reflect new stats
-        await customersStore.refreshCustomer(order.customerId)
+  try {
+    const statsResult = await customersService.updateStats(billCustomerId, orderId, paidAmount)
+    if (statsResult.success) {
+      console.log(
+        `📊 Customer stats updated: ${customer?.name} — visits: ${statsResult.totalVisits}, spent: ${formatIDR(statsResult.totalSpent || 0)}`
+      )
+      if (statsResult.tierChanged) {
+        showSuccess(`${customer?.name} upgraded to ${statsResult.tier?.toUpperCase()}!`)
       }
-    } catch (err) {
-      console.error('📊 Customer stats update failed:', err)
+      await customersStore.refreshCustomer(billCustomerId)
     }
+  } catch (err) {
+    console.error('📊 Customer stats update failed:', err)
   }
 
-  // 2. Apply cashback for digital loyalty customer (only if loyalty enabled)
-  if (order.customerId && !loyaltyDisabled) {
+  // 2. Apply cashback for digital loyalty customer (only if loyalty enabled AND on cashback program)
+  const onCashbackProgram = customer?.loyaltyProgram === 'cashback'
+  if (!loyaltyDisabled && onCashbackProgram) {
     try {
-      const result = await loyaltyStore.applyCashback(order.customerId, orderId, paidAmount)
+      const result = await loyaltyStore.applyCashback(billCustomerId, orderId, paidAmount)
       if (result.success) {
         console.log(
           `🎯 Cashback applied: ${formatIDR(result.cashback)} (${result.cashbackPct}% ${result.tier})`
@@ -1824,11 +1939,34 @@ async function processLoyaltyAfterPayment(orderId: string, paidAmount: number): 
     }
   } else if (loyaltyDisabled) {
     console.log('🎯 Cashback skipped: loyalty accrual disabled for', customer?.name)
+  } else if (!onCashbackProgram) {
+    console.log('🎯 Cashback skipped: customer on stamps program', customer?.name)
   }
 
-  // 3. Add stamps for stamp card (also skip if loyalty disabled)
-  const card = loyaltyCard.value
-  if (card && card.status === 'active' && !loyaltyDisabled) {
+  // 3. Add stamps — resolve card: loyaltyCard ref → bill.stampCardId → customer's active card
+  let card = loyaltyCard.value
+  if (!card) {
+    // Try to load from bill's stampCardId
+    const billStampCardId = paidBills.find(b => b.stampCardId)?.stampCardId
+    if (billStampCardId) {
+      try {
+        card = await loyaltyStore.getCardById(billStampCardId)
+      } catch (err) {
+        console.error('🎯 Failed to load stamp card from bill:', err)
+      }
+    }
+    // Fallback: find customer's active stamp card
+    if (!card) {
+      try {
+        card = await loyaltyStore.getActiveCardByCustomerId(billCustomerId)
+      } catch (err) {
+        console.error('🎯 Failed to find customer stamp card:', err)
+      }
+    }
+  }
+
+  const onStampsProgram = customer?.loyaltyProgram !== 'cashback'
+  if (card && card.status === 'active' && !loyaltyDisabled && onStampsProgram) {
     try {
       const result = await loyaltyStore.addStamps(card.cardNumber, orderId, paidAmount)
       if (result.success && result.stampsAdded > 0) {
@@ -1840,6 +1978,8 @@ async function processLoyaltyAfterPayment(orderId: string, paidAmount: number): 
         )
         if (result.newCycle) {
           showSuccess('Stamp cycle complete! New cycle started.')
+          await customersStore.refreshCustomer(billCustomerId)
+          console.log('🎯 Customer upgraded to cashback program after stamp cycle completion')
         }
       }
     } catch (err) {
@@ -1847,6 +1987,8 @@ async function processLoyaltyAfterPayment(orderId: string, paidAmount: number): 
     }
   } else if (loyaltyDisabled && card) {
     console.log('🎯 Stamps skipped: loyalty accrual disabled for', customer?.name)
+  } else if (card && !onStampsProgram) {
+    console.log('🎯 Stamps skipped: customer on cashback program', customer?.name)
   }
 }
 
@@ -1872,6 +2014,24 @@ const handlePaymentLoyaltyCustomer = async (customer: Customer | null): Promise<
       await customersStore.refreshCustomer(customer.id)
     } catch {
       /* not critical */
+    }
+
+    // Auto-attach stamp card if customer has one and no card is attached yet
+    if (!loyaltyCard.value) {
+      try {
+        const card = await loyaltyStore.getActiveCardByCustomerId(customer.id)
+        if (card) {
+          loyaltyCard.value = card
+          // Also set stampCardId on bills
+          for (const billId of billIds) {
+            const bill = currentOrder.value.bills.find(b => b.id === billId)
+            if (bill) bill.stampCardId = card.cardId
+          }
+          console.log('🎯 Auto-attached stamp card:', card.cardNumber)
+        }
+      } catch {
+        /* not critical */
+      }
     }
   }
 
@@ -2001,6 +2161,27 @@ const handleLoyaltyCustomer = async (customer: Customer | null): Promise<void> =
       await customersStore.refreshCustomer(customer.id)
     } catch {
       /* not critical */
+    }
+
+    // Auto-attach stamp card only if customer is on stamps program
+    if (!bill.stampCardId && !loyaltyCard.value && customer.loyaltyProgram === 'stamps') {
+      try {
+        const card = await loyaltyStore.getActiveCardByCustomerId(customer.id)
+        if (card) {
+          loyaltyCard.value = card
+          bill.stampCardId = card.cardId
+          // If multi-bill payment, attach to all bills
+          if (showPaymentDialog.value && paymentDialogData.value.billIds.length > 1) {
+            for (const bid of paymentDialogData.value.billIds) {
+              const b = currentOrder.value.bills.find(x => x.id === bid)
+              if (b) b.stampCardId = card.cardId
+            }
+          }
+          console.log('🎯 Auto-attached stamp card:', card.cardNumber)
+        }
+      } catch {
+        /* not critical */
+      }
     }
   }
 
@@ -2431,6 +2612,115 @@ const handleDeleteOrder = async (): Promise<void> => {
   }
 }
 
+const handleCancelOrderConfirm = async (data: {
+  reason: import('@/stores/pos/types').CancellationReason
+  notes: string
+}): Promise<void> => {
+  if (!currentOrder.value) return
+
+  try {
+    loading.value.actions = true
+    loadingMessage.value = 'Cancelling order...'
+    showCancelOrderDialog.value = false
+
+    const order = currentOrder.value
+
+    // Collect prepared items BEFORE cancelling (for write-offs)
+    const preparedItems = order.bills.flatMap((b, _bi) =>
+      b.items
+        .filter(i => i.status === 'cooking' || i.status === 'ready')
+        .map(i => ({ item: i, billId: b.id }))
+    )
+
+    // Cancel the order via RPC (sets status in DB, cancels all items)
+    const result = await ordersStore.cancelOrder(order.id, data.reason, data.notes)
+
+    if (result.success) {
+      // Run write-offs for prepared items (non-blocking, fire-and-forget)
+      // Items are already cancelled in DB by RPC, so we create write-offs directly
+      if (preparedItems.length > 0) {
+        ;(async () => {
+          try {
+            const { createDecompositionEngine } = await import(
+              '@/core/decomposition/DecompositionEngine'
+            )
+            const { createWriteOffAdapter } = await import(
+              '@/core/decomposition/adapters/WriteOffAdapter'
+            )
+            const { useStorageStore } = await import('@/stores/storage/storageStore')
+
+            const engine = await createDecompositionEngine()
+            const adapter = createWriteOffAdapter()
+            const storageStore = useStorageStore()
+            const currentUser = authStore.user?.name || 'Unknown'
+
+            for (const { item } of preparedItems) {
+              try {
+                const traversal = await engine.traverse(
+                  {
+                    menuItemId: item.menuItemId,
+                    variantId: item.variantId,
+                    quantity: item.quantity,
+                    selectedModifiers: item.selectedModifiers || []
+                  },
+                  adapter.getTraversalOptions()
+                )
+                const woResult = await adapter.transform(traversal, {
+                  menuItemId: item.menuItemId,
+                  variantId: item.variantId,
+                  quantity: item.quantity,
+                  selectedModifiers: item.selectedModifiers || []
+                })
+                if (woResult.items && woResult.items.length > 0) {
+                  await storageStore.createWriteOff({
+                    department: item.department || 'kitchen',
+                    responsiblePerson: currentUser,
+                    reason: 'other',
+                    items: woResult.items.map(wi => ({
+                      itemId: wi.type === 'product' ? wi.productId! : wi.preparationId!,
+                      itemName: wi.type === 'product' ? wi.productName! : wi.preparationName!,
+                      itemType: wi.type as 'product' | 'preparation',
+                      quantity: wi.quantity,
+                      unit: wi.unit
+                    })),
+                    notes: `Order ${order.orderNumber} cancelled: ${item.menuItemName} (${data.reason}${data.notes ? ': ' + data.notes : ''})`
+                  })
+                }
+              } catch {
+                // Non-critical per item
+              }
+            }
+          } catch {
+            // Non-critical — cancellation already succeeded
+          }
+        })()
+
+        // Watchdog alert (non-blocking)
+        import('@/core/watchdog/WatchdogService').then(({ onItemCancelled }) => {
+          const currentShift = shiftsStore.currentShift
+          if (currentShift) {
+            onItemCancelled(
+              currentShift.id,
+              `Order ${order.orderNumber} (${preparedItems.length} items)`,
+              authStore.user?.name || 'Unknown'
+            )
+          }
+        })
+      }
+
+      showSuccess('Order cancelled successfully')
+    } else {
+      showError(result.error || 'Failed to cancel order')
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to cancel order'
+    showError(message)
+  } finally {
+    loading.value.actions = false
+    loadingMessage.value = ''
+  }
+}
+
 // Watchers
 watch(
   () => currentOrder.value?.id,
@@ -2520,6 +2810,13 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
+}
+
+.online-order-number {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: rgb(var(--v-theme-primary));
+  letter-spacing: 0.5px;
 }
 
 .online-field {

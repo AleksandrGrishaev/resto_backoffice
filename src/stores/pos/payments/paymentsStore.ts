@@ -153,6 +153,16 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
       const ordersStore = usePosOrdersStore()
       const order = ordersStore.orders.find(o => o.id === orderId)
 
+      // ✅ SECURITY: Block payment for draft orders (not sent to kitchen)
+      if (order && order.status === 'draft') {
+        console.error('❌ [paymentsStore] Attempted to pay a draft order:', { orderId })
+        return {
+          success: false,
+          error:
+            'Cannot process payment: Order has not been sent to kitchen. Please save the order first.'
+        }
+      }
+
       // ✅ PRE-CHECK: Verify items are not already paid (prevent double payment)
       if (order) {
         const alreadyPaidItems = order.bills
@@ -815,7 +825,7 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         const tablesStore = usePosTablesStore()
         const table = tablesStore.tables.find(t => t.id === tableIdToFree)
         if (table && table.currentOrderId === orderId) {
-          await tablesStore.freeTable(tableIdToFree)
+          await tablesStore.freeTable(tableIdToFree, orderId)
           console.log('✅ REFUND: Table freed (was occupied by refunded order):', {
             tableId: tableIdToFree
           })

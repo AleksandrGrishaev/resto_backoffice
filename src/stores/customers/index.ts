@@ -2,4 +2,4 @@
 
 export { useCustomersStore } from './customersStore'
 export { customersService } from './customersService'
-export type { Customer, CustomerTier, CustomerStatus } from './types'
+export type { Customer, CustomerTier, CustomerStatus, LoyaltyProgram } from './types'

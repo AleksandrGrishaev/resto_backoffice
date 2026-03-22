@@ -14,6 +14,8 @@ import type {
 import type { MenuItemVariant } from '@/stores/menu'
 import { supabase } from '@/supabase/client'
 import { DebugUtils } from '@/utils'
+
+const MODULE_NAME = 'OrdersStore'
 import { OrdersService } from './services'
 import {
   useOrdersComposables,
@@ -187,6 +189,12 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     customerName?: string
   ): Promise<ServiceResponse<PosOrder>> {
     try {
+      // Debounce: if already creating an order, wait for it to finish
+      if (loading.value.create) {
+        console.warn('⚠️ [ordersStore] createOrder already in progress, skipping')
+        return { success: false, error: 'Order creation already in progress' }
+      }
+
       loading.value.create = true
       error.value = null
 
@@ -205,7 +213,63 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       const orderData =
         typeof typeOrData === 'string' ? { type: typeOrData, tableId, customerName } : typeOrData
 
+      // ✅ Guard: if a dine_in order already exists for this table, select it instead
+      if (orderData.type === 'dine_in' && orderData.tableId) {
+        const existingOrder = orders.value.find(
+          o =>
+            o.tableId === orderData.tableId &&
+            !['cancelled', 'served', 'collected', 'delivered'].includes(o.status)
+        )
+        if (existingOrder) {
+          console.log(
+            '⚠️ [ordersStore] Order already exists for table, selecting instead of creating',
+            {
+              tableId: orderData.tableId,
+              existingOrderId: existingOrder.id
+            }
+          )
+          selectOrder(existingOrder.id)
+          // Fix table status in case it's stale
+          await tablesStore.occupyTable(orderData.tableId, existingOrder.id)
+          return { success: true, data: existingOrder }
+        }
+      }
+
       const response = await ordersService.createOrder(orderData)
+
+      // Handle DB unique violation (another device already created order for this table)
+      if (
+        !response.success &&
+        response.error?.includes('23505') &&
+        orderData.type === 'dine_in' &&
+        orderData.tableId
+      ) {
+        console.warn(
+          '⚠️ [ordersStore] Duplicate order detected (23505), fetching existing order for table',
+          orderData.tableId
+        )
+        const { data: existingRows } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('table_id', orderData.tableId)
+          .not('status', 'in', '("cancelled","served","collected","delivered")')
+          .limit(1)
+          .single()
+
+        if (existingRows) {
+          // Import the order mapper
+          const { fromSupabase: orderFromSupabase } = await import('./supabaseMappers')
+          const existingOrder = orderFromSupabase(existingRows)
+
+          // Add to local state if not already present
+          if (!orders.value.find(o => o.id === existingOrder.id)) {
+            orders.value.unshift(existingOrder)
+          }
+          selectOrder(existingOrder.id)
+          await tablesStore.occupyTable(orderData.tableId, existingOrder.id)
+          return { success: true, data: existingOrder }
+        }
+      }
 
       if (response.success && response.data) {
         // ДОБАВИТЬ: устанавливаем дефолтный paymentStatus если не установлен
@@ -215,14 +279,13 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
         orders.value.unshift(response.data)
 
-        // ✅ FIX: Occupy table IMMEDIATELY on order creation (not after first item)
-        // This prevents "lost orders" where table stays free but order exists
-        if (response.data.type === 'dine_in' && response.data.tableId) {
-          await tablesStore.occupyTable(response.data.tableId, response.data.id)
-        }
-
-        // Автоматически выбираем новый заказ
+        // Автоматически выбираем новый заказ (sync, no await needed)
         selectOrder(response.data.id)
+
+        // Occupy table in background — don't block order selection
+        if (response.data.type === 'dine_in' && response.data.tableId) {
+          tablesStore.occupyTable(response.data.tableId, response.data.id)
+        }
 
         // Автоматически создаем первый счет если нужно
         if (response.data.bills.length === 0) {
@@ -819,9 +882,9 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         if (orderIndex !== -1) {
           orders.value[orderIndex] = response.data
 
-          // Освободить стол если заказ был за столом
+          // Освободить стол если заказ был за столом (conditional: only if table still belongs to this order)
           if (response.data.tableId) {
-            await tablesStore.freeTable(response.data.tableId)
+            await tablesStore.freeTable(response.data.tableId, orderId)
           }
 
           // Очистить текущий заказ если это был он
@@ -902,12 +965,12 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
-   * Delete an empty order (for takeaway/delivery only)
+   * Delete an empty order
    *
-   * Conditions:
-   * 1. Order must be takeaway or delivery (not dine_in)
-   * 2. Order must have no items or only draft/cancelled items
-   * 3. Order must not have any paid items
+   * Conditions (via canDeleteOrder):
+   * - Takeaway/delivery with no active items
+   * - Website dine_in with no active items
+   * - Any empty draft dine_in order (ghost order cleanup)
    */
   async function deleteOrder(orderId: string): Promise<ServiceResponse<void>> {
     try {
@@ -917,37 +980,29 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         return { success: false, error: 'Order not found' }
       }
 
-      // Only allow deleting takeaway/delivery orders
-      if (order.type === 'dine_in') {
+      if (!canDeleteOrder(order)) {
         return {
           success: false,
-          error: 'Cannot delete dine-in orders. Use table management instead.'
-        }
-      }
-
-      // Check if order has any non-deletable items
-      const allItems = order.bills.flatMap(bill => bill.items)
-      const hasActiveItems = allItems.some(
-        item => !['draft', 'cancelled'].includes(item.status) || item.paymentStatus === 'paid'
-      )
-
-      if (hasActiveItems) {
-        return {
-          success: false,
-          error: 'Cannot delete order with active or paid items'
+          error: 'Cannot delete this order. It may have active or paid items.'
         }
       }
 
       console.log('🗑️ [ordersStore] Deleting order:', {
         orderId,
         orderType: order.type,
-        itemsCount: allItems.length
+        tableId: order.tableId,
+        itemsCount: order.bills.flatMap(b => b.items).length
       })
 
       // Delete from service (Supabase + localStorage)
       const deleteResponse = await ordersService.deleteOrder(orderId)
       if (!deleteResponse.success) {
         return deleteResponse
+      }
+
+      // Free the table if this was a dine_in order with a table (conditional: only if table still belongs to this order)
+      if (order.type === 'dine_in' && order.tableId) {
+        await tablesStore.freeTable(order.tableId, orderId)
       }
 
       // Remove from local state
@@ -1001,6 +1056,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         return { success: false, error: 'Order must be fully paid before releasing table' }
       }
 
+      // SECURITY: Block release for orders never sent to kitchen
+      if (order.status === 'draft') {
+        return { success: false, error: 'Cannot release table: Order was never sent to kitchen' }
+      }
+
       console.log('🍽️ [ordersStore] Releasing table:', {
         orderId,
         tableId: order.tableId,
@@ -1018,8 +1078,8 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         return updateResponse
       }
 
-      // Free the table
-      const tableResponse = await tablesStore.freeTable(order.tableId)
+      // Free the table (conditional: only if table still belongs to this order)
+      const tableResponse = await tablesStore.freeTable(order.tableId, orderId)
       if (!tableResponse.success) {
         return {
           success: false,
@@ -1135,20 +1195,237 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
+   * Cancel an entire order via server-side RPC (staff action)
+   * Works for any order type including dine_in with no table
+   */
+  async function cancelOrder(
+    orderId: string,
+    reason: string,
+    notes?: string
+  ): Promise<ServiceResponse<void>> {
+    try {
+      loading.value.update = true
+      const order = orders.value.find(o => o.id === orderId)
+      if (!order) {
+        return { success: false, error: 'Order not found' }
+      }
+
+      const finalStatuses = ['cancelled', 'served', 'collected', 'delivered']
+      if (finalStatuses.includes(order.status)) {
+        return { success: false, error: `Order is already in final status: ${order.status}` }
+      }
+
+      console.log('🚫 [ordersStore] Cancelling order:', { orderId, reason, notes })
+
+      const { data, error: rpcError } = await supabase.rpc('staff_cancel_order', {
+        p_order_id: orderId,
+        p_reason: reason,
+        p_notes: notes || null
+      })
+
+      if (rpcError) {
+        return { success: false, error: rpcError.message }
+      }
+
+      if (!data?.success) {
+        return { success: false, error: data?.error || 'RPC failed' }
+      }
+
+      // Update local state
+      order.status = 'cancelled'
+      order.cancellationReason = reason
+      order.updatedAt = new Date().toISOString()
+      for (const bill of order.bills) {
+        for (const item of bill.items) {
+          if (item.status !== 'cancelled') {
+            item.status = 'cancelled'
+            item.cancelledAt = new Date().toISOString()
+            item.cancellationReason = 'staff_cancelled'
+            item.cancellationNotes = notes || reason
+          }
+        }
+      }
+
+      // If table was freed by the RPC, sync local state + localStorage (DB already updated)
+      if (data.tableFreed && order.tableId) {
+        tablesStore.updateTableLocally(order.tableId, {
+          status: 'free',
+          currentOrderId: undefined,
+          updatedAt: new Date().toISOString()
+        })
+      }
+
+      // Clear current order and selection if this was selected
+      if (currentOrderId.value === orderId) {
+        currentOrderId.value = null
+        activeBillId.value = null
+        clearSelection()
+      }
+
+      console.log('✅ [ordersStore] Order cancelled:', {
+        orderId,
+        cancelledItems: data.cancelledItems
+      })
+
+      return { success: true }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to cancel order'
+      error.value = errorMsg
+      return { success: false, error: errorMsg }
+    } finally {
+      loading.value.update = false
+    }
+  }
+
+  /**
    * Check if order can be deleted
-   * Only takeaway/delivery orders with no active/paid items can be deleted
+   * - Takeaway/delivery with no active items
+   * - Website dine_in with no active items
+   * - Any dine_in draft order with zero items (empty ghost order)
    */
   function canDeleteOrder(order: PosOrder): boolean {
-    // Only takeaway/delivery can be deleted
-    if (order.type === 'dine_in') return false
-
-    // Check if order has any non-deletable items
     const allItems = order.bills.flatMap(bill => bill.items)
     const hasActiveItems = allItems.some(
       item => !['draft', 'cancelled'].includes(item.status) || item.paymentStatus === 'paid'
     )
 
+    // Empty draft dine_in orders can always be deleted (ghost order cleanup)
+    if (order.type === 'dine_in' && order.status === 'draft' && allItems.length === 0) {
+      return true
+    }
+
+    // Dine_in with all items cancelled — allow cleanup
+    if (order.type === 'dine_in' && allItems.length > 0 && !hasActiveItems) {
+      return true
+    }
+
+    // Regular dine_in with active items — cannot delete (use Cancel Order instead)
+    if (order.type === 'dine_in' && hasActiveItems) return false
+
     return !hasActiveItems
+  }
+
+  /**
+   * Cleanup stale orders:
+   * Phase 1: Delete empty draft orders (no items) older than maxAgeMinutes
+   * Phase 2: Evict orders >48h from local state (not DB) — terminal/paid orders
+   * Called before shift end and periodically in background.
+   * Returns the number of cleaned-up orders.
+   */
+  async function cleanupStaleOrders(options: { maxAgeMinutes?: number } = {}): Promise<number> {
+    const { maxAgeMinutes } = options
+    let cleanedCount = 0
+
+    // Phase 1: Delete empty draft orders from DB + local
+    const emptyDrafts = orders.value.filter(order => {
+      if (order.status !== 'draft') return false
+      const allItems = order.bills.flatMap(b => b.items)
+      if (allItems.length > 0) return false
+
+      // If maxAgeMinutes specified, only cleanup orders older than threshold
+      if (maxAgeMinutes !== undefined) {
+        const ageMs = Date.now() - new Date(order.createdAt).getTime()
+        if (ageMs < maxAgeMinutes * 60 * 1000) return false
+      }
+
+      return true
+    })
+
+    if (emptyDrafts.length > 0) {
+      DebugUtils.info(MODULE_NAME, `Cleaning up ${emptyDrafts.length} empty draft orders`, {
+        maxAgeMinutes,
+        orderIds: emptyDrafts.map(o => o.id)
+      })
+
+      for (const order of emptyDrafts) {
+        try {
+          const result = await deleteOrder(order.id)
+          if (result.success) {
+            cleanedCount++
+          }
+        } catch (err) {
+          DebugUtils.warn(MODULE_NAME, 'Failed to cleanup empty draft order', {
+            orderId: order.id,
+            error: err instanceof Error ? err.message : String(err)
+          })
+        }
+      }
+    }
+
+    // Phase 2: Evict stale orders from local state only (>48h, terminal or paid)
+    const EVICT_AGE_MS = 48 * 60 * 60 * 1000
+    const now = Date.now()
+    const terminalStatuses = ['cancelled', 'served', 'collected', 'delivered']
+
+    const staleToEvict = orders.value.filter(order => {
+      const ageMs = now - new Date(order.createdAt).getTime()
+      if (ageMs < EVICT_AGE_MS) return false
+      // Evict terminal-status orders or paid orders
+      return terminalStatuses.includes(order.status) || order.paymentStatus === 'paid'
+    })
+
+    if (staleToEvict.length > 0) {
+      const staleIds = new Set(staleToEvict.map(o => o.id))
+
+      // Free any tables still held by these stale orders
+      for (const order of staleToEvict) {
+        if (order.type === 'dine_in' && order.tableId) {
+          const table = tablesStore.getTableById(order.tableId)
+          if (table && table.currentOrderId === order.id) {
+            tablesStore.updateTableLocally(order.tableId, {
+              status: 'free',
+              currentOrderId: undefined,
+              updatedAt: new Date().toISOString()
+            })
+          }
+        }
+      }
+
+      orders.value = orders.value.filter(o => !staleIds.has(o.id))
+
+      // Clear current order if it was evicted
+      if (currentOrderId.value && staleIds.has(currentOrderId.value)) {
+        currentOrderId.value = null
+        activeBillId.value = null
+      }
+
+      DebugUtils.info(MODULE_NAME, `Evicted ${staleToEvict.length} stale orders from local state`, {
+        orderIds: [...staleIds]
+      })
+      cleanedCount += staleToEvict.length
+    }
+
+    if (cleanedCount > 0) {
+      DebugUtils.info(MODULE_NAME, `Total cleanup: ${cleanedCount} orders`)
+    }
+
+    return cleanedCount
+  }
+
+  // Backward-compatible alias
+  const cleanupEmptyDraftOrders = cleanupStaleOrders
+
+  // Background cleanup timer
+  let _cleanupInterval: ReturnType<typeof setInterval> | null = null
+  const CLEANUP_INTERVAL = 5 * 60 * 1000 // 5 minutes
+  const CLEANUP_MAX_AGE_MINUTES = 15
+
+  function startBackgroundCleanup(): void {
+    stopBackgroundCleanup()
+    _cleanupInterval = setInterval(async () => {
+      await cleanupStaleOrders({ maxAgeMinutes: CLEANUP_MAX_AGE_MINUTES })
+    }, CLEANUP_INTERVAL)
+    DebugUtils.debug(
+      MODULE_NAME,
+      'Background stale order cleanup started (every 5 min, drafts >15 min, evict >48h)'
+    )
+  }
+
+  function stopBackgroundCleanup(): void {
+    if (_cleanupInterval) {
+      clearInterval(_cleanupInterval)
+      _cleanupInterval = null
+    }
   }
 
   /**
@@ -1165,6 +1442,16 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
     // Обрабатываем только dine-in заказы со столами
     if (!order || order.type !== 'dine_in' || !order.tableId) {
+      return
+    }
+
+    // Defense-in-depth: stale orders (>24h) must not manage table state
+    const ORDER_MAX_AGE_MS = 24 * 60 * 60 * 1000
+    if (Date.now() - new Date(order.createdAt).getTime() > ORDER_MAX_AGE_MS) {
+      console.log('⏭️ Skipping table update for stale order (>24h):', {
+        orderId,
+        createdAt: order.createdAt
+      })
       return
     }
 
@@ -1191,11 +1478,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     const isServed = order.status === 'served'
     const isPaid = order.paymentStatus === 'paid'
 
-    // Автоматическое освобождение стола
+    // Автоматическое освобождение стола (conditional: only if table still belongs to this order)
     if (!hasItems || (isServed && isPaid)) {
-      await tablesStore.freeTable(order.tableId)
+      await tablesStore.freeTable(order.tableId, orderId)
 
-      // 🆕 Синхронизировать currentOrderId если это текущий заказ
+      // Синхронизировать currentOrderId если это текущий заказ
       if (currentOrderId.value === orderId) {
         currentOrderId.value = null
         console.log('🔄 Cleared currentOrderId after table freed:', { orderId })
@@ -1209,8 +1496,17 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       return
     }
 
-    // Автоматическое занятие стола (если есть items)
+    // Автоматическое занятие стола (conditional: only if table is free or already belongs to this order)
     if (hasItems) {
+      const table = tablesStore.getTableById(order.tableId)
+      if (table && table.currentOrderId && table.currentOrderId !== orderId) {
+        console.log('⏭️ Table already occupied by different order, skipping auto-occupy:', {
+          tableId: order.tableId,
+          orderId,
+          currentOwner: table.currentOrderId
+        })
+        return
+      }
       await tablesStore.occupyTable(order.tableId, orderId)
       console.log('✅ Table auto-occupied:', { tableId: order.tableId, orderId })
     }
@@ -1481,7 +1777,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
         // Release the source table (if any)
         if (orderToMove.tableId) {
-          await tablesStore.freeTable(orderToMove.tableId)
+          await tablesStore.freeTable(orderToMove.tableId, orderToMove.id)
         }
 
         // Delete source order from database (all bills moved to target)
@@ -1515,7 +1811,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
       // Release the current table (if any)
       if (orderToMove.tableId) {
-        await tablesStore.freeTable(orderToMove.tableId)
+        await tablesStore.freeTable(orderToMove.tableId, orderToMove.id)
       }
 
       // Update order with new table
@@ -2471,6 +2767,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     closeOrder,
     releaseTable,
     completeOrder,
+    cancelOrder,
     deleteOrder,
     updateOrder,
     recalculateOrderTotals,
@@ -2496,6 +2793,10 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     hasItemsInOrder,
     hasItemsInBill,
     canDeleteOrder,
+    cleanupStaleOrders,
+    cleanupEmptyDraftOrders,
+    startBackgroundCleanup,
+    stopBackgroundCleanup,
     updateTableStatusForOrder,
 
     // Order Movement Methods

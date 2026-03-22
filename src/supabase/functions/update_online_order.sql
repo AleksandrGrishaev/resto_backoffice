@@ -27,6 +27,9 @@ DECLARE
   v_bill_items JSONB := '[]'::jsonb;
   v_item_id UUID;
   v_selected_modifiers JSONB;
+  v_item_quantity INTEGER;
+  v_single_item_total NUMERIC;
+  v_q INTEGER;
 BEGIN
   -- Auth check
   IF auth.uid() IS NULL THEN
@@ -156,37 +159,47 @@ BEGIN
           'optionId', v_modifier->>'optionId',
           'optionName', v_mod_option->>'name',
           'priceAdjustment', COALESCE((v_mod_option->>'priceAdjustment')::numeric, 0),
-          'quantity', COALESCE((v_modifier->>'quantity')::integer, 1)
+          'quantity', COALESCE((v_modifier->>'quantity')::integer, 1),
+          -- Fields required by DecompositionEngine for ingredient write-offs
+          'groupType', v_mod_group->>'type',
+          'isDefault', COALESCE((v_mod_option->>'isDefault')::boolean, false),
+          'composition', COALESCE(v_mod_option->'composition', '[]'::jsonb),
+          'targetComponents', COALESCE(v_mod_group->'targetComponents', '[]'::jsonb)
         ));
       END LOOP;
     END IF;
 
-    v_item_total := (v_unit_price + v_modifiers_total) * COALESCE((v_item->>'quantity')::integer, 1);
+    v_item_quantity := COALESCE((v_item->>'quantity')::integer, 1);
+    v_single_item_total := v_unit_price + v_modifiers_total;
+    v_item_total := v_single_item_total * v_item_quantity;
     v_order_subtotal := v_order_subtotal + v_item_total;
 
-    v_item_id := gen_random_uuid();
+    -- Insert N separate order_items (POS expects quantity=1 per row for grouping)
+    FOR v_q IN 1..v_item_quantity LOOP
+      v_item_id := gen_random_uuid();
 
-    INSERT INTO order_items (
-      id, order_id, bill_id, bill_number,
-      menu_item_id, menu_item_name, variant_id, variant_name,
-      quantity, unit_price, modifiers_total, total_price,
-      selected_modifiers, status, department, kitchen_notes,
-      draft_at, sent_to_kitchen_at, created_at, updated_at
-    ) VALUES (
-      v_item_id, p_order_id, v_bill_id, '1',
-      v_menu_item.id, v_menu_item.name, v_item->>'variantId', COALESCE(v_variant->>'name', NULL),
-      COALESCE((v_item->>'quantity')::integer, 1), v_unit_price, v_modifiers_total, v_item_total,
-      CASE WHEN jsonb_array_length(v_selected_modifiers) > 0 THEN v_selected_modifiers ELSE NULL END,
-      'waiting', v_menu_item.department, v_item->>'kitchenNotes',
-      now(), now(), now(), now()
-    );
+      INSERT INTO order_items (
+        id, order_id, bill_id, bill_number,
+        menu_item_id, menu_item_name, variant_id, variant_name,
+        quantity, unit_price, modifiers_total, total_price,
+        selected_modifiers, status, department, kitchen_notes,
+        draft_at, sent_to_kitchen_at, created_at, updated_at
+      ) VALUES (
+        v_item_id, p_order_id, v_bill_id, '1',
+        v_menu_item.id, v_menu_item.name, v_item->>'variantId', COALESCE(v_variant->>'name', NULL),
+        1, v_unit_price, v_modifiers_total, v_single_item_total,
+        CASE WHEN jsonb_array_length(v_selected_modifiers) > 0 THEN v_selected_modifiers ELSE NULL END,
+        'waiting', v_menu_item.department, v_item->>'kitchenNotes',
+        now(), now(), now(), now()
+      );
 
-    v_bill_items := v_bill_items || jsonb_build_array(jsonb_build_object(
-      'id', v_item_id, 'menuItemId', v_menu_item.id, 'menuItemName', v_menu_item.name,
-      'variantId', v_item->>'variantId', 'variantName', COALESCE(v_variant->>'name', NULL),
-      'quantity', COALESCE((v_item->>'quantity')::integer, 1),
-      'unitPrice', v_unit_price, 'modifiersTotal', v_modifiers_total, 'totalPrice', v_item_total
-    ));
+      v_bill_items := v_bill_items || jsonb_build_array(jsonb_build_object(
+        'id', v_item_id, 'menuItemId', v_menu_item.id, 'menuItemName', v_menu_item.name,
+        'variantId', v_item->>'variantId', 'variantName', COALESCE(v_variant->>'name', NULL),
+        'quantity', 1,
+        'unitPrice', v_unit_price, 'modifiersTotal', v_modifiers_total, 'totalPrice', v_single_item_total
+      ));
+    END LOOP;
   END LOOP;
 
   -- Update order totals

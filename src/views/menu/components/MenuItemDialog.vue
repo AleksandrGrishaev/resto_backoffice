@@ -227,6 +227,7 @@
                     :index="index"
                     :can-delete="formData.variants.length > 1"
                     :item-name="formData.name"
+                    :menu-item-id="isEdit ? props.item?.id : undefined"
                     :dish-type="effectiveDishType"
                     :dish-options="dishOptions"
                     :product-options="productOptions"
@@ -276,6 +277,7 @@
                 <templates-editor-widget
                   :templates="formData.templates"
                   :modifier-groups="formData.modifierGroups"
+                  :parent-item-id="item?.id"
                   @update:templates="formData.templates = $event"
                 />
               </div>
@@ -681,7 +683,20 @@ function removeVariant(index: number) {
 }
 
 function updateVariant(index: number, updatedVariant: MenuItemVariant) {
+  const oldVariant = formData.value.variants[index]
   formData.value.variants[index] = updatedVariant
+
+  // Persist variant imageUrl immediately to DB (like item-level images)
+  if (isEdit.value && props.item && oldVariant?.imageUrl !== updatedVariant.imageUrl) {
+    const updatedVariants = formData.value.variants.map((v, i) => ({
+      ...v,
+      composition: v.composition || []
+    }))
+    menuStore.updateMenuItem(props.item.id, {
+      variants: updatedVariants,
+      department: props.item.department
+    })
+  }
 }
 
 function toggleChannel(channelId: string) {
@@ -767,6 +782,7 @@ async function handleSaveDraft() {
       isActive: variant.isActive ?? true,
       sortOrder: index,
       portionMultiplier: variant.portionMultiplier,
+      imageUrl: variant.imageUrl,
       composition:
         variant.composition?.map(comp => ({
           type: comp.type,
@@ -795,6 +811,7 @@ async function handleSaveDraft() {
         sortOrder: v.sortOrder,
         portionMultiplier: v.portionMultiplier,
         onlyModifiers: v.onlyModifiers,
+        imageUrl: v.imageUrl,
         composition: v.composition
       }))
     }
@@ -850,6 +867,7 @@ async function handleSubmit() {
       sortOrder: index,
       portionMultiplier: variant.portionMultiplier,
       onlyModifiers: variant.onlyModifiers || false,
+      imageUrl: variant.imageUrl,
       composition:
         variant.composition?.map(comp => ({
           type: comp.type,
@@ -877,6 +895,7 @@ async function handleSubmit() {
         sortOrder: v.sortOrder,
         portionMultiplier: v.portionMultiplier,
         onlyModifiers: v.onlyModifiers,
+        imageUrl: v.imageUrl,
         composition: v.composition
       }))
     }

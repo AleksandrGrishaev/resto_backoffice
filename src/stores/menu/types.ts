@@ -61,6 +61,7 @@ export interface MenuItemVariant {
   composition: MenuComposition[]
 
   // Дополнительные поля
+  imageUrl?: string // Variant-specific image (overrides menu item image)
   portionMultiplier?: number // для масштабирования количества в композиции и модификаторах
   onlyModifiers?: boolean // цена формируется только из модификаторов, базовая цена = 0
   notes?: string

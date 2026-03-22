@@ -17,8 +17,8 @@
           <!-- Authentication Tabs -->
           <v-tabs v-model="activeTab" class="mb-6 auth-tabs" bg-color="transparent" grow>
             <v-tab value="email" class="auth-tab">
-              <v-icon class="mr-2">mdi-email</v-icon>
-              Email
+              <v-icon class="mr-2">mdi-monitor</v-icon>
+              Desktop
             </v-tab>
             <v-tab value="pos" class="auth-tab">
               <v-icon class="mr-2">mdi-point-of-sale</v-icon>
@@ -259,6 +259,9 @@
               </v-window-item>
             </v-window>
 
+            <!-- Turnstile captcha (invisible in managed mode) -->
+            <div v-if="turnstileSiteKey" ref="turnstileRef" class="turnstile-container"></div>
+
             <!-- Error Alert -->
             <v-alert
               v-if="error"
@@ -278,17 +281,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth/authStore'
 import { DebugUtils } from '@/utils'
 import PinInput from '@/components/atoms/inputs/PinInput.vue'
 
 // ===== CONSTANTS =====
 const MODULE_NAME = 'LoginView'
+const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || ''
 
 // ===== COMPOSABLES =====
-const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
@@ -296,6 +299,9 @@ const authStore = useAuthStore()
 const activeTab = ref<'email' | 'pos' | 'kitchen' | 'admin'>('pos') // Default to POS for quick access
 const isLoading = ref(false)
 const error = ref('')
+const turnstileRef = ref<HTMLElement>()
+const captchaToken = ref('')
+let turnstileWidgetId: string | undefined
 
 // Email form state
 const email = ref('')
@@ -322,13 +328,110 @@ const showDevHelpers = computed(() => {
   return import.meta.env.DEV
 })
 
+// ===== TURNSTILE CAPTCHA =====
+// Tracks whether Turnstile is operational (loaded + no errors)
+const turnstileReady = ref(false)
+
+function loadTurnstileScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if ((window as any).turnstile) {
+      resolve()
+      return
+    }
+    const script = document.createElement('script')
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+    script.async = true
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error('Failed to load Turnstile script'))
+    document.head.appendChild(script)
+  })
+}
+
+function renderTurnstile() {
+  if (!turnstileSiteKey || !turnstileRef.value || !(window as any).turnstile) return
+  try {
+    turnstileWidgetId = (window as any).turnstile.render(turnstileRef.value, {
+      sitekey: turnstileSiteKey,
+      callback: (token: string) => {
+        captchaToken.value = token
+        turnstileReady.value = true
+        DebugUtils.info(MODULE_NAME, 'Turnstile token received')
+      },
+      'expired-callback': () => {
+        captchaToken.value = ''
+        DebugUtils.info(MODULE_NAME, 'Turnstile token expired')
+      },
+      'error-callback': () => {
+        // Turnstile failed (wrong domain, network, etc.) — disable it for this session
+        turnstileReady.value = false
+        DebugUtils.error(MODULE_NAME, 'Turnstile error — captcha disabled for this session')
+      },
+      theme: 'dark',
+      size: 'invisible'
+    })
+  } catch (e) {
+    turnstileReady.value = false
+    DebugUtils.error(MODULE_NAME, 'Turnstile render failed', { error: e })
+  }
+}
+
+function resetTurnstile() {
+  if (!turnstileReady.value || turnstileWidgetId === undefined) return
+  try {
+    ;(window as any).turnstile?.reset(turnstileWidgetId)
+    captchaToken.value = ''
+  } catch {
+    // Widget may already be destroyed — ignore
+  }
+}
+
+/**
+ * Get captcha token — returns immediately if Turnstile is not operational.
+ * If Turnstile is ready but token not yet available, waits up to 3s.
+ */
+async function getCaptchaToken(): Promise<string> {
+  // No sitekey configured or Turnstile errored out — skip entirely
+  if (!turnstileSiteKey || !turnstileReady.value) return ''
+  // Token already available
+  if (captchaToken.value) return captchaToken.value
+  // Wait briefly for token (3s max instead of 10s)
+  for (let i = 0; i < 6; i++) {
+    await new Promise(r => setTimeout(r, 500))
+    if (captchaToken.value) return captchaToken.value
+  }
+  DebugUtils.error(MODULE_NAME, 'Turnstile token timeout (3s)')
+  return ''
+}
+
+onMounted(async () => {
+  if (!turnstileSiteKey) return
+  try {
+    await loadTurnstileScript()
+    renderTurnstile()
+  } catch (e) {
+    turnstileReady.value = false
+    DebugUtils.error(MODULE_NAME, 'Failed to init Turnstile', { error: e })
+  }
+})
+
+onBeforeUnmount(() => {
+  if (turnstileWidgetId !== undefined && (window as any).turnstile) {
+    try {
+      ;(window as any).turnstile.remove(turnstileWidgetId)
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
+})
+
 // ===== METHODS =====
 
 /**
  * Handle email + password login (Admin/Manager)
+ * Sets target route based on ?redirect query or role default.
+ * App.vue handles the actual redirect after stores are loaded.
  */
 const handleEmailLogin = async () => {
-  // Validate form
   const { valid } = await emailFormRef.value.validate()
   if (!valid) return
 
@@ -338,28 +441,35 @@ const handleEmailLogin = async () => {
 
     DebugUtils.info(MODULE_NAME, 'Email login attempt', { email: email.value })
 
-    const success = await authStore.loginWithEmail(email.value, password.value)
+    const token = await getCaptchaToken()
 
-    if (success) {
-      DebugUtils.info(MODULE_NAME, 'Email login successful')
+    // Set target route BEFORE login — watcher in App.vue fires immediately on auth change
+    const redirectPath = (route.query.redirect as string) || null
+    if (redirectPath) {
+      authStore.setTargetRoute(redirectPath)
+    }
 
-      // Redirect to intended page or default
-      const redirectPath = (route.query.redirect as string) || authStore.getDefaultRoute()
-      await router.push(redirectPath)
-    } else {
+    const success = await authStore.loginWithEmail(email.value, password.value, token)
+
+    if (!success) {
+      if (redirectPath) authStore.setTargetRoute(null as unknown as string)
       throw new Error(authStore.state.error || 'Login failed')
     }
+
+    DebugUtils.info(MODULE_NAME, 'Email login successful — App.vue will handle redirect')
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Login failed'
     error.value = errorMessage
     DebugUtils.error(MODULE_NAME, 'Email login failed', { error: errorMessage })
   } finally {
     isLoading.value = false
+    resetTurnstile()
   }
 }
 
 /**
  * Handle PIN login (Cashier - POS)
+ * Always targets /pos regardless of user role.
  */
 const handlePinLogin = async (pin: string) => {
   try {
@@ -368,28 +478,33 @@ const handlePinLogin = async (pin: string) => {
 
     DebugUtils.info(MODULE_NAME, 'POS PIN login attempt')
 
-    const success = await authStore.loginWithPin(pin)
+    const token = await getCaptchaToken()
+    const targetRoute = (route.query.redirect as string) || '/pos'
 
-    if (success) {
-      DebugUtils.info(MODULE_NAME, 'POS PIN login successful')
+    // Set target route BEFORE login — watcher in App.vue fires immediately on auth change
+    authStore.setTargetRoute(targetRoute)
 
-      // Redirect to POS or intended page
-      const redirectPath = (route.query.redirect as string) || '/pos'
-      await router.push(redirectPath)
-    } else {
+    const success = await authStore.loginWithPin(pin, token)
+
+    if (!success) {
+      authStore.setTargetRoute(null as unknown as string)
       throw new Error(authStore.state.error || 'Invalid PIN')
     }
+
+    DebugUtils.info(MODULE_NAME, 'POS PIN login successful — App.vue will handle redirect')
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Login failed'
     error.value = errorMessage
     DebugUtils.error(MODULE_NAME, 'POS PIN login failed', { error: errorMessage })
   } finally {
     isLoading.value = false
+    resetTurnstile()
   }
 }
 
 /**
  * Handle Kitchen PIN login (Kitchen/Bar)
+ * Always targets /kitchen regardless of user role.
  */
 const handleKitchenPinLogin = async (pin: string) => {
   try {
@@ -398,28 +513,33 @@ const handleKitchenPinLogin = async (pin: string) => {
 
     DebugUtils.info(MODULE_NAME, 'Kitchen PIN login attempt')
 
-    const success = await authStore.loginWithPin(pin)
+    const token = await getCaptchaToken()
+    const targetRoute = (route.query.redirect as string) || '/kitchen'
 
-    if (success) {
-      DebugUtils.info(MODULE_NAME, 'Kitchen PIN login successful')
+    // Set target route BEFORE login — watcher in App.vue fires immediately on auth change
+    authStore.setTargetRoute(targetRoute)
 
-      // Redirect to kitchen dashboard or intended page
-      const redirectPath = (route.query.redirect as string) || '/kitchen'
-      await router.push(redirectPath)
-    } else {
+    const success = await authStore.loginWithPin(pin, token)
+
+    if (!success) {
+      authStore.setTargetRoute(null as unknown as string)
       throw new Error(authStore.state.error || 'Invalid PIN')
     }
+
+    DebugUtils.info(MODULE_NAME, 'Kitchen PIN login successful — App.vue will handle redirect')
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Login failed'
     error.value = errorMessage
     DebugUtils.error(MODULE_NAME, 'Kitchen PIN login failed', { error: errorMessage })
   } finally {
     isLoading.value = false
+    resetTurnstile()
   }
 }
 
 /**
  * Handle Admin email login (redirects to /admin tablet UI)
+ * Always targets /admin regardless of user role.
  */
 const handleAdminLogin = async () => {
   const { valid } = await adminFormRef.value.validate()
@@ -431,20 +551,26 @@ const handleAdminLogin = async () => {
 
     DebugUtils.info(MODULE_NAME, 'Admin login attempt', { email: adminEmail.value })
 
-    const success = await authStore.loginWithEmail(adminEmail.value, adminPassword.value)
+    const token = await getCaptchaToken()
 
-    if (success) {
-      DebugUtils.info(MODULE_NAME, 'Admin login successful')
-      await router.push('/admin')
-    } else {
+    // Set target route BEFORE login — watcher in App.vue fires immediately on auth change
+    authStore.setTargetRoute('/admin')
+
+    const success = await authStore.loginWithEmail(adminEmail.value, adminPassword.value, token)
+
+    if (!success) {
+      authStore.setTargetRoute(null as unknown as string) // Clear on failure
       throw new Error(authStore.state.error || 'Login failed')
     }
+
+    DebugUtils.info(MODULE_NAME, 'Admin login successful — App.vue will handle redirect')
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : 'Login failed'
     error.value = errorMessage
     DebugUtils.error(MODULE_NAME, 'Admin login failed', { error: errorMessage })
   } finally {
     isLoading.value = false
+    resetTurnstile()
   }
 }
 
@@ -570,6 +696,13 @@ const fillPin = (pin: string) => {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(var(--v-theme-primary), 0.3);
   }
+}
+
+// ===== TURNSTILE =====
+.turnstile-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
 }
 
 // ===== ERROR ALERT =====

@@ -10,13 +10,14 @@ export type UserRole = 'admin' | 'manager' | 'kitchen' | 'bar' | 'cashier'
 
 export interface User {
   id: string
-  pin: string
   name: string
+  email?: string
   roles: UserRole[]
-  isActive: boolean
+  isActive?: boolean
   lastLoginAt?: string
   createdAt: string
   updatedAt: string
+  avatarUrl?: string
 }
 
 export interface AuthState {
@@ -172,7 +173,6 @@ export interface UseAuthReturn {
   userRoles: ComputedRef<UserRole[]>
 
   // Actions
-  login: (pin: string) => Promise<LoginResult>
   logout: () => Promise<void>
 
   // Permissions

@@ -36,27 +36,32 @@
 
       <div class="templates-list">
         <div v-for="(template, index) in templates" :key="template.id" class="template-card">
-          <div class="template-card__header">
-            <v-icon icon="mdi-lightning-bolt" size="20" color="teal" class="mr-2" />
-            <span class="template-card__name">{{ template.name }}</span>
-            <v-spacer />
-            <v-btn
-              icon="mdi-pencil"
-              variant="text"
-              size="small"
-              color="primary"
-              @click="openEditDialog(index)"
-            />
-            <v-btn
-              icon="mdi-delete"
-              variant="text"
-              size="small"
-              color="error"
-              @click="deleteTemplate(index)"
-            />
-          </div>
-          <div class="template-card__preview">
-            {{ getModifiersPreview(template) }}
+          <div class="template-card__body">
+            <img v-if="template.imageUrl" :src="template.imageUrl" class="template-card__thumb" />
+            <div class="template-card__content">
+              <div class="template-card__header">
+                <v-icon icon="mdi-lightning-bolt" size="20" color="teal" class="mr-2" />
+                <span class="template-card__name">{{ template.name }}</span>
+                <v-spacer />
+                <v-btn
+                  icon="mdi-pencil"
+                  variant="text"
+                  size="small"
+                  color="primary"
+                  @click="openEditDialog(index)"
+                />
+                <v-btn
+                  icon="mdi-delete"
+                  variant="text"
+                  size="small"
+                  color="error"
+                  @click="deleteTemplate(index)"
+                />
+              </div>
+              <div class="template-card__preview">
+                {{ getModifiersPreview(template) }}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -88,6 +93,18 @@
             rows="2"
             class="mb-4"
           />
+
+          <!-- Template image upload -->
+          <div v-if="parentItemId" class="mb-4">
+            <div class="section-label mb-2">Template Image</div>
+            <image-uploader
+              :model-value="dialog.imageUrl"
+              :item-id="dialog.templateId"
+              :item-name="dialog.name || 'template'"
+              subfolder="templates"
+              @update:model-value="dialog.imageUrl = $event"
+            />
+          </div>
 
           <div v-if="modifierGroups.length === 0" class="text-center py-4 text-medium-emphasis">
             No modifier groups available
@@ -226,11 +243,13 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import ImageUploader from '@/components/common/ImageUploader.vue'
 import type { ModifierGroup, VariantTemplate, TemplateModifierSelection } from '@/stores/menu/types'
 
 interface Props {
   templates: VariantTemplate[]
   modifierGroups: ModifierGroup[]
+  parentItemId?: string // menu item ID — needed for image upload path
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -246,8 +265,10 @@ const emit = defineEmits<{
 interface DialogState {
   show: boolean
   editIndex: number | null
+  templateId: string
   name: string
   description: string
+  imageUrl: string
   selectedModifiers: Map<string, Set<string>>
   quantities: Map<string, Map<string, number>> // groupId → optionId → quantity
 }
@@ -255,8 +276,10 @@ interface DialogState {
 const dialog = ref<DialogState>({
   show: false,
   editIndex: null,
+  templateId: '',
   name: '',
   description: '',
+  imageUrl: '',
   selectedModifiers: new Map(),
   quantities: new Map()
 })
@@ -273,8 +296,10 @@ function openAddDialog(): void {
   dialog.value = {
     show: true,
     editIndex: null,
+    templateId: `tpl-${Date.now()}`,
     name: '',
     description: '',
+    imageUrl: '',
     selectedModifiers: defaultSelection,
     quantities: defaultQuantities
   }
@@ -305,8 +330,10 @@ function openEditDialog(index: number): void {
   dialog.value = {
     show: true,
     editIndex: index,
+    templateId: template.id,
     name: template.name,
     description: template.description || '',
+    imageUrl: template.imageUrl || '',
     selectedModifiers: selection,
     quantities
   }
@@ -411,13 +438,15 @@ function saveTemplate(): void {
       ...updatedTemplates[dialog.value.editIndex],
       name: dialog.value.name.trim(),
       description: dialog.value.description.trim() || undefined,
+      imageUrl: dialog.value.imageUrl || undefined,
       selectedModifiers
     }
   } else {
     updatedTemplates.push({
-      id: `tpl-${Date.now()}`,
+      id: dialog.value.templateId,
       name: dialog.value.name.trim(),
       description: dialog.value.description.trim() || undefined,
+      imageUrl: dialog.value.imageUrl || undefined,
       selectedModifiers,
       sortOrder: updatedTemplates.length
     })
@@ -485,6 +514,25 @@ function getModifiersPreview(template: VariantTemplate): string {
   border-left: 4px solid rgba(146, 201, 175, 0.6);
   border-radius: 8px;
   padding: 14px 16px;
+
+  &__body {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  &__thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  &__content {
+    flex: 1;
+    min-width: 0;
+  }
 
   &__header {
     display: flex;

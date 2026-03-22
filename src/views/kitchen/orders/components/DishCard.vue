@@ -271,7 +271,9 @@ const replacementModifiers = computed(() =>
 )
 
 const addonModifiers = computed(() =>
-  groupModifiers(props.dish.selectedModifiers?.filter(m => m.groupType === 'addon') || [])
+  groupModifiers(
+    props.dish.selectedModifiers?.filter(m => m.groupType === 'addon' || !m.groupType) || []
+  )
 )
 
 const removalModifiers = computed(() =>

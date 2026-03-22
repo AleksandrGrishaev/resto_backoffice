@@ -1,12 +1,10 @@
-// src/stores/auth/authStore.ts - Updated for Phase 4: Triple Authentication
+// src/stores/auth/authStore.ts - Refactored: single redirect, awaitable init, proper reset
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { User, UserRole } from './auth'
+import type { User, UserRole } from './types'
 import { CoreUserService } from '@/core/users'
 import { DebugUtils, extractErrorDetails } from '@/utils'
 import { supabase } from '@/supabase'
-import { ENV } from '@/config/environment'
-import { useRouter } from 'vue-router'
 import { resetAllStores, clearAppLocalStorage } from '@/core/storeResetService'
 import { clearHMRState } from '@/core/hmrState'
 import { executeSupabaseSingle } from '@/utils/supabase'
@@ -15,28 +13,27 @@ const MODULE_NAME = 'AuthStore'
 
 // Cross-tab synchronization constants
 const LOGOUT_BROADCAST_KEY = 'kitchen_app_logout_broadcast'
-const SESSION_CHECK_INTERVAL = 5000 // 5 seconds
 
 export const useAuthStore = defineStore('auth', () => {
-  const router = useRouter()
-
   const state = ref({
     currentUser: null as User | null,
     isAuthenticated: false,
     isLoading: false,
     error: null as string | null,
     lastLoginAt: null as string | null,
-    session: null as any // Supabase session for email auth
+    session: null as any, // Supabase session for email auth
+    // Target route set by LoginView — consumed by App.vue after store loading
+    targetRoute: null as string | null
   })
 
-  // ✅ FIX: Track last userId to detect real login vs token refresh
-  // This prevents the "SIGNED_IN every 6 minutes blocks all connections for 60s" issue
+  // Track last userId to detect real login vs token refresh
   let lastUserId: string | null = null
 
-  // ✅ FIX: Deduplicate loadUserProfile — prevent multiple concurrent calls
-  // After signIn, onAuthStateChange fires SIGNED_IN + TOKEN_REFRESHED + loginWithPin
-  // all calling loadUserProfile simultaneously, overwhelming tablet HTTP connections
+  // Deduplicate loadUserProfile — prevent multiple concurrent calls
   let loadProfilePromise: Promise<void> | null = null
+
+  // Store the initialization promise so checkSession() can await it
+  let initPromise: Promise<void> | null = null
 
   // ===== GETTERS =====
   const currentUser = computed(() => state.value.currentUser)
@@ -56,8 +53,41 @@ export const useAuthStore = defineStore('auth', () => {
   const canEdit = computed(() => CoreUserService.canEdit(userRoles.value))
   const canViewFinances = computed(() => CoreUserService.canViewFinances(userRoles.value))
 
+  // ===== TARGET ROUTE (set by LoginView, consumed by App.vue) =====
+
+  /**
+   * Set the intended route after login.
+   * Called by LoginView to indicate which context the user wants (pos, kitchen, admin, etc.)
+   */
+  function setTargetRoute(route: string) {
+    state.value.targetRoute = route
+    DebugUtils.info(MODULE_NAME, 'Target route set', { route })
+  }
+
+  /**
+   * Consume and clear the target route. Returns the target route or null.
+   * Called by App.vue after stores are loaded to determine redirect destination.
+   */
+  function consumeTargetRoute(): string | null {
+    const route = state.value.targetRoute
+    state.value.targetRoute = null
+    return route
+  }
+
   // ===== INITIALIZATION =====
-  async function initialize() {
+
+  /**
+   * Initialize auth store — awaitable, idempotent.
+   * Returns existing promise if already in progress.
+   */
+  function initialize(): Promise<void> {
+    if (!initPromise) {
+      initPromise = doInitialize()
+    }
+    return initPromise
+  }
+
+  async function doInitialize() {
     DebugUtils.info(MODULE_NAME, 'Initializing auth...')
 
     // Check for existing Supabase session
@@ -68,83 +98,45 @@ export const useAuthStore = defineStore('auth', () => {
     if (session) {
       state.value.session = session
       await loadUserProfile(session.user.id)
-      // ✅ FIX: Track userId to detect login vs token refresh
       lastUserId = session.user.id
     }
-    // Note: No longer trying to restore PIN sessions - using only Supabase sessions
 
     // Listen to auth state changes
-    // ✅ FIX: Filter events to prevent unnecessary profile reloads that block connection pool
     supabase.auth.onAuthStateChange(async (event, newSession) => {
-      // 🔍 DIAGNOSTIC: Log ALL auth events with detailed info
-      console.log('🔐 [AuthStore] Auth state changed:', {
+      DebugUtils.debug(MODULE_NAME, 'Auth state changed', {
         event,
         hasSession: !!newSession,
-        hasUser: !!newSession?.user,
-        userId: newSession?.user?.id,
-        timestamp: new Date().toISOString()
+        userId: newSession?.user?.id
       })
 
       state.value.session = newSession
 
-      // ✅ FIX: Detect real login vs token refresh by checking userId change
-      // - SIGNED_IN with SAME userId = token refresh → SKIP reload
-      // - SIGNED_IN with DIFFERENT userId = real login → RELOAD profile
-      // - USER_UPDATED = profile changed → RELOAD profile
       const currentUserId = newSession?.user?.id
       const isUserIdChanged = currentUserId && currentUserId !== lastUserId
       const isInitialSession = event === 'INITIAL_SESSION'
       const isUserUpdated = event === 'USER_UPDATED'
 
-      // Determine if we should reload profile
       const shouldReload =
-        newSession?.user && // Has user
-        !isInitialSession && // Not initial session (already loaded in initialize())
-        (isUserIdChanged || isUserUpdated) // Either user changed OR profile updated
-
-      console.log('🔍 [AuthStore] Should reload profile?', {
-        event,
-        currentUserId: currentUserId?.substring(0, 8) + '...',
-        lastUserId: lastUserId?.substring(0, 8) + '...',
-        isUserIdChanged,
-        isInitialSession,
-        isUserUpdated,
-        shouldReload,
-        hasUser: !!newSession?.user
-      })
+        newSession?.user && !isInitialSession && (isUserIdChanged || isUserUpdated)
 
       if (shouldReload) {
-        console.log('✅ [AuthStore] Reloading profile - user changed or profile updated:', {
+        DebugUtils.info(MODULE_NAME, 'Reloading profile after auth event', {
           event,
           reason: isUserIdChanged ? 'userId changed' : 'USER_UPDATED event'
         })
-        DebugUtils.info(MODULE_NAME, 'Reloading profile after auth event', { event })
-        // ✅ FIX: Set lastUserId BEFORE async call to prevent duplicate triggers
-        // onAuthStateChange fires SIGNED_IN + TOKEN_REFRESHED nearly simultaneously
         lastUserId = currentUserId!
         await loadUserProfile(currentUserId!)
       } else if (newSession?.user && !isUserIdChanged && event === 'SIGNED_IN') {
-        // Same user, SIGNED_IN event = token refresh
-        console.log('🔄 [AuthStore] Token refresh detected - skipping profile reload', {
-          event,
-          userId: currentUserId?.substring(0, 8) + '...'
-        })
-        DebugUtils.debug(MODULE_NAME, 'Token refresh, skipping profile reload', { event })
-        // Update lastUserId even on token refresh to keep tracking
+        // Same user, SIGNED_IN event = token refresh — skip
+        DebugUtils.debug(MODULE_NAME, 'Token refresh, skipping profile reload')
         lastUserId = currentUserId!
-      } else if (newSession?.user) {
-        // Other events - session is valid, but no need to reload profile
-        console.log('⏭️ [AuthStore] Skipping profile reload for event:', event)
-        DebugUtils.debug(MODULE_NAME, 'Auth event, skipping profile reload', { event })
-      } else {
-        // No session - user logged out
-        console.log('🚪 [AuthStore] User logged out, resetting state')
-        lastUserId = null // Clear last userId
+      } else if (!newSession?.user && event === 'SIGNED_OUT') {
+        lastUserId = null
         resetState()
       }
     })
 
-    // ✅ NEW: Setup cross-tab synchronization
+    // Setup cross-tab synchronization
     setupCrossTabSync()
 
     DebugUtils.info(MODULE_NAME, 'AuthStore initialized')
@@ -152,54 +144,54 @@ export const useAuthStore = defineStore('auth', () => {
 
   /**
    * Setup cross-tab synchronization for logout events
-   * Listens for storage changes in other tabs and reacts to logout
    */
   function setupCrossTabSync() {
-    // Listen for storage events (fired only in OTHER tabs, not the one that made the change)
     window.addEventListener('storage', (event: StorageEvent) => {
       // Case 1: Supabase token removed (direct logout)
       if (event.key?.startsWith('sb-') && event.key.includes('auth-token') && !event.newValue) {
-        DebugUtils.info(MODULE_NAME, '🔄 Logout detected in another tab (Supabase token removed)')
+        DebugUtils.info(MODULE_NAME, 'Logout detected in another tab (Supabase token removed)')
         handleCrossTabLogout()
       }
 
       // Case 2: Explicit logout broadcast
       if (event.key === LOGOUT_BROADCAST_KEY && event.newValue) {
-        DebugUtils.info(MODULE_NAME, '🔄 Logout broadcast received from another tab')
+        DebugUtils.info(MODULE_NAME, 'Logout broadcast received from another tab')
         handleCrossTabLogout()
       }
     })
 
-    DebugUtils.info(MODULE_NAME, '✅ Cross-tab synchronization enabled')
+    DebugUtils.debug(MODULE_NAME, 'Cross-tab synchronization enabled')
   }
 
   /**
    * Handle logout detected in another tab
    */
   async function handleCrossTabLogout() {
-    if (!state.value.isAuthenticated) {
-      // Already logged out, ignore
-      return
+    if (!state.value.isAuthenticated) return
+
+    DebugUtils.info(MODULE_NAME, 'Session ended in another tab, logging out...')
+
+    // Sign out from Supabase first to clear the local session token
+    // This prevents checkSession() from finding a valid session on reload
+    try {
+      await supabase.auth.signOut()
+    } catch {
+      // Ignore errors — the other tab already signed out
     }
 
-    DebugUtils.info(MODULE_NAME, '⚠️ Session ended in another tab, logging out...')
-
-    // Reset local state immediately (no API calls needed)
     await resetAllStores()
     clearHMRState()
     clearAppLocalStorage()
     resetState()
 
-    // Full page reload to clear all in-memory state (critical for PWA)
     window.location.href = '/auth/login'
-
-    // Show notification (optional)
-    // toast.info('Session ended in another tab')
   }
 
-  // Load user profile from Supabase users table
-  // ✅ FIX: Deduplicated — if already loading, returns existing promise
-  // Prevents 3+ concurrent calls after signIn (SIGNED_IN + TOKEN_REFRESHED + loginWithPin)
+  // ===== LOAD USER PROFILE =====
+
+  /**
+   * Load user profile — deduplicated to prevent concurrent calls
+   */
   async function loadUserProfile(userId: string) {
     if (loadProfilePromise) {
       DebugUtils.info(MODULE_NAME, 'loadUserProfile already in progress, reusing promise')
@@ -216,9 +208,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function doLoadUserProfile(userId: string) {
     try {
-      // ✅ FIX: Ensure auth session is established before querying with RLS
-      // After signInWithPassword, the Supabase client may not have set the auth header yet.
-      // RLS policy (auth.uid() = id) returns empty if auth context isn't ready.
+      // Wait for auth session to be established (RLS requires auth.uid())
       let retries = 0
       const maxSessionRetries = 5
       while (retries < maxSessionRetries) {
@@ -265,7 +255,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // ===== AUTHENTICATION METHOD 1: Email + Password (Admin/Manager) =====
-  async function loginWithEmail(email: string, password: string): Promise<boolean> {
+  async function loginWithEmail(
+    email: string,
+    password: string,
+    captchaToken?: string
+  ): Promise<boolean> {
     state.value.isLoading = true
     state.value.error = null
 
@@ -274,7 +268,8 @@ export const useAuthStore = defineStore('auth', () => {
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        password
+        password,
+        options: captchaToken ? { captchaToken } : undefined
       })
 
       if (error) throw error
@@ -283,8 +278,7 @@ export const useAuthStore = defineStore('auth', () => {
         userId: data.user.id
       })
 
-      // ✅ FIX: Load profile immediately instead of waiting for onAuthStateChange
-      // This prevents race condition where router.push() happens before isAuthenticated = true
+      // Load profile immediately instead of waiting for onAuthStateChange
       await loadUserProfile(data.user.id)
       lastUserId = data.user.id
 
@@ -299,8 +293,8 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // ===== AUTHENTICATION METHOD 2 & 3: PIN (Cashier/Kitchen/Bar) =====
-  async function loginWithPin(pin: string): Promise<boolean> {
+  // ===== AUTHENTICATION METHOD 2: PIN (Cashier/Kitchen/Bar) =====
+  async function loginWithPin(pin: string, captchaToken?: string): Promise<boolean> {
     state.value.isLoading = true
     state.value.error = null
 
@@ -310,9 +304,7 @@ export const useAuthStore = defineStore('auth', () => {
       // Security: Simple rate limiting (5 attempts per minute)
       const attemptKey = 'pin_login_attempts'
       const attempts = JSON.parse(localStorage.getItem(attemptKey) || '[]')
-      const recentAttempts = attempts.filter(
-        (timestamp: number) => Date.now() - timestamp < 60000 // Last minute
-      )
+      const recentAttempts = attempts.filter((timestamp: number) => Date.now() - timestamp < 60000)
 
       if (recentAttempts.length >= 5) {
         throw new Error('Too many failed attempts. Please try later.')
@@ -321,7 +313,6 @@ export const useAuthStore = defineStore('auth', () => {
       // Step 1: Validate PIN and get credentials for Supabase Auth
       DebugUtils.info(MODULE_NAME, 'Calling get_pin_user_credentials RPC')
 
-      // Add timeout wrapper to catch hanging RPC calls
       const rpcPromise = supabase.rpc('get_pin_user_credentials', {
         pin_input: pin
       })
@@ -335,8 +326,7 @@ export const useAuthStore = defineStore('auth', () => {
       DebugUtils.info(MODULE_NAME, 'RPC response received', {
         hasData: !!data,
         dataLength: data?.length,
-        hasError: !!error,
-        errorMessage: error?.message
+        hasError: !!error
       })
 
       if (error) {
@@ -347,26 +337,17 @@ export const useAuthStore = defineStore('auth', () => {
         // Track failed attempt
         attempts.push(Date.now())
         localStorage.setItem(attemptKey, JSON.stringify(attempts))
-
-        DebugUtils.info(MODULE_NAME, 'PIN validation failed', { pinLength: pin.length })
         throw new Error('Invalid PIN')
       }
 
       const credentials = data[0]
 
       // Step 2: Use credentials to sign in via Supabase Auth
-      // This creates a real Supabase session with auth.uid() set
       DebugUtils.info(MODULE_NAME, 'Calling signInWithPassword', { email: credentials.user_email })
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: credentials.user_email,
-        password: credentials.user_password
-      })
-
-      DebugUtils.info(MODULE_NAME, 'signInWithPassword response', {
-        hasAuthData: !!authData,
-        hasUser: !!authData?.user,
-        hasError: !!authError,
-        errorMessage: authError?.message
+        password: credentials.user_password,
+        options: captchaToken ? { captchaToken } : undefined
       })
 
       if (authError) {
@@ -377,16 +358,13 @@ export const useAuthStore = defineStore('auth', () => {
 
       DebugUtils.info(MODULE_NAME, 'PIN login successful - Supabase session created', {
         userId: authData.user.id,
-        email: credentials.user_email,
-        roles: credentials.user_roles,
-        hasAuthSession: !!authData.session
+        roles: credentials.user_roles
       })
 
       // Clear failed attempts on successful login
       localStorage.removeItem(attemptKey)
 
-      // ✅ FIX: Load profile immediately instead of waiting for onAuthStateChange
-      // This prevents race condition where router.push() happens before isAuthenticated = true
+      // Load profile immediately
       await loadUserProfile(authData.user.id)
       lastUserId = authData.user.id
 
@@ -401,70 +379,12 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // ===== LEGACY: PIN login (fallback to CoreUserService) =====
-  async function login(pin: string): Promise<boolean> {
-    // Use Supabase PIN login if enabled
-    if (ENV.useSupabase) {
-      return loginWithPin(pin)
-    }
-
-    // Fallback to CoreUserService (legacy)
-    try {
-      state.value.isLoading = true
-      state.value.error = null
-
-      DebugUtils.info(MODULE_NAME, 'Login attempt (legacy)', { pin: '***' })
-
-      const userData = CoreUserService.findByPin(pin)
-      if (!userData) {
-        throw new Error('Invalid PIN')
-      }
-
-      const user: User = {
-        id: `user_${Date.now()}`,
-        ...userData,
-        lastLoginAt: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-
-      state.value.currentUser = user
-      state.value.isAuthenticated = true
-      state.value.lastLoginAt = user.lastLoginAt
-
-      DebugUtils.info(MODULE_NAME, 'Login successful (legacy)', {
-        userId: user.id,
-        roles: user.roles
-      })
-
-      return true
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Login failed'
-      state.value.error = errorMessage
-      DebugUtils.error(MODULE_NAME, 'Login failed (legacy)', { error: errorMessage })
-      return false
-    } finally {
-      state.value.isLoading = false
-    }
-  }
-
   // ===== LOGOUT =====
-  /**
-   * Logout user and broadcast to all tabs
-   *
-   * Steps:
-   * 1. Broadcast logout to other tabs
-   * 2. Sign out from Supabase
-   * 3. Reset all application stores
-   * 4. Reset auth state
-   * 5. Redirect to login
-   */
   async function logout() {
     try {
       DebugUtils.info(MODULE_NAME, 'Logging out', { userId: userId.value })
 
       // Step 1: Broadcast logout to other tabs FIRST
-      // This ensures other tabs know about logout before Supabase token is cleared
       localStorage.setItem(LOGOUT_BROADCAST_KEY, Date.now().toString())
 
       // Step 2: Sign out from Supabase (clears token from localStorage)
@@ -475,10 +395,10 @@ export const useAuthStore = defineStore('auth', () => {
       // Step 3: Reset all application stores
       await resetAllStores()
 
-      // Step 4: Clear HMR state (prevent stale store data on next login)
+      // Step 4: Clear HMR state
       clearHMRState()
 
-      // Step 5: Clear all app-specific localStorage (POS data, caches, sync queues)
+      // Step 5: Clear all app-specific localStorage
       clearAppLocalStorage()
 
       // Step 6: Reset auth state
@@ -487,9 +407,9 @@ export const useAuthStore = defineStore('auth', () => {
       // Step 7: Clean up broadcast key
       localStorage.removeItem(LOGOUT_BROADCAST_KEY)
 
-      DebugUtils.info(MODULE_NAME, '✅ Logout complete')
+      DebugUtils.info(MODULE_NAME, 'Logout complete')
 
-      // Step 8: Full page reload to clear all in-memory state (critical for PWA)
+      // Step 8: Full page reload to clear all in-memory state
       window.location.href = '/auth/login'
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Logout failed', { error })
@@ -509,70 +429,44 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // ===== RESTORE PIN SESSION =====
-  function restorePinSession(): boolean {
-    const pinSession = localStorage.getItem('pin_session')
-    if (pinSession) {
-      try {
-        const user = JSON.parse(pinSession)
-        state.value.currentUser = user
-        state.value.isAuthenticated = true
-        state.value.lastLoginAt = user.lastLoginAt
-
-        DebugUtils.info(MODULE_NAME, 'PIN session restored', { userId: user.id })
-        return true
-      } catch (error) {
-        DebugUtils.error(MODULE_NAME, 'Failed to restore PIN session', { error })
-        localStorage.removeItem('pin_session')
-      }
-    }
-    return false
-  }
-
   // ===== SESSION CHECK =====
-  async function checkSession(): Promise<boolean> {
-    try {
-      // First check if already authenticated
-      if (state.value.isAuthenticated && state.value.currentUser !== null) {
-        DebugUtils.info(MODULE_NAME, 'Session check', { hasSession: true, source: 'state' })
-        return true
-      }
 
-      // If not authenticated in state, check Supabase directly
+  /**
+   * Check if a valid session exists.
+   * Awaits initialization first to prevent race conditions.
+   * If Supabase session exists but profile not loaded — loads it.
+   */
+  async function checkSession(): Promise<boolean> {
+    // Ensure initialization is complete before checking
+    await initialize()
+
+    // If already authenticated with profile loaded, we're good
+    if (state.value.isAuthenticated && state.value.currentUser !== null) {
+      DebugUtils.info(MODULE_NAME, 'Session check', { hasSession: true, source: 'state' })
+      return true
+    }
+
+    // Fallback: check Supabase directly and load profile if found
+    try {
       const {
         data: { session }
       } = await supabase.auth.getSession()
 
       if (session) {
-        DebugUtils.info(MODULE_NAME, 'Session check', { hasSession: true, source: 'supabase' })
-        return true
+        DebugUtils.info(MODULE_NAME, 'Session found in Supabase, loading profile...')
+        await loadUserProfile(session.user.id)
+        lastUserId = session.user.id
+        return state.value.isAuthenticated
       }
-
-      DebugUtils.info(MODULE_NAME, 'Session check', { hasSession: false, source: 'none' })
-      return false
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Session check failed', { error })
-      return false
     }
+
+    DebugUtils.info(MODULE_NAME, 'Session check', { hasSession: false })
+    return false
   }
 
   // ===== OTHER METHODS =====
-
-  async function initializeDefaultUsers(): Promise<void> {
-    try {
-      const availableUsers = CoreUserService.getActiveUsers()
-      DebugUtils.info(MODULE_NAME, 'Default users initialized', {
-        count: availableUsers.length,
-        users: availableUsers.map(u => ({
-          name: u.name,
-          roles: u.roles
-        }))
-      })
-    } catch (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to initialize default users', { error })
-      throw error
-    }
-  }
 
   function getDefaultRoute(): string {
     return CoreUserService.getDefaultRoute(userRoles.value)
@@ -585,15 +479,20 @@ export const useAuthStore = defineStore('auth', () => {
       isLoading: false,
       error: null,
       lastLoginAt: null,
-      session: null
+      session: null,
+      targetRoute: null
     }
+    // Reset init promise so next access re-initializes
+    initPromise = null
+    lastUserId = null
   }
 
   function clearError() {
     state.value.error = null
   }
 
-  // Initialize on store creation
+  // Auto-initialize on store creation (fire-and-forget for backwards compat,
+  // but checkSession() will await it before proceeding)
   initialize()
 
   return {
@@ -616,15 +515,15 @@ export const useAuthStore = defineStore('auth', () => {
     canViewFinances,
 
     // Actions
-    login, // Legacy PIN login
-    loginWithEmail, // Email + Password (admin/manager)
-    loginWithPin, // PIN login (cashier/kitchen/bar)
+    loginWithEmail,
+    loginWithPin,
     logout,
     getDefaultRoute,
+    setTargetRoute,
+    consumeTargetRoute,
     clearError,
     resetState,
     checkSession,
-    initializeDefaultUsers,
     initialize
   }
 })

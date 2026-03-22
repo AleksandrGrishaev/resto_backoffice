@@ -16,7 +16,6 @@ export function mapSettingsFromDb(row: any): LoyaltySettings {
     stampLifetimeDays: row.stamp_lifetime_days,
     stampRewards: (row.stamp_rewards || []).map(mapStampRewardFromDb),
     pointsLifetimeDays: row.points_lifetime_days,
-    conversionBonusPct: Number(row.conversion_bonus_pct),
     tierWindowDays: row.tier_window_days,
     maxTierDegradation: row.max_tier_degradation,
     tiers: (row.tiers || []).map(mapTierConfigFromDb),
@@ -35,8 +34,6 @@ export function mapSettingsToDb(settings: Partial<LoyaltySettings>): Record<stri
     result.stamp_rewards = settings.stampRewards.map(mapStampRewardToDb)
   if (settings.pointsLifetimeDays !== undefined)
     result.points_lifetime_days = settings.pointsLifetimeDays
-  if (settings.conversionBonusPct !== undefined)
-    result.conversion_bonus_pct = settings.conversionBonusPct
   if (settings.tierWindowDays !== undefined) result.tier_window_days = settings.tierWindowDays
   if (settings.maxTierDegradation !== undefined)
     result.max_tier_degradation = settings.maxTierDegradation

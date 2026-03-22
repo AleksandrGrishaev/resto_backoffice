@@ -640,6 +640,43 @@ export interface RejectTransferDto {
 }
 
 // =============================================
+// CANCELLATION STATS (Shift Reports)
+// =============================================
+
+export interface ShiftCancellationStats {
+  cancelledOrdersCount: number
+  cancelledItemsCount: number // individually cancelled (not via order cancel)
+  totalCancelledAmount: number
+  reasonBreakdown: {
+    reason: string
+    label: string
+    count: number
+    amount: number
+  }[]
+  details: ShiftCancellationDetail[]
+}
+
+export interface ShiftCancellationDetail {
+  type: 'order' | 'item'
+  orderId: string
+  orderNumber: string
+  orderType: import('../types').OrderType
+  // Item-specific (null for order-level)
+  itemName?: string
+  quantity?: number
+  itemPrice?: number
+  // Common
+  reason: string
+  reasonLabel: string
+  notes?: string
+  cancelledAt: string
+  cancelledBy?: string
+  statusBeforeCancel: string
+  hadWriteOff: boolean
+  totalAmount: number
+}
+
+// =============================================
 // SPRINT 5: SYNC QUEUE
 // =============================================
 

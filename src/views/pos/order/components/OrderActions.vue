@@ -123,6 +123,17 @@
             {{ order?.type === 'delivery' ? 'Delivered' : 'Collected' }}
           </template>
         </BaseButton>
+
+        <!-- Cancel Order Button -->
+        <BaseButton
+          v-if="canCancelOrder"
+          color="error"
+          variant="outlined"
+          size="small"
+          class="flex-shrink-0"
+          icon="mdi-cancel"
+          @click="emit('cancelOrder')"
+        />
       </div>
 
       <!-- Checkout Summary (only when items selected) -->
@@ -176,6 +187,7 @@ const emit = defineEmits<{
   checkout: [items: string[], amount: number]
   releaseTable: []
   completeOrder: []
+  cancelOrder: []
 }>()
 
 // State
@@ -196,6 +208,8 @@ const canMove = computed((): boolean => {
 
 const canCheckout = computed((): boolean => {
   if (!props.order) return false
+  // SECURITY: Block checkout for draft orders (not yet sent to kitchen)
+  if (props.order.status === 'draft') return false
   const hasItems = props.bills.some(bill => bill.items.length > 0)
   const hasUnpaidBills = props.bills.some(bill => bill.paymentStatus !== 'paid')
   return hasItems && hasUnpaidBills
@@ -227,6 +241,14 @@ const canCompleteOrder = computed((): boolean => {
   return (
     isOrderFullyPaid.value && (props.order.type === 'delivery' || props.order.type === 'takeaway')
   )
+})
+
+// Can cancel order (any non-final-status order)
+const canCancelOrder = computed((): boolean => {
+  if (!props.order) return false
+  const finalStatuses = ['cancelled', 'served', 'collected', 'delivered']
+  if (finalStatuses.includes(props.order.status)) return false
+  return true
 })
 
 // Computed - Amounts

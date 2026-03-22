@@ -4,6 +4,26 @@
     <!-- New Order Notifications -->
     <NewOrderNotification ref="notificationComponent" />
 
+    <!-- Scheduled Orders Panel -->
+    <div v-if="scheduledOrders.length > 0" class="scheduled-panel">
+      <div class="scheduled-panel-header">
+        <v-icon color="cyan" size="20">mdi-timer-sand</v-icon>
+        <span class="scheduled-title">Scheduled</span>
+        <v-badge :content="dishesByStatus.scheduled.length" color="cyan" inline />
+      </div>
+      <div class="scheduled-items">
+        <ScheduledOrderCard
+          v-for="group in scheduledOrders"
+          :key="group.orderId"
+          :dishes="group.dishes"
+          :pickup-time="group.pickupTime"
+          :order-number="group.orderNumber"
+          :order-id="group.orderId"
+          @send-now="handleSendNow"
+        />
+      </div>
+    </div>
+
     <!-- Dishes Columns (Kanban) -->
     <div
       class="orders-columns"
@@ -112,6 +132,8 @@ import { useAuthStore } from '@/stores/auth'
 import { DebugUtils } from '@/utils'
 import DishCard from './components/DishCard.vue'
 import NewOrderNotification from './components/NewOrderNotification.vue'
+import ScheduledOrderCard from './components/ScheduledOrderCard.vue'
+import { sendOrderNow } from '@/stores/kitchen/scheduledOrdersService'
 
 const MODULE_NAME = 'OrdersScreen'
 const authStore = useAuthStore()
@@ -213,6 +235,43 @@ const markAsNotified = (orderNumber: string): void => {
   }
 }
 
+/**
+ * Group scheduled dishes by order for the scheduled panel
+ */
+const scheduledOrders = computed(() => {
+  const groups = new Map<
+    string,
+    { orderId: string; orderNumber: string; pickupTime: string; dishes: any[] }
+  >()
+
+  for (const dish of dishesByStatus.value.scheduled) {
+    if (!groups.has(dish.orderId)) {
+      groups.set(dish.orderId, {
+        orderId: dish.orderId,
+        orderNumber: dish.orderNumber,
+        pickupTime: dish.pickupTime || '',
+        dishes: []
+      })
+    }
+    groups.get(dish.orderId)!.dishes.push(dish)
+  }
+
+  return Array.from(groups.values())
+})
+
+/**
+ * Handle "Send Now" button — manually send scheduled order to kitchen
+ */
+const handleSendNow = async (orderId: string) => {
+  const result = await sendOrderNow(orderId)
+  if (result.success) {
+    DebugUtils.info(MODULE_NAME, 'Order sent to kitchen manually', {
+      orderId,
+      itemsCount: result.count
+    })
+  }
+}
+
 // Debug: Log dishes data
 onMounted(() => {
   const roles = authStore.userRoles
@@ -258,6 +317,14 @@ watch(orderNumbersSnapshot, (newSnapshot, oldSnapshot) => {
 
     const orderDishes = dishesByOrder.value.get(orderNumber)
     if (!orderDishes || orderDishes.length === 0) return
+
+    // Don't show notification for orders where ALL items are scheduled
+    // (notification will fire later when items transition to 'waiting')
+    const allScheduled = orderDishes.every(d => d.status === 'scheduled')
+    if (allScheduled) {
+      DebugUtils.debug(MODULE_NAME, 'Skipping notification for scheduled order', { orderNumber })
+      return
+    }
 
     const firstDish = orderDishes[0]
     const itemsCount = orderDishes.length
@@ -327,6 +394,45 @@ const handleDishStatusUpdate = async (
   background-color: var(--v-theme-background);
   overflow: hidden;
   box-sizing: border-box;
+}
+
+/* Scheduled Orders Panel */
+.scheduled-panel {
+  flex-shrink: 0;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  background-color: rgba(0, 188, 212, 0.05);
+  border-bottom: 1px solid rgba(0, 188, 212, 0.2);
+}
+
+.scheduled-panel-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
+}
+
+.scheduled-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: rgba(0, 188, 212, 0.9);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.scheduled-items {
+  display: flex;
+  gap: var(--spacing-sm);
+  overflow-x: auto;
+  padding-bottom: var(--spacing-xs);
+}
+
+.scheduled-items::-webkit-scrollbar {
+  height: 4px;
+}
+
+.scheduled-items::-webkit-scrollbar-thumb {
+  background: rgba(0, 188, 212, 0.3);
+  border-radius: 2px;
 }
 
 /* Kanban Board - 3 Vertical Columns Side by Side */

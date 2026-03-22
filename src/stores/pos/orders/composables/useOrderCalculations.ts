@@ -599,6 +599,7 @@ export function determineStatusByOrderType(
   items: PosBillItem[]
 ): OrderStatus {
   const hasAnyDraft = items.some(item => item.status === 'draft')
+  const hasAnyScheduled = items.some(item => item.status === 'scheduled')
   const hasAnyCooking = items.some(item => item.status === 'cooking')
   const hasAnyWaiting = items.some(item => item.status === 'waiting')
 
@@ -631,7 +632,7 @@ export function determineStatusByOrderType(
 
   // Логика определения статуса:
   if (hasAnyDraft) return 'draft'
-  if (hasAnyWaiting) return 'waiting'
+  if (hasAnyScheduled || hasAnyWaiting) return 'waiting'
   if (hasAnyCooking) return 'cooking'
   if (allReady && !allInFinalStatus) return 'ready'
   if (allInFinalStatus) return finalStatus

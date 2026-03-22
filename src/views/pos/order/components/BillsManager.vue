@@ -33,7 +33,7 @@
       <!-- Items List -->
       <div v-else class="items-list">
         <BillItem
-          :items="activeBill.items.filter(item => item.status !== 'cancelled')"
+          :items="activeBill.items"
           :is-item-selected="ordersStore.isItemSelected"
           @select="handleItemSelect"
           @cancel="handleCancelItem"

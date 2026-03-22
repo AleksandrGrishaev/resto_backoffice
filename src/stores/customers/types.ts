@@ -2,6 +2,7 @@
 
 export type CustomerTier = 'member' | 'regular' | 'vip'
 export type CustomerStatus = 'active' | 'blocked'
+export type LoyaltyProgram = 'stamps' | 'cashback'
 
 export interface Customer {
   id: string
@@ -21,6 +22,7 @@ export interface Customer {
   lastVisitAt: string | null
   notes: string | null
   personalDiscount: number // 0-100, auto-applied at checkout
+  loyaltyProgram: LoyaltyProgram // 'stamps' (new customers) or 'cashback' (after first card cycle)
   disableLoyaltyAccrual: boolean // skip stamps/cashback accrual
   discountNote: string | null // e.g. "Founder", "VIP friend"
   status: CustomerStatus

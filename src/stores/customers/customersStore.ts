@@ -42,6 +42,28 @@ export const useCustomersStore = defineStore('customers', () => {
     return customers.value.find(c => c.telegramId === telegramId)
   }
 
+  function getByToken(token: string): Customer | undefined {
+    return customers.value.find(c => c.token === token)
+  }
+
+  async function findByToken(token: string): Promise<Customer | null> {
+    // Try in-memory cache first
+    const cached = getByToken(token)
+    if (cached) return cached
+
+    // Fetch from DB
+    const customer = await customersService.fetchByToken(token)
+    if (customer) {
+      const index = customers.value.findIndex(c => c.id === customer.id)
+      if (index !== -1) {
+        customers.value[index] = customer
+      } else {
+        customers.value.push(customer)
+      }
+    }
+    return customer
+  }
+
   // Actions
   async function initialize() {
     if (initialized.value) return
@@ -113,6 +135,8 @@ export const useCustomersStore = defineStore('customers', () => {
     customersByTier,
     getById,
     getByTelegramId,
+    getByToken,
+    findByToken,
 
     // Actions
     initialize,

@@ -3,6 +3,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase } from '@/supabase'
+import { customersService } from '@/stores/customers/customersService'
 import type {
   PosShift,
   ShiftStatus,
@@ -207,6 +208,14 @@ export const useShiftsStore = defineStore('posShifts', () => {
         await initializeShiftAccountBalances(newShift)
         startHeartbeat()
 
+        // Fire-and-forget: recalculate customer tiers at shift start
+        customersService
+          .recalculateTiers()
+          .then(r => {
+            if (r.success) console.log(`🔄 Tiers: ↑${r.upgraded} ↓${r.downgraded} =${r.unchanged}`)
+          })
+          .catch(() => {})
+
         console.log('✅ Смена начата:', newShift.shiftNumber)
       }
 
@@ -232,6 +241,21 @@ export const useShiftsStore = defineStore('posShifts', () => {
 
       if (!currentShift.value) {
         throw new Error('No active shift to end')
+      }
+
+      // 0. Cleanup empty draft orders before closing shift
+      try {
+        const { usePosOrdersStore } = await import('../orders/ordersStore')
+        const ordersStore = usePosOrdersStore()
+        const cleaned = await ordersStore.cleanupEmptyDraftOrders()
+        if (cleaned > 0) {
+          console.log(`🧹 Cleaned up ${cleaned} empty draft orders before shift end`)
+        }
+        // Note: background cleanup timer keeps running — it's idempotent and
+        // will serve the next shift without needing a restart
+      } catch (cleanupErr) {
+        // Non-blocking: don't prevent shift from closing
+        console.warn('⚠️ Empty order cleanup failed, proceeding with shift end:', cleanupErr)
       }
 
       // 1. ВСЕГДА закрываем смену локально (offline-first)

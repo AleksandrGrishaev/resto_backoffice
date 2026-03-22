@@ -15,65 +15,75 @@
       </v-btn>
     </div>
 
-    <!-- Основные поля варианта -->
+    <!-- Фото варианта + основные поля -->
     <div class="variant-item__fields">
-      <div class="d-flex gap-2 mb-3">
-        <v-text-field
-          v-model="localVariant.name"
-          label="Variant Name"
-          hide-details="auto"
-          placeholder="Leave empty if not required"
-          class="flex-grow-1"
-          bg-color="surface"
-          @update:model-value="emitUpdate"
+      <div class="d-flex gap-2 mb-3 align-start">
+        <image-uploader
+          v-if="menuItemId"
+          :model-value="localVariant.imageUrl || ''"
+          :item-id="menuItemId + '-' + localVariant.id"
+          :item-name="itemName + (localVariant.name ? ' ' + localVariant.name : '')"
+          subfolder="items/variants"
+          @update:model-value="handleImageUpdate"
         />
-        <NumericInputField
-          v-model="localVariant.price"
-          label="Price"
-          :hide-details="'auto'"
-          suffix="IDR"
-          :rules="onlyModifiers ? [] : [v => v > 0 || 'Price must be greater than 0']"
-          :required="!onlyModifiers"
-          :disabled="onlyModifiers"
-          style="width: 150px"
-          @update:model-value="emitUpdate"
-        />
-        <NumericInputField
-          v-model="localVariant.portionMultiplier"
-          label="Modifier Multiplier"
-          :hide-details="'auto'"
-          placeholder="1"
-          :rules="[v => !v || v > 0 || 'Must be positive']"
-          style="width: 160px"
-          :allow-decimal="true"
-          @update:model-value="emitUpdate"
-        >
-          <template #append-inner>
-            <v-tooltip location="top" max-width="280">
-              <template #activator="{ props: tooltipProps }">
-                <v-icon v-bind="tooltipProps" icon="mdi-help-circle-outline" size="18" />
-              </template>
-              <div>
-                <div class="font-weight-bold mb-1">Modifier Multiplier</div>
+        <div class="d-flex gap-2 flex-grow-1">
+          <v-text-field
+            v-model="localVariant.name"
+            label="Variant Name"
+            hide-details="auto"
+            placeholder="Leave empty if not required"
+            class="flex-grow-1"
+            bg-color="surface"
+            @update:model-value="emitUpdate"
+          />
+          <NumericInputField
+            v-model="localVariant.price"
+            label="Price"
+            :hide-details="'auto'"
+            suffix="IDR"
+            :rules="onlyModifiers ? [] : [v => v > 0 || 'Price must be greater than 0']"
+            :required="!onlyModifiers"
+            :disabled="onlyModifiers"
+            style="width: 150px"
+            @update:model-value="emitUpdate"
+          />
+          <NumericInputField
+            v-model="localVariant.portionMultiplier"
+            label="Modifier Multiplier"
+            :hide-details="'auto'"
+            placeholder="1"
+            :rules="[v => !v || v > 0 || 'Must be positive']"
+            style="width: 160px"
+            :allow-decimal="true"
+            @update:model-value="emitUpdate"
+          >
+            <template #append-inner>
+              <v-tooltip location="top" max-width="280">
+                <template #activator="{ props: tooltipProps }">
+                  <v-icon v-bind="tooltipProps" icon="mdi-help-circle-outline" size="18" />
+                </template>
                 <div>
-                  Scales ingredient quantities for this variant size. For example, if a modifier
-                  adds 50g of cheese:
+                  <div class="font-weight-bold mb-1">Modifier Multiplier</div>
+                  <div>
+                    Scales ingredient quantities for this variant size. For example, if a modifier
+                    adds 50g of cheese:
+                  </div>
+                  <div class="mt-1">
+                    <strong>1.0</strong>
+                    = standard (50g)
+                    <br />
+                    <strong>1.5</strong>
+                    = large size (75g)
+                    <br />
+                    <strong>0.5</strong>
+                    = small size (25g)
+                  </div>
+                  <div class="mt-1 text-medium-emphasis">Default: 1 (no scaling)</div>
                 </div>
-                <div class="mt-1">
-                  <strong>1.0</strong>
-                  = standard (50g)
-                  <br />
-                  <strong>1.5</strong>
-                  = large size (75g)
-                  <br />
-                  <strong>0.5</strong>
-                  = small size (25g)
-                </div>
-                <div class="mt-1 text-medium-emphasis">Default: 1 (no scaling)</div>
-              </div>
-            </v-tooltip>
-          </template>
-        </NumericInputField>
+              </v-tooltip>
+            </template>
+          </NumericInputField>
+        </div>
       </div>
 
       <!-- Композиция (hidden for modifier-only variants) -->
@@ -244,6 +254,7 @@
 import { ref, computed, watch } from 'vue'
 import type { MenuItemVariant, MenuComposition, DishType } from '@/stores/menu'
 import { NumericInputField } from '@/components/input'
+import ImageUploader from '@/components/common/ImageUploader.vue'
 import DishSearchWidget from './widgets/DishSearchWidget.vue'
 import ProductSearchWidget from './widgets/ProductSearchWidget.vue'
 
@@ -252,6 +263,7 @@ interface Props {
   index: number
   canDelete: boolean
   itemName: string
+  menuItemId?: string // ID of the parent menu item (for image upload)
   dishType: DishType // ✨ NEW: тип блюда
   onlyModifiers?: boolean // цена = 0, композиция скрыта
   dishOptions: Array<{
@@ -328,6 +340,11 @@ function emitUpdate() {
   updateTimeout = setTimeout(() => {
     emit('update:variant', { ...localVariant.value })
   }, 100)
+}
+
+function handleImageUpdate(url: string) {
+  localVariant.value.imageUrl = url || undefined
+  emitUpdate()
 }
 
 function addDishComponent(dish: {

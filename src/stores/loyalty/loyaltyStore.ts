@@ -77,6 +77,10 @@ export const useLoyaltyStore = defineStore('loyalty', () => {
     return loyaltyService.getCardById(cardId)
   }
 
+  async function getActiveCardByCustomerId(customerId: string): Promise<StampCardInfo | null> {
+    return loyaltyService.getActiveCardByCustomerId(customerId)
+  }
+
   async function issueNewCard(): Promise<string> {
     return loyaltyService.issueNewCard()
   }
@@ -151,6 +155,7 @@ export const useLoyaltyStore = defineStore('loyalty', () => {
     addStamps,
     getCardInfo,
     getCardById,
+    getActiveCardByCustomerId,
     issueNewCard,
     linkCardToCustomer,
     listCards,

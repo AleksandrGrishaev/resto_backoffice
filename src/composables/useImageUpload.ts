@@ -161,7 +161,8 @@ export function useImageUpload() {
     file: File,
     itemId: string,
     itemName: string,
-    currentImageUrl?: string
+    currentImageUrl?: string,
+    subfolder = 'items'
   ): Promise<ImageUploadResult> {
     error.value = null
     isUploading.value = true
@@ -189,8 +190,8 @@ export function useImageUpload() {
       })
 
       const slug = slugify(itemName, itemId)
-      const fullPath = `items/${slug}.webp`
-      const thumbPath = `items/${slug}_thumb.webp`
+      const fullPath = `${subfolder}/${slug}.webp`
+      const thumbPath = `${subfolder}/${slug}_thumb.webp`
 
       // Upload new files first (upsert to replace if same slug)
       const [fullResult, thumbResult] = await Promise.all([

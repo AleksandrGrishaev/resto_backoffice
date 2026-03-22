@@ -179,6 +179,9 @@ export const usePosStore = defineStore('pos', () => {
         platform.debugLog('POS', '✅ POS Realtime subscriptions active (orders + tables)')
       }
 
+      // Start background cleanup of empty draft orders (>15 min old, every 5 min)
+      ordersStore.startBackgroundCleanup()
+
       // Пока просто помечаем как инициализированную
       isInitialized.value = true
       lastSync.value = new Date().toISOString()
@@ -319,6 +322,10 @@ export const usePosStore = defineStore('pos', () => {
     // Stop shift heartbeat
     shiftsStore.stopHeartbeat()
     platform.debugLog('POS', '✅ Shift heartbeat stopped')
+
+    // Stop background empty order cleanup
+    ordersStore.stopBackgroundCleanup()
+    platform.debugLog('POS', '✅ Background order cleanup stopped')
 
     // Stop SyncService auto-processing
     const syncService = useSyncService()

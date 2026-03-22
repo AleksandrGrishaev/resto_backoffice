@@ -1014,3 +1014,17 @@ This project is part of a **two-project system** (backoffice + web-winter).
 - All DB migrations live here (`src/supabase/migrations/`)
 - All RPC functions live here (`src/supabase/functions/`)
 - web-winter reads our data but never writes directly
+
+### RLS Security Model
+
+**Full documentation:** `src/About/docs/RLS_POLICY.md`
+
+All tables have RLS enabled. Access is gated by `is_staff()` — returns `true` only for users in the `users` table with `is_active=true`.
+
+- **Staff (POS/Kitchen/Backoffice):** Full CRUD via `is_staff()` on ~53 tables
+- **Anonymous Auth (website customers):** Read-only on menu/channel tables, own data via RPCs
+- **`anon` role:** Read-only on menu items/categories/collections (filtered by `is_active`)
+- **`service_role`:** Bypasses RLS (Edge Functions, seeds)
+- **Customer RPCs:** All write operations (`create_online_order`, etc.) are `SECURITY DEFINER` — bypass RLS
+
+**When adding new tables:** Always enable RLS + add `staff_all` policy. See `RLS_POLICY.md` for patterns.

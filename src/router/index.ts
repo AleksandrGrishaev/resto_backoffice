@@ -274,6 +274,14 @@ const routes: RouteRecordRaw[] = [
             }
           },
           {
+            path: 'menu',
+            name: 'website-menu',
+            component: () => import('@/views/website/WebsiteMenuView.vue'),
+            meta: {
+              title: 'Website Menu'
+            }
+          },
+          {
             path: 'settings',
             name: 'website-settings',
             component: () => import('@/views/website/WebsiteSettingsView.vue'),

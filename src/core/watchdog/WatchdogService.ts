@@ -8,8 +8,14 @@ import { checkReceiptPrices } from './checkers/receiptChecker'
 import { checkPrepCosts } from './checkers/prepChecker'
 import { checkReceiptQuantities, checkPrepQuantities } from './checkers/quantityChecker'
 import { generateWeeklyCostReport } from './checkers/weeklyReportChecker'
+import {
+  checkCancellationThreshold,
+  generateShiftCancellationSummary
+} from './checkers/cancellationChecker'
+import { WATCHDOG_THRESHOLDS } from './types'
 import type { PriceCheckResult, PrepCostCheckResult, WeeklyCostReport } from './types'
 import type { QuantityCheckResult } from './checkers/quantityChecker'
+import type { CancellationShiftSummary } from './checkers/cancellationChecker'
 
 const MODULE_NAME = 'WatchdogService'
 
@@ -243,6 +249,71 @@ export async function createWeeklyReport(): Promise<WeeklyCostReport | null> {
 }
 
 // =============================================
+// CANCELLATION WATCHDOG
+// =============================================
+
+// Track last alerted count per shift for deduplication
+const _lastAlertedCount: Record<string, number> = {}
+
+/**
+ * Run after a prepared item (cooking/ready) is cancelled.
+ * Checks if cancellation thresholds are exceeded for the current shift.
+ * Non-blocking — errors are logged but don't affect the cancellation.
+ */
+export async function onItemCancelled(
+  shiftId: string,
+  itemName: string,
+  cancelledBy: string
+): Promise<void> {
+  try {
+    const previousCount = _lastAlertedCount[shiftId] ?? 0
+    const { shouldAlert, summary } = await checkCancellationThreshold(shiftId, previousCount)
+
+    if (shouldAlert && summary) {
+      _lastAlertedCount[shiftId] = summary.totalCancelled
+
+      const alertsStore = useAlertsStore()
+      const { criticalLoss } = WATCHDOG_THRESHOLDS.cancellation
+      const severity = summary.estimatedLoss >= criticalLoss ? 'critical' : 'warning'
+
+      await alertsStore.createAlert({
+        category: 'product',
+        type: 'high_cancellation',
+        severity,
+        title: `High cancellations: ${summary.totalCancelled} items (${formatIDR(summary.estimatedLoss)} loss)`,
+        description: buildCancellationAlertDescription(summary),
+        metadata: {
+          shiftId,
+          totalCancelled: summary.totalCancelled,
+          estimatedLoss: summary.estimatedLoss,
+          byCancelledBy: summary.byCancelledBy,
+          byReason: summary.byReason,
+          lastItem: itemName,
+          lastCancelledBy: cancelledBy
+        }
+      })
+
+      DebugUtils.info(MODULE_NAME, 'Cancellation alert created', {
+        totalCancelled: summary.totalCancelled,
+        estimatedLoss: summary.estimatedLoss
+      })
+    }
+  } catch (err) {
+    DebugUtils.error(MODULE_NAME, 'onItemCancelled watchdog failed', { error: err })
+  }
+}
+
+/**
+ * Get cancellation summary for shift report.
+ * Returns null if no cancellations in this shift.
+ */
+export async function getShiftCancellationSummary(
+  shiftId: string
+): Promise<CancellationShiftSummary | null> {
+  return generateShiftCancellationSummary(shiftId)
+}
+
+// =============================================
 // DESCRIPTION BUILDERS
 // =============================================
 
@@ -321,6 +392,45 @@ function buildWeeklyReportDescription(report: WeeklyCostReport): string {
     }
     if (report.menuItems.length > 10) {
       lines.push(`  ... and ${report.menuItems.length - 10} more`)
+    }
+  }
+
+  return lines.join('\n')
+}
+
+function buildCancellationAlertDescription(summary: CancellationShiftSummary): string {
+  const lines = [
+    `Prepared items cancelled: ${summary.preparedCancelled}`,
+    `Estimated loss: ${formatIDR(summary.estimatedLoss)}`,
+    `Total cancellations (incl. draft): ${summary.totalCancelled}`
+  ]
+
+  // By person
+  const people = Object.entries(summary.byCancelledBy)
+  if (people.length > 0) {
+    lines.push('--- By Staff ---')
+    for (const [person, stats] of people) {
+      lines.push(`  ${person}: ${stats.count} items, ${formatIDR(stats.loss)} loss`)
+    }
+  }
+
+  // By reason
+  const reasons = Object.entries(summary.byReason)
+  if (reasons.length > 0) {
+    lines.push('--- By Reason ---')
+    for (const [reason, stats] of reasons) {
+      lines.push(`  ${reason}: ${stats.count} items, ${formatIDR(stats.loss)}`)
+    }
+  }
+
+  // Top items
+  const topItems = summary.items.slice(0, 5)
+  if (topItems.length > 0) {
+    lines.push('--- Recent Items ---')
+    for (const item of topItems) {
+      lines.push(
+        `  ${item.itemName} x${item.quantity} (${formatIDR(item.totalPrice)}) — ${item.reason}`
+      )
     }
   }
 

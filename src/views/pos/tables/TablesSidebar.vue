@@ -373,6 +373,9 @@ const performTableSelect = async (table: PosTable): Promise<void> => {
     })
 
     if (table.status === 'free') {
+      // ✅ Auto-cleanup: if current order is an empty draft, delete it before creating new one
+      await autoCleanupCurrentEmptyOrder()
+
       // Создаем новый заказ для стола с auto-assigned channel
       // Ensure channels are loaded before creating order
       if (!channelsStore.initialized) {
@@ -401,6 +404,11 @@ const performTableSelect = async (table: PosTable): Promise<void> => {
         throw new Error(result.error || 'Failed to create table order')
       }
     } else if (table.currentOrderId) {
+      // Auto-cleanup: if switching away from an empty draft order, delete it
+      if (ordersStore.currentOrderId && ordersStore.currentOrderId !== table.currentOrderId) {
+        await autoCleanupCurrentEmptyOrder()
+      }
+
       // Выбираем существующий заказ стола
       DebugUtils.debug(MODULE_NAME, 'Selecting existing table order', {
         orderId: table.currentOrderId,
@@ -468,6 +476,11 @@ const handleOrderSelect = async (item: PosTable | PosOrder): Promise<void> => {
  */
 const performOrderSelect = async (order: PosOrder): Promise<void> => {
   try {
+    // Auto-cleanup: if switching away from an empty draft order, delete it
+    if (ordersStore.currentOrderId && ordersStore.currentOrderId !== order.id) {
+      await autoCleanupCurrentEmptyOrder()
+    }
+
     DebugUtils.debug(MODULE_NAME, 'Order selected via SidebarItem', {
       orderId: order.id,
       orderNumber: order.orderNumber,
@@ -491,6 +504,43 @@ const performOrderSelect = async (order: PosOrder): Promise<void> => {
       orderId: order.id
     })
     console.error('Failed to select order:', message)
+  }
+}
+
+// =============================================
+// AUTO-CLEANUP: Delete empty draft order when switching tables
+// =============================================
+
+/**
+ * If the currently selected order is an empty draft dine_in order,
+ * delete it automatically before creating a new one.
+ * This prevents ghost orders from accumulating.
+ */
+async function autoCleanupCurrentEmptyOrder(): Promise<void> {
+  const currentOrder = ordersStore.currentOrder
+  if (!currentOrder) return
+
+  // Only auto-cleanup empty draft dine_in orders
+  if (
+    currentOrder.type === 'dine_in' &&
+    currentOrder.status === 'draft' &&
+    ordersStore.canDeleteOrder(currentOrder)
+  ) {
+    const allItems = currentOrder.bills.flatMap(b => b.items)
+    if (allItems.length === 0) {
+      DebugUtils.info(MODULE_NAME, 'Auto-cleaning empty draft order', {
+        orderId: currentOrder.id,
+        tableId: currentOrder.tableId
+      })
+      const result = await ordersStore.deleteOrder(currentOrder.id)
+      if (result.success) {
+        DebugUtils.info(MODULE_NAME, 'Empty draft order cleaned up successfully')
+      } else {
+        DebugUtils.warn(MODULE_NAME, 'Failed to cleanup empty draft order', {
+          error: result.error
+        })
+      }
+    }
   }
 }
 

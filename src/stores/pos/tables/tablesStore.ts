@@ -18,6 +18,9 @@ export const usePosTablesStore = defineStore('posTables', () => {
   const error = ref<string | null>(null)
   const filters = ref<TableFilters>({})
 
+  // ===== CONSTANTS =====
+  const TABLES_STORAGE_KEY = 'pos_tables'
+
   // ===== SERVICES =====
   const tablesService = new TablesService()
 
@@ -165,17 +168,24 @@ export const usePosTablesStore = defineStore('posTables', () => {
 
   /**
    * Обновить статус стола
+   * @param expectedOrderId — conditional guard: update only if current_order_id matches
    */
   async function updateTableStatus(
     tableId: string,
     status: TableStatus,
-    orderId?: string
+    orderId?: string,
+    expectedOrderId?: string
   ): Promise<ServiceResponse<PosTable>> {
     loading.value.update = true
     error.value = null
 
     try {
-      const response = await tablesService.updateTableStatus(tableId, status, orderId)
+      const response = await tablesService.updateTableStatus(
+        tableId,
+        status,
+        orderId,
+        expectedOrderId
+      )
 
       if (response.success && response.data) {
         const index = tables.value.findIndex(t => t.id === tableId)
@@ -252,17 +262,24 @@ export const usePosTablesStore = defineStore('posTables', () => {
   }
 
   /**
-   * Освободить стол
+   * Освободить стол (conditional: only if current_order_id matches expectedOrderId)
    */
-  async function freeTable(tableId: string): Promise<ServiceResponse<PosTable>> {
-    return updateTableStatus(tableId, 'free')
+  async function freeTable(
+    tableId: string,
+    expectedOrderId?: string
+  ): Promise<ServiceResponse<PosTable>> {
+    return updateTableStatus(tableId, 'free', undefined, expectedOrderId)
   }
 
   /**
-   * Занять стол заказом
+   * Занять стол заказом (conditional: only if current_order_id matches expectedOrderId)
    */
-  async function occupyTable(tableId: string, orderId: string): Promise<ServiceResponse<PosTable>> {
-    return updateTableStatus(tableId, 'occupied', orderId)
+  async function occupyTable(
+    tableId: string,
+    orderId: string,
+    expectedOrderId?: string
+  ): Promise<ServiceResponse<PosTable>> {
+    return updateTableStatus(tableId, 'occupied', orderId, expectedOrderId)
   }
 
   /**
@@ -307,6 +324,33 @@ export const usePosTablesStore = defineStore('posTables', () => {
   }
 
   /**
+   * Update table in-memory + localStorage without Supabase call.
+   * Used when DB was already updated (by RPC, realtime, or another device).
+   */
+  function updateTableLocally(tableId: string, updates: Partial<PosTable>): void {
+    const index = tables.value.findIndex(t => t.id === tableId)
+    if (index === -1) return
+
+    const table = tables.value[index]
+    Object.assign(table, updates)
+
+    // Sync to localStorage so it doesn't diverge
+    try {
+      const cached = localStorage.getItem(TABLES_STORAGE_KEY)
+      if (cached) {
+        const stored: PosTable[] = JSON.parse(cached)
+        const si = stored.findIndex(t => t.id === tableId)
+        if (si !== -1) {
+          Object.assign(stored[si], updates)
+          localStorage.setItem(TABLES_STORAGE_KEY, JSON.stringify(stored))
+        }
+      }
+    } catch {
+      // localStorage write failed — in-memory state is still correct
+    }
+  }
+
+  /**
    * Обновить стол из Realtime (без API вызова)
    * Используется для синхронизации между вкладками/устройствами
    */
@@ -327,16 +371,14 @@ export const usePosTablesStore = defineStore('posTables', () => {
     const oldStatus = table.status
     const oldOrderId = table.currentOrderId
 
-    // Обновляем только изменившиеся поля
-    if (update.status !== undefined) {
-      table.status = update.status
-    }
-    if (update.currentOrderId !== undefined) {
-      table.currentOrderId = update.currentOrderId
-    }
-    if (update.updatedAt !== undefined) {
-      table.updatedAt = update.updatedAt
-    }
+    // Build partial update
+    const changes: Partial<PosTable> = {}
+    if (update.status !== undefined) changes.status = update.status
+    if (update.currentOrderId !== undefined) changes.currentOrderId = update.currentOrderId
+    if (update.updatedAt !== undefined) changes.updatedAt = update.updatedAt
+
+    // Apply to in-memory + localStorage in one shot
+    updateTableLocally(update.id, changes)
 
     console.log('📡 Table updated from realtime:', {
       tableNumber: table.number,
@@ -380,6 +422,7 @@ export const usePosTablesStore = defineStore('posTables', () => {
     setFilters,
     clearFilters,
     clearError,
+    updateTableLocally,
     updateTableFromRealtime,
 
     // Composables (destructured)

@@ -130,7 +130,18 @@
                 {{ getItemStatusText(item.status) }}
               </v-chip>
 
+              <!-- Cancellation reason chip (expanded group item) -->
               <v-chip
+                v-if="item.status === 'cancelled' && item.cancellationReason"
+                :color="getCancellationReasonColor(item)"
+                size="small"
+                variant="tonal"
+              >
+                {{ getCancellationReasonLabel(item) }}
+              </v-chip>
+
+              <v-chip
+                v-if="item.status !== 'cancelled'"
                 :color="getItemPaymentStatusColor(item.paymentStatus || 'unpaid')"
                 size="small"
                 variant="flat"
@@ -266,7 +277,18 @@
                 {{ getItemStatusText(group.items[0].status) }}
               </v-chip>
 
+              <!-- Cancellation reason chip -->
               <v-chip
+                v-if="group.items[0].status === 'cancelled' && group.items[0].cancellationReason"
+                :color="getCancellationReasonColor(group.items[0])"
+                size="small"
+                variant="tonal"
+              >
+                {{ getCancellationReasonLabel(group.items[0]) }}
+              </v-chip>
+
+              <v-chip
+                v-if="group.items[0].status !== 'cancelled'"
                 :color="getItemPaymentStatusColor(group.items[0].paymentStatus)"
                 size="small"
                 variant="flat"
@@ -409,8 +431,10 @@ import type {
   PosBillItem,
   PosItemDiscount,
   ItemStatus,
-  ItemPaymentStatus
+  ItemPaymentStatus,
+  CancellationReason
 } from '@/stores/pos/types'
+import { CANCELLATION_REASON_OPTIONS } from '@/stores/pos/types'
 import { formatIDR } from '@/utils/currency'
 import { computed, ref } from 'vue'
 import { useOrdersComposables } from '@/stores/pos/orders/composables'
@@ -497,8 +521,9 @@ const groupedItems = computed(() => {
     const paymentStatusKey = item.paymentStatus || 'unpaid'
     const notesKey = item.kitchenNotes ? `notes-${item.kitchenNotes}` : 'no-notes'
 
-    // Включаем variantId, discounts, payment status, and notes в ключ группировки
-    const key = `${item.menuItemId}-${item.variantId || 'default'}-${modificationsKey}-${discountKey}-${paymentStatusKey}-${notesKey}`
+    // Включаем variantId, discounts, payment status, item status, and notes в ключ группировки
+    const statusKey = item.status === 'cancelled' ? 'cancelled' : 'active'
+    const key = `${item.menuItemId}-${item.variantId || 'default'}-${modificationsKey}-${discountKey}-${paymentStatusKey}-${statusKey}-${notesKey}`
 
     if (!groups.has(key)) {
       // ✨ NEW: Приоритет новой системе модификаторов
@@ -595,6 +620,18 @@ const getCancelBlockReason = (item: PosBillItem): string => {
   if (item.status === 'cancelled') return 'Already cancelled'
   if (item.paymentStatus === 'paid') return 'Paid'
   return ''
+}
+
+const getCancellationReasonLabel = (item: PosBillItem): string => {
+  if (!item.cancellationReason) return ''
+  const option = CANCELLATION_REASON_OPTIONS.find(o => o.value === item.cancellationReason)
+  return option?.label || item.cancellationReason
+}
+
+const getCancellationReasonColor = (item: PosBillItem): string => {
+  if (!item.cancellationReason) return 'grey'
+  const option = CANCELLATION_REASON_OPTIONS.find(o => o.value === item.cancellationReason)
+  return option?.color || 'grey'
 }
 
 const handleAddNote = (itemId: string): void => {
@@ -825,14 +862,14 @@ const calculateGroupOriginalPrice = (group: GroupedBillItems): number => {
 
 .variant-name-inline {
   font-size: 0.875rem;
-  color: rgb(var(--v-theme-on-surface-variant));
+  color: rgba(255, 255, 255, 0.6);
   font-weight: 500;
   flex-shrink: 0;
 }
 
 .variant-name-line {
   font-size: 0.875rem;
-  color: rgb(var(--v-theme-on-surface-variant));
+  color: rgba(255, 255, 255, 0.6);
   font-weight: 500;
   line-height: 1.2;
   margin-top: 2px;
