@@ -186,6 +186,7 @@
             inputmode="numeric"
             class="flex-grow-1"
             @keyup.enter="findCard"
+            @input="debouncedCardSearch"
           />
           <v-btn
             color="primary"
@@ -196,10 +197,39 @@
           >
             Find
           </v-btn>
-          <v-btn variant="outlined" density="compact" :loading="issuingCard" @click="issueCard">
+          <v-btn
+            variant="outlined"
+            density="compact"
+            :loading="issuingCard"
+            @click="openNewCardForm"
+          >
             New
           </v-btn>
         </div>
+
+        <!-- Card search results -->
+        <v-list
+          v-if="cardSearchResults.length > 0 && !attachedCard"
+          density="compact"
+          class="search-results mb-2"
+        >
+          <v-list-item v-for="c in cardSearchResults" :key="c.id" @click="selectCardFromSearch(c)">
+            <template #prepend>
+              <v-icon size="18" color="amber" class="mr-2">mdi-stamper</v-icon>
+            </template>
+            <v-list-item-title class="text-body-2">
+              #{{ c.cardNumber }}
+              <span v-if="c.customerName" class="text-medium-emphasis ml-2">
+                {{ c.customerName }}
+              </span>
+            </v-list-item-title>
+            <template #append>
+              <v-chip size="x-small" :color="c.status === 'active' ? 'success' : 'grey'">
+                {{ c.status }}
+              </v-chip>
+            </template>
+          </v-list-item>
+        </v-list>
 
         <!-- Card not found error -->
         <v-alert
@@ -213,6 +243,83 @@
         >
           {{ cardError }}
         </v-alert>
+
+        <!-- New card form -->
+        <div v-if="showNewCard" class="new-customer pa-2 rounded loyalty-surface mb-2">
+          <div class="text-body-2 font-weight-medium mb-2">New Stamp Card</div>
+          <v-text-field
+            :model-value="newCardNumber"
+            label="Card number"
+            density="compact"
+            variant="outlined"
+            hide-details
+            readonly
+            class="mb-2"
+          />
+          <NumericInputField
+            v-model="newCardStamps"
+            label="Initial stamps (for existing cards)"
+            density="compact"
+            variant="outlined"
+            hide-details
+            :min="0"
+            :max="100"
+            class="mb-2"
+          />
+          <v-text-field
+            v-model="newCardOwnerName"
+            placeholder="Owner name (optional)"
+            density="compact"
+            variant="outlined"
+            hide-details
+            class="mb-2"
+          />
+          <div class="d-flex gap-2 mb-2">
+            <v-select
+              :model-value="newCardPhone.selectedCountry.value.code"
+              :items="newCardPhone.countries"
+              item-value="code"
+              density="compact"
+              variant="outlined"
+              hide-details
+              style="max-width: 120px; flex-shrink: 0"
+              @update:model-value="newCardPhone.setCountry($event)"
+            >
+              <template #selection="{ item }">{{ item.raw.flag }} {{ item.raw.dial }}</template>
+              <template #item="{ item, props: itemProps }">
+                <v-list-item
+                  v-bind="itemProps"
+                  :title="`${item.raw.flag} ${item.raw.name}`"
+                  :subtitle="item.raw.dial"
+                />
+              </template>
+            </v-select>
+            <v-text-field
+              v-model="newCardPhone.localNumber.value"
+              :placeholder="newCardPhone.selectedCountry.value.format || 'Phone number'"
+              density="compact"
+              variant="outlined"
+              hide-details
+              inputmode="tel"
+              class="flex-grow-1"
+            />
+          </div>
+          <v-alert v-if="newCardError" type="error" variant="tonal" density="compact" class="mb-2">
+            {{ newCardError }}
+          </v-alert>
+          <div class="d-flex gap-2">
+            <v-btn
+              size="small"
+              variant="flat"
+              color="primary"
+              :loading="issuingCard"
+              @click="createNewCard"
+            >
+              Create Card
+            </v-btn>
+            <v-btn size="small" variant="text" @click="showNewCard = false">Cancel</v-btn>
+          </div>
+        </div>
 
         <!-- Card info -->
         <div v-if="attachedCard" class="card-info pa-2 rounded loyalty-surface">
@@ -380,16 +487,27 @@
           />
           <div class="d-flex gap-2 mb-2">
             <v-select
-              v-model="newCustomerPhoneCode"
-              :items="phoneCodes"
+              :model-value="newCustomerPhone.selectedCountry.value.code"
+              :items="newCustomerPhone.countries"
+              item-value="code"
               density="compact"
               variant="outlined"
               hide-details
-              style="max-width: 110px; flex-shrink: 0"
-            />
+              style="max-width: 120px; flex-shrink: 0"
+              @update:model-value="newCustomerPhone.setCountry($event)"
+            >
+              <template #selection="{ item }">{{ item.raw.flag }} {{ item.raw.dial }}</template>
+              <template #item="{ item, props: itemProps }">
+                <v-list-item
+                  v-bind="itemProps"
+                  :title="`${item.raw.flag} ${item.raw.name}`"
+                  :subtitle="item.raw.dial"
+                />
+              </template>
+            </v-select>
             <v-text-field
-              v-model="newCustomerPhone"
-              placeholder="Phone number"
+              v-model="newCustomerPhone.localNumber.value"
+              :placeholder="newCustomerPhone.selectedCountry.value.format || 'Phone number'"
               density="compact"
               variant="outlined"
               hide-details
@@ -445,12 +563,13 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { Customer } from '@/stores/customers'
-import type { StampCardInfo, ConvertResult } from '@/stores/loyalty'
+import type { StampCardInfo, StampCardListItem, ConvertResult } from '@/stores/loyalty'
 import { useCustomersStore } from '@/stores/customers'
 import { useLoyaltyStore } from '@/stores/loyalty'
 import { formatIDR, DebugUtils } from '@/utils'
 import { TimeUtils } from '@/utils'
-import { usePhoneCodes, buildFullPhone } from '@/composables/usePhoneCodes'
+import { usePhoneInput } from '@/composables/usePhoneInput'
+import { NumericInputField } from '@/components/input'
 import QrScanner from './QrScanner.vue'
 
 const props = defineProps<{
@@ -469,7 +588,6 @@ const emit = defineEmits<{
 
 const customersStore = useCustomersStore()
 const loyaltyStore = useLoyaltyStore()
-const { phoneCodes, defaultPhoneCode } = usePhoneCodes()
 
 // State
 const expanded = ref(props.dialogMode || false)
@@ -537,6 +655,15 @@ const creatingCustomer = ref(false)
 const cardNumber = ref('')
 const cardError = ref('')
 const attachedCard = ref<StampCardInfo | null>(null)
+const cardSearchResults = ref<StampCardListItem[]>([])
+
+// New card form state
+const showNewCard = ref(false)
+const newCardNumber = ref('')
+const newCardStamps = ref(0)
+const newCardOwnerName = ref('')
+const newCardError = ref('')
+const newCardPhone = usePhoneInput()
 
 // Customer state
 const customerQuery = ref('')
@@ -544,8 +671,7 @@ const searchResults = ref<Customer[]>([])
 const attachedCustomer = ref<Customer | null>(null)
 const showNewCustomer = ref(false)
 const newCustomerName = ref('')
-const newCustomerPhone = ref('')
-const newCustomerPhoneCode = ref(defaultPhoneCode)
+const newCustomerPhone = usePhoneInput()
 const newCustomerTelegram = ref('')
 const newCustomerCardNumber = ref('')
 const createCustomerError = ref('')
@@ -665,12 +791,13 @@ async function findCard() {
   if (!cardNumber.value.trim()) return
   loading.value = true
   cardError.value = ''
+  cardSearchResults.value = []
 
   try {
     const info = await loyaltyStore.getCardInfo(cardNumber.value.trim())
     attachedCard.value = info
     emit('update:card', info)
-    if (!props.dialogMode) expanded.value = false
+    // Don't collapse — let the user see the card info and decide
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     // Show user-friendly error
@@ -686,14 +813,55 @@ async function findCard() {
   }
 }
 
-async function issueCard() {
-  issuingCard.value = true
+// Card search (debounced)
+let cardSearchTimeout: ReturnType<typeof setTimeout> | null = null
+function debouncedCardSearch() {
+  if (cardSearchTimeout) clearTimeout(cardSearchTimeout)
+  cardSearchTimeout = setTimeout(async () => {
+    const q = cardNumber.value.trim()
+    if (q.length < 1) {
+      cardSearchResults.value = []
+      return
+    }
+    cardSearchResults.value = await loyaltyStore.searchCards(q)
+  }, 300)
+}
+
+async function selectCardFromSearch(card: StampCardListItem) {
+  cardNumber.value = card.cardNumber
+  cardSearchResults.value = []
+  await findCard()
+}
+
+async function openNewCardForm() {
+  showNewCard.value = true
+  newCardStamps.value = 0
+  newCardOwnerName.value = ''
+  newCardPhone.localNumber.value = ''
+  newCardError.value = ''
   try {
-    const newNumber = await loyaltyStore.issueNewCard()
-    cardNumber.value = newNumber
+    newCardNumber.value = await loyaltyStore.getNextCardNumber()
+  } catch {
+    newCardNumber.value = '???'
+  }
+}
+
+async function createNewCard() {
+  issuingCard.value = true
+  newCardError.value = ''
+  try {
+    const stamps = newCardStamps.value > 0 ? newCardStamps.value : undefined
+    const createdNumber = await loyaltyStore.issueNewCard({
+      cardNumber: newCardNumber.value,
+      stamps: stamps && !isNaN(stamps) ? stamps : undefined,
+      customerName: newCardOwnerName.value || undefined,
+      customerPhone: newCardPhone.fullPhone.value || undefined
+    })
+    cardNumber.value = createdNumber
+    showNewCard.value = false
     await findCard()
   } catch (err) {
-    cardError.value = err instanceof Error ? err.message : 'Failed to issue card'
+    newCardError.value = err instanceof Error ? err.message : 'Failed to create card'
   } finally {
     issuingCard.value = false
   }
@@ -723,7 +891,7 @@ function selectCustomer(customer: Customer) {
   searchResults.value = []
   customerQuery.value = ''
   emit('update:customer', customer)
-  if (!props.dialogMode) expanded.value = false
+  // Don't collapse — let operator continue (e.g. attach card too)
 }
 
 function detachCustomer() {
@@ -737,12 +905,9 @@ async function createNewCustomer() {
   createCustomerError.value = ''
 
   try {
-    // Build phone with country code
-    const fullPhone = buildFullPhone(newCustomerPhoneCode.value, newCustomerPhone.value)
-
     let customer = await customersStore.createCustomer({
       name: newCustomerName.value.trim(),
-      phone: fullPhone,
+      phone: newCustomerPhone.fullPhone.value || undefined,
       telegramUsername: newCustomerTelegram.value.trim() || undefined
     } as any)
 
@@ -768,7 +933,7 @@ async function createNewCustomer() {
     selectCustomer(customer)
     showNewCustomer.value = false
     newCustomerName.value = ''
-    newCustomerPhone.value = ''
+    newCustomerPhone.localNumber.value = ''
     newCustomerTelegram.value = ''
     newCustomerCardNumber.value = ''
   } catch (err) {

@@ -67,6 +67,9 @@ export const STORE_DEPENDENCIES: Record<StoreName, StoreName[]> = {
   websiteSettings: [],
   websiteMenu: ['menu'],
 
+  // Staff & payroll
+  staff: [],
+
   // Debug system
   debug: []
 }
@@ -167,6 +170,9 @@ export const STORE_CATEGORIES: Record<StoreName, StoreCategory> = {
   website: 'backoffice',
   websiteSettings: 'backoffice',
   websiteMenu: 'backoffice',
+
+  // Staff & payroll
+  staff: 'backoffice',
 
   // Опциональные
   debug: 'optional'

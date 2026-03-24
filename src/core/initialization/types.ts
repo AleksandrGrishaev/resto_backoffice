@@ -53,6 +53,7 @@ export type StoreName =
   | 'website'
   | 'websiteSettings'
   | 'websiteMenu'
+  | 'staff'
   | 'debug'
 
 /**

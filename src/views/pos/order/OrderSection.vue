@@ -401,7 +401,10 @@ const paymentBillCustomerId = computed(() => {
     const cids = [...new Set(bills.map(b => b!.customerId).filter(Boolean))]
     if (cids.length === 1) return cids[0]
   }
-  // Fallback to order-level customer (e.g. customer attached before bill creation)
+  // If a specific bill is being paid and it has no customer, don't inherit from order
+  // (other bills may have a customer but this one doesn't)
+  if (paymentBill.value && !paymentBill.value.customerId) return null
+  // Fallback to order-level customer only when no specific bill context
   return currentOrder.value?.customerId || null
 })
 
@@ -2188,7 +2191,7 @@ const handleLoyaltyCustomer = async (customer: Customer | null): Promise<void> =
   }
 
   await ordersStore.updateOrder(currentOrder.value)
-  showLoyaltyDialog.value = false
+  // Don't close dialog — let operator continue working (attach card, etc.)
   console.log(
     '🎯 Bill loyalty customer updated:',
     customer?.name || 'detached',
@@ -2241,7 +2244,7 @@ const handleLoyaltyCard = async (card: StampCardInfo | null): Promise<void> => {
   }
 
   await ordersStore.updateOrder(currentOrder.value)
-  showLoyaltyDialog.value = false
+  // Don't close dialog — let operator continue working
   console.log(
     '🎯 Bill loyalty card updated:',
     card?.cardNumber || 'detached',

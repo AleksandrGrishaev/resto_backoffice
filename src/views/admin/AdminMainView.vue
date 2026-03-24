@@ -27,6 +27,8 @@
           <LoyaltySettingsScreen
             v-else-if="currentScreen === 'loyalty' || currentScreen === 'customers'"
           />
+          <StaffScreen v-else-if="currentScreen === 'staff'" />
+          <PayrollScreen v-else-if="currentScreen === 'payroll'" />
           <DashboardScreen v-else-if="currentScreen === 'dashboard'" />
         </div>
       </template>
@@ -63,6 +65,8 @@ const LoyaltySettingsScreen = defineAsyncComponent(
   () => import('./loyalty/LoyaltySettingsScreen.vue')
 )
 const DashboardScreen = defineAsyncComponent(() => import('./dashboard/DashboardScreen.vue'))
+const StaffScreen = defineAsyncComponent(() => import('./staff/StaffScreen.vue'))
+const PayrollScreen = defineAsyncComponent(() => import('./payroll/PayrollScreen.vue'))
 
 const authStore = useAuthStore()
 const { state: snackbarState } = useSnackbar()
@@ -96,6 +100,11 @@ onMounted(async () => {
     async () => {
       const { useLoyaltyStore } = await import('@/stores/loyalty')
       const s = useLoyaltyStore()
+      if (!s.initialized) await s.initialize()
+    },
+    async () => {
+      const { useStaffStore } = await import('@/stores/staff')
+      const s = useStaffStore()
       if (!s.initialized) await s.initialize()
     }
   ]

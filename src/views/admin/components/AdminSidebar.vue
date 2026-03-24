@@ -55,6 +55,8 @@ const screens = [
   { id: 'menu' as AdminScreenName, label: 'Menu', icon: 'mdi-book-open-variant' },
   { id: 'channels' as AdminScreenName, label: 'Channels', icon: 'mdi-store' },
   { id: 'loyalty' as AdminScreenName, label: 'Loyalty', icon: 'mdi-star-circle' },
+  { id: 'staff' as AdminScreenName, label: 'Staff', icon: 'mdi-account-group' },
+  { id: 'payroll' as AdminScreenName, label: 'Payroll', icon: 'mdi-cash-multiple' },
   { id: 'dashboard' as AdminScreenName, label: 'Dashboard', icon: 'mdi-chart-box-outline' }
 ]
 </script>

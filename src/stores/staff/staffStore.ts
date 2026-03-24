@@ -1,0 +1,212 @@
+// src/stores/staff/staffStore.ts - Pinia store for Staff & Payroll
+
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+import { DebugUtils } from '@/utils'
+import type { StaffRank, StaffMember, WorkLog, StaffBonus, PayrollPeriod } from './types'
+import { staffService } from './staffService'
+import {
+  calculatePayrollForMonth,
+  savePayrollToDb,
+  updatePayrollStatus,
+  getPayrollMonth
+} from './payrollService'
+import type { PayrollResult } from './payrollService'
+
+const MODULE = 'StaffStore'
+
+export const useStaffStore = defineStore('staff', () => {
+  // =====================================================
+  // STATE
+  // =====================================================
+  const ranks = ref<StaffRank[]>([])
+  const members = ref<StaffMember[]>([])
+  const bonuses = ref<StaffBonus[]>([])
+  const payrollPeriods = ref<PayrollPeriod[]>([])
+  const initialized = ref(false)
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  // =====================================================
+  // GETTERS
+  // =====================================================
+  const activeMembers = computed(() => members.value.filter(m => m.isActive))
+  const activeRanks = computed(() => ranks.value.filter(r => r.isActive))
+
+  // =====================================================
+  // ACTIONS
+  // =====================================================
+
+  async function initialize() {
+    if (initialized.value) return
+    loading.value = true
+    error.value = null
+
+    try {
+      const [ranksData, membersData, bonusesData] = await Promise.all([
+        staffService.fetchRanks(),
+        staffService.fetchMembers(),
+        staffService.fetchBonuses()
+      ])
+      ranks.value = ranksData
+      members.value = membersData
+      bonuses.value = bonusesData
+      initialized.value = true
+      DebugUtils.info(MODULE, '✅ Initialized', {
+        ranks: ranksData.length,
+        members: membersData.length,
+        bonuses: bonusesData.length
+      })
+    } catch (e: any) {
+      error.value = e.message
+      DebugUtils.error(MODULE, 'Init failed', e)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // --- Ranks ---
+
+  async function addRank(rank: Partial<StaffRank>) {
+    const created = await staffService.createRank(rank)
+    ranks.value.push(created)
+    return created
+  }
+
+  async function editRank(id: string, data: Partial<StaffRank>) {
+    const updated = await staffService.updateRank(id, data)
+    const idx = ranks.value.findIndex(r => r.id === id)
+    if (idx >= 0) ranks.value[idx] = updated
+    return updated
+  }
+
+  async function removeRank(id: string) {
+    await staffService.deleteRank(id)
+    ranks.value = ranks.value.filter(r => r.id !== id)
+  }
+
+  // --- Members ---
+
+  async function addMember(member: Partial<StaffMember>) {
+    const created = await staffService.createMember(member)
+    members.value.push(created)
+    return created
+  }
+
+  async function editMember(id: string, data: Partial<StaffMember>) {
+    const updated = await staffService.updateMember(id, data)
+    const idx = members.value.findIndex(m => m.id === id)
+    if (idx >= 0) members.value[idx] = updated
+    return updated
+  }
+
+  async function removeMember(id: string) {
+    await staffService.deleteMember(id)
+    members.value = members.value.filter(m => m.id !== id)
+  }
+
+  // --- Bonuses ---
+
+  async function addBonus(bonus: Partial<StaffBonus>) {
+    const created = await staffService.createBonus(bonus)
+    bonuses.value.push(created)
+    return created
+  }
+
+  async function editBonus(id: string, data: Partial<StaffBonus>) {
+    const updated = await staffService.updateBonus(id, data)
+    const idx = bonuses.value.findIndex(b => b.id === id)
+    if (idx >= 0) bonuses.value[idx] = updated
+    return updated
+  }
+
+  async function removeBonus(id: string) {
+    await staffService.deleteBonus(id)
+    bonuses.value = bonuses.value.filter(b => b.id !== id)
+  }
+
+  // --- Work Logs ---
+
+  async function fetchWorkLogs(dateFrom: string, dateTo: string): Promise<WorkLog[]> {
+    return staffService.fetchWorkLogs(dateFrom, dateTo)
+  }
+
+  async function saveWorkLogs(
+    logs: Array<{ staffId: string; workDate: string; hoursWorked: number; recordedBy?: string }>
+  ): Promise<WorkLog[]> {
+    return staffService.upsertWorkLogsBatch(logs)
+  }
+
+  // --- Payroll ---
+
+  async function loadPayrollPeriods() {
+    payrollPeriods.value = await staffService.fetchPayrollPeriods()
+  }
+
+  async function runPayrollCalculation(year: number, month: number): Promise<PayrollResult> {
+    loading.value = true
+    try {
+      return await calculatePayrollForMonth(year, month, members.value, bonuses.value)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function savePayroll(result: PayrollResult) {
+    const period = await savePayrollToDb(result)
+    const idx = payrollPeriods.value.findIndex(p => p.id === period.id)
+    if (idx >= 0) {
+      payrollPeriods.value[idx] = period
+    } else {
+      payrollPeriods.value.unshift(period)
+    }
+    return period
+  }
+
+  async function approvePayroll(periodId: string, approvedBy?: string) {
+    const period = await updatePayrollStatus(periodId, 'approved', approvedBy)
+    const idx = payrollPeriods.value.findIndex(p => p.id === periodId)
+    if (idx >= 0) payrollPeriods.value[idx] = period
+    return period
+  }
+
+  async function markPayrollPaid(periodId: string) {
+    const period = await updatePayrollStatus(periodId, 'paid')
+    const idx = payrollPeriods.value.findIndex(p => p.id === periodId)
+    if (idx >= 0) payrollPeriods.value[idx] = period
+    return period
+  }
+
+  return {
+    // state
+    ranks,
+    members,
+    bonuses,
+    payrollPeriods,
+    initialized,
+    loading,
+    error,
+    // getters
+    activeMembers,
+    activeRanks,
+    // actions
+    initialize,
+    addRank,
+    editRank,
+    removeRank,
+    addMember,
+    editMember,
+    removeMember,
+    addBonus,
+    editBonus,
+    removeBonus,
+    fetchWorkLogs,
+    saveWorkLogs,
+    loadPayrollPeriods,
+    runPayrollCalculation,
+    savePayroll,
+    approvePayroll,
+    markPayrollPaid,
+    getPayrollMonth
+  }
+})
