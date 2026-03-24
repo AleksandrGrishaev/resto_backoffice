@@ -17,6 +17,7 @@ const emit = defineEmits<{
   edit: [category: WebsiteMenuCategory]
   delete: [id: string]
   itemDropped: [categoryId: string, menuItemId: string]
+  itemMoved: [itemId: string, fromCategoryId: string, toCategoryId: string]
 }>()
 
 const collapsed = ref(props.forceCollapsed ?? false)
@@ -46,8 +47,18 @@ function getMenuItem(menuItemId: string): MenuItem | undefined {
 }
 
 function handleDragAdd(event: any) {
-  // Read menu item ID from data attribute on the dropped DOM element
-  const menuItemId = event.item?.dataset?.menuItemId
+  const el = event.item
+  const websiteItemId = el?.dataset?.websiteItemId
+  const sourceCategoryId = el?.dataset?.sourceCategoryId
+
+  if (websiteItemId && sourceCategoryId && sourceCategoryId !== props.category.id) {
+    // Existing item moved from another category
+    emit('itemMoved', websiteItemId, sourceCategoryId, props.category.id)
+    return
+  }
+
+  // New item dragged from source panel
+  const menuItemId = el?.dataset?.menuItemId
   if (menuItemId) {
     emit('itemDropped', props.category.id, menuItemId)
   }

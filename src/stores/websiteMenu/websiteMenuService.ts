@@ -199,6 +199,22 @@ export const websiteMenuService = {
     }
   },
 
+  async moveItem(id: string, newCategoryId: string): Promise<WebsiteMenuItem> {
+    const { data, error } = await supabase
+      .from('website_menu_items')
+      .update({ category_id: newCategoryId })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to move item', { error })
+      throw error
+    }
+
+    return mapMenuItemFromDB(data)
+  },
+
   async reorderItems(
     items: { id: string; sortOrder: number; categoryId?: string }[]
   ): Promise<void> {

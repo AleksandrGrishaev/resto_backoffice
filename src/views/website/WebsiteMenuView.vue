@@ -94,6 +94,10 @@ async function handleItemDropped(categoryId: string, menuItemId: string) {
   })
 }
 
+async function handleItemMoved(itemId: string, fromCategoryId: string, toCategoryId: string) {
+  await websiteMenuStore.moveItem(itemId, fromCategoryId, toCategoryId)
+}
+
 // Group deletion
 const deleteGroupDialog = ref(false)
 const groupToDelete = ref<WebsiteMenuCategory | null>(null)
@@ -234,6 +238,7 @@ async function deleteGroupWithChildren() {
                     @edit="openEditCategory"
                     @delete="handleDeleteCategory"
                     @item-dropped="handleItemDropped"
+                    @item-moved="handleItemMoved"
                   />
                 </VueDraggable>
               </div>
@@ -256,6 +261,7 @@ async function deleteGroupWithChildren() {
             @edit="openEditCategory"
             @delete="handleDeleteCategory"
             @item-dropped="handleItemDropped"
+            @item-moved="handleItemMoved"
           />
         </div>
       </v-col>

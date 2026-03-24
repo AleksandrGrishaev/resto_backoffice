@@ -165,6 +165,48 @@ export const useWebsiteMenuStore = defineStore('websiteMenu', () => {
     }
   }
 
+  async function moveItem(
+    itemId: string,
+    fromCategoryId: string,
+    toCategoryId: string
+  ): Promise<void> {
+    // Optimistic update
+    const newMap = new Map(itemsByCategory.value)
+    const fromItems = [...(newMap.get(fromCategoryId) || [])]
+    const movedItem = fromItems.find(i => i.id === itemId)
+    if (!movedItem) return
+
+    // Remove from source
+    newMap.set(
+      fromCategoryId,
+      fromItems.filter(i => i.id !== itemId)
+    )
+
+    // Add to target
+    const toItems = [
+      ...(newMap.get(toCategoryId) || []),
+      { ...movedItem, categoryId: toCategoryId }
+    ]
+    newMap.set(toCategoryId, toItems)
+    itemsByCategory.value = newMap
+
+    try {
+      await websiteMenuService.moveItem(itemId, toCategoryId)
+      DebugUtils.info(MODULE_NAME, 'Item moved', { itemId, fromCategoryId, toCategoryId })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to move item', { error })
+      // Reload both categories on failure
+      const allItems = await websiteMenuService.getItems()
+      const reloadMap = new Map<string, WebsiteMenuItem[]>()
+      for (const item of allItems) {
+        const list = reloadMap.get(item.categoryId) || []
+        list.push(item)
+        reloadMap.set(item.categoryId, list)
+      }
+      itemsByCategory.value = reloadMap
+    }
+  }
+
   async function reorderItems(categoryId: string, orderedItems: WebsiteMenuItem[]): Promise<void> {
     // Optimistic update — also update categoryId for items moved from other categories
     const newMap = new Map(itemsByCategory.value)
@@ -266,6 +308,7 @@ export const useWebsiteMenuStore = defineStore('websiteMenu', () => {
     bulkAddItems,
     updateItem,
     removeItem,
+    moveItem,
     reorderItems,
     setVariantDisplayMode
   }
