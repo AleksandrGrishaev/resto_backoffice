@@ -57,8 +57,6 @@ export const useWebsiteMenuStore = defineStore('websiteMenu', () => {
     dto: CreateWebsiteCategoryDto
   ): Promise<WebsiteMenuCategory | null> {
     try {
-      // Set sort order to append at end
-      const maxSort = categories.value.reduce((max, c) => Math.max(max, c.sortOrder), -1)
       const category = await websiteMenuService.createCategory(dto)
       categories.value.push(category)
       return category
@@ -208,32 +206,17 @@ export const useWebsiteMenuStore = defineStore('websiteMenu', () => {
   }
 
   async function reorderItems(categoryId: string, orderedItems: WebsiteMenuItem[]): Promise<void> {
-    // Optimistic update — also update categoryId for items moved from other categories
+    // Optimistic update — only sort order within same category
     const newMap = new Map(itemsByCategory.value)
-    const updatedItems = orderedItems.map((item, i) => ({
-      ...item,
-      sortOrder: i,
-      categoryId
-    }))
-    newMap.set(categoryId, updatedItems)
-
-    // Remove moved items from their old categories
-    for (const item of orderedItems) {
-      if (item.categoryId !== categoryId) {
-        const oldItems = newMap.get(item.categoryId)
-        if (oldItems) {
-          newMap.set(
-            item.categoryId,
-            oldItems.filter(i => i.id !== item.id)
-          )
-        }
-      }
-    }
+    newMap.set(
+      categoryId,
+      orderedItems.map((item, i) => ({ ...item, sortOrder: i }))
+    )
     itemsByCategory.value = newMap
 
     try {
       await websiteMenuService.reorderItems(
-        orderedItems.map((item, i) => ({ id: item.id, sortOrder: i, categoryId }))
+        orderedItems.map((item, i) => ({ id: item.id, sortOrder: i }))
       )
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to reorder items', { error })

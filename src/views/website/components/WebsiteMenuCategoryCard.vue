@@ -30,11 +30,18 @@ watch(
 )
 const confirmDelete = ref(false)
 
+// Flag to skip v-model setter when handleDragAdd already handles the move
+const skipNextReorder = ref(false)
+
 const orderedItems = computed({
   get: () => [...props.items].sort((a, b) => a.sortOrder - b.sortOrder),
   set: (val: WebsiteMenuItem[]) => {
+    if (skipNextReorder.value) {
+      skipNextReorder.value = false
+      return
+    }
     // Only reorder real items (ignore cloned source items without id)
-    const realItems = val.filter(i => i.id)
+    const realItems = val.filter(i => i.id && i.categoryId === props.category.id)
     if (realItems.length > 0) {
       props.websiteMenuStore.reorderItems(props.category.id, realItems)
     }
@@ -52,14 +59,16 @@ function handleDragAdd(event: any) {
   const sourceCategoryId = el?.dataset?.sourceCategoryId
 
   if (websiteItemId && sourceCategoryId && sourceCategoryId !== props.category.id) {
-    // Existing item moved from another category
+    // Existing item moved from another category — skip v-model reorder
+    skipNextReorder.value = true
     emit('itemMoved', websiteItemId, sourceCategoryId, props.category.id)
     return
   }
 
-  // New item dragged from source panel
+  // New item dragged from source panel — skip v-model reorder (addItem handles it)
   const menuItemId = el?.dataset?.menuItemId
   if (menuItemId) {
+    skipNextReorder.value = true
     emit('itemDropped', props.category.id, menuItemId)
   }
 }

@@ -225,6 +225,7 @@ async function deleteGroupWithChildren() {
                   handle=".category-drag-handle"
                   animation="200"
                   ghost-class="ghost"
+                  @update:model-value="websiteMenuStore.reorderCategories($event)"
                 >
                   <WebsiteMenuCategoryCard
                     v-for="category in getGroupChildren(group.id)"
