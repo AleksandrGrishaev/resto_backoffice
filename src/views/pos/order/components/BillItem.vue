@@ -501,9 +501,9 @@ const groupedItems = computed(() => {
     let modificationsKey = 'no-mods'
 
     if (item.selectedModifiers && item.selectedModifiers.length > 0) {
-      // Используем новую систему модификаторов
+      // Используем optionId для точной группировки (optionName может совпадать у разных групп)
       modificationsKey = item.selectedModifiers
-        .map(m => m.optionName)
+        .map(m => m.optionId || m.optionName)
         .sort()
         .join('-')
     } else if (item.modifications && item.modifications.length > 0) {

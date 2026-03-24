@@ -341,7 +341,14 @@
         <v-spacer />
 
         <v-btn variant="text" @click="handleCancel">Cancel</v-btn>
-        <v-btn color="primary" :disabled="!isValid" @click="handleAddToBill">Add to Bill</v-btn>
+        <v-btn
+          color="primary"
+          :disabled="!isValid || addingInProgress"
+          :loading="addingInProgress"
+          @click="handleAddToBill"
+        >
+          Add to Bill
+        </v-btn>
       </v-card-actions>
 
       <!-- Validation Errors -->
@@ -391,6 +398,7 @@ const recipesStore = useRecipesStore()
 const selectedModifiers = ref<Map<string, Map<string, number>>>(new Map())
 const selectedTemplateId = ref<string | null>(null)
 const collapsedGroups = ref<Set<string>>(new Set())
+const addingInProgress = ref(false)
 
 function toggleGroupCollapse(groupId: string): void {
   if (collapsedGroups.value.has(groupId)) {
@@ -655,7 +663,8 @@ function applyTemplate(template: VariantTemplate): void {
 }
 
 function handleAddToBill(): void {
-  if (!isValid.value || !props.variant) return
+  if (!isValid.value || !props.variant || addingInProgress.value) return
+  addingInProgress.value = true
 
   // Convert selectedModifiers Map to SelectedModifier[]
   // Generate `count` number of SelectedModifier objects for each option
@@ -711,6 +720,7 @@ function handleCancel(): void {
 }
 
 function initializeDefaults(): void {
+  addingInProgress.value = false
   if (!props.menuItem?.modifierGroups) return
 
   selectedModifiers.value.clear()

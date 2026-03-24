@@ -1072,10 +1072,13 @@ const handleConfirmCancel = async (data: {
 }): Promise<void> => {
   if (!currentOrder.value || !activeBillId.value || !cancellationItem.value) return
 
-  // Close dialog immediately for better UX
+  // Capture values before closing dialog (activeBillId may change after close)
   const orderId = currentOrder.value.id
+  const billId = activeBillId.value
   const item = cancellationItem.value.item
   const itemName = item.menuItemName
+
+  // Close dialog immediately for better UX
   handleCancelDialogClose()
 
   try {
@@ -1085,7 +1088,7 @@ const handleConfirmCancel = async (data: {
 
     const result = await cancelItem(
       orderId,
-      activeBillId.value!,
+      billId,
       item,
       item.status === 'draft'
         ? undefined
@@ -1114,8 +1117,7 @@ const handleConfirmCancel = async (data: {
       showSuccess(result.writeOffPending ? `${message} (write-off in progress...)` : message)
       hasUnsavedChanges.value = true
 
-      // Recalculate order totals
-      await ordersStore.recalculateOrderTotals(orderId)
+      // Note: recalculateOrderTotals already called inside cancelItem/removeItemFromBill
 
       // Watchdog: track prepared item cancellations (non-blocking)
       if (item.status === 'cooking' || item.status === 'ready') {
