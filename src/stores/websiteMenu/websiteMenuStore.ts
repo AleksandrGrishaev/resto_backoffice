@@ -166,17 +166,32 @@ export const useWebsiteMenuStore = defineStore('websiteMenu', () => {
   }
 
   async function reorderItems(categoryId: string, orderedItems: WebsiteMenuItem[]): Promise<void> {
-    // Optimistic update
+    // Optimistic update — also update categoryId for items moved from other categories
     const newMap = new Map(itemsByCategory.value)
-    newMap.set(
-      categoryId,
-      orderedItems.map((item, i) => ({ ...item, sortOrder: i }))
-    )
+    const updatedItems = orderedItems.map((item, i) => ({
+      ...item,
+      sortOrder: i,
+      categoryId
+    }))
+    newMap.set(categoryId, updatedItems)
+
+    // Remove moved items from their old categories
+    for (const item of orderedItems) {
+      if (item.categoryId !== categoryId) {
+        const oldItems = newMap.get(item.categoryId)
+        if (oldItems) {
+          newMap.set(
+            item.categoryId,
+            oldItems.filter(i => i.id !== item.id)
+          )
+        }
+      }
+    }
     itemsByCategory.value = newMap
 
     try {
       await websiteMenuService.reorderItems(
-        orderedItems.map((item, i) => ({ id: item.id, sortOrder: i }))
+        orderedItems.map((item, i) => ({ id: item.id, sortOrder: i, categoryId }))
       )
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to reorder items', { error })
