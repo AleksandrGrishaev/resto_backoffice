@@ -59,6 +59,7 @@ export interface RecipeExportData {
   date: string
   departments?: RecipeDepartmentExport[] // When exporting 'all' - grouped by department
   categories: RecipeCategoryExport[] // Direct categories (single department or backward compat)
+  dependentPreparations?: PreparationExport[] // Unique referenced preparations (no duplicates)
 }
 
 export interface RecipeDepartmentExport {
@@ -81,12 +82,27 @@ export interface RecipeExport {
   costPerUnit: number
   totalCost: number
   components: RecipeComponentExport[]
+  modifierGroups?: RecipeModifierGroupExport[]
   instructions?: string
+}
+
+export interface RecipeModifierGroupExport {
+  name: string
+  type: 'replacement' | 'addon' | 'removal'
+  options: RecipeModifierOptionExport[]
+}
+
+export interface RecipeModifierOptionExport {
+  name: string
+  isDefault: boolean
+  priceAdjustment: number
+  components: RecipeComponentExport[]
+  totalCost: number
 }
 
 export interface RecipeComponentExport {
   name: string
-  type: 'product' | 'preparation'
+  type: 'product' | 'preparation' | 'recipe'
   quantity: number
   unit: string
   cost: number

@@ -24,36 +24,57 @@
           </v-chip>
         </div>
       </div>
-      <!-- Export PDF (menu items, recipes, preparations) -->
-      <v-btn
-        v-if="item.type !== 'product'"
-        variant="tonal"
-        size="small"
-        prepend-icon="mdi-file-pdf-box"
-        class="mr-1"
-        :loading="isExporting"
-        @click="handleExportPdf"
-      >
-        PDF
-      </v-btn>
-      <v-btn
-        variant="tonal"
-        size="small"
-        prepend-icon="mdi-content-copy"
-        class="mr-1"
-        @click="emit('createBased', { id: item.id, type: item.type, name: item.name })"
-      >
-        Clone
-      </v-btn>
-      <v-btn
-        variant="tonal"
-        color="primary"
-        size="small"
-        prepend-icon="mdi-pencil"
-        @click="emit('edit', { id: item.id, type: item.type })"
-      >
-        Edit
-      </v-btn>
+      <div class="header-actions">
+        <!-- View mode toggle (only for non-product items that have tree) -->
+        <v-btn-toggle
+          v-if="item.type !== 'product'"
+          v-model="treeViewMode"
+          mandatory
+          density="compact"
+          variant="outlined"
+          class="mr-2"
+        >
+          <v-btn value="flat" size="small">
+            <v-icon size="18" start>mdi-format-list-bulleted</v-icon>
+            Simple
+          </v-btn>
+          <v-btn value="tree" size="small">
+            <v-icon size="18" start>mdi-file-tree</v-icon>
+            Tree
+          </v-btn>
+        </v-btn-toggle>
+
+        <!-- Export PDF (menu items, recipes, preparations) -->
+        <v-btn
+          v-if="item.type !== 'product'"
+          variant="tonal"
+          size="small"
+          prepend-icon="mdi-file-pdf-box"
+          class="mr-1"
+          :loading="isExporting"
+          @click="handleExportPdf"
+        >
+          PDF
+        </v-btn>
+        <v-btn
+          variant="tonal"
+          size="small"
+          prepend-icon="mdi-content-copy"
+          class="mr-1"
+          @click="emit('createBased', { id: item.id, type: item.type, name: item.name })"
+        >
+          Clone
+        </v-btn>
+        <v-btn
+          variant="tonal"
+          color="primary"
+          size="small"
+          prepend-icon="mdi-pencil"
+          @click="emit('edit', { id: item.id, type: item.type })"
+        >
+          Edit
+        </v-btn>
+      </div>
     </div>
 
     <!-- Tabs — products have no tree (leaf entities), show Used In first -->
@@ -96,8 +117,13 @@
                 Cost: {{ vData.totalCost > 0 ? formatIDR(vData.totalCost) : '-' }}
               </span>
             </div>
+            <FlatCompositionList
+              v-if="treeViewMode === 'flat' && vData.nodes.length > 0"
+              :tree="vData.nodes"
+              @navigate="handleTreeNavigate"
+            />
             <DependencyTree
-              v-if="vData.nodes.length > 0"
+              v-else-if="treeViewMode === 'tree' && vData.nodes.length > 0"
               :tree="vData.nodes"
               :default-expand-depth="1"
               @navigate="handleTreeNavigate"
@@ -117,8 +143,13 @@
             <span class="tree-output-value">{{ totalCostDisplay }}</span>
             <span v-if="costPerUnit" class="tree-output-per-unit">({{ costPerUnit }})</span>
           </div>
+          <FlatCompositionList
+            v-if="treeViewMode === 'flat' && treeNodes.length > 0"
+            :tree="treeNodes"
+            @navigate="handleTreeNavigate"
+          />
           <DependencyTree
-            v-if="treeNodes.length > 0"
+            v-else-if="treeViewMode === 'tree' && treeNodes.length > 0"
             :tree="treeNodes"
             :default-expand-depth="2"
             @navigate="handleTreeNavigate"
@@ -592,14 +623,15 @@ import { calculateFoodCostRange } from '@/core/cost/modifierCostCalculator'
 import type { FoodCostRange } from '@/core/cost/modifierCostCalculator'
 import { useExport } from '@/core/export'
 import type {
-  ModifiersExportData,
-  ExportTreeNode,
   RecipeExportData,
   RecipeComponentExport,
   PreparationExportData,
-  PreparationComponentExport
+  PreparationComponentExport,
+  PreparationExport,
+  RecipeModifierGroupExport
 } from '@/core/export'
 import DependencyTree from './DependencyTree.vue'
+import FlatCompositionList from './FlatCompositionList.vue'
 import EntityHistoryTab from '@/views/kitchen/constructor/components/EntityHistoryTab.vue'
 import type { TreeNode } from './DependencyTree.vue'
 import type { Product } from '@/stores/productsStore/types'
@@ -635,6 +667,7 @@ const { buildTree, buildModifierDisplayData, resolveComponentCost } = useCatalog
 
 const defaultTab = (type: CatalogItem['type']) => (type === 'product' ? 'used-in' : 'tree')
 const activeTab = ref(defaultTab(props.item.type))
+const treeViewMode = ref<'tree' | 'flat'>('flat')
 const historyEntityType = computed(() => props.item.type as 'recipe' | 'preparation')
 
 // Reset to default tab when navigating to a different item
@@ -709,42 +742,69 @@ function modifierTypeColor(type: string): string {
 }
 
 // --- Export PDF ---
-const { isExporting, exportError, exportModifiers, exportRecipes, exportPreparations } = useExport()
+const { isExporting, exportError, exportRecipes, exportPreparations } = useExport()
 const showExportError = ref(false)
 
-function convertTreeNodes(nodes: TreeNode[], scaleRatio?: number): ExportTreeNode[] {
-  return nodes.map(n => {
-    // Scale quantity & cost proportionally when inside a preparation/recipe
-    const scaledQty =
-      n.quantity != null && scaleRatio
-        ? Math.round(n.quantity * scaleRatio * 100) / 100
-        : n.quantity
-    const scaledCost = n.cost != null && scaleRatio ? Math.round(n.cost * scaleRatio) : n.cost
-
-    // For prep/recipe children: scale by usage/output ratio
-    let childScale: number | undefined
-    if (
-      (n.type === 'preparation' || n.type === 'recipe') &&
-      n.outputQuantity &&
-      n.outputQuantity > 0 &&
-      n.quantity
-    ) {
-      const usedQty = scaleRatio ? n.quantity * scaleRatio : n.quantity
-      childScale = usedQty / n.outputQuantity
+/**
+ * Collect all unique dependent preparations recursively (for PDF export).
+ * Traverses compositions to find all referenced preparations and builds export data.
+ */
+function collectDependentPreparations(
+  components: Array<{ type: string; id: string }>,
+  collected: Map<string, PreparationExport>
+): void {
+  for (const comp of components) {
+    if (comp.type === 'preparation' && !collected.has(comp.id)) {
+      const prep = recipesStore.getPreparationById(comp.id) as Preparation | undefined
+      if (prep?.recipe?.length) {
+        const prepComponents = prep.recipe.map(ing => ({
+          name: getEntityName(ing.type, ing.id) || ing.id,
+          type: ing.type as 'product' | 'preparation',
+          quantity: ing.quantity,
+          unit: ing.unit,
+          cost: resolveComponentCost(ing.type, ing.id, ing.quantity)
+        }))
+        const prepTotalCost = prepComponents.reduce((sum, c) => sum + (c.cost || 0), 0)
+        const outputQty = prep.outputQuantity || 1
+        collected.set(prep.id, {
+          id: prep.id,
+          name: prep.name,
+          portionType: (prep.portionType || 'weight') as 'weight' | 'portion',
+          outputQuantity: outputQty,
+          outputUnit: prep.outputUnit || 'gram',
+          costPerUnit: prepTotalCost > 0 ? Math.round(prepTotalCost / outputQty) : 0,
+          totalCost: prepTotalCost,
+          components: prepComponents,
+          instructions: prep.instructions
+        })
+        // Recurse into sub-preparations
+        collectDependentPreparations(
+          prep.recipe.filter(r => r.type === 'preparation'),
+          collected
+        )
+      }
     }
-
-    return {
-      name: n.name,
-      type: n.type as 'product' | 'recipe' | 'preparation',
-      quantity: scaledQty,
-      unit: n.unit,
-      cost: scaledCost,
-      outputQuantity: n.outputQuantity,
-      outputUnit: n.outputUnit,
-      totalRecipeCost: n.totalRecipeCost,
-      children: convertTreeNodes(n.children, childScale)
+    if (comp.type === 'recipe' && !collected.has(`recipe:${comp.id}`)) {
+      // Mark as visited to avoid infinite recursion
+      collected.set(`recipe:${comp.id}`, undefined as unknown as PreparationExport)
+      const r = recipesStore.getRecipeById(comp.id) as Recipe | undefined
+      if (r?.components?.length) {
+        collectDependentPreparations(
+          r.components.map(c => ({ type: c.componentType, id: c.componentId })),
+          collected
+        )
+      }
     }
-  })
+  }
+}
+
+/** Get only actual PreparationExport entries from the collected map (filter out recipe markers) */
+function getDependentPreparations(
+  components: Array<{ type: string; id: string }>
+): PreparationExport[] {
+  const collected = new Map<string, PreparationExport>()
+  collectDependentPreparations(components, collected)
+  return [...collected.values()].filter(v => v != null)
 }
 
 async function handleExportPdf() {
@@ -756,71 +816,143 @@ async function handleExportPdf() {
 
   try {
     if (props.item.type === 'menu' && menuItem.value) {
-      // Menu item — export modifiers if has them, otherwise export as recipe
-      if (modifierGroups.value.length > 0) {
-        const exportData: ModifiersExportData = {
-          title: props.item.name,
-          date: dateStr,
-          department: props.item.department,
-          categoryName: props.item.categoryName,
-          modifierGroups: modifierGroups.value.map(g => ({
-            id: g.id,
-            name: g.name,
-            type: g.type,
-            isRequired: g.isRequired,
-            minSelection: g.minSelection,
-            maxSelection: g.maxSelection,
-            targetComponentNames: g.targetComponentNames,
-            options: g.options.map(o => ({
-              id: o.id,
-              name: o.name,
-              priceAdjustment: o.priceAdjustment,
-              compositionCost: o.compositionCost,
-              netCost: o.netCost,
-              isDefault: o.isDefault,
-              isActive: o.isActive,
-              compositionTree: convertTreeNodes(o.compositionTree)
-            }))
-          }))
+      // Menu item — unified export: base ingredients + modifiers inline
+      const variant = menuItem.value.variants?.[0]
+      if (!variant) return
+
+      const hasComposition = variant.composition && variant.composition.length > 0
+      let components: RecipeComponentExport[] = []
+      let outputQuantity = 1
+      let outputUnit = 'portion'
+      let instructions: string | undefined
+
+      if (hasComposition) {
+        // Flatten single-recipe composition: show recipe's ingredients directly
+        if (variant.composition.length === 1 && variant.composition[0].type === 'recipe') {
+          const recipeId = variant.composition[0].id
+          const r = recipesStore.getRecipeById(recipeId) as Recipe | undefined
+          if (r?.components?.length) {
+            outputQuantity = r.portionSize || 1
+            outputUnit = r.portionUnit || 'portion'
+            instructions = r.instructions
+            components = r.components.map(
+              (comp): RecipeComponentExport => ({
+                name: getEntityName(comp.componentType, comp.componentId) || comp.componentId,
+                type: comp.componentType as RecipeComponentExport['type'],
+                quantity: comp.quantity,
+                unit: comp.unit,
+                cost: resolveComponentCost(comp.componentType, comp.componentId, comp.quantity)
+              })
+            )
+          } else {
+            components = variant.composition.map(
+              (comp): RecipeComponentExport => ({
+                name: getEntityName(comp.type, comp.id) || comp.id,
+                type: comp.type as RecipeComponentExport['type'],
+                quantity: comp.quantity,
+                unit: comp.unit,
+                cost: resolveComponentCost(comp.type, comp.id, comp.quantity)
+              })
+            )
+          }
+        } else {
+          components = variant.composition.map(
+            (comp): RecipeComponentExport => ({
+              name: getEntityName(comp.type, comp.id) || comp.id,
+              type: comp.type as RecipeComponentExport['type'],
+              quantity: comp.quantity,
+              unit: comp.unit,
+              cost: resolveComponentCost(comp.type, comp.id, comp.quantity)
+            })
+          )
         }
-        await exportModifiers(exportData)
-      } else {
-        // Simple menu item — export as a recipe card
-        const variant = menuItem.value.variants?.[0]
-        if (!variant?.composition?.length) return
-        const data: RecipeExportData = {
-          title: props.item.name,
-          date: dateStr,
-          categories: [
-            {
-              name: props.item.categoryName || 'Menu Item',
-              recipes: [
-                {
-                  id: props.item.id,
-                  name: props.item.name,
-                  outputQuantity: 1,
-                  outputUnit: 'portion',
-                  costPerUnit: totalCost.value,
-                  totalCost: totalCost.value,
-                  components: variant.composition.map(
-                    (comp): RecipeComponentExport => ({
-                      name: getEntityName(comp.type, comp.id) || comp.id,
-                      type: comp.type as 'product' | 'preparation',
-                      quantity: comp.quantity,
-                      unit: comp.unit,
-                      cost: resolveComponentCost(comp.type, comp.id, comp.quantity)
-                    })
-                  )
-                }
-              ]
-            }
-          ]
-        }
-        await exportRecipes(data, { includeInstructions: false })
       }
+
+      // Build modifier groups for inline display
+      let modGroups: RecipeModifierGroupExport[] | undefined
+      if (modifierGroups.value.length > 0) {
+        modGroups = modifierGroups.value.map(g => ({
+          name: g.name,
+          type: g.type,
+          options: g.options
+            .filter(o => o.isActive)
+            .map(o => ({
+              name: o.name,
+              isDefault: o.isDefault,
+              priceAdjustment: o.priceAdjustment,
+              components: o.compositionTree.map(
+                (node): RecipeComponentExport => ({
+                  name: node.name,
+                  type: (node.type === 'menu'
+                    ? 'recipe'
+                    : node.type) as RecipeComponentExport['type'],
+                  quantity: node.quantity || 0,
+                  unit: node.unit || '',
+                  cost: node.cost || 0
+                })
+              ),
+              totalCost: o.compositionCost
+            }))
+        }))
+      }
+
+      // Collect dependent preparations from base + modifiers
+      const depComponents: Array<{ type: string; id: string }> = []
+      if (hasComposition) {
+        depComponents.push(...variant.composition.map(c => ({ type: c.type, id: c.id })))
+      }
+      if (modifierGroups.value.length > 0) {
+        for (const g of modifierGroups.value) {
+          for (const o of g.options) {
+            depComponents.push(...o.compositionTree.map(n => ({ type: n.type, id: n.id })))
+          }
+        }
+      }
+      const depPreps = getDependentPreparations(depComponents)
+
+      const hasInstructions = !!instructions || modGroups?.length
+      const data: RecipeExportData = {
+        title: props.item.name,
+        date: dateStr,
+        categories: [
+          {
+            name: props.item.categoryName || 'Menu Item',
+            recipes: [
+              {
+                id: props.item.id,
+                name: props.item.name,
+                outputQuantity,
+                outputUnit,
+                costPerUnit: totalCost.value,
+                totalCost: totalCost.value,
+                components,
+                modifierGroups: modGroups,
+                instructions
+              }
+            ]
+          }
+        ],
+        dependentPreparations: depPreps.length > 0 ? depPreps : undefined
+      }
+      await exportRecipes(data, { includeInstructions: !!hasInstructions })
     } else if (props.item.type === 'recipe' && recipe.value) {
       // Recipe export
       const r = recipe.value
+      const recipeComponents = (r.components || []).map(
+        (comp): RecipeComponentExport => ({
+          name: getEntityName(comp.componentType, comp.componentId) || comp.componentId,
+          type: comp.componentType as RecipeComponentExport['type'],
+          quantity: comp.quantity,
+          unit: comp.unit,
+          cost: resolveComponentCost(comp.componentType, comp.componentId, comp.quantity)
+        })
+      )
+
+      // Collect dependent preparations
+      const depPreps = getDependentPreparations(
+        (r.components || []).map(c => ({ type: c.componentType, id: c.componentId }))
+      )
+
       const data: RecipeExportData = {
         title: r.name,
         date: dateStr,
@@ -836,20 +968,13 @@ async function handleExportPdf() {
                 costPerUnit:
                   totalCost.value > 0 ? Math.round(totalCost.value / (r.portionSize || 1)) : 0,
                 totalCost: totalCost.value,
-                components: (r.components || []).map(
-                  (comp): RecipeComponentExport => ({
-                    name: getEntityName(comp.componentType, comp.componentId) || comp.componentId,
-                    type: comp.componentType as 'product' | 'preparation',
-                    quantity: comp.quantity,
-                    unit: comp.unit,
-                    cost: resolveComponentCost(comp.componentType, comp.componentId, comp.quantity)
-                  })
-                ),
+                components: recipeComponents,
                 instructions: r.instructions
               }
             ]
           }
-        ]
+        ],
+        dependentPreparations: depPreps.length > 0 ? depPreps : undefined
       }
       await exportRecipes(data, { includeInstructions: !!r.instructions })
     } else if (props.item.type === 'preparation' && preparation.value) {
@@ -1400,6 +1525,12 @@ const usedInItems = computed<UsageItem[]>(() => {
   h4 {
     display: none;
   }
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .tree-output-header {

@@ -18,6 +18,8 @@ export type {
   RecipeCategoryExport,
   RecipeExport,
   RecipeComponentExport,
+  RecipeModifierGroupExport,
+  RecipeModifierOptionExport,
   PreparationExportData,
   PreparationDepartmentExport,
   PreparationCategoryExport,

@@ -399,7 +399,19 @@
             </v-radio-group>
           </div>
 
-          <!-- Include instructions -->
+          <!-- Options -->
+          <div
+            v-if="activeSection === 'menu' && exportMode === 'detailed'"
+            class="filter-group mt-3"
+          >
+            <v-checkbox
+              v-model="exportIncludeCosts"
+              label="Include costs"
+              hide-details
+              density="compact"
+              color="primary"
+            />
+          </div>
           <v-checkbox
             v-if="activeSection === 'recipes' || activeSection === 'preps'"
             v-model="exportIncludeInstructions"
@@ -422,11 +434,86 @@
           <v-spacer />
           <v-btn variant="text" @click="showExportDialog = false">Cancel</v-btn>
           <v-btn
+            v-if="
+              activeSection === 'menu' &&
+              exportMode === 'detailed' &&
+              exportModifierItems.length > 0
+            "
+            color="primary"
+            variant="flat"
+            prepend-icon="mdi-tune"
+            :disabled="exportItemCount === 0"
+            @click="openModifierSelection"
+          >
+            Configure & Export
+          </v-btn>
+          <v-btn
+            v-else
             color="primary"
             variant="flat"
             prepend-icon="mdi-download"
             :loading="isExporting"
             :disabled="exportItemCount === 0"
+            @click="handleBulkExport"
+          >
+            Export PDF
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Step 2: Modifier selection dialog -->
+    <v-dialog v-model="showModifierSelectionDialog" max-width="520" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon start color="primary">mdi-tune-variant</v-icon>
+          Select Modifiers to Export
+        </v-card-title>
+        <v-card-subtitle class="px-4 pb-2">
+          Uncheck modifier groups you don't want in the PDF
+        </v-card-subtitle>
+        <v-divider />
+        <v-card-text class="pa-0" style="max-height: 60vh">
+          <v-list density="compact">
+            <template v-for="item in exportModifierItems" :key="item.id">
+              <v-list-subheader class="modifier-item-header">
+                {{ item.name }}
+              </v-list-subheader>
+              <v-list-item
+                v-for="mg in item.groups"
+                :key="mg.key"
+                class="pl-8"
+                @click="exportModifierFilter[mg.key] = !exportModifierFilter[mg.key]"
+              >
+                <template #prepend>
+                  <v-checkbox-btn
+                    :model-value="exportModifierFilter[mg.key] !== false"
+                    color="primary"
+                    density="compact"
+                    @update:model-value="exportModifierFilter[mg.key] = $event"
+                  />
+                </template>
+                <v-list-item-title class="text-body-2">
+                  {{ mg.name }}
+                  <span class="text-caption text-medium-emphasis ml-1">
+                    ({{ mg.type }}, {{ mg.optionCount }} options)
+                  </span>
+                </v-list-item-title>
+              </v-list-item>
+            </template>
+          </v-list>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-4">
+          <v-btn size="small" variant="text" @click="toggleAllModifiers(true)">Select All</v-btn>
+          <v-btn size="small" variant="text" @click="toggleAllModifiers(false)">Deselect All</v-btn>
+          <v-spacer />
+          <v-btn variant="text" @click="showModifierSelectionDialog = false">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            prepend-icon="mdi-download"
+            :loading="isExporting"
             @click="handleBulkExport"
           >
             Export PDF
@@ -474,8 +561,13 @@ import type {
   MenuCategoryExport,
   CatalogExportData,
   CatalogExportItem,
-  CatalogExportModifierGroup,
-  ExportTreeNode
+  ExportTreeNode,
+  RecipeExportData,
+  RecipeExport,
+  RecipeComponentExport,
+  RecipeCategoryExport,
+  RecipeModifierGroupExport,
+  PreparationExport
 } from '@/core/export'
 
 type SectionId = 'menu' | 'recipes' | 'preps' | 'products'
@@ -563,11 +655,15 @@ async function handleRecalculateCosts() {
 }
 
 // --- Export ---
-const { isExporting, exportMenu, exportCatalog } = useExport()
+const { isExporting, exportMenu, exportCatalog, exportRecipes } = useExport()
 const showExportDialog = ref(false)
 const exportScope = ref<'all' | 'category'>('all')
 const exportMode = ref<'summary' | 'detailed'>('detailed')
 const exportIncludeInstructions = ref(true)
+const exportIncludeCosts = ref(false)
+// key = "itemId:groupName" → boolean
+const exportModifierFilter = ref<Record<string, boolean>>({})
+const showModifierSelectionDialog = ref(false)
 
 const exportItemCount = computed(() => {
   if (exportScope.value === 'category' && currentCategory.value) {
@@ -575,6 +671,60 @@ const exportItemCount = computed(() => {
   }
   return currentSectionItems.value.length
 })
+
+interface ExportModifierItem {
+  id: string
+  name: string
+  groups: Array<{
+    key: string // "itemId:groupName"
+    name: string
+    type: string
+    optionCount: number
+  }>
+}
+
+/** Items with modifiers in export scope — for the selection dialog */
+const exportModifierItems = computed<ExportModifierItem[]>(() => {
+  if (activeSection.value !== 'menu' || exportMode.value !== 'detailed') return []
+  const items =
+    exportScope.value === 'category' && currentCategory.value
+      ? categoryItems.value
+      : currentSectionItems.value
+  const result: ExportModifierItem[] = []
+  for (const ci of items) {
+    const mi = (menuStore.menuItems as MenuItem[]).find(m => m.id === ci.id)
+    if (!mi?.modifierGroups?.length) continue
+    const groups = mi.modifierGroups.map(g => ({
+      key: `${ci.id}:${g.name}`,
+      name: g.name,
+      type: g.type,
+      optionCount: g.options?.length || 0
+    }))
+    result.push({ id: ci.id, name: ci.name, groups })
+  }
+  return result
+})
+
+function openModifierSelection() {
+  // Initialize all modifier keys as checked (default: include all)
+  for (const item of exportModifierItems.value) {
+    for (const g of item.groups) {
+      if (!(g.key in exportModifierFilter.value)) {
+        exportModifierFilter.value[g.key] = true
+      }
+    }
+  }
+  showExportDialog.value = false
+  showModifierSelectionDialog.value = true
+}
+
+function toggleAllModifiers(value: boolean) {
+  for (const item of exportModifierItems.value) {
+    for (const g of item.groups) {
+      exportModifierFilter.value[g.key] = value
+    }
+  }
+}
 
 function getComponentName(type: string, id: string): string {
   if (type === 'product') return (productsStore.getProductById(id) as Product | null)?.name || id
@@ -648,6 +798,57 @@ function convertTreeNodes(
   })
 }
 
+/**
+ * Collect dependent preparations recursively (for menu PDF export).
+ * Deduplicates by preparation ID.
+ */
+function collectMenuDepPreps(
+  components: Array<{ type: string; id: string }>,
+  collected: Map<string, PreparationExport>
+): void {
+  for (const comp of components) {
+    if (comp.type === 'preparation' && !collected.has(comp.id)) {
+      const prep = recipesStore.getPreparationById(comp.id) as Preparation | undefined
+      if (prep?.recipe?.length) {
+        const prepComponents = prep.recipe.map(ing => ({
+          name: getComponentName(ing.type, ing.id),
+          type: ing.type as 'product' | 'preparation',
+          quantity: ing.quantity,
+          unit: ing.unit,
+          cost: resolveComponentCost(ing.type, ing.id, ing.quantity)
+        }))
+        const prepTotalCost = prepComponents.reduce((sum, c) => sum + (c.cost || 0), 0)
+        const outputQty = prep.outputQuantity || 1
+        collected.set(prep.id, {
+          id: prep.id,
+          name: prep.name,
+          portionType: (prep.portionType || 'weight') as 'weight' | 'portion',
+          outputQuantity: outputQty,
+          outputUnit: prep.outputUnit || 'gram',
+          costPerUnit: prepTotalCost > 0 ? Math.round(prepTotalCost / outputQty) : 0,
+          totalCost: prepTotalCost,
+          components: prepComponents,
+          instructions: prep.instructions
+        })
+        collectMenuDepPreps(
+          prep.recipe.filter(r => r.type === 'preparation'),
+          collected
+        )
+      }
+    }
+    if (comp.type === 'recipe' && !collected.has(`recipe:${comp.id}`)) {
+      collected.set(`recipe:${comp.id}`, undefined as unknown as PreparationExport)
+      const r = recipesStore.getRecipeById(comp.id) as Recipe | undefined
+      if (r?.components?.length) {
+        collectMenuDepPreps(
+          r.components.map(c => ({ type: c.componentType, id: c.componentId })),
+          collected
+        )
+      }
+    }
+  }
+}
+
 async function handleBulkExport() {
   const items =
     exportScope.value === 'category' && currentCategory.value
@@ -670,86 +871,145 @@ async function handleBulkExport() {
           : ''
 
       if (exportMode.value === 'detailed') {
-        // Detailed export — each item with composition tree + modifiers
-        const catalogItems: CatalogExportItem[] = items
-          .map(ci => {
-            const mi = (menuStore.menuItems as MenuItem[]).find(m => m.id === ci.id)
-            if (!mi) return null
-            const catName =
-              menuCategories.value.find(c => c.id === ci.categoryId)?.name || 'Uncategorized'
-            const variants = (mi.variants || []).filter(v => v.isActive)
-            const hasMultipleVariants = variants.length > 1
+        // Detailed export — kitchen-friendly: dishes with ingredients + modifiers, then unique preps
+        const allDepPreps = new Map<string, PreparationExport>()
+        const catRecipes = new Map<string, RecipeExport[]>()
 
-            // Build modifier groups with trees
-            let modGroups: CatalogExportModifierGroup[] | undefined
-            if (mi.modifierGroups?.length) {
-              const displayGroups = buildModifierDisplayData(mi)
-              modGroups = displayGroups.map(g => ({
-                name: g.name,
-                type: g.type,
-                options: g.options.map(o => ({
-                  name: o.name,
-                  priceAdjustment: o.priceAdjustment,
-                  cost: o.compositionCost,
-                  isDefault: o.isDefault,
-                  tree: convertTreeNodes(o.compositionTree)
+        for (const ci of items) {
+          const mi = (menuStore.menuItems as MenuItem[]).find(m => m.id === ci.id)
+          if (!mi) continue
+          const catName =
+            menuCategories.value.find(c => c.id === ci.categoryId)?.name || 'Uncategorized'
+          const variant = (mi.variants || []).find(v => v.isActive) || mi.variants?.[0]
+          if (!variant) continue
+
+          const hasComposition = variant.composition && variant.composition.length > 0
+          const isOnlyModifiers = !hasComposition
+
+          let components: RecipeComponentExport[] = []
+          let instructions: string | undefined
+
+          if (hasComposition) {
+            // Flatten single-recipe composition
+            if (variant.composition.length === 1 && variant.composition[0].type === 'recipe') {
+              const r = recipesStore.getRecipeById(variant.composition[0].id) as Recipe | undefined
+              if (r?.components?.length) {
+                instructions = r.instructions
+                components = r.components.map(comp => ({
+                  name: getComponentName(comp.componentType, comp.componentId),
+                  type: comp.componentType as RecipeComponentExport['type'],
+                  quantity: comp.quantity,
+                  unit: comp.unit,
+                  cost: resolveComponentCost(comp.componentType, comp.componentId, comp.quantity)
                 }))
+              } else {
+                components = variant.composition.map(comp => ({
+                  name: getComponentName(comp.type, comp.id),
+                  type: comp.type as RecipeComponentExport['type'],
+                  quantity: comp.quantity,
+                  unit: comp.unit,
+                  cost: resolveComponentCost(comp.type, comp.id, comp.quantity)
+                }))
+              }
+            } else {
+              components = variant.composition.map(comp => ({
+                name: getComponentName(comp.type, comp.id),
+                type: comp.type as RecipeComponentExport['type'],
+                quantity: comp.quantity,
+                unit: comp.unit,
+                cost: resolveComponentCost(comp.type, comp.id, comp.quantity)
               }))
             }
+          }
 
-            if (hasMultipleVariants) {
-              return {
-                id: ci.id,
-                name: ci.name,
-                type: 'menu' as const,
-                categoryName: catName,
-                department: ci.department,
-                cost: ci.cost || 0,
-                tree: [],
-                variants: variants.map((v, idx) => {
-                  const tree = buildTree('menu', ci.id, undefined, idx)
-                  const cost = tree.reduce((sum, n) => sum + (n.cost ?? 0), 0)
-                  return {
-                    name: v.name,
-                    price: v.price,
-                    cost,
-                    foodCostPercent: v.price > 0 ? (cost / v.price) * 100 : 0,
-                    tree: convertTreeNodes(tree)
-                  }
-                }),
-                modifierGroups: modGroups
-              } as CatalogExportItem
-            } else {
-              const tree = buildTree('menu', ci.id)
-              const cost = tree.reduce((sum, n) => sum + (n.cost ?? 0), 0)
-              const price = variants[0]?.price || 0
-              return {
-                id: ci.id,
-                name: ci.name,
-                type: 'menu' as const,
-                categoryName: catName,
-                department: ci.department,
-                price,
-                cost,
-                foodCostPercent: price > 0 ? (cost / price) * 100 : 0,
-                tree: convertTreeNodes(tree),
-                modifierGroups: modGroups
-              } as CatalogExportItem
+          // Build modifier groups (filtered by user checkbox selection)
+          let modGroups: RecipeModifierGroupExport[] | undefined
+          if (mi.modifierGroups?.length) {
+            const displayGroups = buildModifierDisplayData(mi)
+            const filtered = displayGroups.filter(
+              g => exportModifierFilter.value[`${ci.id}:${g.name}`] !== false
+            )
+            if (filtered.length > 0) {
+              modGroups = filtered.map(g => ({
+                name: g.name,
+                type: g.type,
+                options: g.options
+                  .filter(o => o.isActive)
+                  .map(o => {
+                    // Flatten compositionTree into RecipeComponentExport[]
+                    const flatComps: RecipeComponentExport[] = []
+                    for (const node of o.compositionTree) {
+                      flatComps.push({
+                        name: node.name,
+                        type: (node.type === 'menu'
+                          ? 'recipe'
+                          : node.type) as RecipeComponentExport['type'],
+                        quantity: node.quantity || 0,
+                        unit: node.unit || '',
+                        cost: node.cost || 0
+                      })
+                    }
+                    // Collect dep preps from modifier compositions
+                    if (o.compositionTree.length > 0) {
+                      collectMenuDepPreps(
+                        o.compositionTree.map(n => ({ type: n.type, id: n.id })),
+                        allDepPreps
+                      )
+                    }
+                    return {
+                      name: o.name,
+                      isDefault: o.isDefault,
+                      priceAdjustment: o.priceAdjustment,
+                      components: flatComps,
+                      totalCost: o.compositionCost
+                    }
+                  })
+              }))
             }
-          })
-          .filter((x): x is CatalogExportItem => x !== null)
+          }
 
-        const data: CatalogExportData = {
-          title: `Menu (${deptLabel})${scopeLabel}`,
-          date: dateStr,
-          department: deptLabel,
-          items: catalogItems,
-          summary: {
-            totalItems: catalogItems.length,
-            totalCost: catalogItems.reduce((sum, i) => sum + i.cost, 0)
+          // Skip items with no content at all
+          if (components.length === 0 && !modGroups?.length) continue
+
+          const totalCost = components.reduce((sum, c) => sum + (c.cost || 0), 0)
+
+          if (!catRecipes.has(catName)) catRecipes.set(catName, [])
+          catRecipes.get(catName)!.push({
+            id: ci.id,
+            name: ci.name,
+            outputQuantity: 1,
+            outputUnit: 'portion',
+            costPerUnit: totalCost,
+            totalCost,
+            components,
+            modifierGroups: modGroups,
+            instructions
+          })
+
+          // Collect dependent preparations from base composition
+          if (hasComposition) {
+            collectMenuDepPreps(variant.composition, allDepPreps)
           }
         }
-        await exportCatalog(data, { avoidPageBreaks: true })
+
+        const categories: RecipeCategoryExport[] = []
+        for (const [catName, recipes] of catRecipes) {
+          categories.push({ name: catName, recipes })
+        }
+
+        const depPreps = [...allDepPreps.values()].filter(v => v != null)
+
+        const data: RecipeExportData = {
+          title: `Menu (${deptLabel})${scopeLabel}`,
+          date: dateStr,
+          categories,
+          dependentPreparations: depPreps.length > 0 ? depPreps : undefined
+        }
+        await exportRecipes(data, {
+          includeInstructions: true,
+          includeCosts: exportIncludeCosts.value,
+          avoidPageBreaks: true
+        })
       } else {
         // Summary export — table with cost/price/FC%
         const catMap = new Map<string, CatalogItem[]>()
@@ -877,6 +1137,7 @@ async function handleBulkExport() {
     }
 
     showExportDialog.value = false
+    showModifierSelectionDialog.value = false
   } catch (error) {
     console.error('[CatalogExport] Failed:', error)
   }
@@ -1608,5 +1869,13 @@ watch(
   font-weight: 500;
   margin-bottom: 6px;
   color: rgba(255, 255, 255, 0.7);
+}
+
+.modifier-item-header {
+  font-weight: 600 !important;
+  font-size: 0.85rem !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  text-transform: none !important;
+  padding-top: 12px !important;
 }
 </style>

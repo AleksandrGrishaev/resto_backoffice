@@ -31,6 +31,19 @@ function formatCurrency(amount: number): string {
 function formatQuantity(qty: number, unit: string): string {
   return `${qty} ${unit}`
 }
+
+function badgeLabel(type: string): string {
+  switch (type) {
+    case 'product':
+      return 'ING'
+    case 'preparation':
+      return 'PREP'
+    case 'recipe':
+      return 'REC'
+    default:
+      return type.charAt(0).toUpperCase()
+  }
+}
 </script>
 
 <template>
@@ -39,21 +52,21 @@ function formatQuantity(qty: number, unit: string): string {
     <div class="legend">
       <span class="legend-title">Components:</span>
       <span class="legend-item">
-        <span class="comp-type product">P</span>
-        Product
+        <span class="badge badge-ingredient">ING</span>
+        Ingredient
       </span>
       <span class="legend-item">
-        <span class="comp-type preparation">S</span>
-        Semi-finished
+        <span class="badge badge-prep">PREP</span>
+        Preparation
       </span>
       <span class="legend-divider">|</span>
       <span class="legend-title">Output:</span>
       <span class="legend-item">
-        <span class="portion-type weight">W</span>
+        <span class="badge badge-weight">WT</span>
         Weight (g/ml)
       </span>
       <span class="legend-item">
-        <span class="portion-type portion">P</span>
+        <span class="badge badge-portion">PRT</span>
         Portion
       </span>
     </div>
@@ -75,12 +88,14 @@ function formatQuantity(qty: number, unit: string): string {
           <h2 class="category-title">{{ category.name }}</h2>
 
           <div v-for="prep in category.preparations" :key="prep.id" class="preparation">
-            <!-- Preparation content (same as below) -->
             <div class="prep-header">
               <div class="prep-title">
                 <h3 class="prep-name">{{ prep.name }}</h3>
-                <span class="portion-type" :class="prep.portionType">
-                  {{ prep.portionType === 'portion' ? 'P' : 'W' }}
+                <span
+                  class="badge"
+                  :class="prep.portionType === 'portion' ? 'badge-portion' : 'badge-weight'"
+                >
+                  {{ prep.portionType === 'portion' ? 'PRT' : 'WT' }}
                 </span>
               </div>
             </div>
@@ -107,11 +122,14 @@ function formatQuantity(qty: number, unit: string): string {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(comp, idx) in prep.components" :key="idx">
+                <tr v-for="(comp, cidx) in prep.components" :key="cidx">
                   <td class="col-name">
                     <span class="comp-name-wrapper">
-                      <span class="comp-type" :class="comp.type">
-                        {{ comp.type === 'product' ? 'P' : 'S' }}
+                      <span
+                        class="badge"
+                        :class="'badge-' + (comp.type === 'product' ? 'ingredient' : 'prep')"
+                      >
+                        {{ badgeLabel(comp.type) }}
                       </span>
                       <span>{{ comp.name }}</span>
                     </span>
@@ -145,8 +163,11 @@ function formatQuantity(qty: number, unit: string): string {
           <div class="prep-header">
             <div class="prep-title">
               <h3 class="prep-name">{{ prep.name }}</h3>
-              <span class="portion-type" :class="prep.portionType">
-                {{ prep.portionType === 'portion' ? 'P' : 'W' }}
+              <span
+                class="badge"
+                :class="prep.portionType === 'portion' ? 'badge-portion' : 'badge-weight'"
+              >
+                {{ prep.portionType === 'portion' ? 'PRT' : 'WT' }}
               </span>
             </div>
           </div>
@@ -173,11 +194,14 @@ function formatQuantity(qty: number, unit: string): string {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(comp, idx) in prep.components" :key="idx">
+              <tr v-for="(comp, cidx) in prep.components" :key="cidx">
                 <td class="col-name">
                   <span class="comp-name-wrapper">
-                    <span class="comp-type" :class="comp.type">
-                      {{ comp.type === 'product' ? 'P' : 'S' }}
+                    <span
+                      class="badge"
+                      :class="'badge-' + (comp.type === 'product' ? 'ingredient' : 'prep')"
+                    >
+                      {{ badgeLabel(comp.type) }}
                     </span>
                     <span>{{ comp.name }}</span>
                   </span>
@@ -230,6 +254,50 @@ function formatQuantity(qty: number, unit: string): string {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+/* Print-friendly badges — high contrast, visible in B&W */
+.badge {
+  display: inline-block;
+  font-size: 8px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 2px;
+  min-width: 24px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  line-height: 1.4;
+}
+
+.badge-ingredient {
+  border: 1.5px solid #333;
+  color: #333;
+  background: white;
+}
+
+.badge-prep {
+  border: 1.5px solid #333;
+  color: #333;
+  background: #e0e0e0;
+}
+
+.badge-recipe {
+  border: 1.5px solid #333;
+  color: white;
+  background: #333;
+}
+
+.badge-weight {
+  border: 1.5px solid #555;
+  color: #555;
+  background: white;
+}
+
+.badge-portion {
+  border: 1.5px solid #555;
+  color: white;
+  background: #555;
 }
 
 /* Department Section */
@@ -343,46 +411,6 @@ function formatQuantity(qty: number, unit: string): string {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-
-.comp-type {
-  display: inline-block;
-  font-size: 9px;
-  font-weight: bold;
-  padding: 1px 4px;
-  border-radius: 3px;
-  min-width: 14px;
-  text-align: center;
-}
-
-.comp-type.product {
-  background: #e3f2fd;
-  color: #1565c0;
-}
-
-.comp-type.preparation {
-  background: #fff3e0;
-  color: #e65100;
-}
-
-.portion-type {
-  display: inline-block;
-  font-size: 9px;
-  font-weight: bold;
-  padding: 1px 4px;
-  border-radius: 3px;
-  min-width: 14px;
-  text-align: center;
-}
-
-.portion-type.weight {
-  background: #f3e5f5;
-  color: #7b1fa2;
-}
-
-.portion-type.portion {
-  background: #e8f5e9;
-  color: #2e7d32;
 }
 
 .col-qty {
