@@ -57,7 +57,7 @@ export function fromSupabase(row: SupabaseTable): PosTable {
 /**
  * Map PosTable status to Supabase status
  */
-function mapStatusToSupabase(
+export function mapStatusToSupabase(
   status: 'free' | 'occupied' | 'reserved'
 ): 'available' | 'occupied' | 'reserved' {
   if (status === 'free') return 'available'

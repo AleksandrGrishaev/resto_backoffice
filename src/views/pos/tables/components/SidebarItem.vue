@@ -314,16 +314,14 @@ const handleClick = (): void => {
 }
 
 .sidebar-item--selected {
-  border-color: var(--color-primary, #a395e9) !important;
   border-width: 3px;
-  background: color-mix(in srgb, var(--color-primary, #a395e9) 10%, transparent);
-  box-shadow: 0 0 0 1px rgba(163, 149, 233, 0.3);
+  box-shadow: 0 0 0 2px rgba(163, 149, 233, 0.5);
 }
 
 .sidebar-item--selected:hover {
   box-shadow:
     0 4px 12px rgba(0, 0, 0, 0.2),
-    0 0 0 1px rgba(163, 149, 233, 0.4);
+    0 0 0 2px rgba(163, 149, 233, 0.6);
 }
 
 /* =============================================

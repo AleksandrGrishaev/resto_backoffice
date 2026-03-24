@@ -107,10 +107,11 @@ export class OrdersService {
         let query = supabase.from('orders').select('*')
 
         if (!options?.all) {
-          // Cap unpaid order loading to 48h — prevents ancient unpaid orders from re-occupying tables
+          // Load: today's orders + active table-bound orders (any age) + unpaid orders (48h cap)
+          // Active table-bound orders MUST always load — they block the unique index and must be visible
           const cutoff48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
           query = query.or(
-            `and(payment_status.neq.paid,created_at.gte.${cutoff48h}),created_at.gte.${dateFilter}`
+            `and(table_id.not.is.null,status.not.in.("cancelled","served","collected","delivered")),and(payment_status.neq.paid,created_at.gte.${cutoff48h}),created_at.gte.${dateFilter}`
           )
         }
 
