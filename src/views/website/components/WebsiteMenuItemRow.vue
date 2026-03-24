@@ -76,7 +76,12 @@ function cancelEdit() {
 </script>
 
 <template>
-  <div class="item-row d-flex align-center pa-2 rounded mb-1">
+  <div
+    class="item-row d-flex align-center pa-2 rounded mb-1"
+    :data-website-item-id="item.id"
+    :data-menu-item-id="item.menuItemId"
+    :data-source-category-id="categoryId"
+  >
     <v-icon class="item-drag-handle mr-2 cursor-grab" size="18" color="grey-lighten-1">
       mdi-drag-vertical
     </v-icon>

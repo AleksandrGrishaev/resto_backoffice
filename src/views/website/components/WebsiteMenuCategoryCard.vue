@@ -17,6 +17,7 @@ const emit = defineEmits<{
   edit: [category: WebsiteMenuCategory]
   delete: [id: string]
   itemDropped: [categoryId: string, menuItemId: string]
+  itemMoved: [itemId: string, fromCategoryId: string, toCategoryId: string]
 }>()
 
 const collapsed = ref(props.forceCollapsed ?? false)
@@ -29,11 +30,18 @@ watch(
 )
 const confirmDelete = ref(false)
 
+// Flag to skip v-model setter when handleDragAdd already handles the move
+const skipNextReorder = ref(false)
+
 const orderedItems = computed({
   get: () => [...props.items].sort((a, b) => a.sortOrder - b.sortOrder),
   set: (val: WebsiteMenuItem[]) => {
+    if (skipNextReorder.value) {
+      skipNextReorder.value = false
+      return
+    }
     // Only reorder real items (ignore cloned source items without id)
-    const realItems = val.filter(i => i.id)
+    const realItems = val.filter(i => i.id && i.categoryId === props.category.id)
     if (realItems.length > 0) {
       props.websiteMenuStore.reorderItems(props.category.id, realItems)
     }
@@ -46,9 +54,21 @@ function getMenuItem(menuItemId: string): MenuItem | undefined {
 }
 
 function handleDragAdd(event: any) {
-  // Read menu item ID from data attribute on the dropped DOM element
-  const menuItemId = event.item?.dataset?.menuItemId
+  const el = event.item
+  const websiteItemId = el?.dataset?.websiteItemId
+  const sourceCategoryId = el?.dataset?.sourceCategoryId
+
+  if (websiteItemId && sourceCategoryId && sourceCategoryId !== props.category.id) {
+    // Existing item moved from another category — skip v-model reorder
+    skipNextReorder.value = true
+    emit('itemMoved', websiteItemId, sourceCategoryId, props.category.id)
+    return
+  }
+
+  // New item dragged from source panel — skip v-model reorder (addItem handles it)
+  const menuItemId = el?.dataset?.menuItemId
   if (menuItemId) {
+    skipNextReorder.value = true
     emit('itemDropped', props.category.id, menuItemId)
   }
 }

@@ -126,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useChannelsStore } from '@/stores/channels'
 import type { MenuItem, MenuItemVariant } from '@/stores/menu/types'
 
@@ -186,6 +186,9 @@ const formatPrice = (price: number): string => {
   }).format(price)
 }
 
+// Guard against double-firing on touch devices (touchend + click both trigger)
+const addingInProgress = ref(false)
+
 const handleItemClick = (): void => {
   if (!canSelect.value) {
     return
@@ -202,9 +205,15 @@ const handleItemClick = (): void => {
 }
 
 const handleAddSingle = (): void => {
+  if (addingInProgress.value) return
   if (activevariants.value.length === 1 && canSelect.value) {
+    addingInProgress.value = true
     const variant = activevariants.value[0]
     emit('add-item', props.item, variant)
+    // Reset guard after a short delay to allow intentional rapid taps
+    setTimeout(() => {
+      addingInProgress.value = false
+    }, 300)
   }
 }
 </script>
