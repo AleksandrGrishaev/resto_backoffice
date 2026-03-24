@@ -133,8 +133,12 @@ async function loadStoresAfterAuth() {
       throw new Error('No authenticated user found after waiting')
     }
 
-    // Determine target route: LoginView's targetRoute > role-based default
-    const targetRoute = authStore.consumeTargetRoute() || authStore.getDefaultRoute()
+    // Determine target route: LoginView's targetRoute > redirect query param > role-based default
+    // On page reload, router guard sends user to /auth/login?redirect=/admin (or /pos, /kitchen)
+    // We must honor that redirect param to restore the user's original location
+    const redirectParam = router.currentRoute.value.query.redirect as string | undefined
+    const targetRoute =
+      authStore.consumeTargetRoute() || redirectParam || authStore.getDefaultRoute()
 
     DebugUtils.info(MODULE_NAME, 'Loading stores for user', {
       userId: user.id,

@@ -484,7 +484,7 @@ const handlePinLogin = async (pin: string) => {
     // Set target route BEFORE login — watcher in App.vue fires immediately on auth change
     authStore.setTargetRoute(targetRoute)
 
-    const success = await authStore.loginWithPin(pin, token)
+    const success = await authStore.loginWithPin(pin, token, ['admin', 'cashier'])
 
     if (!success) {
       authStore.setTargetRoute(null as unknown as string)
@@ -519,7 +519,7 @@ const handleKitchenPinLogin = async (pin: string) => {
     // Set target route BEFORE login — watcher in App.vue fires immediately on auth change
     authStore.setTargetRoute(targetRoute)
 
-    const success = await authStore.loginWithPin(pin, token)
+    const success = await authStore.loginWithPin(pin, token, ['admin', 'kitchen', 'bar'])
 
     if (!success) {
       authStore.setTargetRoute(null as unknown as string)

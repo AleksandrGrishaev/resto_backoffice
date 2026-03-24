@@ -294,7 +294,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // ===== AUTHENTICATION METHOD 2: PIN (Cashier/Kitchen/Bar) =====
-  async function loginWithPin(pin: string, captchaToken?: string): Promise<boolean> {
+  async function loginWithPin(
+    pin: string,
+    captchaToken?: string,
+    allowedRoles?: UserRole[]
+  ): Promise<boolean> {
     state.value.isLoading = true
     state.value.error = null
 
@@ -341,6 +345,17 @@ export const useAuthStore = defineStore('auth', () => {
       }
 
       const credentials = data[0]
+
+      // Step 1.5: Validate roles BEFORE creating session (avoids login/logout flash)
+      if (allowedRoles && allowedRoles.length > 0) {
+        const userRoles: string[] = credentials.user_roles || []
+        const hasPermission = userRoles.some(r => allowedRoles.includes(r as UserRole))
+        if (!hasPermission) {
+          throw new Error(
+            'This PIN does not have access to this section. Please use the correct login tab.'
+          )
+        }
+      }
 
       // Step 2: Use credentials to sign in via Supabase Auth
       DebugUtils.info(MODULE_NAME, 'Calling signInWithPassword', { email: credentials.user_email })
