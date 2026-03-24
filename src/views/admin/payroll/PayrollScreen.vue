@@ -23,14 +23,7 @@
           hide-details
           style="max-width: 130px"
         />
-        <v-btn color="primary" :loading="store.loading" size="small" @click="calculate">
-          <v-icon start size="18">mdi-calculator</v-icon>
-          Calculate
-        </v-btn>
-        <v-btn v-if="result" variant="outlined" size="small" :loading="saving" @click="save">
-          <v-icon start size="18">mdi-content-save</v-icon>
-          Save
-        </v-btn>
+        <v-progress-circular v-if="store.loading" indeterminate size="20" width="2" class="ml-2" />
       </div>
     </div>
 
@@ -45,6 +38,13 @@
     <!-- Content area (scrollable) -->
     <div v-if="result" class="payroll-content">
       <!-- ==================== SPREADSHEET TABLE ==================== -->
+      <div class="table-legend">
+        <span class="legend-item">
+          <span class="legend-edited-mark" />
+          Corrected by admin (hover for reason)
+        </span>
+        <span class="legend-item legend-muted">Click day number to edit hours</span>
+      </div>
       <div class="payroll-table-wrapper">
         <table class="payroll-table">
           <thead>
@@ -53,8 +53,9 @@
               <th
                 v-for="date in result.month.allDates"
                 :key="date"
-                class="day-col"
+                class="day-col day-header"
                 :class="{ 'period-boundary': date === result.month.service1End }"
+                @click="openDayDialog(date)"
               >
                 {{ dayLabel(date) }}
               </th>
@@ -74,28 +75,18 @@
               <td
                 v-for="date in result.month.allDates"
                 :key="date"
-                class="day-col editable-cell"
+                class="day-col"
                 :class="{
                   'period-boundary': date === result.month.service1End,
-                  'zero-hours': row.dailyHours[date] === 0
+                  'zero-hours': row.dailyHours[date] === 0,
+                  'edited-cell': row.editedDates.has(date)
                 }"
-                @dblclick="startEdit(row.staffId, date, row.dailyHours[date])"
+                @click="openDayDialog(date)"
               >
-                <input
-                  v-if="editingCell?.staffId === row.staffId && editingCell?.date === date"
-                  ref="editInput"
-                  v-model.number="editingCell.value"
-                  type="number"
-                  min="0"
-                  max="24"
-                  step="0.5"
-                  class="cell-input"
-                  @blur="commitEdit(row)"
-                  @keydown.enter="commitEdit(row)"
-                  @keydown.escape="cancelEdit"
-                  @keydown.tab.prevent="commitAndMove(row, date, $event.shiftKey ? -1 : 1)"
-                />
-                <span v-else>{{ row.dailyHours[date] || 0 }}</span>
+                {{ row.dailyHours[date] || 0 }}
+                <v-tooltip v-if="row.editedDates.has(date)" activator="parent" location="top">
+                  {{ row.editedDates.get(date) }}
+                </v-tooltip>
               </td>
               <td class="subtotal-col">{{ row.totalHoursP1 }}</td>
               <td class="subtotal-col">{{ row.totalHoursP2 }}</td>
@@ -127,6 +118,14 @@
           </tbody>
         </table>
       </div>
+
+      <!-- Day edit dialog -->
+      <DayEditDialog
+        v-model="showDayDialog"
+        :date="editingDate"
+        :staff-rows="result.rows"
+        @saved="calculate"
+      />
 
       <!-- ==================== SUMMARY SECTION ==================== -->
       <div class="summary-section">
@@ -342,24 +341,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useStaffStore, BASE_MONTHLY_HOURS } from '@/stores/staff'
-import type { PayrollResult, PayrollStaffRow } from '@/stores/staff'
+import type { PayrollResult } from '@/stores/staff'
 import { formatIDR } from '@/utils'
-import { supabase } from '@/supabase/client'
-import { useAuthStore } from '@/stores/auth'
+import DayEditDialog from './components/DayEditDialog.vue'
 
 const store = useStaffStore()
-const authStore = useAuthStore()
 
 const now = new Date()
 const selectedYear = ref(now.getFullYear())
 const selectedMonth = ref(now.getMonth() + 1)
 const result = ref<PayrollResult | null>(null)
-const saving = ref(false)
 
-// Inline editing state
-const editingCell = ref<{ staffId: string; date: string; value: number } | null>(null)
+// Auto-calculate on month/year change
+watch([selectedYear, selectedMonth], () => calculate(), { flush: 'post' })
+onMounted(() => calculate())
+
+// Day edit dialog state
+const showDayDialog = ref(false)
+const editingDate = ref('')
 
 const years = computed(() => {
   const y = now.getFullYear()
@@ -431,69 +432,12 @@ function fmtNum(n: number): string {
 }
 
 // =====================================================
-// INLINE EDITING
+// DAY EDIT DIALOG
 // =====================================================
 
-function startEdit(staffId: string, date: string, currentValue: number) {
-  editingCell.value = { staffId, date, value: currentValue }
-  nextTick(() => {
-    const inputs = document.querySelectorAll('.cell-input') as NodeListOf<HTMLInputElement>
-    if (inputs.length > 0) inputs[0].focus()
-  })
-}
-
-async function commitEdit(row: PayrollStaffRow) {
-  if (!editingCell.value || !result.value) return
-
-  const { staffId, date, value } = editingCell.value
-  const hours = Math.max(0, Math.min(24, value || 0))
-  const oldValue = row.dailyHours[date]
-
-  editingCell.value = null
-
-  if (hours === oldValue) return
-
-  // Save to DB
-  try {
-    if (hours > 0) {
-      await supabase.from('staff_work_logs').upsert(
-        {
-          staff_id: staffId,
-          work_date: date,
-          hours_worked: hours,
-          recorded_by: authStore.currentUser?.id
-        },
-        { onConflict: 'staff_id,work_date' }
-      )
-    } else {
-      await supabase.from('staff_work_logs').delete().eq('staff_id', staffId).eq('work_date', date)
-    }
-  } catch (e) {
-    console.error('Failed to save work log:', e)
-    return
-  }
-
-  // Recalculate
-  await calculate()
-}
-
-function cancelEdit() {
-  editingCell.value = null
-}
-
-function commitAndMove(row: PayrollStaffRow, currentDate: string, direction: number) {
-  if (!result.value) return
-  const dates = result.value.month.allDates
-  const idx = dates.indexOf(currentDate)
-  const nextIdx = idx + direction
-
-  commitEdit(row)
-
-  if (nextIdx >= 0 && nextIdx < dates.length) {
-    nextTick(() => {
-      startEdit(row.staffId, dates[nextIdx], row.dailyHours[dates[nextIdx]] || 0)
-    })
-  }
+function openDayDialog(date: string) {
+  editingDate.value = date
+  showDayDialog.value = true
 }
 
 // =====================================================
@@ -505,18 +449,6 @@ async function calculate() {
     result.value = await store.runPayrollCalculation(selectedYear.value, selectedMonth.value)
   } catch (e: any) {
     console.error('Payroll calculation failed:', e)
-  }
-}
-
-async function save() {
-  if (!result.value) return
-  saving.value = true
-  try {
-    await store.savePayroll(result.value)
-  } catch (e: any) {
-    console.error('Save payroll failed:', e)
-  } finally {
-    saving.value = false
   }
 }
 </script>
@@ -552,6 +484,46 @@ async function save() {
 
 // ==================== SPREADSHEET TABLE ====================
 
+.table-legend {
+  display: flex;
+  gap: 16px;
+  padding: 0 16px 6px;
+  font-size: 11px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.legend-muted {
+  color: rgba(255, 255, 255, 0.3);
+  font-style: italic;
+}
+
+.legend-edited-mark {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  background: rgba(255, 152, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-top: 5px solid rgba(255, 152, 0, 0.7);
+  }
+}
+
 .payroll-table-wrapper {
   overflow-x: auto;
   padding: 0 8px 8px;
@@ -559,21 +531,21 @@ async function save() {
 
 .payroll-table {
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 15px;
   white-space: nowrap;
   min-width: 100%;
 
   th,
   td {
     border: 1px solid rgba(255, 255, 255, 0.08);
-    padding: 4px 6px;
+    padding: 8px 8px;
     text-align: center;
   }
 
   thead th {
     background: rgba(255, 255, 255, 0.06);
     font-weight: 600;
-    font-size: 11px;
+    font-size: 13px;
     position: sticky;
     top: 0;
     z-index: 2;
@@ -593,38 +565,30 @@ thead .sticky-col {
 
 .name-col {
   text-align: left !important;
-  min-width: 90px;
-  max-width: 120px;
-  font-weight: 500;
+  min-width: 100px;
+  max-width: 140px;
+  font-weight: 600;
+  font-size: 14px;
 }
 
 .day-col {
-  min-width: 32px;
+  min-width: 38px;
   font-variant-numeric: tabular-nums;
   position: relative;
-}
-
-.editable-cell {
   cursor: pointer;
+
   &:hover {
     background: rgba(255, 255, 255, 0.06) !important;
   }
 }
 
-.cell-input {
-  width: 32px;
-  background: transparent;
-  border: 1px solid rgba(var(--v-theme-primary), 0.8);
-  border-radius: 2px;
-  color: inherit;
-  text-align: center;
-  font-size: 12px;
-  padding: 1px;
-  outline: none;
+.day-header {
+  cursor: pointer;
+  user-select: none;
 
-  &::-webkit-inner-spin-button,
-  &::-webkit-outer-spin-button {
-    -webkit-appearance: none;
+  &:hover {
+    background: rgba(var(--v-theme-primary), 0.15) !important;
+    color: rgb(var(--v-theme-primary));
   }
 }
 
@@ -632,15 +596,32 @@ thead .sticky-col {
   color: rgba(255, 255, 255, 0.2);
 }
 
+.edited-cell {
+  background: rgba(255, 152, 0, 0.12) !important;
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-top: 5px solid rgba(255, 152, 0, 0.7);
+  }
+}
+
 .period-boundary {
   border-right: 2px solid rgba(var(--v-theme-primary), 0.6) !important;
 }
 
 .subtotal-col {
-  min-width: 40px;
+  min-width: 48px;
   font-weight: 600;
   background: rgba(255, 255, 255, 0.03);
   font-variant-numeric: tabular-nums;
+  font-size: 14px;
 }
 
 .total-hours {
@@ -649,7 +630,8 @@ thead .sticky-col {
 
 .summary-col {
   font-variant-numeric: tabular-nums;
-  min-width: 76px;
+  min-width: 90px;
+  font-size: 13px;
 }
 
 .service-col {

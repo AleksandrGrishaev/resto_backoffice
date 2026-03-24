@@ -71,6 +71,9 @@ export function mapWorkLogFromDb(row: any): WorkLog {
     hoursWorked: Number(row.hours_worked) || 0,
     notes: row.notes,
     recordedBy: row.recorded_by,
+    editReason: row.edit_reason,
+    editedBy: row.edited_by,
+    editedAt: row.edited_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }

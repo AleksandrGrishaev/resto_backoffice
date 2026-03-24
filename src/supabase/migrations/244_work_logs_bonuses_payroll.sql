@@ -10,6 +10,9 @@ CREATE TABLE staff_work_logs (
   hours_worked NUMERIC(4,1) NOT NULL DEFAULT 0,
   notes TEXT,
   recorded_by UUID REFERENCES users(id),
+  edit_reason TEXT,
+  edited_by UUID REFERENCES users(id),
+  edited_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(staff_id, work_date)

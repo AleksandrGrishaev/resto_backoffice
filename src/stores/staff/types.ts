@@ -40,6 +40,9 @@ export interface WorkLog {
   hoursWorked: number
   notes?: string
   recordedBy?: string
+  editReason?: string
+  editedBy?: string
+  editedAt?: string
   createdAt: string
   updatedAt: string
 }

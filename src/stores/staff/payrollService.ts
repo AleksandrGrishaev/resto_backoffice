@@ -105,6 +105,8 @@ export interface PayrollStaffRow {
   hourlyRate: number
   /** Часы по дням: { 'YYYY-MM-DD': hours } */
   dailyHours: Record<string, number>
+  /** Даты, где часы были скорректированы: date → reason */
+  editedDates: Map<string, string>
   /** Итого часов за service period 1 */
   totalHoursP1: number
   /** Итого часов за service period 2 */
@@ -170,11 +172,18 @@ export async function calculatePayrollForMonth(
     staffService.fetchServiceTaxForPeriod(pm.service2Start, pm.service2End)
   ])
 
-  // 3. Build lookup: staffId → { date → hours }
+  // 3. Build lookup: staffId → { date → hours } + edited dates with reasons
   const logMap = new Map<string, Map<string, number>>()
+  const editedMap = new Map<string, Map<string, string>>() // staffId → Map<date, reason>
   for (const log of workLogs) {
     if (!logMap.has(log.staffId)) logMap.set(log.staffId, new Map())
     logMap.get(log.staffId)!.set(log.workDate, log.hoursWorked)
+
+    // Detect edits: has edited_by or edited_at
+    if (log.editedBy || log.editedAt) {
+      if (!editedMap.has(log.staffId)) editedMap.set(log.staffId, new Map())
+      editedMap.get(log.staffId)!.set(log.workDate, log.editReason || 'Corrected')
+    }
   }
 
   // 4. Total team hours per sub-period (for service tax distribution)
@@ -194,6 +203,7 @@ export async function calculatePayrollForMonth(
 
   for (const member of activeMembers) {
     const staffDays = logMap.get(member.id) || new Map<string, number>()
+    const editedDates = editedMap.get(member.id) || new Map<string, string>()
 
     // Daily hours map
     const dailyHours: Record<string, number> = {}
@@ -251,6 +261,7 @@ export async function calculatePayrollForMonth(
       baseSalaryMonthly: baseSalary,
       hourlyRate: Math.round(hourlyRate * 100) / 100,
       dailyHours,
+      editedDates,
       totalHoursP1,
       totalHoursP2,
       totalHours,
