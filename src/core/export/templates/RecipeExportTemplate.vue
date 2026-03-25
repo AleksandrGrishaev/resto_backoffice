@@ -311,6 +311,78 @@ function badgeLabel(type: string): string {
       </div>
     </template>
 
+    <!-- Dependent Recipes (unique, no duplicates) -->
+    <template v-if="data.dependentRecipes?.length">
+      <div class="dependent-preps-section">
+        <h2 class="section-title">Referenced Recipes</h2>
+        <div v-for="recipe in data.dependentRecipes" :key="recipe.id" class="preparation">
+          <div class="prep-header">
+            <h3 class="prep-name">
+              <span class="badge badge-recipe">REC</span>
+              {{ recipe.name }}
+            </h3>
+          </div>
+          <div class="prep-info">
+            <span class="info-item">
+              <strong>Output:</strong>
+              {{ formatQuantity(recipe.outputQuantity, recipe.outputUnit) }}
+            </span>
+            <span v-if="showCosts" class="info-item">
+              <strong>Cost/Unit:</strong>
+              {{ formatCurrency(recipe.costPerUnit) }}
+            </span>
+            <span v-if="showCosts" class="info-item">
+              <strong>Total Cost:</strong>
+              {{ formatCurrency(recipe.totalCost) }}
+            </span>
+          </div>
+          <table class="components-table">
+            <thead>
+              <tr>
+                <th class="col-name">Component</th>
+                <th class="col-qty">Quantity</th>
+                <th v-if="showCosts" class="col-cost">Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(comp, cidx) in recipe.components" :key="cidx">
+                <td class="col-name">
+                  <span class="comp-name-wrapper">
+                    <span
+                      class="badge"
+                      :class="
+                        'badge-' +
+                        (comp.type === 'product'
+                          ? 'ingredient'
+                          : comp.type === 'preparation'
+                            ? 'prep'
+                            : 'recipe')
+                      "
+                    >
+                      {{ badgeLabel(comp.type) }}
+                    </span>
+                    <span>{{ comp.name }}</span>
+                  </span>
+                </td>
+                <td class="col-qty">{{ formatQuantity(comp.quantity, comp.unit) }}</td>
+                <td v-if="showCosts" class="col-cost">{{ formatCurrency(comp.cost) }}</td>
+              </tr>
+            </tbody>
+            <tfoot v-if="showCosts">
+              <tr>
+                <td colspan="2" class="total-label">Total</td>
+                <td class="col-cost total-value">{{ formatCurrency(recipe.totalCost) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+          <div v-if="options?.includeInstructions && recipe.instructions" class="instructions">
+            <h4>Instructions</h4>
+            <p>{{ recipe.instructions }}</p>
+          </div>
+        </div>
+      </div>
+    </template>
+
     <!-- Dependent Preparations (unique, no duplicates) -->
     <template v-if="data.dependentPreparations?.length">
       <div class="dependent-preps-section">

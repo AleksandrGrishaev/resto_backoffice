@@ -60,6 +60,7 @@ export interface RecipeExportData {
   departments?: RecipeDepartmentExport[] // When exporting 'all' - grouped by department
   categories: RecipeCategoryExport[] // Direct categories (single department or backward compat)
   dependentPreparations?: PreparationExport[] // Unique referenced preparations (no duplicates)
+  dependentRecipes?: RecipeExport[] // Unique referenced recipes (no duplicates)
 }
 
 export interface RecipeDepartmentExport {

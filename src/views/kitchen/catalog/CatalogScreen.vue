@@ -871,15 +871,16 @@ function convertTreeNodes(
 }
 
 /**
- * Collect dependent preparations recursively (for menu PDF export).
- * Deduplicates by preparation ID.
+ * Collect dependent preparations and recipes recursively (for menu PDF export).
+ * Deduplicates by ID.
  */
-function collectMenuDepPreps(
+function collectMenuDeps(
   components: Array<{ type: string; id: string }>,
-  collected: Map<string, PreparationExport>
+  collectedPreps: Map<string, PreparationExport>,
+  collectedRecipes: Map<string, RecipeExport>
 ): void {
   for (const comp of components) {
-    if (comp.type === 'preparation' && !collected.has(comp.id)) {
+    if (comp.type === 'preparation' && !collectedPreps.has(comp.id)) {
       const prep = recipesStore.getPreparationById(comp.id) as Preparation | undefined
       if (prep?.recipe?.length) {
         const prepComponents = prep.recipe.map(ing => ({
@@ -891,7 +892,7 @@ function collectMenuDepPreps(
         }))
         const prepTotalCost = prepComponents.reduce((sum, c) => sum + (c.cost || 0), 0)
         const outputQty = prep.outputQuantity || 1
-        collected.set(prep.id, {
+        collectedPreps.set(prep.id, {
           id: prep.id,
           name: prep.name,
           portionType: (prep.portionType || 'weight') as 'weight' | 'portion',
@@ -902,19 +903,42 @@ function collectMenuDepPreps(
           components: prepComponents,
           instructions: prep.instructions
         })
-        collectMenuDepPreps(
-          prep.recipe.filter(r => r.type === 'preparation'),
-          collected
+        collectMenuDeps(
+          prep.recipe.filter(r => r.type === 'preparation' || r.type === 'recipe'),
+          collectedPreps,
+          collectedRecipes
         )
       }
     }
-    if (comp.type === 'recipe' && !collected.has(`recipe:${comp.id}`)) {
-      collected.set(`recipe:${comp.id}`, undefined as unknown as PreparationExport)
+    if (comp.type === 'recipe' && !collectedRecipes.has(comp.id)) {
       const r = recipesStore.getRecipeById(comp.id) as Recipe | undefined
       if (r?.components?.length) {
-        collectMenuDepPreps(
+        const recipeComponents: RecipeComponentExport[] = r.components.map(c => ({
+          name: getComponentName(c.componentType, c.componentId),
+          type: c.componentType as RecipeComponentExport['type'],
+          quantity: c.quantity,
+          unit: c.unit,
+          cost: resolveComponentCost(c.componentType, c.componentId, c.quantity)
+        }))
+        const recipeTotalCost = recipeComponents.reduce((sum, c) => sum + (c.cost || 0), 0)
+        const outputQty = r.outputQuantity || 1
+
+        collectedRecipes.set(r.id, {
+          id: r.id,
+          name: r.name,
+          category: r.category,
+          outputQuantity: outputQty,
+          outputUnit: r.outputUnit || 'portion',
+          costPerUnit: recipeTotalCost > 0 ? Math.round(recipeTotalCost / outputQty) : 0,
+          totalCost: recipeTotalCost,
+          components: recipeComponents,
+          instructions: r.instructions
+        })
+        // Recurse into recipe components
+        collectMenuDeps(
           r.components.map(c => ({ type: c.componentType, id: c.componentId })),
-          collected
+          collectedPreps,
+          collectedRecipes
         )
       }
     }
@@ -940,8 +964,10 @@ async function handleBulkExport() {
           : ''
 
       if (exportMode.value === 'detailed') {
-        // Detailed export — kitchen-friendly: dishes with ingredients + modifiers, then unique preps
+        // Detailed export — kitchen-friendly: dishes with ingredients + modifiers, then unique preps/recipes
         const allDepPreps = new Map<string, PreparationExport>()
+        const allDepRecipes = new Map<string, RecipeExport>()
+        const flattenedRecipeIds = new Set<string>() // Recipes already inlined into menu items
         const catRecipes = new Map<string, RecipeExport[]>()
 
         for (const ci of items) {
@@ -961,6 +987,7 @@ async function handleBulkExport() {
           if (hasComposition) {
             // Flatten single-recipe composition
             if (variant.composition.length === 1 && variant.composition[0].type === 'recipe') {
+              flattenedRecipeIds.add(variant.composition[0].id)
               const r = recipesStore.getRecipeById(variant.composition[0].id) as Recipe | undefined
               if (r?.components?.length) {
                 instructions = r.instructions
@@ -1018,11 +1045,12 @@ async function handleBulkExport() {
                         cost: node.cost || 0
                       })
                     }
-                    // Collect dep preps from modifier compositions
+                    // Collect dep preps/recipes from modifier compositions
                     if (o.compositionTree.length > 0) {
-                      collectMenuDepPreps(
+                      collectMenuDeps(
                         o.compositionTree.map(n => ({ type: n.type, id: n.id })),
-                        allDepPreps
+                        allDepPreps,
+                        allDepRecipes
                       )
                     }
                     return {
@@ -1055,9 +1083,9 @@ async function handleBulkExport() {
             instructions
           })
 
-          // Collect dependent preparations from base composition
+          // Collect dependent preparations and recipes from base composition
           if (hasComposition) {
-            collectMenuDepPreps(variant.composition, allDepPreps)
+            collectMenuDeps(variant.composition, allDepPreps, allDepRecipes)
           }
         }
 
@@ -1067,11 +1095,16 @@ async function handleBulkExport() {
         }
 
         const depPreps = [...allDepPreps.values()].filter(v => v != null)
+        // Exclude recipes that were already flattened/inlined into menu items
+        const depRecipes = [...allDepRecipes.values()].filter(
+          r => r != null && !flattenedRecipeIds.has(r.id)
+        )
 
         const data: RecipeExportData = {
           title: `Menu (${deptLabel})${scopeLabel}`,
           date: dateStr,
           categories,
+          dependentRecipes: depRecipes.length > 0 ? depRecipes : undefined,
           dependentPreparations: depPreps.length > 0 ? depPreps : undefined
         }
         await exportRecipes(data, {
