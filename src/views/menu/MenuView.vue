@@ -336,7 +336,12 @@
     </v-dialog>
 
     <!-- Export Options Dialog -->
-    <ExportOptionsDialog v-model="dialogs.export" export-type="menu" @export="handleExportPdf" />
+    <ExportOptionsDialog
+      v-model="dialogs.export"
+      export-type="menu"
+      :categories="exportCategories"
+      @export="handleExportPdf"
+    />
 
     <!-- View Item Dialog -->
     <MenuItemViewDialog v-model="dialogs.view" :item="viewingItem" />
@@ -468,6 +473,15 @@ const filteredCategories = computed(() => {
     if (orderDiff !== 0) return orderDiff
     return a.name.localeCompare(b.name)
   })
+})
+
+// Categories for export dialog (all root categories with item counts)
+const exportCategories = computed(() => {
+  return menuStore.rootCategories.map(cat => ({
+    id: cat.id,
+    name: cat.name,
+    itemCount: menuStore.getItemsByCategory(cat.id).filter(i => i.isActive).length
+  }))
 })
 
 // Get subcategories of a parent (filtered)
@@ -729,24 +743,27 @@ async function handleExportPdf(options: ExportDialogOptions) {
     const departmentFilter = options.department
     const includeRecipeDetails = options.includeRecipeDetails || false
     const avoidPageBreaks = options.avoidPageBreaks !== false // Default to true
+    const excludedCategoryIds = options.excludedCategoryIds || []
 
     DebugUtils.info(MODULE_NAME, 'Starting export', {
       filteredCategoriesCount: filteredCategories.value.length,
       filterTypes: filterTypes.value,
       departmentFilter,
       includeRecipeDetails,
-      avoidPageBreaks
+      avoidPageBreaks,
+      excludedCategoryIds: excludedCategoryIds.length
     })
 
     // If includeRecipeDetails, build detailed export with all recipes
     if (includeRecipeDetails) {
-      await handleDetailedExport(departmentFilter, avoidPageBreaks)
+      await handleDetailedExport(departmentFilter, avoidPageBreaks, excludedCategoryIds)
       return
     }
 
     // Standard export (without recipe details)
     const categories: MenuCategoryExport[] = filteredCategories.value
       .filter(cat => cat.isActive)
+      .filter(cat => !excludedCategoryIds.includes(cat.id))
       .map(category => {
         let items = getCategoryItems(category.id)
 
@@ -818,7 +835,11 @@ async function handleExportPdf(options: ExportDialogOptions) {
  * Handle detailed export with recipe information
  * Uses all active menu items (not filtered by page view)
  */
-async function handleDetailedExport(departmentFilter: DepartmentFilter, avoidPageBreaks: boolean) {
+async function handleDetailedExport(
+  departmentFilter: DepartmentFilter,
+  avoidPageBreaks: boolean,
+  excludedCategoryIds: string[] = []
+) {
   const costContext: CostCalculationContext = {
     productsStore,
     recipesStore
@@ -827,8 +848,10 @@ async function handleDetailedExport(departmentFilter: DepartmentFilter, avoidPag
   // Get all active items (not filtered by page view filters)
   const allItems: { item: MenuItem; categoryName: string }[] = []
 
-  // Use all active root categories (not page-filtered)
-  const allRootCategories = menuStore.rootCategories.filter(cat => cat.isActive)
+  // Use all active root categories (not page-filtered), excluding selected categories
+  const allRootCategories = menuStore.rootCategories
+    .filter(cat => cat.isActive)
+    .filter(cat => !excludedCategoryIds.includes(cat.id))
 
   for (const category of allRootCategories) {
     // Get all active items directly in this category

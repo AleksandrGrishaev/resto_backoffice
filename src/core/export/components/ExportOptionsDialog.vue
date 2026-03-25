@@ -1,21 +1,29 @@
 <script setup lang="ts">
 /**
  * Export Options Dialog
- * Allows user to select export options including department filter
+ * Allows user to select export options including department filter and category selection
  */
 
 import { ref, computed } from 'vue'
 import type { DepartmentFilter } from '../types'
 
+interface CategoryOption {
+  id: string
+  name: string
+  itemCount?: number
+}
+
 interface Props {
   modelValue: boolean
   exportType: 'menu' | 'recipes' | 'preparations'
+  categories?: CategoryOption[] // Available categories for filtering (menu export)
 }
 
 export interface ExportDialogOptions {
   department: DepartmentFilter
   includeRecipeDetails?: boolean // For menu export - include detailed recipe breakdown
   avoidPageBreaks?: boolean // Avoid cutting modules across pages
+  excludedCategoryIds?: string[] // Categories to exclude from export
 }
 
 const props = defineProps<Props>()
@@ -28,6 +36,7 @@ const emit = defineEmits<{
 const selectedDepartment = ref<DepartmentFilter>('all')
 const includeRecipeDetails = ref(true) // Default to true
 const avoidPageBreaks = ref(true) // Default to true - avoid cutting modules
+const excludedCategoryIds = ref<string[]>([])
 
 const isOpen = computed({
   get: () => props.modelValue,
@@ -49,11 +58,46 @@ const exportTypeLabel = computed(() => {
   return labels[props.exportType]
 })
 
+// Category selection helpers
+const hasCategories = computed(() => props.categories && props.categories.length > 0)
+
+const allSelected = computed(() => excludedCategoryIds.value.length === 0)
+
+function toggleSelectAll() {
+  if (allSelected.value) {
+    // Deselect all
+    excludedCategoryIds.value = (props.categories || []).map(c => c.id)
+  } else {
+    // Select all
+    excludedCategoryIds.value = []
+  }
+}
+
+function toggleCategory(categoryId: string) {
+  const idx = excludedCategoryIds.value.indexOf(categoryId)
+  if (idx >= 0) {
+    excludedCategoryIds.value.splice(idx, 1)
+  } else {
+    excludedCategoryIds.value.push(categoryId)
+  }
+}
+
+function isCategorySelected(categoryId: string) {
+  return !excludedCategoryIds.value.includes(categoryId)
+}
+
+const selectedCategoryCount = computed(() => {
+  if (!props.categories) return 0
+  return props.categories.length - excludedCategoryIds.value.length
+})
+
 function handleExport() {
   emit('export', {
     department: selectedDepartment.value,
     includeRecipeDetails: props.exportType === 'menu' ? includeRecipeDetails.value : undefined,
-    avoidPageBreaks: avoidPageBreaks.value
+    avoidPageBreaks: avoidPageBreaks.value,
+    excludedCategoryIds:
+      excludedCategoryIds.value.length > 0 ? [...excludedCategoryIds.value] : undefined
   })
   isOpen.value = false
 }
@@ -67,6 +111,7 @@ function handleAfterEnter() {
   selectedDepartment.value = 'all'
   includeRecipeDetails.value = true
   avoidPageBreaks.value = true
+  excludedCategoryIds.value = []
 }
 </script>
 
@@ -79,9 +124,7 @@ function handleAfterEnter() {
       </v-card-title>
 
       <v-card-text>
-        <p class="text-body-2 text-medium-emphasis mb-4">
-          Select which departments to include in the export:
-        </p>
+        <p class="text-body-2 text-medium-emphasis mb-3">Department</p>
 
         <v-radio-group v-model="selectedDepartment" hide-details>
           <v-radio
@@ -99,6 +142,45 @@ function handleAfterEnter() {
             </template>
           </v-radio>
         </v-radio-group>
+
+        <!-- Category filter (only for menu export with categories) -->
+        <div v-if="hasCategories" class="mt-4">
+          <div class="d-flex align-center justify-space-between mb-2">
+            <p class="text-body-2 text-medium-emphasis">
+              Categories
+              <span class="text-caption">
+                ({{ selectedCategoryCount }}/{{ categories!.length }})
+              </span>
+            </p>
+            <v-btn variant="text" density="compact" size="small" @click="toggleSelectAll">
+              {{ allSelected ? 'Deselect all' : 'Select all' }}
+            </v-btn>
+          </div>
+
+          <div class="category-list">
+            <v-checkbox
+              v-for="cat in categories"
+              :key="cat.id"
+              :model-value="isCategorySelected(cat.id)"
+              density="compact"
+              hide-details
+              color="primary"
+              @update:model-value="toggleCategory(cat.id)"
+            >
+              <template #label>
+                <div class="d-flex align-center justify-space-between flex-grow-1">
+                  <span class="text-body-2">{{ cat.name }}</span>
+                  <span
+                    v-if="cat.itemCount !== undefined"
+                    class="text-caption text-medium-emphasis ml-2"
+                  >
+                    {{ cat.itemCount }} items
+                  </span>
+                </div>
+              </template>
+            </v-checkbox>
+          </div>
+        </div>
 
         <!-- Recipe details option (only for menu export) -->
         <div v-if="exportType === 'menu'" class="mt-4">
@@ -137,3 +219,13 @@ function handleAfterEnter() {
     </v-card>
   </v-dialog>
 </template>
+
+<style scoped>
+.category-list {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+</style>
