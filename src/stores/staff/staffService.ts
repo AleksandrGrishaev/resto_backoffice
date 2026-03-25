@@ -237,9 +237,30 @@ export async function fetchPayrollPeriod(id: string): Promise<PayrollPeriod> {
 }
 
 /**
- * Получить сумму service_tax_amount из sales_transactions за период
+ * Получить сумму service_tax для payroll за период.
+ * Для inclusive каналов (GoFood, Grab) вычитает комиссию платформы —
+ * service tax распределяется только от базовой стоимости блюда, без комиссии.
+ *
+ * Формула:
+ *   exclusive каналы: service_tax_amount as-is
+ *   inclusive каналы:  service_tax_amount × (1 - commission_percent / 100)
  */
 export async function fetchServiceTaxForPeriod(dateFrom: string, dateTo: string): Promise<number> {
+  const { data, error } = await supabase.rpc('get_payroll_service_tax', {
+    date_from: `${dateFrom}T00:00:00+08:00`,
+    date_to: `${dateTo}T23:59:59+08:00`
+  })
+
+  if (error) {
+    DebugUtils.error(MODULE, 'fetchServiceTaxForPeriod RPC failed, falling back', error)
+    return fetchServiceTaxFallback(dateFrom, dateTo)
+  }
+
+  return Number(data) || 0
+}
+
+/** Fallback: простая сумма без коррекции на комиссию */
+async function fetchServiceTaxFallback(dateFrom: string, dateTo: string): Promise<number> {
   const { data, error } = await supabase
     .from('sales_transactions')
     .select('service_tax_amount')
@@ -247,7 +268,7 @@ export async function fetchServiceTaxForPeriod(dateFrom: string, dateTo: string)
     .lte('created_at', `${dateTo}T23:59:59+08:00`)
 
   if (error) {
-    DebugUtils.error(MODULE, 'fetchServiceTaxForPeriod failed', error)
+    DebugUtils.error(MODULE, 'fetchServiceTaxFallback failed', error)
     return 0
   }
 
