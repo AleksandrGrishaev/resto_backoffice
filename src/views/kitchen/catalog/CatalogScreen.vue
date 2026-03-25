@@ -374,6 +374,49 @@
             </v-radio-group>
           </div>
 
+          <!-- Category filter (only when scope is 'all') -->
+          <div
+            v-if="exportScope === 'all' && exportCategoryOptions.length > 1"
+            class="filter-group mt-3"
+          >
+            <div class="d-flex align-center justify-space-between">
+              <div class="filter-label mb-0">
+                Categories
+                <span class="text-caption text-medium-emphasis">
+                  ({{ exportSelectedCategoryCount }}/{{ exportCategoryOptions.length }})
+                </span>
+              </div>
+              <v-btn
+                variant="text"
+                density="compact"
+                size="x-small"
+                @click="toggleAllExportCategories"
+              >
+                {{ exportAllCategoriesSelected ? 'Deselect all' : 'Select all' }}
+              </v-btn>
+            </div>
+            <div class="export-category-list mt-1">
+              <v-checkbox
+                v-for="cat in exportCategoryOptions"
+                :key="cat.id"
+                :model-value="isExportCategorySelected(cat.id)"
+                density="compact"
+                hide-details
+                color="primary"
+                @update:model-value="toggleExportCategory(cat.id)"
+              >
+                <template #label>
+                  <div class="d-flex align-center justify-space-between flex-grow-1">
+                    <span class="text-body-2">{{ cat.name }}</span>
+                    <span class="text-caption text-medium-emphasis ml-2">
+                      {{ cat.count }}
+                    </span>
+                  </div>
+                </template>
+              </v-checkbox>
+            </div>
+          </div>
+
           <!-- Export mode for Menu -->
           <div v-if="activeSection === 'menu'" class="filter-group mt-3">
             <div class="filter-label">Detail level</div>
@@ -661,16 +704,48 @@ const exportScope = ref<'all' | 'category'>('all')
 const exportMode = ref<'summary' | 'detailed'>('detailed')
 const exportIncludeInstructions = ref(true)
 const exportIncludeCosts = ref(false)
+const exportExcludedCategoryIds = ref<string[]>([])
+
+// Categories available for export filtering (only when scope is 'all')
+const exportCategoryOptions = computed(() => {
+  return visibleCategories.value.filter(c => c.id !== '__uncategorized__')
+})
+function isExportCategorySelected(id: string) {
+  return !exportExcludedCategoryIds.value.includes(id)
+}
+function toggleExportCategory(id: string) {
+  const idx = exportExcludedCategoryIds.value.indexOf(id)
+  if (idx >= 0) exportExcludedCategoryIds.value.splice(idx, 1)
+  else exportExcludedCategoryIds.value.push(id)
+}
+function toggleAllExportCategories() {
+  if (exportExcludedCategoryIds.value.length === 0) {
+    exportExcludedCategoryIds.value = exportCategoryOptions.value.map(c => c.id)
+  } else {
+    exportExcludedCategoryIds.value = []
+  }
+}
+const exportAllCategoriesSelected = computed(() => exportExcludedCategoryIds.value.length === 0)
+const exportSelectedCategoryCount = computed(
+  () => exportCategoryOptions.value.length - exportExcludedCategoryIds.value.length
+)
 // key = "itemId:groupName" → boolean
 const exportModifierFilter = ref<Record<string, boolean>>({})
 const showModifierSelectionDialog = ref(false)
 
-const exportItemCount = computed(() => {
+// Items that will actually be exported (respects category exclusion)
+const exportFilteredItems = computed<CatalogItem[]>(() => {
   if (exportScope.value === 'category' && currentCategory.value) {
-    return categoryItems.value.length
+    return categoryItems.value
   }
-  return currentSectionItems.value.length
+  let items = currentSectionItems.value
+  if (exportExcludedCategoryIds.value.length > 0) {
+    items = items.filter(i => !exportExcludedCategoryIds.value.includes(i.categoryId || ''))
+  }
+  return items
 })
+
+const exportItemCount = computed(() => exportFilteredItems.value.length)
 
 interface ExportModifierItem {
   id: string
@@ -686,10 +761,7 @@ interface ExportModifierItem {
 /** Items with modifiers in export scope — for the selection dialog */
 const exportModifierItems = computed<ExportModifierItem[]>(() => {
   if (activeSection.value !== 'menu' || exportMode.value !== 'detailed') return []
-  const items =
-    exportScope.value === 'category' && currentCategory.value
-      ? categoryItems.value
-      : currentSectionItems.value
+  const items = exportFilteredItems.value
   const result: ExportModifierItem[] = []
   for (const ci of items) {
     const mi = (menuStore.menuItems as MenuItem[]).find(m => m.id === ci.id)
@@ -850,10 +922,7 @@ function collectMenuDepPreps(
 }
 
 async function handleBulkExport() {
-  const items =
-    exportScope.value === 'category' && currentCategory.value
-      ? categoryItems.value
-      : currentSectionItems.value
+  const items = exportFilteredItems.value
   if (items.length === 0) return
 
   const dateStr = new Date().toLocaleDateString('en-US', {
@@ -1659,6 +1728,11 @@ watch(activeDepartment, () => {
   navStack.value = []
 })
 
+// Reset category filter when export dialog opens
+watch(showExportDialog, open => {
+  if (open) exportExcludedCategoryIds.value = []
+})
+
 // Navigate to pending item from constructor
 function navigateToPendingItem() {
   const pending = props.pendingItem
@@ -1869,6 +1943,14 @@ watch(
   font-weight: 500;
   margin-bottom: 6px;
   color: rgba(255, 255, 255, 0.7);
+}
+
+.export-category-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 2px 8px;
 }
 
 .modifier-item-header {
