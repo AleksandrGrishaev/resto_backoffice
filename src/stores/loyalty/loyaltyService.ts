@@ -421,6 +421,16 @@ export class LoyaltyService {
       throw error
     }
 
+    // Switch customer to stamps program when a stamp card is linked
+    const { error: custError } = await supabase
+      .from('customers')
+      .update({ loyalty_program: 'stamps' })
+      .eq('id', customerId)
+
+    if (custError) {
+      DebugUtils.error(MODULE_NAME, 'Failed to switch customer to stamps program', { custError })
+    }
+
     DebugUtils.info(MODULE_NAME, 'Card linked to customer', { cardNumber, customerId })
   }
 
