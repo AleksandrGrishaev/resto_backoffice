@@ -421,7 +421,9 @@ export function fromOrderItemRow(row: SupabaseOrderItem): PosBillItem {
     totalPrice: row.total_price,
 
     // Modifiers (new system)
-    selectedModifiers: (row.selected_modifiers as any) || [],
+    // Expand modifiers with quantity > 1 into duplicates for POS compatibility
+    // Web-winter sends { optionId, optionName, quantity: 2 }, POS expects duplicate objects
+    selectedModifiers: expandModifierQuantities((row.selected_modifiers as any) || []),
     modifications: [], // Legacy, not used in new system
 
     // Discounts
@@ -465,6 +467,32 @@ export function fromOrderItemRow(row: SupabaseOrderItem): PosBillItem {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
+}
+
+// =====================================================
+// MODIFIER HELPERS
+// =====================================================
+
+/**
+ * Expand modifiers with quantity > 1 into duplicate objects.
+ * Web-winter sends: [{ optionId, optionName, quantity: 2, priceAdjustment: 10000 }]
+ * POS expects:      [{ optionId, optionName }, { optionId, optionName }]
+ *
+ * The priceAdjustment is per-unit, so each duplicate keeps the original priceAdjustment.
+ */
+function expandModifierQuantities(modifiers: any[]): any[] {
+  if (!modifiers || modifiers.length === 0) return []
+
+  const result: any[] = []
+  for (const mod of modifiers) {
+    const qty = mod.quantity && mod.quantity > 1 ? mod.quantity : 1
+    // Create copies without the quantity field so POS logic counts array length
+    const { quantity: _q, ...rest } = mod
+    for (let i = 0; i < qty; i++) {
+      result.push({ ...rest })
+    }
+  }
+  return result
 }
 
 // =====================================================
