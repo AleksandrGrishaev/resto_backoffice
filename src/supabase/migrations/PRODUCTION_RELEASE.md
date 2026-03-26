@@ -78,6 +78,60 @@ SELECT grantee, table_name FROM information_schema.table_privileges
 WHERE table_name = 'staff_shift_presets' AND grantee = 'authenticated';
 ```
 
+---
+
+## Customer Invite Flow (migrations 255-259)
+
+### Migrations to Apply
+
+| #   | File                                 | Description                                                     |
+| --- | ------------------------------------ | --------------------------------------------------------------- |
+| 7   | `255_customer_invites.sql`           | New table: unified invite for customer + order QR flows (RLS)   |
+| 8   | `256_rpc_create_customer_invite.sql` | RPC: staff generates 30-day invite for existing POS customer    |
+| 9   | `257_rpc_create_order_invite.sql`    | RPC: staff generates 2-hour invite for order without customer   |
+| 10  | `258_rpc_claim_invite.sql`           | RPC: customer claims invite after auth (both flows, race-safe)  |
+| 11  | `259_rpc_get_invite_by_token.sql`    | RPC: safe anon lookup for /join page (returns type + name only) |
+
+### Pre-requisite
+
+```sql
+-- Ensure pgcrypto extension (needed for token generation)
+CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA extensions;
+```
+
+### Post-Migration
+
+```sql
+-- Reload PostgREST schema cache
+NOTIFY pgrst, 'reload schema';
+```
+
+### Verification
+
+```sql
+-- Check table exists
+SELECT tablename FROM pg_tables WHERE tablename = 'customer_invites';
+
+-- Check RLS policies (should have staff_all only, NO anon SELECT)
+SELECT policyname FROM pg_policies WHERE tablename = 'customer_invites';
+
+-- Check RPCs registered
+SELECT proname FROM pg_proc
+WHERE proname IN ('create_customer_invite', 'create_order_invite', 'claim_invite', 'get_invite_by_token');
+
+-- Test RPC (should return 'Unauthorized' for non-staff or 'Order not found')
+SELECT create_order_invite('00000000-0000-0000-0000-000000000000'::uuid);
+```
+
+### Security Notes
+
+- No anon SELECT policy on `customer_invites` — token lookup via `get_invite_by_token` RPC only
+- `create_*_invite` RPCs require `is_staff()` — website customers cannot generate tokens
+- `claim_invite` uses `FOR UPDATE SKIP LOCKED` — prevents double-claim race condition
+- Generic error messages in EXCEPTION handlers — no DB internals leaked
+
+---
+
 ## Feature Summary
 
 - **Staff Time Slots**: Work hours now track exact time ranges (e.g. 08:00-16:00) instead of just total hours. Configurable shift presets (Full Day, Morning, Evening). POS dialog with hour-grid picker. Admin schedule timeline with infinite scroll and click-to-edit for future dates.
@@ -87,3 +141,6 @@ WHERE table_name = 'staff_shift_presets' AND grantee = 'authenticated';
 - **Pre-made Management**: Half-cooked items with short shelf life, separate config tab
 - **KPI Tracking**: Completion rate, streak, avg duration, per-staff breakdown, history with detail view
 - **Time Windows**: Auto-open/close rituals, session persistence for tablet restart recovery
+- **Customer Invite QR (Order)**: Pre-bill auto-prints QR for orders without customer. Customer scans → registers → order linked via Supabase realtime. POS shows toast notification.
+- **Customer Invite QR (Customer)**: Staff prints invite QR from LoyaltyPanel. Customer scans → registers → linked to existing POS profile (no duplicate). 30-day expiry.
+- **ESC/POS QR Printing**: QR code generation added to thermal printer commands (GS ( k). Standalone invite print + embedded in pre-bill.
