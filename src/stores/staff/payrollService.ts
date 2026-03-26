@@ -268,7 +268,7 @@ export async function calculatePayrollForMonth(
       type: b.type
     }))
 
-    const grandTotal = salary + service1 + service2 + bonusesTotal
+    const grandTotal = Math.round((salary + service1 + service2 + bonusesTotal) / 1000) * 1000
 
     rows.push({
       staffId: member.id,

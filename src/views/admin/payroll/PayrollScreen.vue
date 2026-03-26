@@ -581,7 +581,7 @@ async function calculate() {
   position: sticky;
   left: 0;
   z-index: 3;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.6);
 }
 
 thead .sticky-col {

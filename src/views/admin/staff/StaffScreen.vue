@@ -1,9 +1,12 @@
 <!-- src/views/admin/staff/StaffScreen.vue -->
 <template>
   <div class="staff-screen">
-    <!-- Header -->
-    <div class="d-flex align-center justify-space-between pa-4 pb-0">
-      <h2>Staff Management</h2>
+    <!-- Header — compact on schedule tab -->
+    <div
+      class="d-flex align-center justify-space-between"
+      :class="activeTab === 'schedule' ? 'px-4 pt-2' : 'pa-4 pb-0'"
+    >
+      <h2 :style="activeTab === 'schedule' ? 'font-size: 16px' : ''">Staff Management</h2>
       <div v-if="activeTab === 'members'" class="d-flex gap-sm">
         <v-btn variant="outlined" size="small" @click="showShiftPresetsDialog = true">
           <v-icon start>mdi-clock-outline</v-icon>
@@ -20,8 +23,12 @@
       </div>
     </div>
 
-    <!-- Tabs -->
-    <v-tabs v-model="activeTab" class="px-4">
+    <!-- Tabs — compact height on schedule -->
+    <v-tabs
+      v-model="activeTab"
+      :class="activeTab === 'schedule' ? 'px-4 compact-tabs' : 'px-4'"
+      density="compact"
+    >
       <v-tab value="members">Members</v-tab>
       <v-tab value="schedule">Schedule</v-tab>
     </v-tabs>
@@ -99,8 +106,8 @@
       </v-card>
     </div>
 
-    <!-- Schedule tab -->
-    <div v-if="activeTab === 'schedule'" class="tab-content pa-4">
+    <!-- Schedule tab — full height, no padding -->
+    <div v-if="activeTab === 'schedule'" class="schedule-tab-content">
       <DailySchedule />
     </div>
 
@@ -354,5 +361,12 @@ async function handleDeleteBonus(id: string) {
 .tab-content {
   flex: 1;
   overflow-y: auto;
+}
+
+.schedule-tab-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 </style>
