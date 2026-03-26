@@ -17,6 +17,17 @@ Apply in order. All are independent (no cross-dependencies), but sequential orde
 | #   | File                                       | Description                                                                                        |
 | --- | ------------------------------------------ | -------------------------------------------------------------------------------------------------- |
 | 6   | `254_add_time_slots_and_shift_presets.sql` | Add `time_slots JSONB` to staff_work_logs + new `staff_shift_presets` table with 3 default presets |
+| 7   | `260_add_trainee_support.sql`              | Add `is_trainee BOOLEAN` + `custom_salary NUMERIC` to staff_members                                |
+
+### After migration 260 (trainees):
+
+```sql
+-- Activate Fio and Seri as trainees with individual salary
+-- UPDATE staff_members SET is_active = true, is_trainee = true, custom_salary = <amount> WHERE name IN ('Fio', 'Seri');
+
+-- Verify
+SELECT name, is_trainee, custom_salary FROM staff_members WHERE is_trainee = true;
+```
 
 ## Post-Migration Steps
 

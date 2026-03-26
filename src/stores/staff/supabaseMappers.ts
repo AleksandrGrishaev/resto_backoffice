@@ -40,6 +40,8 @@ export function mapMemberFromDb(row: any): StaffMember {
     rankId: row.rank_id,
     userId: row.user_id,
     isActive: row.is_active ?? true,
+    isTrainee: row.is_trainee ?? false,
+    customSalary: row.custom_salary != null ? Number(row.custom_salary) : null,
     startDate: row.start_date,
     notes: row.notes,
     createdAt: row.created_at,
@@ -59,6 +61,8 @@ export function mapMemberToDb(m: Partial<StaffMember>): Record<string, unknown> 
   if (m.rankId !== undefined) row.rank_id = m.rankId
   if (m.userId !== undefined) row.user_id = m.userId
   if (m.isActive !== undefined) row.is_active = m.isActive
+  if (m.isTrainee !== undefined) row.is_trainee = m.isTrainee
+  if (m.customSalary !== undefined) row.custom_salary = m.customSalary
   if (m.startDate !== undefined) row.start_date = m.startDate
   if (m.notes !== undefined) row.notes = m.notes
   return row

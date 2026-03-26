@@ -46,7 +46,29 @@
           <v-text-field v-model="form.phone" label="Phone" class="mb-2" />
           <v-text-field v-model="form.startDate" label="Start Date" type="date" class="mb-2" />
           <v-textarea v-model="form.notes" label="Notes" rows="2" auto-grow class="mb-2" />
-          <v-switch v-model="form.isActive" label="Active" color="primary" hide-details />
+          <v-switch
+            v-model="form.isActive"
+            label="Active"
+            color="primary"
+            hide-details
+            class="mb-2"
+          />
+          <v-switch
+            v-model="form.isTrainee"
+            label="Trainee (no service tax)"
+            color="warning"
+            hide-details
+            class="mb-2"
+          />
+          <v-text-field
+            v-if="form.isTrainee"
+            v-model.number="form.customSalary"
+            label="Monthly Salary (IDR)"
+            type="number"
+            hint="Individual rate, hourly = salary / 208"
+            persistent-hint
+            class="mb-2"
+          />
         </v-form>
       </v-card-text>
       <v-card-actions>
@@ -85,7 +107,9 @@ const form = ref({
   phone: '',
   startDate: '',
   notes: '',
-  isActive: true
+  isActive: true,
+  isTrainee: false,
+  customSalary: 0 as number | null
 })
 
 watch(
@@ -100,7 +124,9 @@ watch(
           phone: props.member.phone || '',
           startDate: props.member.startDate || '',
           notes: props.member.notes || '',
-          isActive: props.member.isActive
+          isActive: props.member.isActive,
+          isTrainee: props.member.isTrainee,
+          customSalary: props.member.customSalary ?? 0
         }
       } else {
         form.value = {
@@ -110,7 +136,9 @@ watch(
           phone: '',
           startDate: '',
           notes: '',
-          isActive: true
+          isActive: true,
+          isTrainee: false,
+          customSalary: 0
         }
       }
     }
@@ -128,7 +156,9 @@ async function save() {
     phone: form.value.phone || undefined,
     startDate: form.value.startDate || undefined,
     notes: form.value.notes || undefined,
-    isActive: form.value.isActive
+    isActive: form.value.isActive,
+    isTrainee: form.value.isTrainee,
+    customSalary: form.value.isTrainee ? form.value.customSalary || null : null
   })
 }
 </script>

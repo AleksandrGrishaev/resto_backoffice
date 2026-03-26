@@ -71,7 +71,10 @@
           </thead>
           <tbody>
             <tr v-for="row in result.rows" :key="row.staffId" class="data-row">
-              <td class="sticky-col name-col">{{ row.staffName }}</td>
+              <td class="sticky-col name-col">
+                {{ row.staffName }}
+                <span v-if="row.isTrainee" class="trainee-badge">T</span>
+              </td>
               <td
                 v-for="date in result.month.allDates"
                 :key="date"
@@ -281,7 +284,10 @@
         <h3>Per-Person Breakdown</h3>
         <div v-for="row in result.rows" :key="row.staffId" class="person-card">
           <div class="person-header">
-            <div class="person-name">{{ row.staffName }}</div>
+            <div class="person-name">
+              {{ row.staffName }}
+              <span v-if="row.isTrainee" class="trainee-badge">Trainee</span>
+            </div>
             <div class="person-rank">{{ row.rankName }} — {{ row.department }}</div>
             <div class="person-total">{{ formatIDR(row.grandTotal) }}</div>
           </div>
@@ -588,6 +594,18 @@ thead .sticky-col {
   max-width: 140px;
   font-weight: 600;
   font-size: 14px;
+}
+
+.trainee-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 152, 0, 0.2);
+  color: rgba(255, 152, 0, 0.9);
+  vertical-align: middle;
+  margin-left: 4px;
 }
 
 .day-col {

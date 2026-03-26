@@ -126,6 +126,8 @@ export interface PayrollStaffRow {
   bonusesTotal: number
   /** Детали бонусов */
   bonusDetails: Array<{ reason: string; amount: number; type: string }>
+  /** Стажёр — индивидуальная ставка, без service tax */
+  isTrainee: boolean
 }
 
 export interface PayrollResult {
@@ -189,9 +191,12 @@ export async function calculatePayrollForMonth(
   }
 
   // 4. Total team hours per sub-period (for service tax distribution)
+  //    Trainees are excluded — they don't participate in service tax
+  const traineeIds = new Set(activeMembers.filter(m => m.isTrainee).map(m => m.id))
   let teamHoursP1 = 0
   let teamHoursP2 = 0
   for (const log of workLogs) {
+    if (traineeIds.has(log.staffId)) continue
     if (log.workDate >= pm.service1Start && log.workDate <= pm.service1End) {
       teamHoursP1 += log.hoursWorked
     }
@@ -226,16 +231,23 @@ export async function calculatePayrollForMonth(
     }
     const totalHours = totalHoursP1 + totalHoursP2
 
-    // Salary
-    const baseSalary = member.rank?.baseSalary || 0
+    // Salary — trainees use customSalary, regular staff use rank
+    const isTrainee = member.isTrainee
+    const baseSalary = isTrainee ? member.customSalary || 0 : member.rank?.baseSalary || 0
     const hourlyRate = baseSalary / BASE_MONTHLY_HOURS
     const salary = Math.round(hourlyRate * totalHours)
 
-    // Service tax proportional share per sub-period
-    const service1 =
-      teamHoursP1 > 0 ? Math.round(totalServiceTaxP1 * (totalHoursP1 / teamHoursP1)) : 0
-    const service2 =
-      teamHoursP2 > 0 ? Math.round(totalServiceTaxP2 * (totalHoursP2 / teamHoursP2)) : 0
+    // Service tax — trainees excluded (0 service)
+    const service1 = isTrainee
+      ? 0
+      : teamHoursP1 > 0
+        ? Math.round(totalServiceTaxP1 * (totalHoursP1 / teamHoursP1))
+        : 0
+    const service2 = isTrainee
+      ? 0
+      : teamHoursP2 > 0
+        ? Math.round(totalServiceTaxP2 * (totalHoursP2 / teamHoursP2))
+        : 0
 
     // Bonuses
     const staffBonuses = bonuses.filter(b => {
@@ -262,7 +274,8 @@ export async function calculatePayrollForMonth(
       staffId: member.id,
       staffName: member.name,
       department: member.department,
-      rankName: member.rank?.name || '—',
+      isTrainee,
+      rankName: isTrainee ? 'Trainee' : member.rank?.name || '—',
       baseSalaryMonthly: baseSalary,
       hourlyRate: Math.round(hourlyRate * 100) / 100,
       dailyHours,

@@ -20,8 +20,24 @@ export interface ShiftPreset {
   updatedAt: string
 }
 
+/** Merge overlapping/adjacent time slots into non-overlapping ranges */
+export function mergeOverlappingSlots(slots: TimeSlot[]): TimeSlot[] {
+  if (slots.length <= 1) return [...slots]
+  const sorted = [...slots].sort((a, b) => a.start - b.start)
+  const merged: TimeSlot[] = [{ ...sorted[0] }]
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = merged[merged.length - 1]
+    if (sorted[i].start <= prev.end) {
+      prev.end = Math.max(prev.end, sorted[i].end)
+    } else {
+      merged.push({ ...sorted[i] })
+    }
+  }
+  return merged
+}
+
 export function calculateHoursFromSlots(slots: TimeSlot[]): number {
-  return slots.reduce((sum, s) => sum + (s.end - s.start), 0)
+  return mergeOverlappingSlots(slots).reduce((sum, s) => sum + (s.end - s.start), 0)
 }
 
 export function formatHour(hour: number): string {
@@ -49,6 +65,8 @@ export interface StaffMember {
   rankId?: string
   userId?: string
   isActive: boolean
+  isTrainee: boolean
+  customSalary?: number | null
   startDate?: string
   notes?: string
   createdAt: string
