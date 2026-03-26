@@ -479,10 +479,9 @@ const handlePinLogin = async (pin: string) => {
     DebugUtils.info(MODULE_NAME, 'POS PIN login attempt')
 
     const token = await getCaptchaToken()
-    const targetRoute = (route.query.redirect as string) || '/pos'
-
-    // Set target route BEFORE login — watcher in App.vue fires immediately on auth change
-    authStore.setTargetRoute(targetRoute)
+    // PIN logins always go to their dedicated route — ignore ?redirect param
+    // (redirect may point to a route the PIN role can't access)
+    authStore.setTargetRoute('/pos')
 
     const success = await authStore.loginWithPin(pin, token, ['admin', 'cashier'])
 
@@ -514,10 +513,9 @@ const handleKitchenPinLogin = async (pin: string) => {
     DebugUtils.info(MODULE_NAME, 'Kitchen PIN login attempt')
 
     const token = await getCaptchaToken()
-    const targetRoute = (route.query.redirect as string) || '/kitchen'
-
-    // Set target route BEFORE login — watcher in App.vue fires immediately on auth change
-    authStore.setTargetRoute(targetRoute)
+    // PIN logins always go to their dedicated route — ignore ?redirect param
+    // (redirect may point to a route the kitchen role can't access, e.g. /menu)
+    authStore.setTargetRoute('/kitchen')
 
     const success = await authStore.loginWithPin(pin, token, ['admin', 'kitchen', 'bar'])
 
