@@ -361,8 +361,8 @@ function pruneShiftMap() {
 async function loadInitial() {
   initialLoading.value = true
   try {
-    const start = addDays(todayStr, -INITIAL_DAYS_BACK)
-    const end = addDays(todayStr, INITIAL_DAYS_FORWARD)
+    const start = addDays(todayStr.value, -INITIAL_DAYS_BACK)
+    const end = addDays(todayStr.value, INITIAL_DAYS_FORWARD)
     rangeStart.value = start
     rangeEnd.value = end
     days.value = generateDateRange(start, end).map(makeDayInfo)

@@ -401,7 +401,7 @@ export interface ProductionScheduleItem {
   currentStockAtGeneration?: number
   recommendationReason?: string
   status: ProductionScheduleStatus
-  taskType?: 'production' | 'write_off'
+  taskType: 'production' | 'write_off'
 
   // Portion type support for UI display
   portionType?: PortionType // 'weight' (default) or 'portion'

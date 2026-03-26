@@ -509,9 +509,15 @@ let deadlineTimer: ReturnType<typeof setTimeout> | null = null
 function scheduleRitualDeadline(): void {
   if (deadlineTimer) clearTimeout(deadlineTimer)
 
-  const now = new Date()
-  const h = now.getHours()
-  const m = now.getMinutes()
+  // Use Bali time (Asia/Makassar) instead of device clock
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Makassar',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false
+  }).formatToParts(new Date())
+  const h = Number(parts.find(p => p.type === 'hour')?.value || 0)
+  const m = Number(parts.find(p => p.type === 'minute')?.value || 0)
   const t = h * 60 + m
   const w = RITUAL_WINDOWS[kpiStore.currentRitualType]
   const end = w.end[0] * 60 + w.end[1]
