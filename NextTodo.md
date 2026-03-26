@@ -145,3 +145,59 @@ Evening Ritual (15:00-22:00):
 | 10  | RitualKpiTab                         | 5            | new component                |
 | 11  | KpiScreen (add tab)                  | 10           | KpiScreen.vue                |
 | 12  | Kitchen RitualSettingsScreen         | 4            | new screen in KitchenSidebar |
+
+---
+
+## Customer Invite Flow — Production Migration Plan
+
+### Overview
+
+Two QR invite flows implemented (DEV applied, PROD pending):
+
+1. **Order Invite (QR-first)** — QR on pre-bill → customer scans → registers → order linked via realtime
+2. **Customer Invite** — staff prints invite QR → customer scans → linked to existing POS customer
+
+### PROD Migration Checklist
+
+| #   | Migration                                | Status       | Notes                                                                |
+| --- | ---------------------------------------- | ------------ | -------------------------------------------------------------------- |
+| 1   | `255_customer_invites.sql` — table + RLS | `[ ]` DEV ✅ | Table, indexes, staff_all policy, service_role grant                 |
+| 2   | `256_rpc_create_customer_invite.sql`     | `[ ]` DEV ✅ | Staff-only, 30-day TTL, expires previous invites                     |
+| 3   | `257_rpc_create_order_invite.sql`        | `[ ]` DEV ✅ | Staff-only, 2-hour TTL, reuses existing active                       |
+| 4   | `258_rpc_claim_invite.sql`               | `[ ]` DEV ✅ | FOR UPDATE SKIP LOCKED, handles trigger conflict, sets customer_name |
+| 5   | `259_rpc_get_invite_by_token.sql`        | `[ ]` DEV ✅ | Safe anon lookup — returns type + name only, no IDs                  |
+
+### PROD Apply Order
+
+```bash
+# 1. Ensure pgcrypto extension exists
+mcp__supabase_prod__execute_sql: CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA extensions;
+
+# 2. Apply table (255)
+mcp__supabase_prod__execute_sql: < 255_customer_invites.sql
+
+# 3. Apply RPCs (256-259) — order matters for dependencies
+mcp__supabase_prod__execute_sql: < 256_rpc_create_customer_invite.sql
+mcp__supabase_prod__execute_sql: < 257_rpc_create_order_invite.sql
+mcp__supabase_prod__execute_sql: < 258_rpc_claim_invite.sql
+mcp__supabase_prod__execute_sql: < 259_rpc_get_invite_by_token.sql
+
+# 4. Verify
+mcp__supabase_prod__execute_sql: SELECT count(*) FROM customer_invites;
+mcp__supabase_prod__execute_sql: SELECT create_order_invite('test'::uuid); -- should return 'Unauthorized' or 'Order not found'
+```
+
+### Security Fixes Applied (from code review)
+
+- ❌ Removed `read_active_by_token` anon SELECT policy (enumeration risk)
+- ✅ Added `get_invite_by_token` SECURITY DEFINER RPC instead
+- ✅ Added `is_staff()` guard to `create_customer_invite` and `create_order_invite`
+- ✅ Added `FOR UPDATE SKIP LOCKED` to `claim_invite` (double-claim race)
+- ✅ Added `customer_name` to order UPDATE in `claim_invite` (for POS realtime toast)
+- ✅ Generic error messages in EXCEPTION handlers (no DB detail leakage)
+
+### Web-winter TODO (separate PR)
+
+- `[ ]` Page `apps/website/pages/join/[token].vue`
+- `[ ]` Claim invite in auth callbacks (`callback.vue`, `verify.vue`, `telegram-callback.vue`)
+- `[ ]` Save invite-token to localStorage before auth redirect

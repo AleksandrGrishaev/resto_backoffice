@@ -81,6 +81,15 @@ export function usePrinter() {
   }
 
   /**
+   * Print a standalone invite QR receipt
+   * @param url The invite URL to encode in QR
+   * @param customerName Customer name shown on the receipt
+   */
+  async function printInviteQR(url: string, customerName: string): Promise<PrintResult> {
+    return printerStore.printInviteQR(url, customerName)
+  }
+
+  /**
    * Print a test receipt
    */
   async function testPrint(): Promise<PrintResult> {
@@ -146,6 +155,7 @@ export function usePrinter() {
     // Printing
     printPreBill,
     printPaymentReceipt,
+    printInviteQR,
     testPrint,
 
     // Settings

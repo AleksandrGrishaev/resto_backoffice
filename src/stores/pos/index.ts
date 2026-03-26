@@ -171,6 +171,9 @@ export const usePosStore = defineStore('pos', () => {
         if (_cancellationCallback) {
           ordersRealtime.onCancellationRequested(_cancellationCallback)
         }
+        if (_customerLinkedCallback) {
+          ordersRealtime.onCustomerLinkedToOrder(_customerLinkedCallback)
+        }
 
         // 🆕 Tables Realtime for sync between tabs/devices
         tablesRealtime = useTablesRealtime()
@@ -375,6 +378,31 @@ export const usePosStore = defineStore('pos', () => {
     | ((order: { orderId: string; orderNumber: string; reason?: string }) => void)
     | null = null
 
+  /**
+   * Register callback for customer linked to order via invite QR
+   */
+  function onCustomerLinkedToOrder(
+    callback: (info: {
+      orderId: string
+      orderNumber: string
+      customerId: string
+      customerName?: string
+    }) => void
+  ) {
+    if (ordersRealtime) {
+      ordersRealtime.onCustomerLinkedToOrder(callback)
+    }
+    _customerLinkedCallback = callback
+  }
+  let _customerLinkedCallback:
+    | ((info: {
+        orderId: string
+        orderNumber: string
+        customerId: string
+        customerName?: string
+      }) => void)
+    | null = null
+
   // ===== RETURN =====
 
   return {
@@ -396,6 +424,7 @@ export const usePosStore = defineStore('pos', () => {
     clearError,
     reset,
     cleanup,
-    onCancellationRequested
+    onCancellationRequested,
+    onCustomerLinkedToOrder
   }
 })

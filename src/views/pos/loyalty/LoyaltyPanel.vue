@@ -32,6 +32,18 @@
         <span class="text-body-2 font-weight-medium">
           {{ formatIDR(attachedCustomer.loyaltyBalance) }}
         </span>
+        <v-btn
+          v-if="isPrinterConnected"
+          icon
+          size="x-small"
+          variant="text"
+          color="amber-darken-2"
+          :loading="printingInvite"
+          @click="handlePrintInviteQR"
+        >
+          <v-icon size="16">mdi-qrcode</v-icon>
+          <v-tooltip activator="parent" location="top">Print Invite QR</v-tooltip>
+        </v-btn>
         <v-btn icon size="x-small" variant="text" @click="expanded = true">
           <v-icon size="16">mdi-pencil</v-icon>
         </v-btn>
@@ -570,6 +582,8 @@ import { formatIDR, DebugUtils } from '@/utils'
 import { TimeUtils } from '@/utils'
 import { usePhoneInput } from '@/composables/usePhoneInput'
 import { NumericInputField } from '@/components/input'
+import { supabase } from '@/supabase/client'
+import { usePrinter } from '@/core/printing'
 import QrScanner from './QrScanner.vue'
 
 const props = defineProps<{
@@ -588,6 +602,31 @@ const emit = defineEmits<{
 
 const customersStore = useCustomersStore()
 const loyaltyStore = useLoyaltyStore()
+const { isConnected: isPrinterConnected, printInviteQR } = usePrinter()
+
+// Invite QR state
+const printingInvite = ref(false)
+
+async function handlePrintInviteQR() {
+  if (!attachedCustomer.value || printingInvite.value) return
+
+  printingInvite.value = true
+  try {
+    const { data } = await supabase.rpc('create_customer_invite', {
+      p_customer_id: attachedCustomer.value.id
+    })
+
+    if (data?.success && data?.url) {
+      await printInviteQR(data.url, data.customerName || attachedCustomer.value.name)
+    } else {
+      DebugUtils.error('LoyaltyPanel', 'Failed to create invite', { data })
+    }
+  } catch (e) {
+    DebugUtils.error('LoyaltyPanel', 'Error creating invite QR', { error: e })
+  } finally {
+    printingInvite.value = false
+  }
+}
 
 // State
 const expanded = ref(props.dialogMode || false)

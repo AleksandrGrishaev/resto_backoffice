@@ -18,6 +18,14 @@ type CancellationRequestCallback = (order: {
   reason?: string
 }) => void
 
+// Customer linked callback type (from invite QR claim)
+type CustomerLinkedCallback = (info: {
+  orderId: string
+  orderNumber: string
+  customerId: string
+  customerName?: string
+}) => void
+
 /**
  * POS Orders Realtime Subscription (NEW: Migration 053-054)
  * Listens for order updates from Kitchen (item status changes)
@@ -38,6 +46,7 @@ export function useOrdersRealtime() {
   const isConnected = computed(() => ordersConnected.value && itemsConnected.value)
   const ordersStore = usePosOrdersStore()
   let onCancellationRequest: CancellationRequestCallback | null = null
+  let onCustomerLinked: CustomerLinkedCallback | null = null
 
   /**
    * Subscribe to orders and order_items table changes
@@ -245,8 +254,24 @@ export function useOrdersRealtime() {
       if (updatedOrder.customer_name !== undefined)
         existingOrder.customerName = updatedOrder.customer_name
       if (updatedOrder.customer_phone) existingOrder.customerPhone = updatedOrder.customer_phone
-      if (updatedOrder.customer_id !== undefined)
+      if (updatedOrder.customer_id !== undefined) {
+        const oldCustomerId = existingOrder.customerId
         existingOrder.customerId = updatedOrder.customer_id
+
+        // Detect customer linked via invite QR (null → value)
+        if (!oldCustomerId && updatedOrder.customer_id && onCustomerLinked) {
+          DebugUtils.info(MODULE_NAME, '🔗 Customer linked to order via invite', {
+            orderNumber: existingOrder.orderNumber,
+            customerId: updatedOrder.customer_id
+          })
+          onCustomerLinked({
+            orderId: existingOrder.id,
+            orderNumber: existingOrder.orderNumber,
+            customerId: updatedOrder.customer_id,
+            customerName: updatedOrder.customer_name
+          })
+        }
+      }
       if (updatedOrder.comment) existingOrder.comment = updatedOrder.comment
 
       // Cancellation request fields
@@ -476,10 +501,18 @@ export function useOrdersRealtime() {
     onCancellationRequest = callback
   }
 
+  /**
+   * Register callback for customer linked via invite QR
+   */
+  function onCustomerLinkedToOrder(callback: CustomerLinkedCallback) {
+    onCustomerLinked = callback
+  }
+
   return {
     subscribe,
     unsubscribe,
     isConnected,
-    onCancellationRequested
+    onCancellationRequested,
+    onCustomerLinkedToOrder
   }
 }

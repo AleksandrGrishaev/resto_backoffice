@@ -397,6 +397,7 @@ import { useChannelsStore } from '@/stores/channels'
 import { DISCOUNT_REASON_LABELS } from '@/stores/discounts/constants'
 import { DebugUtils, TimeUtils } from '@/utils'
 import { usePrinter } from '@/core/printing'
+import { supabase } from '@/supabase/client'
 import { createPreBillSnapshot } from '@/stores/pos/utils/preBillTracking'
 import PaymentItemsList from './widgets/PaymentItemsList.vue'
 import PrinterStatus from './widgets/PrinterStatus.vue'
@@ -880,6 +881,24 @@ const handlePrintPreBill = async (): Promise<void> => {
   isPrintingPreBill.value = true
   try {
     const receiptData = buildReceiptData()
+
+    // Auto-generate invite QR for orders without customer
+    if (!props.customerId && ordersStore.currentOrder?.id) {
+      try {
+        const { data } = await supabase.rpc('create_order_invite', {
+          p_order_id: ordersStore.currentOrder.id
+        })
+        if (data?.success && data?.url) {
+          receiptData.inviteQR = {
+            url: data.url,
+            message: 'Scan to collect stamps!'
+          }
+        }
+      } catch (e) {
+        DebugUtils.error('PaymentDialog', 'Failed to create order invite', { error: e })
+      }
+    }
+
     const result = await printPreBill(receiptData)
 
     if (result.success) {

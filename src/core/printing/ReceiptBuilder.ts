@@ -64,6 +64,24 @@ export class ReceiptBuilder {
     cmd.setBold(false)
     cmd.setAlign('left')
 
+    // Invite QR code (for orders without customer)
+    if (data.inviteQR) {
+      cmd.emptyLine()
+      cmd.dash()
+      cmd.setAlign('center')
+      cmd.setBold(true)
+      cmd.textLine(data.inviteQR.message || 'Scan to collect stamps!')
+      cmd.setBold(false)
+      cmd.emptyLine()
+      cmd.qrCode(data.inviteQR.url, 6)
+      cmd.emptyLine()
+      // Show short URL below QR
+      const shortUrl = data.inviteQR.url.replace('https://', '')
+      cmd.textLine(shortUrl)
+      cmd.setAlign('left')
+      cmd.dash()
+    }
+
     // Footer
     cmd.emptyLine()
     if (data.footerMessage) {
@@ -153,6 +171,38 @@ export class ReceiptBuilder {
     cmd.hr()
 
     // Cut paper
+    cmd.cut()
+
+    return cmd.build()
+  }
+
+  /**
+   * Build standalone invite QR receipt (mini-print for customer invite)
+   */
+  buildInviteQR(url: string, customerName: string, restaurantName: string): Uint8Array {
+    const cmd = new EscPosCommandBuilder(this.charsPerLine)
+
+    cmd.init()
+    cmd.hr()
+    cmd.setAlign('center')
+    cmd.setBold(true)
+    cmd.textLine(restaurantName)
+    cmd.setBold(false)
+    cmd.hr()
+    cmd.emptyLine()
+    cmd.setBold(true)
+    cmd.textLine(`Welcome, ${customerName}!`)
+    cmd.setBold(false)
+    cmd.emptyLine()
+    cmd.textLine('Scan to collect stamps')
+    cmd.textLine('and earn rewards')
+    cmd.emptyLine()
+    cmd.qrCode(url, 8)
+    cmd.emptyLine()
+    cmd.textLine(url.replace('https://', ''))
+    cmd.setAlign('left')
+    cmd.emptyLine()
+    cmd.hr()
     cmd.cut()
 
     return cmd.build()

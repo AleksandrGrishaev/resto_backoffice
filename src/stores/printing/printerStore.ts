@@ -196,6 +196,15 @@ export const usePrinterStore = defineStore('printer', () => {
   }
 
   /**
+   * Print a standalone invite QR (for customer invite flow)
+   */
+  async function printInviteQR(url: string, customerName: string): Promise<PrintResult> {
+    const builder = new ReceiptBuilder()
+    const commands = builder.buildInviteQR(url, customerName, settings.value.restaurantName)
+    return print(commands)
+  }
+
+  /**
    * Print a test receipt
    */
   async function printTest(): Promise<PrintResult> {
@@ -335,6 +344,7 @@ export const usePrinterStore = defineStore('printer', () => {
     print,
     printPreBill,
     printPaymentReceipt,
+    printInviteQR,
     printTest,
 
     // Settings

@@ -308,6 +308,12 @@ const initializePOS = async (): Promise<void> => {
         'warning'
       )
     })
+
+    // Register customer linked via invite QR handler
+    posStore.onCustomerLinkedToOrder(info => {
+      const name = info.customerName || 'Customer'
+      showNotification(`${name} linked to Order #${info.orderNumber}`, 'success')
+    })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     initError.value = errorMessage

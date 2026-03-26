@@ -119,6 +119,12 @@ export interface ReceiptData {
   paymentNumber?: string
   cashierName?: string
   footerMessage?: string
+
+  // Invite QR (printed on pre-bill for orders without customer)
+  inviteQR?: {
+    url: string
+    message?: string // e.g. "Scan to collect stamps!"
+  }
 }
 
 /**
