@@ -2,7 +2,15 @@
 
 import { supabase } from '@/supabase/client'
 import { DebugUtils } from '@/utils'
-import type { StaffRank, StaffMember, WorkLog, StaffBonus, PayrollPeriod } from './types'
+import type {
+  StaffRank,
+  StaffMember,
+  WorkLog,
+  StaffBonus,
+  PayrollPeriod,
+  ShiftPreset,
+  TimeSlot
+} from './types'
 import {
   mapRankFromDb,
   mapRankToDb,
@@ -11,7 +19,9 @@ import {
   mapWorkLogFromDb,
   mapBonusFromDb,
   mapBonusToDb,
-  mapPayrollPeriodFromDb
+  mapPayrollPeriodFromDb,
+  mapShiftPresetFromDb,
+  mapShiftPresetToDb
 } from './supabaseMappers'
 
 const MODULE = 'StaffService'
@@ -104,6 +114,51 @@ export async function deleteMember(id: string): Promise<void> {
 }
 
 // =====================================================
+// SHIFT PRESETS
+// =====================================================
+
+export async function fetchShiftPresets(): Promise<ShiftPreset[]> {
+  const { data, error } = await supabase.from('staff_shift_presets').select('*').order('sort_order')
+
+  if (error) {
+    DebugUtils.error(MODULE, 'fetchShiftPresets failed', error)
+    throw error
+  }
+  return (data || []).map(mapShiftPresetFromDb)
+}
+
+export async function createShiftPreset(preset: Partial<ShiftPreset>): Promise<ShiftPreset> {
+  const { data, error } = await supabase
+    .from('staff_shift_presets')
+    .insert(mapShiftPresetToDb(preset))
+    .select()
+    .single()
+
+  if (error) throw error
+  return mapShiftPresetFromDb(data)
+}
+
+export async function updateShiftPreset(
+  id: string,
+  preset: Partial<ShiftPreset>
+): Promise<ShiftPreset> {
+  const { data, error } = await supabase
+    .from('staff_shift_presets')
+    .update(mapShiftPresetToDb(preset))
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return mapShiftPresetFromDb(data)
+}
+
+export async function deleteShiftPreset(id: string): Promise<void> {
+  const { error } = await supabase.from('staff_shift_presets').delete().eq('id', id)
+  if (error) throw error
+}
+
+// =====================================================
 // WORK LOGS
 // =====================================================
 
@@ -126,6 +181,7 @@ export async function upsertWorkLog(
   staffId: string,
   workDate: string,
   hoursWorked: number,
+  timeSlots?: TimeSlot[] | null,
   recordedBy?: string,
   notes?: string
 ): Promise<WorkLog> {
@@ -136,6 +192,7 @@ export async function upsertWorkLog(
         staff_id: staffId,
         work_date: workDate,
         hours_worked: hoursWorked,
+        time_slots: timeSlots ?? null,
         recorded_by: recordedBy,
         notes
       },
@@ -149,12 +206,19 @@ export async function upsertWorkLog(
 }
 
 export async function upsertWorkLogsBatch(
-  logs: Array<{ staffId: string; workDate: string; hoursWorked: number; recordedBy?: string }>
+  logs: Array<{
+    staffId: string
+    workDate: string
+    hoursWorked: number
+    timeSlots?: TimeSlot[] | null
+    recordedBy?: string
+  }>
 ): Promise<WorkLog[]> {
   const rows = logs.map(l => ({
     staff_id: l.staffId,
     work_date: l.workDate,
     hours_worked: l.hoursWorked,
+    time_slots: l.timeSlots ?? null,
     recorded_by: l.recordedBy
   }))
 
@@ -284,6 +348,10 @@ export const staffService = {
   createMember,
   updateMember,
   deleteMember,
+  fetchShiftPresets,
+  createShiftPreset,
+  updateShiftPreset,
+  deleteShiftPreset,
   fetchWorkLogs,
   upsertWorkLog,
   upsertWorkLogsBatch,

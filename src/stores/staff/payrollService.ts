@@ -3,7 +3,7 @@
 import { supabase } from '@/supabase/client'
 import { DebugUtils } from '@/utils'
 import { BASE_MONTHLY_HOURS } from './types'
-import type { StaffMember, StaffBonus, PayrollPeriod, WorkLog } from './types'
+import type { StaffMember, StaffBonus, PayrollPeriod, WorkLog, TimeSlot } from './types'
 import { staffService } from './staffService'
 
 const MODULE = 'PayrollService'
@@ -105,6 +105,8 @@ export interface PayrollStaffRow {
   hourlyRate: number
   /** Часы по дням: { 'YYYY-MM-DD': hours } */
   dailyHours: Record<string, number>
+  /** Тайм-слоты по дням: { 'YYYY-MM-DD': TimeSlot[] | null } */
+  dailyTimeSlots: Record<string, TimeSlot[] | null>
   /** Даты, где часы были скорректированы: date → reason */
   editedDates: Map<string, string>
   /** Итого часов за service period 1 */
@@ -172,12 +174,12 @@ export async function calculatePayrollForMonth(
     staffService.fetchServiceTaxForPeriod(pm.service2Start, pm.service2End)
   ])
 
-  // 3. Build lookup: staffId → { date → hours } + edited dates with reasons
-  const logMap = new Map<string, Map<string, number>>()
+  // 3. Build lookup: staffId → { date → WorkLog } + edited dates with reasons
+  const logMap = new Map<string, Map<string, WorkLog>>()
   const editedMap = new Map<string, Map<string, string>>() // staffId → Map<date, reason>
   for (const log of workLogs) {
     if (!logMap.has(log.staffId)) logMap.set(log.staffId, new Map())
-    logMap.get(log.staffId)!.set(log.workDate, log.hoursWorked)
+    logMap.get(log.staffId)!.set(log.workDate, log)
 
     // Detect edits: has edited_by or edited_at
     if (log.editedBy || log.editedAt) {
@@ -202,13 +204,16 @@ export async function calculatePayrollForMonth(
   const rows: PayrollStaffRow[] = []
 
   for (const member of activeMembers) {
-    const staffDays = logMap.get(member.id) || new Map<string, number>()
+    const staffLogs = logMap.get(member.id) || new Map<string, WorkLog>()
     const editedDates = editedMap.get(member.id) || new Map<string, string>()
 
-    // Daily hours map
+    // Daily hours and time slots maps
     const dailyHours: Record<string, number> = {}
+    const dailyTimeSlots: Record<string, TimeSlot[] | null> = {}
     for (const date of pm.allDates) {
-      dailyHours[date] = staffDays.get(date) || 0
+      const log = staffLogs.get(date)
+      dailyHours[date] = log?.hoursWorked || 0
+      dailyTimeSlots[date] = log?.timeSlots ?? null
     }
 
     // Sub-period hours
@@ -261,6 +266,7 @@ export async function calculatePayrollForMonth(
       baseSalaryMonthly: baseSalary,
       hourlyRate: Math.round(hourlyRate * 100) / 100,
       dailyHours,
+      dailyTimeSlots,
       editedDates,
       totalHoursP1,
       totalHoursP2,

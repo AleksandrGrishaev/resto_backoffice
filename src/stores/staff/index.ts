@@ -13,6 +13,8 @@ export type {
   PayrollItem,
   StaffDepartment,
   BonusType,
-  PayrollStatus
+  PayrollStatus,
+  TimeSlot,
+  ShiftPreset
 } from './types'
-export { DEPARTMENT_LABELS, BASE_MONTHLY_HOURS } from './types'
+export { DEPARTMENT_LABELS, BASE_MONTHLY_HOURS, calculateHoursFromSlots, formatHour } from './types'

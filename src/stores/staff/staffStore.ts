@@ -3,7 +3,15 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { DebugUtils } from '@/utils'
-import type { StaffRank, StaffMember, WorkLog, StaffBonus, PayrollPeriod } from './types'
+import type {
+  StaffRank,
+  StaffMember,
+  WorkLog,
+  StaffBonus,
+  PayrollPeriod,
+  ShiftPreset,
+  TimeSlot
+} from './types'
 import { staffService } from './staffService'
 import {
   calculatePayrollForMonth,
@@ -22,6 +30,7 @@ export const useStaffStore = defineStore('staff', () => {
   const ranks = ref<StaffRank[]>([])
   const members = ref<StaffMember[]>([])
   const bonuses = ref<StaffBonus[]>([])
+  const shiftPresets = ref<ShiftPreset[]>([])
   const payrollPeriods = ref<PayrollPeriod[]>([])
   const initialized = ref(false)
   const loading = ref(false)
@@ -32,6 +41,7 @@ export const useStaffStore = defineStore('staff', () => {
   // =====================================================
   const activeMembers = computed(() => members.value.filter(m => m.isActive))
   const activeRanks = computed(() => ranks.value.filter(r => r.isActive))
+  const activeShiftPresets = computed(() => shiftPresets.value.filter(p => p.isActive))
 
   // =====================================================
   // ACTIONS
@@ -43,19 +53,22 @@ export const useStaffStore = defineStore('staff', () => {
     error.value = null
 
     try {
-      const [ranksData, membersData, bonusesData] = await Promise.all([
+      const [ranksData, membersData, bonusesData, presetsData] = await Promise.all([
         staffService.fetchRanks(),
         staffService.fetchMembers(),
-        staffService.fetchBonuses()
+        staffService.fetchBonuses(),
+        staffService.fetchShiftPresets()
       ])
       ranks.value = ranksData
       members.value = membersData
       bonuses.value = bonusesData
+      shiftPresets.value = presetsData
       initialized.value = true
       DebugUtils.info(MODULE, '✅ Initialized', {
         ranks: ranksData.length,
         members: membersData.length,
-        bonuses: bonusesData.length
+        bonuses: bonusesData.length,
+        shiftPresets: presetsData.length
       })
     } catch (e: any) {
       error.value = e.message
@@ -125,6 +138,26 @@ export const useStaffStore = defineStore('staff', () => {
     bonuses.value = bonuses.value.filter(b => b.id !== id)
   }
 
+  // --- Shift Presets ---
+
+  async function addShiftPreset(preset: Partial<ShiftPreset>) {
+    const created = await staffService.createShiftPreset(preset)
+    shiftPresets.value.push(created)
+    return created
+  }
+
+  async function editShiftPreset(id: string, data: Partial<ShiftPreset>) {
+    const updated = await staffService.updateShiftPreset(id, data)
+    const idx = shiftPresets.value.findIndex(p => p.id === id)
+    if (idx >= 0) shiftPresets.value[idx] = updated
+    return updated
+  }
+
+  async function removeShiftPreset(id: string) {
+    await staffService.deleteShiftPreset(id)
+    shiftPresets.value = shiftPresets.value.filter(p => p.id !== id)
+  }
+
   // --- Work Logs ---
 
   async function fetchWorkLogs(dateFrom: string, dateTo: string): Promise<WorkLog[]> {
@@ -132,7 +165,13 @@ export const useStaffStore = defineStore('staff', () => {
   }
 
   async function saveWorkLogs(
-    logs: Array<{ staffId: string; workDate: string; hoursWorked: number; recordedBy?: string }>
+    logs: Array<{
+      staffId: string
+      workDate: string
+      hoursWorked: number
+      timeSlots?: TimeSlot[] | null
+      recordedBy?: string
+    }>
   ): Promise<WorkLog[]> {
     return staffService.upsertWorkLogsBatch(logs)
   }
@@ -182,6 +221,7 @@ export const useStaffStore = defineStore('staff', () => {
     ranks,
     members,
     bonuses,
+    shiftPresets,
     payrollPeriods,
     initialized,
     loading,
@@ -189,6 +229,7 @@ export const useStaffStore = defineStore('staff', () => {
     // getters
     activeMembers,
     activeRanks,
+    activeShiftPresets,
     // actions
     initialize,
     addRank,
@@ -200,6 +241,9 @@ export const useStaffStore = defineStore('staff', () => {
     addBonus,
     editBonus,
     removeBonus,
+    addShiftPreset,
+    editShiftPreset,
+    removeShiftPreset,
     fetchWorkLogs,
     saveWorkLogs,
     loadPayrollPeriods,

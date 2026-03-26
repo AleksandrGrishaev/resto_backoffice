@@ -2,7 +2,7 @@
 <template>
   <v-dialog
     :model-value="modelValue"
-    max-width="480"
+    max-width="600"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <v-card>
@@ -20,7 +20,10 @@
             v-for="entry in entries"
             :key="entry.staffId"
             class="staff-entry"
-            :class="{ 'active-entry': selectedStaffId === entry.staffId }"
+            :class="{
+              'active-entry': selectedStaffId === entry.staffId,
+              changed: hasEntryChanged(entry)
+            }"
             @click="selectStaff(entry)"
           >
             <div class="staff-info">
@@ -28,43 +31,33 @@
               <div class="staff-dept">{{ entry.department }}</div>
             </div>
             <div class="hours-display">
-              <span v-if="entry.originalHours !== entry.newHours" class="old-hours">
-                {{ entry.originalHours }}
+              <div v-if="entry.newSlots.length" class="slot-chips-small">
+                <span v-for="(slot, i) in entry.newSlots" :key="i" class="slot-chip-small">
+                  {{ formatHour(slot.start) }}-{{ formatHour(slot.end) }}
+                </span>
+              </div>
+              <span v-if="hasEntryChanged(entry)" class="old-hours">
+                {{ entry.originalHours }}h
               </span>
-              <span
-                class="current-hours"
-                :class="{ changed: entry.originalHours !== entry.newHours }"
-              >
-                {{ entry.newHours }}h
+              <span class="current-hours" :class="{ changed: hasEntryChanged(entry) }">
+                {{ getNewHours(entry) }}h
               </span>
             </div>
           </div>
         </div>
 
-        <!-- Keypad for selected staff -->
-        <div v-if="selectedEntry" class="keypad-section">
-          <div class="keypad-header">
-            <span class="keypad-staff-name">{{ selectedEntry.staffName }}</span>
-            <span
-              v-if="selectedEntry.originalHours !== selectedEntry.newHours"
-              class="keypad-change"
-            >
-              {{ selectedEntry.originalHours }}h → {{ selectedEntry.newHours }}h
+        <!-- Slot editor for selected staff -->
+        <div v-if="selectedEntry" class="editor-section">
+          <div class="editor-header">
+            <span class="editor-staff-name">{{ selectedEntry.staffName }}</span>
+            <span v-if="hasEntryChanged(selectedEntry)" class="editor-change">
+              {{ selectedEntry.originalHours }}h → {{ getNewHours(selectedEntry) }}h
             </span>
           </div>
-          <NumericKeypad
-            v-model="selectedEntry.newHours"
-            :allow-decimal="true"
-            :max-value="24"
-            :show-display="true"
-            label="Hours"
-            suffix="h"
-            compact
-            inline
-          />
+          <TimeSlotEditor v-model="selectedEntry.newSlots" :presets="shiftPresets" />
         </div>
 
-        <!-- Reason field (shown when any value changed) -->
+        <!-- Reason field -->
         <div v-if="hasChanges" class="reason-section">
           <v-text-field
             v-model="reason"
@@ -103,14 +96,17 @@
 import { ref, computed, watch } from 'vue'
 import { supabase } from '@/supabase/client'
 import { useAuthStore } from '@/stores/auth'
-import NumericKeypad from '@/components/input/NumericKeypad.vue'
+import type { TimeSlot, ShiftPreset } from '@/stores/staff'
+import { calculateHoursFromSlots, formatHour } from '@/stores/staff'
+import TimeSlotEditor from '@/components/staff/TimeSlotEditor.vue'
 
 interface StaffEntry {
   staffId: string
   staffName: string
   department: string
   originalHours: number
-  newHours: number
+  originalSlots: TimeSlot[]
+  newSlots: TimeSlot[]
 }
 
 const props = defineProps<{
@@ -121,7 +117,9 @@ const props = defineProps<{
     staffName: string
     department: string
     dailyHours: Record<string, number>
+    dailyTimeSlots?: Record<string, TimeSlot[] | null>
   }>
+  shiftPresets?: ShiftPreset[]
 }>()
 
 const emit = defineEmits<{
@@ -134,6 +132,7 @@ const entries = ref<StaffEntry[]>([])
 const selectedStaffId = ref<string | null>(null)
 const reason = ref('')
 const saving = ref(false)
+const shiftPresets = computed(() => props.shiftPresets || [])
 
 const formattedDate = computed(() => {
   if (!props.date) return ''
@@ -141,29 +140,48 @@ const formattedDate = computed(() => {
   return d.toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' })
 })
 
-const selectedEntry = computed(() => {
-  return entries.value.find(e => e.staffId === selectedStaffId.value) || null
-})
+const selectedEntry = computed(
+  () => entries.value.find(e => e.staffId === selectedStaffId.value) || null
+)
 
-const hasChanges = computed(() => {
-  return entries.value.some(e => e.originalHours !== e.newHours)
-})
+function getNewHours(entry: StaffEntry): number {
+  return calculateHoursFromSlots(entry.newSlots)
+}
 
-const changedCount = computed(() => {
-  return entries.value.filter(e => e.originalHours !== e.newHours).length
-})
+function hasEntryChanged(entry: StaffEntry): boolean {
+  return (
+    entry.originalHours !== getNewHours(entry) ||
+    JSON.stringify(entry.originalSlots) !== JSON.stringify(entry.newSlots)
+  )
+}
+
+const hasChanges = computed(() => entries.value.some(hasEntryChanged))
+
+const changedCount = computed(() => entries.value.filter(hasEntryChanged).length)
 
 watch(
   () => props.modelValue,
   open => {
     if (open && props.date) {
-      entries.value = props.staffRows.map(r => ({
-        staffId: r.staffId,
-        staffName: r.staffName,
-        department: r.department,
-        originalHours: r.dailyHours[props.date] || 0,
-        newHours: r.dailyHours[props.date] || 0
-      }))
+      entries.value = props.staffRows.map(r => {
+        const existingSlots = r.dailyTimeSlots?.[props.date] || null
+        const hours = r.dailyHours[props.date] || 0
+        let slots: TimeSlot[] = []
+        if (existingSlots && existingSlots.length > 0) {
+          slots = existingSlots.map(s => ({ ...s }))
+        } else if (hours > 0) {
+          // Legacy: synthesize from hours
+          slots = [{ start: 8, end: Math.min(8 + hours, 24) }]
+        }
+        return {
+          staffId: r.staffId,
+          staffName: r.staffName,
+          department: r.department,
+          originalHours: hours,
+          originalSlots: slots.map(s => ({ ...s })),
+          newSlots: slots
+        }
+      })
       selectedStaffId.value = entries.value[0]?.staffId || null
       reason.value = ''
     }
@@ -181,16 +199,18 @@ function close() {
 async function saveAll() {
   saving.value = true
   try {
-    const changed = entries.value.filter(e => e.originalHours !== e.newHours)
+    const changed = entries.value.filter(hasEntryChanged)
     const userId = authStore.currentUser?.id
 
     for (const entry of changed) {
-      if (entry.newHours > 0) {
+      const newHours = getNewHours(entry)
+      if (newHours > 0) {
         await supabase.from('staff_work_logs').upsert(
           {
             staff_id: entry.staffId,
             work_date: props.date,
-            hours_worked: entry.newHours,
+            hours_worked: newHours,
+            time_slots: entry.newSlots,
             edit_reason: reason.value.trim(),
             edited_by: userId,
             edited_at: new Date().toISOString()
@@ -239,6 +259,12 @@ async function saveAll() {
     background: rgba(var(--v-theme-primary), 0.1);
     border-left: 3px solid rgb(var(--v-theme-primary));
   }
+
+  &.changed {
+    .current-hours {
+      color: rgb(var(--v-theme-primary));
+    }
+  }
 }
 
 .staff-info {
@@ -261,6 +287,19 @@ async function saveAll() {
   gap: 6px;
 }
 
+.slot-chips-small {
+  display: flex;
+  gap: 4px;
+}
+
+.slot-chip-small {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(var(--v-theme-primary), 0.15);
+  color: rgba(255, 255, 255, 0.7);
+}
+
 .old-hours {
   text-decoration: line-through;
   color: rgba(255, 255, 255, 0.3);
@@ -271,30 +310,26 @@ async function saveAll() {
   font-size: 18px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-
-  &.changed {
-    color: rgb(var(--v-theme-primary));
-  }
 }
 
-.keypad-section {
+.editor-section {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding: 12px 16px;
 }
 
-.keypad-header {
+.editor-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
 }
 
-.keypad-staff-name {
+.editor-staff-name {
   font-weight: 600;
   font-size: 14px;
 }
 
-.keypad-change {
+.editor-change {
   font-size: 12px;
   color: rgba(255, 152, 0, 0.8);
 }

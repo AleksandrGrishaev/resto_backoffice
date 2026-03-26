@@ -6,7 +6,8 @@ import type {
   WorkLog,
   StaffBonus,
   PayrollPeriod,
-  PayrollItem
+  PayrollItem,
+  ShiftPreset
 } from './types'
 
 export function mapRankFromDb(row: any): StaffRank {
@@ -69,6 +70,7 @@ export function mapWorkLogFromDb(row: any): WorkLog {
     staffId: row.staff_id,
     workDate: row.work_date,
     hoursWorked: Number(row.hours_worked) || 0,
+    timeSlots: row.time_slots ?? null,
     notes: row.notes,
     recordedBy: row.recorded_by,
     editReason: row.edit_reason,
@@ -77,6 +79,29 @@ export function mapWorkLogFromDb(row: any): WorkLog {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
+}
+
+export function mapShiftPresetFromDb(row: any): ShiftPreset {
+  return {
+    id: row.id,
+    name: row.name,
+    startHour: row.start_hour,
+    endHour: row.end_hour,
+    sortOrder: row.sort_order ?? 0,
+    isActive: row.is_active ?? true,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+export function mapShiftPresetToDb(p: Partial<ShiftPreset>): Record<string, unknown> {
+  const row: Record<string, unknown> = {}
+  if (p.name !== undefined) row.name = p.name
+  if (p.startHour !== undefined) row.start_hour = p.startHour
+  if (p.endHour !== undefined) row.end_hour = p.endHour
+  if (p.sortOrder !== undefined) row.sort_order = p.sortOrder
+  if (p.isActive !== undefined) row.is_active = p.isActive
+  return row
 }
 
 export function mapBonusFromDb(row: any): StaffBonus {

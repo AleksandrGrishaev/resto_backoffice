@@ -84,8 +84,26 @@
                 @click="openDayDialog(date)"
               >
                 {{ row.dailyHours[date] || 0 }}
-                <v-tooltip v-if="row.editedDates.has(date)" activator="parent" location="top">
-                  {{ row.editedDates.get(date) }}
+                <v-tooltip
+                  v-if="
+                    row.editedDates.has(date) ||
+                    (row.dailyTimeSlots[date] && row.dailyTimeSlots[date]!.length > 0)
+                  "
+                  activator="parent"
+                  location="top"
+                >
+                  <div v-if="row.dailyTimeSlots[date]?.length">
+                    <div v-for="(slot, si) in row.dailyTimeSlots[date]!" :key="si">
+                      {{ formatHour(slot.start) }} — {{ formatHour(slot.end) }}
+                    </div>
+                  </div>
+                  <div
+                    v-if="row.editedDates.has(date)"
+                    class="mt-1"
+                    style="font-style: italic; opacity: 0.7"
+                  >
+                    {{ row.editedDates.get(date) }}
+                  </div>
                 </v-tooltip>
               </td>
               <td class="subtotal-col">{{ row.totalHoursP1 }}</td>
@@ -124,6 +142,7 @@
         v-model="showDayDialog"
         :date="editingDate"
         :staff-rows="result.rows"
+        :shift-presets="store.activeShiftPresets"
         @saved="calculate"
       />
 
@@ -342,7 +361,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { useStaffStore, BASE_MONTHLY_HOURS } from '@/stores/staff'
+import { useStaffStore, BASE_MONTHLY_HOURS, formatHour } from '@/stores/staff'
 import type { PayrollResult } from '@/stores/staff'
 import { formatIDR } from '@/utils'
 import DayEditDialog from './components/DayEditDialog.vue'

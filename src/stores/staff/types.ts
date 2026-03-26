@@ -4,6 +4,30 @@ export type StaffDepartment = 'kitchen' | 'bar' | 'service' | 'management'
 export type BonusType = 'one_time' | 'monthly'
 export type PayrollStatus = 'draft' | 'calculated' | 'approved' | 'paid'
 
+export interface TimeSlot {
+  start: number // hour 0-23
+  end: number // hour 1-24
+}
+
+export interface ShiftPreset {
+  id: string
+  name: string
+  startHour: number
+  endHour: number
+  sortOrder: number
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export function calculateHoursFromSlots(slots: TimeSlot[]): number {
+  return slots.reduce((sum, s) => sum + (s.end - s.start), 0)
+}
+
+export function formatHour(hour: number): string {
+  return `${String(hour).padStart(2, '0')}:00`
+}
+
 /** Часов в месяце при 6-дневной неделе по 8 часов */
 export const BASE_MONTHLY_HOURS = 208
 
@@ -38,6 +62,7 @@ export interface WorkLog {
   staffId: string
   workDate: string
   hoursWorked: number
+  timeSlots?: TimeSlot[] | null
   notes?: string
   recordedBy?: string
   editReason?: string
