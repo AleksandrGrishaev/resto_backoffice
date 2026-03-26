@@ -973,29 +973,20 @@ async function createNewCustomer() {
   createCustomerError.value = ''
 
   try {
-    let customer = await customersStore.createCustomer({
+    const customer = await customersStore.createCustomer({
       name: newCustomerName.value.trim(),
       phone: newCustomerPhone.fullPhone.value || undefined,
       telegramUsername: newCustomerTelegram.value.trim() || undefined,
       loyaltyProgram: newCustomerLoyaltyProgram.value
     } as any)
 
-    // If stamp card number provided, link it and auto-convert stamps to points
+    // If stamp card number provided, link it to customer (no conversion — stamps keep accruing)
     const cardNum = newCustomerCardNumber.value.trim()
     if (cardNum) {
       try {
         await loyaltyStore.linkCardToCustomer(cardNum, customer.id)
-        // Auto-convert: stamps → loyalty points + 10% bonus
-        const result = await loyaltyStore.convertCard(cardNum, customer.id)
-        if (result.success && result.stamps > 0) {
-          conversionResult.value = result
-          // Refresh customer to get updated loyalty_balance from DB
-          await customersStore.refreshCustomer(customer.id)
-          const updated = customersStore.getById(customer.id)
-          if (updated) customer = updated
-        }
       } catch {
-        // Card linking/conversion is optional — don't block customer creation
+        // Card linking is optional — don't block customer creation
       }
     }
 

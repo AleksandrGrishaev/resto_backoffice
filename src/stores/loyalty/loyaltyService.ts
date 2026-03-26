@@ -175,7 +175,8 @@ export class LoyaltyService {
         .from('customers')
         .insert({
           name: options.customerName.trim(),
-          phone: options.customerPhone?.trim() || null
+          phone: options.customerPhone?.trim() || null,
+          loyalty_program: 'stamps'
         })
         .select('id')
         .single()
