@@ -14,7 +14,7 @@ const MODULE_NAME = 'RecommendationsService'
 // =============================================
 
 export interface RecommendationConfig {
-  /** Number of days to calculate average consumption (default: 7) */
+  /** Number of days to calculate average consumption (default: 3) */
   daysForAverage: number
   /** Multiplier for safety stock (default: 1.5) */
   safetyStockMultiplier: number
@@ -31,7 +31,7 @@ export interface RecommendationConfig {
 }
 
 const DEFAULT_CONFIG: RecommendationConfig = {
-  daysForAverage: 7,
+  daysForAverage: 3,
   safetyStockMultiplier: 1.5,
   urgentThresholdDays: 1,
   morningThresholdDays: 2,
@@ -175,7 +175,7 @@ export function generateRecommendations(
       continue
     }
 
-    // Create recommendation for zero stock
+    // Create recommendation for zero stock (or pre-made without balance)
     const recommendation = createZeroStockRecommendation(preparation, cfg)
     if (recommendation) {
       zeroStockCount++
@@ -189,6 +189,14 @@ export function generateRecommendations(
 
   DebugUtils.info(MODULE_NAME, '📊 Zero stock preparations', {
     count: zeroStockCount
+  })
+
+  // Generate write-off tasks for expired items
+  const writeOffRecs = generateWriteOffRecommendations(department, departmentBalances, preparations)
+  recommendations.push(...writeOffRecs)
+
+  DebugUtils.info(MODULE_NAME, '🗑️ Write-off recommendations', {
+    count: writeOffRecs.length
   })
 
   // Sort by priority (urgent first)
@@ -223,6 +231,11 @@ function calculateRecommendation(
 ): ProductionRecommendation | null {
   const currentStock = balance.totalQuantity
   const avgDailyConsumption = calculateAvgDailyConsumption(balance, config.daysForAverage)
+
+  // Pre-made items: use dailyTargetQuantity if set, always morning slot
+  if (preparation.isPremade) {
+    return calculatePremadeRecommendation(balance, preparation, config)
+  }
 
   // Calculate days until stockout
   const daysUntilStockout = avgDailyConsumption > 0 ? currentStock / avgDailyConsumption : 999
@@ -265,6 +278,58 @@ function calculateRecommendation(
     storageLocation: preparation.storageLocation || 'fridge',
     portionType: preparation.portionType,
     portionSize: preparation.portionSize,
+    isPremade: false,
+    isCompleted: false
+  }
+}
+
+/**
+ * Calculate recommendation for pre-made items (always morning slot)
+ * Uses dailyTargetQuantity if set, otherwise calculates from consumption
+ */
+function calculatePremadeRecommendation(
+  balance: PreparationBalance,
+  preparation: Preparation,
+  config: RecommendationConfig
+): ProductionRecommendation | null {
+  const currentStock = balance.totalQuantity
+  const avgDailyConsumption = calculateAvgDailyConsumption(balance, config.daysForAverage)
+
+  // Use fixed daily target if set, otherwise calculate
+  let targetQuantity = preparation.dailyTargetQuantity || 0
+  if (targetQuantity <= 0) {
+    targetQuantity = calculateRecommendedQuantity(avgDailyConsumption, preparation, config)
+  }
+
+  // How much still needs to be produced
+  const needToProduce = Math.max(0, targetQuantity - currentStock)
+
+  // Skip if we already have enough stock
+  if (needToProduce < config.minRecommendedQuantity) {
+    return null
+  }
+
+  const daysUntilStockout = avgDailyConsumption > 0 ? currentStock / avgDailyConsumption : 999
+
+  const reason =
+    currentStock <= 0
+      ? `Pre-made: needs daily prep (target: ${Math.round(targetQuantity)}${preparation.outputUnit})`
+      : `Pre-made: ${Math.round(currentStock)}${preparation.outputUnit} in stock, target: ${Math.round(targetQuantity)}${preparation.outputUnit}`
+
+  return {
+    id: generateId(),
+    preparationId: preparation.id,
+    preparationName: preparation.name,
+    currentStock,
+    avgDailyConsumption,
+    daysUntilStockout: Math.round(daysUntilStockout * 10) / 10,
+    recommendedQuantity: Math.round(needToProduce),
+    urgency: 'morning', // Pre-made always in morning slot
+    reason,
+    storageLocation: preparation.storageLocation || 'fridge',
+    portionType: preparation.portionType,
+    portionSize: preparation.portionSize,
+    isPremade: true,
     isCompleted: false
   }
 }
@@ -276,11 +341,15 @@ function createZeroStockRecommendation(
   preparation: Preparation,
   config: RecommendationConfig
 ): ProductionRecommendation | null {
-  // For zero stock, use standard batch size or output quantity
-  const recommendedQuantity = Math.max(
-    preparation.outputQuantity || 500,
-    config.minRecommendedQuantity
-  )
+  const isPremade = preparation.isPremade === true
+
+  // For pre-made, use daily target; for others, use batch size
+  let recommendedQuantity: number
+  if (isPremade && preparation.dailyTargetQuantity && preparation.dailyTargetQuantity > 0) {
+    recommendedQuantity = preparation.dailyTargetQuantity
+  } else {
+    recommendedQuantity = Math.max(preparation.outputQuantity || 500, config.minRecommendedQuantity)
+  }
 
   return {
     id: generateId(),
@@ -290,11 +359,14 @@ function createZeroStockRecommendation(
     avgDailyConsumption: 0,
     daysUntilStockout: 0,
     recommendedQuantity: Math.round(recommendedQuantity),
-    urgency: 'urgent',
-    reason: 'Out of stock - no inventory available',
+    urgency: isPremade ? 'morning' : 'urgent',
+    reason: isPremade
+      ? `Pre-made: needs daily prep (target: ${Math.round(recommendedQuantity)}${preparation.outputUnit})`
+      : 'Out of stock - no inventory available',
     storageLocation: preparation.storageLocation || 'fridge',
     portionType: preparation.portionType,
     portionSize: preparation.portionSize,
+    isPremade: isPremade,
     isCompleted: false
   }
 }
@@ -453,16 +525,86 @@ function generateReason(
 }
 
 // =============================================
+// Write-off Recommendations
+// =============================================
+
+/**
+ * Generate write-off recommendations for expired items
+ * These appear as urgent tasks in the schedule
+ */
+function generateWriteOffRecommendations(
+  department: 'kitchen' | 'bar',
+  balances: PreparationBalance[],
+  preparations?: Preparation[]
+): ProductionRecommendation[] {
+  const writeOffRecs: ProductionRecommendation[] = []
+
+  for (const balance of balances) {
+    if (!balance.hasExpired) continue
+
+    // Calculate expired quantity from batches
+    const expiredQuantity =
+      balance.batches
+        ?.filter(b => b.status === 'expired')
+        .reduce((sum, b) => sum + (b.currentQuantity || 0), 0) || 0
+
+    if (expiredQuantity <= 0) continue
+
+    // Look up preparation for extra metadata
+    const prep = preparations?.find(p => p.id === balance.preparationId)
+
+    writeOffRecs.push({
+      id: generateId(),
+      preparationId: balance.preparationId,
+      preparationName: balance.preparationName,
+      currentStock: balance.totalQuantity,
+      avgDailyConsumption: balance.averageDailyUsage || 0,
+      daysUntilStockout: 0,
+      recommendedQuantity: Math.round(expiredQuantity),
+      urgency: 'urgent',
+      reason: `Write-off expired: ${Math.round(expiredQuantity)}${balance.unit}`,
+      storageLocation: prep?.storageLocation || 'fridge',
+      portionType: balance.portionType,
+      portionSize: balance.portionSize,
+      isPremade: prep?.isPremade || false,
+      isCompleted: false,
+      isWriteOff: true
+    })
+  }
+
+  return writeOffRecs
+}
+
+// =============================================
 // Utility Functions
 // =============================================
 
 /**
  * Convert recommendations to schedule items data
  */
+/**
+ * Get display unit for a recommendation based on preparation's outputUnit
+ */
+function getDisplayUnit(rec: ProductionRecommendation, preparations?: Preparation[]): string {
+  const prep = preparations?.find(p => p.id === rec.preparationId)
+  if (!prep) return 'g'
+  switch (prep.outputUnit) {
+    case 'ml':
+      return 'ml'
+    case 'piece':
+      return 'pc'
+    case 'portion':
+      return 'pc'
+    default:
+      return 'g'
+  }
+}
+
 export function recommendationsToScheduleData(
   recommendations: ProductionRecommendation[],
   department: 'kitchen' | 'bar',
-  scheduleDate: string
+  scheduleDate: string,
+  preparations?: Preparation[]
 ): Array<{
   preparationId: string
   preparationName: string
@@ -473,6 +615,7 @@ export function recommendationsToScheduleData(
   targetUnit: string
   priority: number
   recommendationReason: string
+  taskType: 'production' | 'write_off'
 }> {
   return recommendations.map(rec => ({
     preparationId: rec.preparationId,
@@ -481,9 +624,10 @@ export function recommendationsToScheduleData(
     scheduleDate,
     productionSlot: rec.urgency,
     targetQuantity: rec.recommendedQuantity,
-    targetUnit: 'g', // Default unit
+    targetUnit: getDisplayUnit(rec, preparations),
     priority: URGENCY_PRIORITY[rec.urgency] || 50,
-    recommendationReason: rec.reason
+    recommendationReason: rec.reason,
+    taskType: rec.isWriteOff ? ('write_off' as const) : ('production' as const)
   }))
 }
 
