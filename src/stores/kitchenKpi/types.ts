@@ -24,6 +24,186 @@ export {
 } from '@/stores/preparation/types'
 
 // ===============================================
+// Ritual Time Windows
+// ===============================================
+
+/** Ritual time windows: { start: [hour, minute], end: [hour, minute] } */
+export const RITUAL_WINDOWS = {
+  morning: { start: [7, 30], end: [10, 0] },
+  evening: { start: [18, 0], end: [22, 0] }
+} as const
+
+/** localStorage key for persisting ritual session state */
+export const RITUAL_SESSION_KEY = 'ritual_session'
+
+/** Persisted ritual session state */
+export interface RitualSession {
+  ritualType: RitualType
+  startedAt: string
+  date: string // ISO date (YYYY-MM-DD) to detect day change
+}
+
+// ===============================================
+// Ritual Types
+// ===============================================
+
+export type RitualType = 'morning' | 'evening'
+
+/**
+ * Custom task defined by admin for morning/evening ritual
+ */
+export interface RitualCustomTask {
+  id: string
+  name: string
+  ritualType: RitualType
+  department: string
+  sortOrder: number
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * Database row for ritual_custom_tasks
+ */
+export interface RitualCustomTaskRow {
+  id: string
+  restaurant_id: string
+  name: string
+  ritual_type: string
+  department: string
+  sort_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * Unified ritual task: either a schedule task or a custom task
+ */
+export interface RitualTask {
+  id: string
+  name: string
+  type: 'schedule' | 'custom'
+  completed: boolean
+  completedAt?: string
+  // Schedule task fields
+  scheduleItem?: ProductionScheduleItem
+  quantity?: number
+  targetQuantity?: number
+  targetUnit?: string
+  // Custom task fields (checkbox only)
+  customTask?: RitualCustomTask
+}
+
+/**
+ * Recorded completion of a ritual
+ */
+export interface RitualCompletion {
+  id: string
+  ritualType: RitualType
+  department: string
+  completedBy?: string
+  completedByName?: string
+  startedAt: string
+  completedAt: string
+  durationMinutes: number
+  totalTasks: number
+  completedTasks: number
+  customTasksCompleted: number
+  scheduleTasksCompleted: number
+  taskDetails: RitualTaskDetail[]
+  createdAt: string
+}
+
+/**
+ * Individual task detail inside a ritual completion
+ */
+export interface RitualTaskDetail {
+  taskId: string
+  name: string
+  type: 'schedule' | 'custom'
+  completed: boolean
+  completedAt?: string
+  // Schedule task fields
+  targetQuantity?: number
+  completedQuantity?: number
+  unit?: string
+  // Legacy alias
+  quantity?: number
+}
+
+/**
+ * Database row for ritual_completions
+ */
+export interface RitualCompletionRow {
+  id: string
+  restaurant_id: string
+  ritual_type: string
+  department: string
+  completed_by: string | null
+  completed_by_name: string | null
+  started_at: string
+  completed_at: string
+  duration_minutes: number
+  total_tasks: number
+  completed_tasks: number
+  custom_tasks_completed: number
+  schedule_tasks_completed: number
+  task_details: RitualTaskDetail[]
+  created_at: string
+}
+
+/**
+ * KPI summary for rituals
+ */
+export interface RitualKpiSummary {
+  completionRate: number // % of rituals completed on time
+  avgDurationMinutes: number
+  onTimeRate: number // % completed within expected window
+  currentStreak: number // consecutive days with all rituals done
+  totalCompleted: number
+  byStaff: RitualStaffKpi[]
+}
+
+/**
+ * Per-staff ritual KPI
+ */
+export interface RitualStaffKpi {
+  staffName: string
+  completedCount: number
+  avgDurationMinutes: number
+}
+
+/**
+ * DTO for creating a custom task
+ */
+export interface CreateRitualCustomTaskData {
+  name: string
+  ritualType: RitualType
+  department?: string
+  sortOrder?: number
+}
+
+/**
+ * DTO for recording a ritual completion
+ */
+export interface RecordRitualCompletionData {
+  ritualType: RitualType
+  department: string
+  completedBy?: string
+  completedByName?: string
+  startedAt: string
+  completedAt: string
+  durationMinutes: number
+  totalTasks: number
+  completedTasks: number
+  customTasksCompleted: number
+  scheduleTasksCompleted: number
+  taskDetails: RitualTaskDetail[]
+}
+
+// ===============================================
 // KPI Store State Types
 // ===============================================
 
@@ -120,6 +300,7 @@ export interface CreateScheduleItemData {
   targetUnit: string
   priority?: number
   recommendationReason?: string
+  taskType?: 'production' | 'write_off'
 }
 
 /**
@@ -197,6 +378,7 @@ export interface ProductionScheduleRow {
   current_stock_at_generation: number | null
   recommendation_reason: string | null
   status: string
+  task_type?: string
   completed_at: string | null
   completed_by: string | null
   completed_by_name: string | null

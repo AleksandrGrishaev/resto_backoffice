@@ -44,7 +44,24 @@
 
       <div class="separator" />
 
-      <!-- Preparation Screen Button -->
+      <!-- Tasks Screen Button (Kanban + Rituals) -->
+      <v-btn
+        :class="['screen-btn', { active: currentScreen === 'tasks' }]"
+        :color="currentScreen === 'tasks' ? 'primary' : undefined"
+        :variant="currentScreen === 'tasks' ? 'flat' : 'text'"
+        block
+        height="56"
+        @click="handleScreenSelect('tasks')"
+      >
+        <div class="screen-btn-content">
+          <v-icon size="24">mdi-format-list-checks</v-icon>
+          <span class="screen-btn-label">Tasks</span>
+        </div>
+      </v-btn>
+
+      <div class="separator" />
+
+      <!-- Preparation Screen Button (Stock List + History) -->
       <v-btn
         :class="['screen-btn', { active: currentScreen === 'preparation' }]"
         :color="currentScreen === 'preparation' ? 'primary' : undefined"
@@ -168,7 +185,7 @@
 
     <!-- Navigation Menu at Bottom -->
     <div class="navigation-section">
-      <KitchenNavigationMenu />
+      <KitchenNavigationMenu @navigate-screen="handleScreenSelect" />
     </div>
   </div>
 </template>

@@ -87,6 +87,14 @@ export function preparationToSupabaseInsert(preparation: Preparation): SupabaseP
     // ⭐ PHASE 2: Portion type support
     portion_type: preparation.portionType || 'weight',
     portion_size: preparation.portionSize || null,
+    // Schedule fields
+    storage_location: preparation.storageLocation || null,
+    production_slot: preparation.productionSlot || null,
+    min_stock_threshold: preparation.minStockThreshold || null,
+    daily_target_quantity: preparation.dailyTargetQuantity || null,
+    // Pre-made flag
+    is_premade: preparation.isPremade || false,
+    target_mode: preparation.targetMode || 'auto',
     // Entity status
     status: (preparation as any).status || 'active',
     last_edited_at: (preparation as any).lastEditedAt || null,
@@ -131,8 +139,20 @@ export function preparationFromSupabase(
     // ⭐ PHASE 2: Portion type support
     portionType: (row.portion_type as 'weight' | 'portion') || 'weight',
     portionSize: row.portion_size ? Number(row.portion_size) : undefined,
+    // Schedule fields
+    storageLocation: (row as any).storage_location || undefined,
+    productionSlot: (row as any).production_slot || undefined,
+    minStockThreshold: (row as any).min_stock_threshold
+      ? Number((row as any).min_stock_threshold)
+      : undefined,
+    dailyTargetQuantity: (row as any).daily_target_quantity
+      ? Number((row as any).daily_target_quantity)
+      : undefined,
     // Consumption analytics
     avgDailyUsage: (row as any).avg_daily_usage ? Number((row as any).avg_daily_usage) : undefined,
+    // Pre-made flag
+    isPremade: (row as any).is_premade === true,
+    targetMode: ((row as any).target_mode as 'auto' | 'fixed') || 'auto',
     // Entity status
     status: ((row as any).status as any) || (row.is_active === false ? 'draft' : 'active'),
     lastEditedAt: (row as any).last_edited_at || undefined,

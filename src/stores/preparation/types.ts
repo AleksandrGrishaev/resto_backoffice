@@ -401,10 +401,13 @@ export interface ProductionScheduleItem {
   currentStockAtGeneration?: number
   recommendationReason?: string
   status: ProductionScheduleStatus
+  taskType?: 'production' | 'write_off'
 
-  // ⭐ PHASE 2: Portion type support for UI display
+  // Portion type support for UI display
   portionType?: PortionType // 'weight' (default) or 'portion'
   portionSize?: number // Size of one portion in grams (only for portionType='portion')
+  isPremade?: boolean // Pre-made item flag (enriched from preparation)
+  avgDailyConsumption?: number // Average daily usage (enriched from preparation)
 
   // Completion details
   completedAt?: string
@@ -440,6 +443,8 @@ export interface ProductionRecommendation {
   expiryDate?: string
   portionType?: PortionType
   portionSize?: number
+  isPremade?: boolean
+  isWriteOff?: boolean
 
   // Completion tracking (when converted to schedule item)
   isCompleted: boolean

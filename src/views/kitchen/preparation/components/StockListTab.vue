@@ -227,11 +227,8 @@ function handleViewDetails(balance: PreparationBalance): void {
 
 <style scoped lang="scss">
 .stock-tab {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 0; /* Important for flex scroll containers */
-  height: 100%;
 }
 
 .stock-toolbar {
@@ -275,16 +272,10 @@ function handleViewDetails(balance: PreparationBalance): void {
 }
 
 .stock-list {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 0; /* Important for flex scroll containers */
-  -webkit-overflow-scrolling: touch; /* Smooth scroll on iOS */
-  overscroll-behavior: contain; /* Prevent scroll chaining */
 }
 
 .stock-footer {

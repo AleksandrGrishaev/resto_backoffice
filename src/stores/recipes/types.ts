@@ -118,8 +118,19 @@ export interface Preparation extends BaseEntity {
   portionType: PortionType // 'weight' (default) or 'portion'
   portionSize?: number // Size of one portion in grams (only for portionType='portion')
 
+  // Schedule fields (from DB - storage_location, production_slot, min_stock_threshold, daily_target_quantity)
+  storageLocation?: 'shelf' | 'fridge' | 'freezer'
+  productionSlot?: 'morning' | 'afternoon' | 'evening' | 'any'
+  minStockThreshold?: number
+  dailyTargetQuantity?: number
+
   // Consumption analytics (from recalculate_consumption_stats RPC)
   avgDailyUsage?: number
+
+  // Pre-made: semi-cooked items prepared ahead (falafel, poached eggs, etc.)
+  isPremade?: boolean
+  // Target mode: 'auto' (calculated from avg sales) or 'fixed' (manual daily_target_quantity)
+  targetMode?: 'auto' | 'fixed'
 
   // Entity status & last edited tracking
   status?: EntityStatus

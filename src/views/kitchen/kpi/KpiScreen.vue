@@ -11,6 +11,10 @@
         <v-icon icon="mdi-currency-usd" class="mr-2" />
         Food Cost
       </v-tab>
+      <v-tab value="ritual">
+        <v-icon icon="mdi-calendar-check" class="mr-2" />
+        Ritual
+      </v-tab>
     </v-tabs>
 
     <!-- Dashboard Cards -->
@@ -28,6 +32,7 @@
         :loading="foodCostLoading"
         :error="foodCostError"
       />
+      <!-- Ritual tab has no top-level card -->
     </div>
 
     <!-- Detail Tabs -->
@@ -46,6 +51,7 @@
         :department="effectiveDepartment"
         :loading="foodCostLoading"
       />
+      <RitualKpiTab v-else-if="activeTab === 'ritual'" :department="effectiveDepartment" />
     </div>
   </div>
 </template>
@@ -59,6 +65,7 @@ import TimeKpiCard from './components/TimeKpiCard.vue'
 import TimeKpiTab from './components/TimeKpiTab.vue'
 import FoodCostKpiCard from './components/FoodCostKpiCard.vue'
 import FoodCostKpiTab from './components/FoodCostKpiTab.vue'
+import RitualKpiTab from './components/RitualKpiTab.vue'
 
 const MODULE_NAME = 'KpiScreen'
 
@@ -84,7 +91,7 @@ const authStore = useAuthStore()
 // STATE
 // =============================================
 
-const activeTab = ref<'time' | 'foodcost'>('time')
+const activeTab = ref<'time' | 'foodcost' | 'ritual'>('time')
 const detailOffset = ref(0)
 const DETAIL_LIMIT = 50
 

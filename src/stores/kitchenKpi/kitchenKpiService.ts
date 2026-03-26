@@ -18,7 +18,14 @@ import type {
   CreateScheduleItemData,
   CompleteScheduleTaskData,
   RecordKpiEntryData,
-  ScheduleCompletionKpiDetail
+  ScheduleCompletionKpiDetail,
+  RitualCustomTask,
+  RitualCustomTaskRow,
+  RitualCompletion,
+  RitualCompletionRow,
+  RitualType,
+  CreateRitualCustomTaskData,
+  RecordRitualCompletionData
 } from './types'
 
 const MODULE_NAME = 'KitchenKpiService'
@@ -66,6 +73,7 @@ function scheduleFromSupabase(row: ProductionScheduleRow): ProductionScheduleIte
       : undefined,
     recommendationReason: row.recommendation_reason || undefined,
     status: row.status as 'pending' | 'in_progress' | 'completed' | 'cancelled',
+    taskType: (row.task_type as 'production' | 'write_off') || 'production',
     completedAt: row.completed_at || undefined,
     completedBy: row.completed_by || undefined,
     completedByName: row.completed_by_name || undefined,
@@ -93,14 +101,52 @@ function enrichScheduleItemsWithPortionType(
   return items.map(item => {
     const preparation = recipesStore.preparations?.find(p => p.id === item.preparationId)
     if (preparation) {
+      // Map outputUnit to display unit
+      const unitMap: Record<string, string> = { ml: 'ml', piece: 'pc', portion: 'pc' }
+      const displayUnit = unitMap[preparation.outputUnit] || 'g'
       return {
         ...item,
         portionType: preparation.portionType || 'weight',
-        portionSize: preparation.portionSize
+        portionSize: preparation.portionSize,
+        isPremade: preparation.isPremade || false,
+        targetUnit: displayUnit,
+        avgDailyConsumption: preparation.avgDailyUsage || 0
       }
     }
     return item
   })
+}
+
+function ritualCustomTaskFromSupabase(row: RitualCustomTaskRow): RitualCustomTask {
+  return {
+    id: row.id,
+    name: row.name,
+    ritualType: row.ritual_type as RitualType,
+    department: row.department,
+    sortOrder: row.sort_order,
+    isActive: row.is_active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function ritualCompletionFromSupabase(row: RitualCompletionRow): RitualCompletion {
+  return {
+    id: row.id,
+    ritualType: row.ritual_type as RitualType,
+    department: row.department,
+    completedBy: row.completed_by || undefined,
+    completedByName: row.completed_by_name || undefined,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    durationMinutes: row.duration_minutes,
+    totalTasks: row.total_tasks,
+    completedTasks: row.completed_tasks,
+    customTasksCompleted: row.custom_tasks_completed,
+    scheduleTasksCompleted: row.schedule_tasks_completed,
+    taskDetails: row.task_details || [],
+    createdAt: row.created_at
+  }
 }
 
 function scheduleToSupabase(item: CreateScheduleItemData): Partial<ProductionScheduleRow> {
@@ -114,6 +160,7 @@ function scheduleToSupabase(item: CreateScheduleItemData): Partial<ProductionSch
     target_unit: item.targetUnit,
     priority: item.priority || 0,
     recommendation_reason: item.recommendationReason || null,
+    task_type: item.taskType || 'production',
     status: 'pending',
     sync_status: 'pending'
   }
@@ -601,6 +648,233 @@ class KitchenKpiService {
       DebugUtils.info(MODULE_NAME, 'Schedule item deleted', { taskId })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to delete schedule item', { error })
+      throw error
+    }
+  }
+
+  // ----- Ritual Custom Tasks Operations -----
+
+  /**
+   * Get custom tasks for a ritual type
+   */
+  async getCustomTasks(
+    ritualType?: RitualType,
+    department = 'kitchen'
+  ): Promise<RitualCustomTask[]> {
+    try {
+      let query = supabase
+        .from('ritual_custom_tasks')
+        .select('*')
+        .eq('department', department)
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true })
+
+      if (ritualType) {
+        query = query.eq('ritual_type', ritualType)
+      }
+
+      const { data, error } = await query
+
+      if (error) throw error
+
+      return (data || []).map(row => ritualCustomTaskFromSupabase(row as RitualCustomTaskRow))
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch custom tasks', { error })
+      throw error
+    }
+  }
+
+  /**
+   * Get all custom tasks (including inactive) for admin
+   */
+  async getAllCustomTasks(department = 'kitchen'): Promise<RitualCustomTask[]> {
+    try {
+      const { data, error } = await supabase
+        .from('ritual_custom_tasks')
+        .select('*')
+        .eq('department', department)
+        .order('ritual_type')
+        .order('sort_order', { ascending: true })
+
+      if (error) throw error
+
+      return (data || []).map(row => ritualCustomTaskFromSupabase(row as RitualCustomTaskRow))
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch all custom tasks', { error })
+      throw error
+    }
+  }
+
+  /**
+   * Create a custom task
+   */
+  async createCustomTask(data: CreateRitualCustomTaskData): Promise<RitualCustomTask> {
+    try {
+      const { data: result, error } = await supabase
+        .from('ritual_custom_tasks')
+        .insert({
+          name: data.name,
+          ritual_type: data.ritualType,
+          department: data.department || 'kitchen',
+          sort_order: data.sortOrder || 0
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      DebugUtils.info(MODULE_NAME, 'Custom task created', { name: data.name })
+      return ritualCustomTaskFromSupabase(result as RitualCustomTaskRow)
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to create custom task', { error })
+      throw error
+    }
+  }
+
+  /**
+   * Update a custom task
+   */
+  async updateCustomTask(
+    taskId: string,
+    updates: Partial<{ name: string; ritualType: RitualType; sortOrder: number; isActive: boolean }>
+  ): Promise<RitualCustomTask> {
+    try {
+      const row: Record<string, unknown> = {}
+      if (updates.name !== undefined) row.name = updates.name
+      if (updates.ritualType !== undefined) row.ritual_type = updates.ritualType
+      if (updates.sortOrder !== undefined) row.sort_order = updates.sortOrder
+      if (updates.isActive !== undefined) row.is_active = updates.isActive
+
+      const { data, error } = await supabase
+        .from('ritual_custom_tasks')
+        .update(row)
+        .eq('id', taskId)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      DebugUtils.info(MODULE_NAME, 'Custom task updated', { taskId })
+      return ritualCustomTaskFromSupabase(data as RitualCustomTaskRow)
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to update custom task', { error })
+      throw error
+    }
+  }
+
+  /**
+   * Delete a custom task
+   */
+  async deleteCustomTask(taskId: string): Promise<void> {
+    try {
+      const { error } = await supabase.from('ritual_custom_tasks').delete().eq('id', taskId)
+
+      if (error) throw error
+
+      DebugUtils.info(MODULE_NAME, 'Custom task deleted', { taskId })
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to delete custom task', { error })
+      throw error
+    }
+  }
+
+  // ----- Ritual Completions Operations -----
+
+  /**
+   * Record a ritual completion
+   */
+  async recordRitualCompletion(data: RecordRitualCompletionData): Promise<RitualCompletion> {
+    try {
+      DebugUtils.info(MODULE_NAME, 'Recording ritual completion', {
+        type: data.ritualType,
+        tasks: data.totalTasks
+      })
+
+      const { data: result, error } = await supabase
+        .from('ritual_completions')
+        .insert({
+          ritual_type: data.ritualType,
+          department: data.department,
+          completed_by: data.completedBy || null,
+          completed_by_name: data.completedByName || null,
+          started_at: data.startedAt,
+          completed_at: data.completedAt,
+          duration_minutes: data.durationMinutes,
+          total_tasks: data.totalTasks,
+          completed_tasks: data.completedTasks,
+          custom_tasks_completed: data.customTasksCompleted,
+          schedule_tasks_completed: data.scheduleTasksCompleted,
+          task_details: data.taskDetails
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      DebugUtils.info(MODULE_NAME, 'Ritual completion recorded', {
+        id: (result as RitualCompletionRow).id
+      })
+      return ritualCompletionFromSupabase(result as RitualCompletionRow)
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to record ritual completion', { error })
+      throw error
+    }
+  }
+
+  /**
+   * Get today's ritual completions
+   */
+  async getTodayRitualCompletions(department = 'kitchen'): Promise<RitualCompletion[]> {
+    try {
+      const today = TimeUtils.getCurrentLocalDate()
+
+      const tomorrow = new Date()
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      const tomorrowStr = tomorrow.toISOString().split('T')[0]
+
+      const { data, error } = await supabase
+        .from('ritual_completions')
+        .select('*')
+        .eq('department', department)
+        .gte('completed_at', `${today}T00:00:00`)
+        .lt('completed_at', `${tomorrowStr}T00:00:00`)
+
+      if (error) throw error
+
+      return (data || []).map(row => ritualCompletionFromSupabase(row as RitualCompletionRow))
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch today ritual completions', { error })
+      throw error
+    }
+  }
+
+  /**
+   * Get ritual completions for a date range
+   */
+  async getRitualCompletions(
+    dateFrom: string,
+    dateTo: string,
+    department = 'kitchen'
+  ): Promise<RitualCompletion[]> {
+    try {
+      // dateTo is inclusive, so query up to the next day
+      const nextDay = new Date(dateTo)
+      nextDay.setDate(nextDay.getDate() + 1)
+      const nextDayStr = nextDay.toISOString().split('T')[0]
+
+      const { data, error } = await supabase
+        .from('ritual_completions')
+        .select('*')
+        .eq('department', department)
+        .gte('completed_at', `${dateFrom}T00:00:00`)
+        .lt('completed_at', `${nextDayStr}T00:00:00`)
+        .order('completed_at', { ascending: false })
+
+      if (error) throw error
+
+      return (data || []).map(row => ritualCompletionFromSupabase(row as RitualCompletionRow))
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to fetch ritual completions', { error })
       throw error
     }
   }
