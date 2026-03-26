@@ -546,7 +546,21 @@
             hide-details
             class="mb-2"
           />
+          <div class="mb-2">
+            <div class="text-caption text-medium-emphasis mb-1">Loyalty program</div>
+            <v-btn-toggle
+              v-model="newCustomerLoyaltyProgram"
+              mandatory
+              density="compact"
+              color="primary"
+              class="w-100"
+            >
+              <v-btn value="stamps" size="small" class="flex-grow-1">Stamps</v-btn>
+              <v-btn value="cashback" size="small" class="flex-grow-1">Cashback</v-btn>
+            </v-btn-toggle>
+          </div>
           <v-text-field
+            v-if="newCustomerLoyaltyProgram === 'stamps'"
             v-model="newCustomerCardNumber"
             placeholder="Stamp card number (optional)"
             density="compact"
@@ -727,6 +741,7 @@ const newCustomerName = ref('')
 const newCustomerPhone = usePhoneInput()
 const newCustomerTelegram = ref('')
 const newCustomerCardNumber = ref('')
+const newCustomerLoyaltyProgram = ref<'stamps' | 'cashback'>('stamps')
 const createCustomerError = ref('')
 const conversionResult = ref<ConvertResult | null>(null)
 
@@ -961,7 +976,8 @@ async function createNewCustomer() {
     let customer = await customersStore.createCustomer({
       name: newCustomerName.value.trim(),
       phone: newCustomerPhone.fullPhone.value || undefined,
-      telegramUsername: newCustomerTelegram.value.trim() || undefined
+      telegramUsername: newCustomerTelegram.value.trim() || undefined,
+      loyaltyProgram: newCustomerLoyaltyProgram.value
     } as any)
 
     // If stamp card number provided, link it and auto-convert stamps to points
@@ -989,6 +1005,7 @@ async function createNewCustomer() {
     newCustomerPhone.localNumber.value = ''
     newCustomerTelegram.value = ''
     newCustomerCardNumber.value = ''
+    newCustomerLoyaltyProgram.value = 'stamps'
   } catch (err) {
     createCustomerError.value = err instanceof Error ? err.message : 'Failed to create customer'
   } finally {
