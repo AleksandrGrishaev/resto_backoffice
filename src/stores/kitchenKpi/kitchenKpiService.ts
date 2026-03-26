@@ -828,16 +828,17 @@ class KitchenKpiService {
     try {
       const today = TimeUtils.getCurrentLocalDate()
 
-      const tomorrow = new Date()
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      const tomorrowStr = tomorrow.toISOString().split('T')[0]
+      // Build tomorrow in local time (avoid UTC via toISOString)
+      const [y, mo, d] = today.split('-').map(Number)
+      const tomorrowDate = new Date(y, mo - 1, d + 1)
+      const tomorrowStr = `${tomorrowDate.getFullYear()}-${String(tomorrowDate.getMonth() + 1).padStart(2, '0')}-${String(tomorrowDate.getDate()).padStart(2, '0')}`
 
       const { data, error } = await supabase
         .from('ritual_completions')
         .select('*')
         .eq('department', department)
-        .gte('completed_at', `${today}T00:00:00`)
-        .lt('completed_at', `${tomorrowStr}T00:00:00`)
+        .gte('completed_at', `${today}T00:00:00+08:00`)
+        .lt('completed_at', `${tomorrowStr}T00:00:00+08:00`)
 
       if (error) throw error
 
@@ -858,16 +859,16 @@ class KitchenKpiService {
   ): Promise<RitualCompletion[]> {
     try {
       // dateTo is inclusive, so query up to the next day
-      const nextDay = new Date(dateTo)
-      nextDay.setDate(nextDay.getDate() + 1)
-      const nextDayStr = nextDay.toISOString().split('T')[0]
+      const [y, mo, d] = dateTo.split('-').map(Number)
+      const nextDay = new Date(y, mo - 1, d + 1)
+      const nextDayStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth() + 1).padStart(2, '0')}-${String(nextDay.getDate()).padStart(2, '0')}`
 
       const { data, error } = await supabase
         .from('ritual_completions')
         .select('*')
         .eq('department', department)
-        .gte('completed_at', `${dateFrom}T00:00:00`)
-        .lt('completed_at', `${nextDayStr}T00:00:00`)
+        .gte('completed_at', `${dateFrom}T00:00:00+08:00`)
+        .lt('completed_at', `${nextDayStr}T00:00:00+08:00`)
         .order('completed_at', { ascending: false })
 
       if (error) throw error

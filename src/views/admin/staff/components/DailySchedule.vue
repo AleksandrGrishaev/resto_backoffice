@@ -76,7 +76,7 @@
                   :key="day.date + '-' + staff.id + '-' + hour"
                   class="hour-cell"
                   :class="getCellClass(staff.id, staff.department, day, hour)"
-                  @click="day.date > todayStr && openEditor(staff.id, staff.name, day.date)"
+                  @click="day.date >= todayStr && openEditor(staff.id, staff.name, day.date)"
                 />
               </template>
             </tr>
@@ -267,7 +267,7 @@ function formatDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-const todayStr = formatDateStr(new Date())
+const todayStr = ref(formatDateStr(new Date()))
 
 function makeDayInfo(dateStr: string): DayInfo {
   const d = new Date(dateStr + 'T12:00:00')
@@ -276,7 +276,7 @@ function makeDayInfo(dateStr: string): DayInfo {
     date: dateStr,
     label: d.toLocaleDateString('en', { day: 'numeric', month: 'short' }),
     weekday: d.toLocaleDateString('en', { weekday: 'short' }),
-    isToday: dateStr === todayStr,
+    isToday: dateStr === todayStr.value,
     isWeekend: dayNum === 0 || dayNum === 6
   }
 }
@@ -311,7 +311,8 @@ function getCellClass(
   const inSlot = slots?.some(s => hour >= s.start && hour < s.end) || false
   const isStart = inSlot && (slots?.some(s => hour === s.start) || false)
   const isEnd = inSlot && (slots?.some(s => hour === s.end - 1) || false)
-  const isFuture = day.date > todayStr
+  const isFuture = day.date > todayStr.value
+  const isEditable = day.date >= todayStr.value
 
   return {
     'in-shift': inSlot,
@@ -321,8 +322,9 @@ function getCellClass(
     'day-start': hour === GRID_START,
     'today-col': day.isToday,
     'is-now': day.isToday && currentHour.value === hour,
-    'past-cell': !isFuture && !day.isToday,
-    'future-cell': isFuture
+    'past-cell': !isEditable,
+    'future-cell': isEditable && !day.isToday,
+    'editable-cell': isEditable
   }
 }
 
@@ -462,6 +464,7 @@ onMounted(() => {
   loadInitial()
   clockTimer = setInterval(() => {
     currentHour.value = new Date().getHours()
+    todayStr.value = formatDateStr(new Date())
   }, 60000)
 })
 

@@ -378,7 +378,7 @@ export interface ProductionScheduleRow {
   current_stock_at_generation: number | null
   recommendation_reason: string | null
   status: string
-  task_type?: string
+  task_type: string
   completed_at: string | null
   completed_by: string | null
   completed_by_name: string | null

@@ -449,8 +449,12 @@ function startTask(task: ProductionScheduleItem): void {
 
 /** Toggle custom task completion */
 function toggleCustomTask(task: RitualCustomTask): void {
-  completedCustomTaskIds.add(task.id)
-  doneCollapsed.value = false
+  if (completedCustomTaskIds.has(task.id)) {
+    completedCustomTaskIds.delete(task.id)
+  } else {
+    completedCustomTaskIds.add(task.id)
+    doneCollapsed.value = false
+  }
 }
 
 /** Open quantity confirmation dialog with numpad */
@@ -463,7 +467,7 @@ function openQtyDialog(task: ProductionScheduleItem): void {
 function numpadPress(digit: string): void {
   if (qtyDialogDisplay.value === '0') {
     qtyDialogDisplay.value = digit
-  } else {
+  } else if (qtyDialogDisplay.value.length < 5) {
     qtyDialogDisplay.value += digit
   }
 }

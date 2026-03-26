@@ -73,7 +73,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { TimeSlot, ShiftPreset } from '@/stores/staff'
-import { formatHour } from '@/stores/staff'
+import { formatHour, mergeOverlappingSlots } from '@/stores/staff'
 
 const props = defineProps<{
   modelValue: TimeSlot[]
@@ -144,8 +144,8 @@ function commitSelection(start: number, end: number) {
   const newSlot: TimeSlot = { start, end }
 
   if (addingNew.value) {
-    // Append new slot
-    const updated = [...props.modelValue, newSlot].sort((a, b) => a.start - b.start)
+    // Append new slot and merge overlapping ranges
+    const updated = mergeOverlappingSlots([...props.modelValue, newSlot])
     emit('update:modelValue', updated)
   } else {
     // Replace all with this single slot

@@ -37,5 +37,8 @@ BEGIN
     'type', v_invite.type,
     'name', coalesce(v_name, '')
   );
+
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object('success', false, 'error', 'Failed to lookup invite');
 END;
 $$;

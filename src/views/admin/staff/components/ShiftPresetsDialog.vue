@@ -161,14 +161,14 @@ function startEdit(preset: ShiftPreset) {
 }
 
 function saveEdit() {
-  if (editingId.value) {
-    emit('update', editingId.value, {
-      name: editForm.name,
-      startHour: editForm.startHour,
-      endHour: editForm.endHour
-    })
-    editingId.value = null
-  }
+  if (!editingId.value) return
+  if (!editForm.name.trim() || editForm.endHour <= editForm.startHour) return
+  emit('update', editingId.value, {
+    name: editForm.name.trim(),
+    startHour: editForm.startHour,
+    endHour: editForm.endHour
+  })
+  editingId.value = null
 }
 
 function handleCreate() {

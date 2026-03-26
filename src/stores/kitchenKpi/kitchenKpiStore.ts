@@ -231,9 +231,8 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
   // Computed - Ritual
   // ===============================================
 
-  /** Get current local time in minutes (Bali timezone via TimeUtils) */
+  /** Get current local time in minutes (Bali timezone via Intl) */
   function getLocalMinutes(): number {
-    // Use Intl to get Bali local time (Asia/Makassar UTC+8)
     const now = new Date()
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: 'Asia/Makassar',
@@ -246,16 +245,22 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
     return h * 60 + m
   }
 
+  // Reactive time tick — drives all time-dependent computeds (updates every 60s)
+  const _timeTick = ref(getLocalMinutes())
+  setInterval(() => {
+    _timeTick.value = getLocalMinutes()
+  }, 60_000)
+
   /** Current ritual type based on Bali time */
   const currentRitualType = computed<RitualType>(() => {
-    const t = getLocalMinutes()
+    const t = _timeTick.value
     const eveningStart = RITUAL_WINDOWS.evening.start[0] * 60 + RITUAL_WINDOWS.evening.start[1]
     return t >= eveningStart ? 'evening' : 'morning'
   })
 
   /** Whether we're currently inside a ritual time window (Bali time) */
   const isInRitualWindow = computed(() => {
-    const t = getLocalMinutes()
+    const t = _timeTick.value
     const w = RITUAL_WINDOWS[currentRitualType.value]
     const start = w.start[0] * 60 + w.start[1]
     const end = w.end[0] * 60 + w.end[1]
@@ -264,7 +269,7 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
 
   /** Minutes remaining until ritual deadline */
   const ritualMinutesRemaining = computed(() => {
-    const t = getLocalMinutes()
+    const t = _timeTick.value
     const w = RITUAL_WINDOWS[currentRitualType.value]
     const end = w.end[0] * 60 + w.end[1]
     return Math.max(0, end - t)

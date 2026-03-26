@@ -44,6 +44,17 @@
           <v-icon size="16">mdi-qrcode</v-icon>
           <v-tooltip activator="parent" location="top">Print Invite QR</v-tooltip>
         </v-btn>
+        <v-alert
+          v-if="inviteError"
+          type="error"
+          variant="tonal"
+          density="compact"
+          closable
+          class="mt-1"
+          @click:close="inviteError = null"
+        >
+          {{ inviteError }}
+        </v-alert>
         <v-btn icon size="x-small" variant="text" @click="expanded = true">
           <v-icon size="16">mdi-pencil</v-icon>
         </v-btn>
@@ -606,6 +617,7 @@ const { isConnected: isPrinterConnected, printInviteQR } = usePrinter()
 
 // Invite QR state
 const printingInvite = ref(false)
+const inviteError = ref<string | null>(null)
 
 async function handlePrintInviteQR() {
   if (!attachedCustomer.value || printingInvite.value) return
@@ -620,9 +632,11 @@ async function handlePrintInviteQR() {
       await printInviteQR(data.url, data.customerName || attachedCustomer.value.name)
     } else {
       DebugUtils.error('LoyaltyPanel', 'Failed to create invite', { data })
+      inviteError.value = data?.error || 'Failed to create invite'
     }
   } catch (e) {
     DebugUtils.error('LoyaltyPanel', 'Error creating invite QR', { error: e })
+    inviteError.value = 'Failed to print invite QR'
   } finally {
     printingInvite.value = false
   }

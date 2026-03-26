@@ -17,4 +17,10 @@ export type {
   TimeSlot,
   ShiftPreset
 } from './types'
-export { DEPARTMENT_LABELS, BASE_MONTHLY_HOURS, calculateHoursFromSlots, formatHour } from './types'
+export {
+  DEPARTMENT_LABELS,
+  BASE_MONTHLY_HOURS,
+  calculateHoursFromSlots,
+  mergeOverlappingSlots,
+  formatHour
+} from './types'

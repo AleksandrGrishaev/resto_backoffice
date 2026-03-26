@@ -138,7 +138,12 @@ BEGIN
     SELECT name INTO v_customer_name FROM customers WHERE id = v_customer_id;
 
     UPDATE customer_invites SET status = 'claimed', claimed_by = v_auth_uid, claimed_at = now()
-    WHERE id = v_invite.id AND status = 'active';
+    WHERE id = v_invite.id AND status = 'active'
+    RETURNING id INTO v_claimed_id;
+
+    IF v_claimed_id IS NULL THEN
+      RETURN jsonb_build_object('success', false, 'error', 'Invite already claimed');
+    END IF;
 
     RETURN jsonb_build_object(
       'success', true, 'type', 'customer',

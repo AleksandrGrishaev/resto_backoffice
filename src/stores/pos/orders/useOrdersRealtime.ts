@@ -306,6 +306,25 @@ export function useOrdersRealtime() {
         orderNumber: existingOrder.orderNumber,
         status: existingOrder.status
       })
+
+      // Persist updated order to localStorage for offline resilience
+      try {
+        const stored = localStorage.getItem('pos_orders')
+        if (stored) {
+          const ordersList = JSON.parse(stored)
+          const idx = ordersList.findIndex((o: { id: string }) => o.id === existingOrder.id)
+          if (idx >= 0) {
+            Object.assign(ordersList[idx], {
+              customer_id: existingOrder.customerId,
+              customer_name: existingOrder.customerName,
+              status: existingOrder.status
+            })
+            localStorage.setItem('pos_orders', JSON.stringify(ordersList))
+          }
+        }
+      } catch {
+        // localStorage sync is best-effort
+      }
     } else {
       DebugUtils.debug(MODULE_NAME, 'Order not found in local state, ignoring', {
         orderId: updatedOrder?.id
