@@ -1,15 +1,9 @@
--- Migration: 228_add_scheduled_item_status
--- Description: Add 'scheduled' status for order items with future pickup times.
---              Online orders with pickup_time != 'asap' will use 'scheduled' status
---              instead of 'waiting', so kitchen doesn't see them until it's time to cook.
--- Date: 2026-03-17
-
--- ============================================================
--- 1. Update create_online_order RPC
---    - When pickup_time is a specific time (not 'asap'), set items to 'scheduled'
---    - Set sent_to_kitchen_at = NULL for scheduled items
---    - Set estimated_ready_time on the order
--- ============================================================
+-- Migration: 250_fix_create_online_order_quantity_splitting
+-- Description: Fix quantity splitting regression in create_online_order RPC.
+--              Migrations 228/229 rewrote the function and lost the fix from migration 227.
+--              POS expects quantity=1 per row; this restores the FOR loop that splits
+--              quantity=N into N separate order_items rows.
+-- Date: 2026-03-26
 
 CREATE OR REPLACE FUNCTION public.create_online_order(p_data JSONB)
 RETURNS JSONB
@@ -53,7 +47,7 @@ DECLARE
   v_item_quantity INTEGER;
   v_single_item_total NUMERIC;
   v_q INTEGER;
-  -- NEW: scheduled order support
+  -- Scheduled order support
   v_pickup_time TEXT;
   v_is_scheduled BOOLEAN := false;
   v_item_status TEXT;
@@ -104,7 +98,6 @@ BEGIN
   IF v_is_scheduled THEN
     v_item_status := 'scheduled';
     v_sent_to_kitchen := NULL;
-    -- Calculate estimated_ready_time from pickup_time (today, Jakarta timezone)
     v_estimated_ready := (
       (now() AT TIME ZONE 'Asia/Jakarta')::date
       + v_pickup_time::time
@@ -130,7 +123,6 @@ BEGIN
   WHERE key = 'kitchen_hours';
 
   IF v_kitchen_hours IS NOT NULL AND (v_kitchen_hours->>'enabled')::boolean = true THEN
-    -- Get current day key (mon, tue, wed, etc.) using locale-independent approach
     v_today_key := (ARRAY['sun','mon','tue','wed','thu','fri','sat'])[EXTRACT(DOW FROM now() AT TIME ZONE 'Asia/Jakarta')::int + 1];
     v_now_time := (now() AT TIME ZONE 'Asia/Jakarta')::time;
 
@@ -157,7 +149,6 @@ BEGIN
   WHERE ci.auth_user_id = auth.uid()
   LIMIT 1;
 
-  -- Extract customer name/phone from input, fallback to customers table
   v_customer_name := p_data->>'customerName';
   v_customer_phone := p_data->>'customerPhone';
 
@@ -178,7 +169,6 @@ BEGIN
   WHERE code = 'takeaway' AND is_active = true
   LIMIT 1;
 
-  -- Fallback: use dine_in channel for dine_in orders
   IF v_type = 'dine_in' THEN
     SELECT id, code INTO v_channel_id, v_channel_code
     FROM sales_channels
@@ -188,7 +178,6 @@ BEGIN
 
   -- ============================================================
   -- 6. Generate sequential order number: SK-{MMDD}-{daily_counter}
-  --    Date prefix prevents collisions across days since counter resets daily
   -- ============================================================
   INSERT INTO order_counters (counter_date, last_number)
   VALUES (CURRENT_DATE, 1)
@@ -231,7 +220,6 @@ BEGIN
   -- ============================================================
   FOR v_item IN SELECT * FROM jsonb_array_elements(v_items)
   LOOP
-    -- Validate menu item exists and is active
     SELECT mi.id, mi.name, mi.price, mi.variants, mi.modifier_groups, mi.department, mi.image_url
     INTO v_menu_item
     FROM menu_items mi
@@ -283,14 +271,12 @@ BEGIN
     v_selected_modifiers := '[]'::jsonb;
 
     IF v_item->'modifiers' IS NOT NULL AND jsonb_array_length(v_item->'modifiers') > 0 THEN
-      -- Menu item must support modifiers if customer sent them
       IF v_menu_item.modifier_groups IS NULL THEN
         RAISE EXCEPTION '%', 'Menu item does not support modifiers: ' || v_menu_item.name;
       END IF;
 
       FOR v_modifier IN SELECT * FROM jsonb_array_elements(v_item->'modifiers')
       LOOP
-        -- Find modifier group in menu_item's modifier_groups JSONB
         SELECT grp INTO v_mod_group
         FROM jsonb_array_elements(v_menu_item.modifier_groups) grp
         WHERE grp->>'id' = v_modifier->>'groupId';
@@ -317,7 +303,6 @@ BEGIN
           'optionName', v_mod_option->>'name',
           'priceAdjustment', COALESCE((v_mod_option->>'priceAdjustment')::numeric, 0),
           'quantity', COALESCE((v_modifier->>'quantity')::integer, 1),
-          -- Fields required by DecompositionEngine for ingredient write-offs
           'groupType', v_mod_group->>'type',
           'isDefault', COALESCE((v_mod_option->>'isDefault')::boolean, false),
           'composition', COALESCE(v_mod_option->'composition', '[]'::jsonb),
@@ -356,7 +341,6 @@ BEGIN
         now(), v_sent_to_kitchen, now(), now()
       );
 
-      -- Collect for bill and result
       v_bill_items := v_bill_items || jsonb_build_array(jsonb_build_object(
         'id', v_item_id,
         'menuItemId', v_menu_item.id,
