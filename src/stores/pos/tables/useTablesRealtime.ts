@@ -27,16 +27,36 @@ export function useTablesRealtime() {
   const isConnected = ref(false)
   const tablesStore = usePosTablesStore()
 
-  /**
-   * Subscribe to tables table changes
-   */
-  function subscribe() {
-    if (tablesChannel.value) {
-      DebugUtils.debug(MODULE_NAME, 'Already subscribed, unsubscribing first')
-      unsubscribe()
-    }
+  // Reconnect state
+  let isUnsubscribing = false
+  let retryTimer: ReturnType<typeof setTimeout> | null = null
+  let retryCount = 0
+  const MAX_RETRY_DELAY_MS = 30_000
 
-    DebugUtils.info(MODULE_NAME, 'Subscribing to POS tables...')
+  function getRetryDelay(attempt: number): number {
+    return Math.min(1000 * Math.pow(2, attempt), MAX_RETRY_DELAY_MS)
+  }
+
+  function scheduleReconnect() {
+    if (isUnsubscribing) return
+    if (retryTimer) clearTimeout(retryTimer)
+    const delay = getRetryDelay(retryCount)
+    retryCount++
+    DebugUtils.warn(
+      MODULE_NAME,
+      `Scheduling tables reconnect in ${delay}ms (attempt ${retryCount})`
+    )
+    retryTimer = setTimeout(() => {
+      retryTimer = null
+      if (!isUnsubscribing) subscribeChannel()
+    }, delay)
+  }
+
+  function subscribeChannel() {
+    if (tablesChannel.value) {
+      supabase.removeChannel(tablesChannel.value)
+      tablesChannel.value = null
+    }
 
     tablesChannel.value = supabase
       .channel('pos-tables')
@@ -55,17 +75,38 @@ export function useTablesRealtime() {
         isConnected.value = status === 'SUBSCRIBED'
 
         if (status === 'SUBSCRIBED') {
+          retryCount = 0
           DebugUtils.info(MODULE_NAME, '📡 POS tables Realtime connected')
         } else if (status === 'CHANNEL_ERROR') {
-          DebugUtils.warn(
-            MODULE_NAME,
-            '⚠️ POS tables Realtime channel error (will auto-reconnect)',
-            {
-              error: err?.message || 'WebSocket disconnected'
-            }
-          )
+          DebugUtils.warn(MODULE_NAME, '⚠️ POS tables Realtime channel error', {
+            error: err?.message || 'WebSocket disconnected'
+          })
+          scheduleReconnect()
+        } else if (status === 'TIMED_OUT') {
+          DebugUtils.warn(MODULE_NAME, '⏰ POS tables Realtime TIMED_OUT')
+          scheduleReconnect()
+        } else if (status === 'CLOSED') {
+          DebugUtils.warn(MODULE_NAME, '🔌 POS tables Realtime CLOSED')
+          if (!isUnsubscribing) scheduleReconnect()
         }
       })
+  }
+
+  /**
+   * Subscribe to tables table changes
+   */
+  function subscribe() {
+    isUnsubscribing = false
+    retryCount = 0
+
+    if (tablesChannel.value) {
+      DebugUtils.debug(MODULE_NAME, 'Already subscribed, unsubscribing first')
+      unsubscribe()
+      isUnsubscribing = false
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Subscribing to POS tables...')
+    subscribeChannel()
   }
 
   /**
@@ -95,6 +136,11 @@ export function useTablesRealtime() {
    * IMPORTANT: Must be called manually by the parent store (e.g., posStore.cleanup())
    */
   function unsubscribe() {
+    isUnsubscribing = true
+    if (retryTimer) {
+      clearTimeout(retryTimer)
+      retryTimer = null
+    }
     if (tablesChannel.value) {
       DebugUtils.info(MODULE_NAME, 'Unsubscribing from POS tables')
       supabase.removeChannel(tablesChannel.value)

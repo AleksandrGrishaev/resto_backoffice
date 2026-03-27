@@ -48,21 +48,58 @@ export function useOrdersRealtime() {
   let onCancellationRequest: CancellationRequestCallback | null = null
   let onCustomerLinked: CustomerLinkedCallback | null = null
 
+  // Reconnect state
+  let isUnsubscribing = false
+  let ordersRetryTimer: ReturnType<typeof setTimeout> | null = null
+  let itemsRetryTimer: ReturnType<typeof setTimeout> | null = null
+  let ordersRetryCount = 0
+  let itemsRetryCount = 0
+  const MAX_RETRY_DELAY_MS = 30_000 // 30s cap
+
+  function getRetryDelay(attempt: number): number {
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s, 30s...
+    return Math.min(1000 * Math.pow(2, attempt), MAX_RETRY_DELAY_MS)
+  }
+
+  function scheduleOrdersReconnect() {
+    if (isUnsubscribing) return
+    if (ordersRetryTimer) clearTimeout(ordersRetryTimer)
+    const delay = getRetryDelay(ordersRetryCount)
+    ordersRetryCount++
+    DebugUtils.warn(
+      MODULE_NAME,
+      `Scheduling orders reconnect in ${delay}ms (attempt ${ordersRetryCount})`
+    )
+    ordersRetryTimer = setTimeout(() => {
+      ordersRetryTimer = null
+      if (!isUnsubscribing) subscribeOrders()
+    }, delay)
+  }
+
+  function scheduleItemsReconnect() {
+    if (isUnsubscribing) return
+    if (itemsRetryTimer) clearTimeout(itemsRetryTimer)
+    const delay = getRetryDelay(itemsRetryCount)
+    itemsRetryCount++
+    DebugUtils.warn(
+      MODULE_NAME,
+      `Scheduling order_items reconnect in ${delay}ms (attempt ${itemsRetryCount})`
+    )
+    itemsRetryTimer = setTimeout(() => {
+      itemsRetryTimer = null
+      if (!isUnsubscribing) subscribeItems()
+    }, delay)
+  }
+
   /**
-   * Subscribe to orders and order_items table changes
-   * POS listens for updates from Kitchen (item status changes)
+   * Subscribe to orders table (order-level updates)
    */
-  function subscribe() {
-    if (ordersChannel.value || itemsChannel.value) {
-      DebugUtils.debug(MODULE_NAME, 'Already subscribed, unsubscribing first')
-      unsubscribe()
+  function subscribeOrders() {
+    if (ordersChannel.value) {
+      supabase.removeChannel(ordersChannel.value)
+      ordersChannel.value = null
     }
 
-    DebugUtils.info(MODULE_NAME, 'Subscribing to POS orders + order_items...')
-
-    // =====================================================
-    // SUBSCRIBE TO orders TABLE (order-level updates)
-    // =====================================================
     ordersChannel.value = supabase
       .channel('pos-orders')
       .on(
@@ -91,21 +128,32 @@ export function useOrdersRealtime() {
         ordersConnected.value = status === 'SUBSCRIBED'
 
         if (status === 'SUBSCRIBED') {
+          ordersRetryCount = 0
           console.log('📡 [POSRealtime] orders channel SUBSCRIBED')
         } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ [POSRealtime] orders channel ERROR:', err?.message)
+          scheduleOrdersReconnect()
         } else if (status === 'TIMED_OUT') {
           console.error('⏰ [POSRealtime] orders channel TIMED_OUT')
+          scheduleOrdersReconnect()
         } else if (status === 'CLOSED') {
           console.warn('🔌 [POSRealtime] orders channel CLOSED')
+          if (!isUnsubscribing) scheduleOrdersReconnect()
         } else {
           console.log(`🔄 [POSRealtime] orders channel status: ${status}`)
         }
       })
+  }
 
-    // =====================================================
-    // SUBSCRIBE TO order_items TABLE (item-level updates)
-    // =====================================================
+  /**
+   * Subscribe to order_items table (item-level updates)
+   */
+  function subscribeItems() {
+    if (itemsChannel.value) {
+      supabase.removeChannel(itemsChannel.value)
+      itemsChannel.value = null
+    }
+
     itemsChannel.value = supabase
       .channel('pos-order-items')
       .on(
@@ -123,17 +171,41 @@ export function useOrdersRealtime() {
         itemsConnected.value = status === 'SUBSCRIBED'
 
         if (status === 'SUBSCRIBED') {
+          itemsRetryCount = 0
           console.log('📡 [POSRealtime] order_items channel SUBSCRIBED')
         } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ [POSRealtime] order_items channel ERROR:', err?.message)
+          scheduleItemsReconnect()
         } else if (status === 'TIMED_OUT') {
           console.error('⏰ [POSRealtime] order_items channel TIMED_OUT')
+          scheduleItemsReconnect()
         } else if (status === 'CLOSED') {
           console.warn('🔌 [POSRealtime] order_items channel CLOSED')
+          if (!isUnsubscribing) scheduleItemsReconnect()
         } else {
           console.log(`🔄 [POSRealtime] order_items channel status: ${status}`)
         }
       })
+  }
+
+  /**
+   * Subscribe to orders and order_items table changes
+   * POS listens for updates from Kitchen (item status changes)
+   */
+  function subscribe() {
+    isUnsubscribing = false
+    ordersRetryCount = 0
+    itemsRetryCount = 0
+
+    if (ordersChannel.value || itemsChannel.value) {
+      DebugUtils.debug(MODULE_NAME, 'Already subscribed, unsubscribing first')
+      unsubscribe()
+      isUnsubscribing = false // Reset after cleanup
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Subscribing to POS orders + order_items...')
+    subscribeOrders()
+    subscribeItems()
   }
 
   /**
@@ -499,6 +571,15 @@ export function useOrdersRealtime() {
    * IMPORTANT: Must be called manually by the parent store (e.g., posStore.cleanup())
    */
   function unsubscribe() {
+    isUnsubscribing = true
+    if (ordersRetryTimer) {
+      clearTimeout(ordersRetryTimer)
+      ordersRetryTimer = null
+    }
+    if (itemsRetryTimer) {
+      clearTimeout(itemsRetryTimer)
+      itemsRetryTimer = null
+    }
     if (ordersChannel.value) {
       DebugUtils.info(MODULE_NAME, 'Unsubscribing from POS orders')
       supabase.removeChannel(ordersChannel.value)
