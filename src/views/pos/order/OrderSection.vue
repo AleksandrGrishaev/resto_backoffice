@@ -1664,6 +1664,12 @@ const handleCheckout = async (itemIds: string[], billId: string): Promise<void> 
       }
     }
 
+    // Ensure fresh customer data for loyalty/cashback balance display
+    const checkoutCustomerId = paymentBillCustomerId.value
+    if (checkoutCustomerId) {
+      await customersStore.refreshCustomer(checkoutCustomerId).catch(() => {})
+    }
+
     showPaymentDialog.value = true
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to prepare checkout'
