@@ -330,6 +330,15 @@ export function useOrdersRealtime() {
         const oldCustomerId = existingOrder.customerId
         existingOrder.customerId = updatedOrder.customer_id
 
+        // Propagate customer to first bill if bill has no customer yet
+        if (updatedOrder.customer_id && existingOrder.bills?.length) {
+          const firstBill = existingOrder.bills[0]
+          if (!firstBill.customerId) {
+            firstBill.customerId = updatedOrder.customer_id
+            firstBill.customerName = updatedOrder.customer_name || undefined
+          }
+        }
+
         // Detect customer linked via invite QR (null → value)
         if (!oldCustomerId && updatedOrder.customer_id && onCustomerLinked) {
           DebugUtils.info(MODULE_NAME, '🔗 Customer linked to order via invite', {

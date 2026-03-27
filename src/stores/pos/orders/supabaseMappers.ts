@@ -208,8 +208,8 @@ export function fromSupabase(supabaseOrder: SupabaseOrder, items?: PosBillItem[]
     paymentStatus: meta.paymentStatus,
     paidAmount: meta.paidAmount,
     notes: meta.notes,
-    customerId: meta.customerId,
-    customerName: meta.customerName,
+    customerId: meta.customerId || supabaseOrder.customer_id || undefined,
+    customerName: meta.customerName || supabaseOrder.customer_name || undefined,
     stampCardId: meta.stampCardId,
     createdAt: meta.createdAt,
     updatedAt: meta.updatedAt
