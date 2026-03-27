@@ -152,13 +152,21 @@ export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
 
 /**
  * Convert PosOrder (app) to Supabase format for UPDATE
+ *
+ * IMPORTANT: customer_id/customer_name are excluded from updates.
+ * These fields may be set externally (e.g. by claim_invite RPC via website),
+ * and POS would overwrite them with stale null values from its local copy.
+ * Customer attachment is handled separately via dedicated endpoints.
  */
 export function toSupabaseUpdate(order: PosOrder): SupabaseOrderUpdate {
   const insert = toSupabaseInsert(order)
   return {
     ...insert,
     created_at: undefined,
-    updated_at: order.updatedAt
+    updated_at: order.updatedAt,
+    // Don't overwrite externally-set customer fields
+    customer_id: undefined,
+    customer_name: undefined
   }
 }
 
