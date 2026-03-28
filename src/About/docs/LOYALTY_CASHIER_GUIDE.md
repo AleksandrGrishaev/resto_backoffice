@@ -74,8 +74,9 @@
 4. Switch loyalty program from **Stamps** to **Cashback**
 5. Tap **CREATE**
 6. Customer is created and attached to the order
-7. Give them the invite QR: tap the **QR icon** next to customer name → prints invite receipt
-8. Customer scans later → registers → gets access to their cashback balance online
+7. The **Print Invite QR** button appears automatically (customer has no linked account yet)
+8. Tap the button → prints invite receipt with QR code
+9. Customer scans later → registers → gets access to their cashback balance online
 
 ### Bahasa Indonesia
 
@@ -88,8 +89,9 @@
 4. Ubah program loyalitas dari **Stamps** ke **Cashback**
 5. Tekan **CREATE**
 6. Pelanggan dibuat dan dipasang ke pesanan
-7. Berikan QR invite: tekan **ikon QR** di sebelah nama pelanggan → cetak receipt invite
-8. Pelanggan scan nanti → daftar → akses saldo cashback mereka secara online
+7. Tombol **Print Invite QR** muncul otomatis (pelanggan belum punya akun)
+8. Tekan tombol → cetak receipt invite dengan QR code
+9. Pelanggan scan nanti → daftar → akses saldo cashback mereka secara online
 
 ---
 

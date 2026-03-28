@@ -476,6 +476,34 @@
               No accrual
             </v-chip>
           </div>
+
+          <!-- Invite QR: show when customer has no linked auth account -->
+          <div v-if="!customerHasAuth && !checkingAuth" class="mt-2">
+            <v-btn
+              size="small"
+              variant="tonal"
+              color="amber-darken-2"
+              prepend-icon="mdi-qrcode"
+              :loading="printingInvite"
+              @click="handlePrintInviteQR"
+            >
+              Print Invite QR
+            </v-btn>
+            <div class="text-caption text-medium-emphasis mt-1">
+              Customer has no linked account. Print QR so they can register online.
+            </div>
+            <v-alert
+              v-if="inviteError"
+              type="error"
+              variant="tonal"
+              density="compact"
+              closable
+              class="mt-1"
+              @click:close="inviteError = null"
+            >
+              {{ inviteError }}
+            </v-alert>
+          </div>
         </div>
 
         <!-- Conversion result toast -->
@@ -632,6 +660,24 @@ const { isConnected: isPrinterConnected, printInviteQR } = usePrinter()
 // Invite QR state
 const printingInvite = ref(false)
 const inviteError = ref<string | null>(null)
+const customerHasAuth = ref(false)
+const checkingAuth = ref(false)
+
+// Check if customer has any linked auth identities
+async function checkCustomerAuth(customerId: string) {
+  checkingAuth.value = true
+  try {
+    const { count } = await supabase
+      .from('customer_identities')
+      .select('id', { count: 'exact', head: true })
+      .eq('customer_id', customerId)
+    customerHasAuth.value = (count ?? 0) > 0
+  } catch {
+    customerHasAuth.value = false
+  } finally {
+    checkingAuth.value = false
+  }
+}
 
 async function handlePrintInviteQR() {
   if (!attachedCustomer.value || printingInvite.value) return
@@ -821,6 +867,7 @@ watch(
       }
       if (c) {
         attachedCustomer.value = c
+        checkCustomerAuth(c.id)
         // Auto-switch to customer tab if in dialog mode
         if (props.dialogMode) activeTab.value = 'customer'
       }
@@ -959,11 +1006,14 @@ function selectCustomer(customer: Customer) {
   searchResults.value = []
   customerQuery.value = ''
   emit('update:customer', customer)
+  // Check if customer has linked auth
+  checkCustomerAuth(customer.id)
   // Don't collapse — let operator continue (e.g. attach card too)
 }
 
 function detachCustomer() {
   attachedCustomer.value = null
+  customerHasAuth.value = false
   emit('update:customer', null)
 }
 
