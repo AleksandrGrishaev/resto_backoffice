@@ -39,6 +39,6 @@ BEGIN
   );
 
 EXCEPTION WHEN OTHERS THEN
-  RETURN jsonb_build_object('success', false, 'error', 'Failed to lookup invite');
+  RETURN jsonb_build_object('success', false, 'error', 'Failed to lookup invite: ' || SQLERRM);
 END;
 $$;

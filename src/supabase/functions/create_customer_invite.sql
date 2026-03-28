@@ -51,6 +51,6 @@ BEGIN
   );
 
 EXCEPTION WHEN OTHERS THEN
-  RETURN jsonb_build_object('success', false, 'error', 'Failed to create invite');
+  RETURN jsonb_build_object('success', false, 'error', 'Failed to create invite: ' || SQLERRM);
 END;
 $$;

@@ -74,7 +74,16 @@ BEGIN
     SELECT name INTO v_customer_name FROM customers WHERE id = v_customer_id;
 
     -- Link order to customer (set both customer_id AND customer_name for POS realtime)
-    UPDATE orders SET customer_id = v_customer_id, customer_name = v_customer_name
+    UPDATE orders SET
+      customer_id = v_customer_id,
+      customer_name = v_customer_name,
+      -- Propagate customer into bills JSONB (bill-level is source of truth for POS)
+      bills = (
+        SELECT COALESCE(jsonb_agg(
+          bill || jsonb_build_object('customerId', v_customer_id, 'customerName', v_customer_name)
+        ), bills)
+        FROM jsonb_array_elements(bills) AS bill
+      )
     WHERE id = v_invite.order_id AND customer_id IS NULL;
 
     -- Set loyalty program to stamps
@@ -115,6 +124,10 @@ BEGIN
       UPDATE customer_identities SET customer_id = v_customer_id
       WHERE id = v_existing_identity.id;
 
+      -- Clear email/telegram on trigger customer first to avoid unique constraint violations
+      UPDATE customers SET email = NULL, telegram_id = NULL
+      WHERE id = v_trigger_customer_id AND created_by = 'auth';
+
       -- Delete trigger-created empty customer (safe guards)
       DELETE FROM customers
       WHERE id = v_trigger_customer_id
@@ -131,11 +144,19 @@ BEGIN
       loyalty_program = coalesce(loyalty_program, 'stamps')
     WHERE id = v_customer_id;
 
-    -- Link any anonymous orders from this auth user
-    UPDATE orders SET customer_id = v_customer_id
-    WHERE created_by = v_auth_uid::text AND customer_id IS NULL;
-
     SELECT name INTO v_customer_name FROM customers WHERE id = v_customer_id;
+
+    -- Link any anonymous orders from this auth user (with bills JSONB propagation)
+    UPDATE orders SET
+      customer_id = v_customer_id,
+      customer_name = v_customer_name,
+      bills = (
+        SELECT COALESCE(jsonb_agg(
+          bill || jsonb_build_object('customerId', v_customer_id, 'customerName', v_customer_name)
+        ), bills)
+        FROM jsonb_array_elements(bills) AS bill
+      )
+    WHERE created_by = v_auth_uid::text AND customer_id IS NULL;
 
     UPDATE customer_invites SET status = 'claimed', claimed_by = v_auth_uid, claimed_at = now()
     WHERE id = v_invite.id AND status = 'active'
@@ -154,6 +175,6 @@ BEGIN
   RETURN jsonb_build_object('success', false, 'error', 'Unknown invite type');
 
 EXCEPTION WHEN OTHERS THEN
-  RETURN jsonb_build_object('success', false, 'error', 'Failed to claim invite');
+  RETURN jsonb_build_object('success', false, 'error', 'Failed to claim invite: ' || SQLERRM);
 END;
 $$;
