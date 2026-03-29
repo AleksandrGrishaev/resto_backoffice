@@ -62,11 +62,11 @@ const authStore = useAuthStore()
 const loading = ref(false)
 
 const screens = [
+  { id: 'dashboard' as AdminScreenName, label: 'Dashboard', icon: 'mdi-chart-box-outline' },
   { id: 'channels' as AdminScreenName, label: 'Channels', icon: 'mdi-store' },
   { id: 'loyalty' as AdminScreenName, label: 'Loyalty', icon: 'mdi-star-circle' },
   { id: 'staff' as AdminScreenName, label: 'Staff', icon: 'mdi-account-group' },
-  { id: 'payroll' as AdminScreenName, label: 'Payroll', icon: 'mdi-cash-multiple' },
-  { id: 'dashboard' as AdminScreenName, label: 'Dashboard', icon: 'mdi-chart-box-outline' }
+  { id: 'payroll' as AdminScreenName, label: 'Payroll', icon: 'mdi-cash-multiple' }
 ]
 
 const userName = computed(() => {

@@ -69,7 +69,7 @@ const PayrollScreen = defineAsyncComponent(() => import('./payroll/PayrollScreen
 const authStore = useAuthStore()
 const { state: snackbarState } = useSnackbar()
 
-const currentScreen = ref<AdminScreenName>('channels')
+const currentScreen = ref<AdminScreenName>('dashboard')
 const loading = ref(true)
 
 const canAccess = computed(() => {
