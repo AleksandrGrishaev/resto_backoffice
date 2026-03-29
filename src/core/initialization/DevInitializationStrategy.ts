@@ -314,8 +314,6 @@ export class DevInitializationStrategy implements InitializationStrategy {
         return this.loadChannels()
       case 'gobiz':
         return this.loadGobiz()
-      case 'menuCollections':
-        return this.loadMenuCollections()
       case 'customers':
         return this.loadCustomers()
       case 'loyalty':
@@ -832,38 +830,6 @@ export class DevInitializationStrategy implements InitializationStrategy {
 
       return {
         name: 'gobiz',
-        success: false,
-        error: message,
-        duration: Date.now() - start
-      }
-    }
-  }
-
-  private async loadMenuCollections(): Promise<StoreInitResult> {
-    const start = Date.now()
-
-    try {
-      const { useMenuCollectionsStore } = await import('@/stores/menuCollections')
-      const store = useMenuCollectionsStore()
-
-      DebugUtils.store(MODULE_NAME, '[DEV] Loading menu collections...')
-
-      if (!store.initialized) {
-        await store.initialize()
-      }
-
-      return {
-        name: 'menuCollections',
-        success: true,
-        count: store.collections.length,
-        duration: Date.now() - start
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to load menu collections'
-      DebugUtils.warn(MODULE_NAME, `[DEV] ${message} (non-critical)`, { error })
-
-      return {
-        name: 'menuCollections',
         success: false,
         error: message,
         duration: Date.now() - start

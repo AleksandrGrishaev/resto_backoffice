@@ -56,20 +56,18 @@ _`warehouses` — write requires admin/manager role, read requires `is_staff()`_
 
 Website visitors can read menu data. Only staff can modify.
 
-| Table                       | `anon` SELECT       | `authenticated` SELECT | Staff write  |
-| --------------------------- | ------------------- | ---------------------- | ------------ |
-| `menu_items`                | `is_active = true`  | `true`                 | `is_staff()` |
-| `menu_categories`           | `is_active = true`  | `true`                 | `is_staff()` |
-| `menu_collections`          | `status = 'active'` | `true`                 | `is_staff()` |
-| `menu_collection_items`     | `true`              | `true`                 | `is_staff()` |
-| `sales_channels`            | —                   | `true`                 | `is_staff()` |
-| `channel_prices`            | —                   | `true`                 | `is_staff()` |
-| `channel_menu_items`        | —                   | `true`                 | `is_staff()` |
-| `channel_payment_methods`   | —                   | `true`                 | `is_staff()` |
-| `content_translations`      | `true`              | `true`                 | `is_staff()` |
-| `website_homepage_sections` | `is_active = true`  | `true`                 | `is_staff()` |
-| `website_homepage_items`    | `is_active = true`  | `true`                 | `is_staff()` |
-| `loyalty_settings`          | —                   | `true` (read)          | `is_staff()` |
+| Table                       | `anon` SELECT      | `authenticated` SELECT | Staff write  |
+| --------------------------- | ------------------ | ---------------------- | ------------ |
+| `menu_items`                | `is_active = true` | `true`                 | `is_staff()` |
+| `menu_categories`           | `is_active = true` | `true`                 | `is_staff()` |
+| `sales_channels`            | —                  | `true`                 | `is_staff()` |
+| `channel_prices`            | —                  | `true`                 | `is_staff()` |
+| `channel_menu_items`        | —                  | `true`                 | `is_staff()` |
+| `channel_payment_methods`   | —                  | `true`                 | `is_staff()` |
+| `content_translations`      | `true`             | `true`                 | `is_staff()` |
+| `website_homepage_sections` | `is_active = true` | `true`                 | `is_staff()` |
+| `website_homepage_items`    | `is_active = true` | `true`                 | `is_staff()` |
+| `loyalty_settings`          | —                  | `true` (read)          | `is_staff()` |
 
 ### Customer-Own-Data Tables (2 tables)
 
