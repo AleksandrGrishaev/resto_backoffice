@@ -4,6 +4,7 @@ export { useStaffStore } from './staffStore'
 export { staffService } from './staffService'
 export { getPayrollMonth } from './payrollService'
 export type { PayrollMonth, PayrollResult, PayrollStaffRow } from './payrollService'
+export { getAllKpiBonusSchemes, saveKpiBonusScheme, loadKpiBonusSnapshots } from './kpiBonusService'
 export type {
   StaffRank,
   StaffMember,
@@ -15,7 +16,14 @@ export type {
   BonusType,
   PayrollStatus,
   TimeSlot,
-  ShiftPreset
+  ShiftPreset,
+  KpiBonusScheme,
+  KpiBonusSnapshot,
+  KpiBonusStaffItem,
+  KpiDepartment,
+  KpiPoolType,
+  DepartmentKpiResult,
+  KpiScoreBreakdown
 } from './types'
 export {
   DEPARTMENT_LABELS,

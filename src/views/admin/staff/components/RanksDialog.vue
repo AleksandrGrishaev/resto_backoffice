@@ -29,6 +29,9 @@
                       formatIDR(Math.round(rank.baseSalary / 208))
                     }}
                     / hr)
+                    <span v-if="kpiBonusLabel(rank.kpiMultiplier)" class="ml-1">
+                      | KPI bonus: {{ kpiBonusLabel(rank.kpiMultiplier) }}
+                    </span>
                   </div>
                 </div>
                 <v-btn icon size="x-small" variant="text" @click="startEdit(rank)">
@@ -51,7 +54,7 @@
                   label="Name"
                   density="compact"
                   hide-details
-                  style="max-width: 180px"
+                  style="max-width: 140px"
                 />
                 <v-text-field
                   v-model.number="editForm.baseSalary"
@@ -59,7 +62,16 @@
                   type="number"
                   density="compact"
                   hide-details
-                  style="max-width: 180px"
+                  style="max-width: 160px"
+                />
+                <v-text-field
+                  v-model.number="editForm.kpiBonusPercent"
+                  label="KPI bonus"
+                  type="number"
+                  suffix="%"
+                  density="compact"
+                  hide-details
+                  style="max-width: 100px"
                 />
                 <v-btn icon size="x-small" color="success" @click="saveEdit">
                   <v-icon size="16">mdi-check</v-icon>
@@ -81,7 +93,7 @@
             label="Rank Name"
             density="compact"
             hide-details
-            style="max-width: 180px"
+            style="max-width: 160px"
           />
           <v-text-field
             v-model.number="newRank.baseSalary"
@@ -89,7 +101,16 @@
             type="number"
             density="compact"
             hide-details
-            style="max-width: 180px"
+            style="max-width: 160px"
+          />
+          <v-text-field
+            v-model.number="newRank.kpiBonusPercent"
+            label="KPI bonus"
+            type="number"
+            suffix="%"
+            density="compact"
+            hide-details
+            style="max-width: 100px"
           />
           <v-btn color="primary" size="small" :disabled="!newRank.name" @click="handleCreate">
             Add
@@ -118,18 +139,40 @@ const emit = defineEmits<{
 }>()
 
 const editingId = ref<string | null>(null)
-const editForm = reactive({ name: '', baseSalary: 0 })
-const newRank = reactive({ name: '', baseSalary: 2000000 })
+const editForm = reactive({ name: '', baseSalary: 0, kpiBonusPercent: 0 })
+const newRank = reactive({ name: '', baseSalary: 2000000, kpiBonusPercent: 0 })
+
+/** Display label: 0% → "standard", >0 → "+50%", <0 → "-20%" */
+function kpiBonusLabel(multiplier: number): string {
+  const pct = Math.round((multiplier - 1) * 100)
+  if (pct === 0) return 'standard'
+  return pct > 0 ? `+${pct}%` : `${pct}%`
+}
+
+/** Convert UI percent to DB multiplier: +50 → 1.5, 0 → 1.0 */
+function percentToMultiplier(pct: number): number {
+  return 1 + pct / 100
+}
+
+/** Convert DB multiplier to UI percent: 1.5 → 50, 1.0 → 0 */
+function multiplierToPercent(mult: number): number {
+  return Math.round((mult - 1) * 100)
+}
 
 function startEdit(rank: StaffRank) {
   editingId.value = rank.id
   editForm.name = rank.name
   editForm.baseSalary = rank.baseSalary
+  editForm.kpiBonusPercent = multiplierToPercent(rank.kpiMultiplier)
 }
 
 function saveEdit() {
   if (editingId.value) {
-    emit('update', editingId.value, { name: editForm.name, baseSalary: editForm.baseSalary })
+    emit('update', editingId.value, {
+      name: editForm.name,
+      baseSalary: editForm.baseSalary,
+      kpiMultiplier: percentToMultiplier(editForm.kpiBonusPercent)
+    })
     editingId.value = null
   }
 }
@@ -138,9 +181,11 @@ function handleCreate() {
   emit('create', {
     name: newRank.name,
     baseSalary: newRank.baseSalary,
+    kpiMultiplier: percentToMultiplier(newRank.kpiBonusPercent),
     sortOrder: 0
   })
   newRank.name = ''
   newRank.baseSalary = 2000000
+  newRank.kpiBonusPercent = 0
 }
 </script>

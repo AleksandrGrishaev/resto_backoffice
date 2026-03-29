@@ -55,7 +55,7 @@
           />
           <v-switch
             v-model="form.isTrainee"
-            label="Trainee (no service tax)"
+            label="Trainee (no service tax, no KPI bonus)"
             color="warning"
             hide-details
             class="mb-2"

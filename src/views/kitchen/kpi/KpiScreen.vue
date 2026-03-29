@@ -1,6 +1,9 @@
 <!-- src/views/kitchen/kpi/KpiScreen.vue -->
 <template>
   <div class="kpi-screen">
+    <!-- KPI Bonus Widget (always visible) -->
+    <KpiBonusWidget :department="effectiveDepartment" />
+
     <!-- KPI Type Tabs -->
     <v-tabs v-model="activeTab" color="primary" class="kpi-tabs">
       <v-tab value="time">
@@ -61,6 +64,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useTimeKpi, useFoodCostKpi } from '@/stores/kitchenKpi/composables'
 import { useAuthStore } from '@/stores/auth'
 import { DebugUtils } from '@/utils'
+import KpiBonusWidget from './components/KpiBonusWidget.vue'
 import TimeKpiCard from './components/TimeKpiCard.vue'
 import TimeKpiTab from './components/TimeKpiTab.vue'
 import FoodCostKpiCard from './components/FoodCostKpiCard.vue'

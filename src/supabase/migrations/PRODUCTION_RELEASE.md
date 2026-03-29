@@ -1,157 +1,63 @@
-# Production Release: Kitchen Ritual System
+# Production Release — Pending Migrations
 
-## Migrations to Apply
+## KPI Bonus Pools (2026-03-29)
 
-Apply in order. All are independent (no cross-dependencies), but sequential order is recommended.
+**Status:** Applied to DEV, NOT yet applied to PROD
 
-| #   | File                                           | Description                                                                 |
-| --- | ---------------------------------------------- | --------------------------------------------------------------------------- |
-| 1   | `248_add_is_premade_to_preparations.sql`       | Add `is_premade BOOLEAN DEFAULT false` to preparations                      |
-| 2   | `249_add_task_type_to_production_schedule.sql` | Add `task_type TEXT DEFAULT 'production'` to production_schedule            |
-| 3   | `251_ritual_custom_tasks.sql`                  | New table: custom checklist tasks for rituals (RLS + grants)                |
-| 4   | `252_ritual_completions.sql`                   | New table: ritual completion history with JSONB task details (RLS + grants) |
-| 5   | `253_add_target_mode_to_preparations.sql`      | Add `target_mode TEXT DEFAULT 'auto'` to preparations                       |
+### Migration 262: `kpi_bonus_pools`
 
-### Staff Work Hours — Time Slots & Shift Presets
-
-| #   | File                                       | Description                                                                                        |
-| --- | ------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| 6   | `254_add_time_slots_and_shift_presets.sql` | Add `time_slots JSONB` to staff_work_logs + new `staff_shift_presets` table with 3 default presets |
-| 7   | `260_add_trainee_support.sql`              | Add `is_trainee BOOLEAN` + `custom_salary NUMERIC` to staff_members                                |
-
-### After migration 260 (trainees):
+New tables + columns for KPI bonus pool system.
 
 ```sql
--- Activate Fio and Seri as trainees with individual salary
--- UPDATE staff_members SET is_active = true, is_trainee = true, custom_salary = <amount> WHERE name IN ('Fio', 'Seri');
+-- New tables:
+-- kpi_bonus_schemes — per-department bonus pool config (pool type, weights, thresholds)
+-- kpi_bonus_snapshots — immutable KPI calculation snapshots per payroll period
 
--- Verify
-SELECT name, is_trainee, custom_salary FROM staff_members WHERE is_trainee = true;
+-- Altered tables:
+-- payroll_items: +kpi_bonus NUMERIC NOT NULL DEFAULT 0
+-- payroll_periods: +total_kpi_bonuses NUMERIC NOT NULL DEFAULT 0
+
+-- Also includes: RLS, grants, triggers, index on kpi_bonus_snapshots(payroll_period_id)
 ```
 
-## Post-Migration Steps
+**Apply:** `mcp__supabase_prod__apply_migration` with content from `262_kpi_bonus_pools.sql`
 
-After applying all migrations:
+### Migration 263: `kpi_rank_multiplier_and_loss_rate`
+
+Rank-based KPI distribution + loss rate target.
 
 ```sql
--- 1. Make restaurant_id nullable (app setting not configured in PostgREST)
-ALTER TABLE ritual_completions ALTER COLUMN restaurant_id DROP NOT NULL;
-ALTER TABLE ritual_custom_tasks ALTER COLUMN restaurant_id DROP NOT NULL;
-
--- 2. Reload PostgREST schema cache
-NOTIFY pgrst, 'reload schema';
+ALTER TABLE staff_ranks ADD COLUMN kpi_multiplier NUMERIC NOT NULL DEFAULT 1.0;
+UPDATE staff_ranks SET kpi_multiplier = 1.5 WHERE name = 'Senior';
+UPDATE staff_ranks SET kpi_multiplier = 1.0 WHERE name = 'Junior';
+ALTER TABLE kpi_bonus_schemes ADD COLUMN loss_rate_target NUMERIC NOT NULL DEFAULT 3;
 ```
 
-### After migration 254 (shift presets):
+**Apply:** `mcp__supabase_prod__apply_migration` with content from `263_kpi_rank_multiplier_and_loss_rate.sql`
+
+### Migration 264: `kpi_per_metric_thresholds`
+
+Per-metric minimum score thresholds (y/n or minimum % to pass).
 
 ```sql
--- Verify shift presets seeded
-SELECT name, start_hour, end_hour FROM staff_shift_presets ORDER BY sort_order;
--- Expected: Full Day (8-22), Morning (8-16), Evening (14-22)
-
--- Verify time_slots column
-SELECT column_name, data_type FROM information_schema.columns
-WHERE table_name = 'staff_work_logs' AND column_name = 'time_slots';
-
-NOTIFY pgrst, 'reload schema';
+ALTER TABLE kpi_bonus_schemes
+  ADD COLUMN threshold_food_cost INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN threshold_time INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN threshold_production INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN threshold_ritual INTEGER NOT NULL DEFAULT 0;
 ```
 
-## Verification
+**Apply:** `mcp__supabase_prod__apply_migration` with content from `264_kpi_per_metric_thresholds.sql`
 
-```sql
--- Check tables exist
-SELECT tablename FROM pg_tables WHERE tablename IN ('ritual_custom_tasks', 'ritual_completions');
+### Post-migration Steps
 
--- Check RLS policies
-SELECT tablename, policyname FROM pg_policies WHERE tablename IN ('ritual_custom_tasks', 'ritual_completions');
-
--- Check grants
-SELECT grantee, table_name FROM information_schema.table_privileges
-WHERE table_name IN ('ritual_custom_tasks', 'ritual_completions') AND grantee = 'authenticated';
-
--- Check new columns on preparations
-SELECT column_name, column_default FROM information_schema.columns
-WHERE table_name = 'preparations' AND column_name IN ('is_premade', 'target_mode');
-
--- Check new column on production_schedule
-SELECT column_name, column_default FROM information_schema.columns
-WHERE table_name = 'production_schedule' AND column_name = 'task_type';
-```
-
-## Verification (migration 254)
-
-```sql
--- Check table + RLS
-SELECT tablename, policyname FROM pg_policies WHERE tablename = 'staff_shift_presets';
-
--- Check grants
-SELECT grantee, table_name FROM information_schema.table_privileges
-WHERE table_name = 'staff_shift_presets' AND grantee = 'authenticated';
-```
-
----
-
-## Customer Invite Flow (migrations 255-259)
-
-### Migrations to Apply
-
-| #   | File                                 | Description                                                     |
-| --- | ------------------------------------ | --------------------------------------------------------------- |
-| 7   | `255_customer_invites.sql`           | New table: unified invite for customer + order QR flows (RLS)   |
-| 8   | `256_rpc_create_customer_invite.sql` | RPC: staff generates 30-day invite for existing POS customer    |
-| 9   | `257_rpc_create_order_invite.sql`    | RPC: staff generates 2-hour invite for order without customer   |
-| 10  | `258_rpc_claim_invite.sql`           | RPC: customer claims invite after auth (both flows, race-safe)  |
-| 11  | `259_rpc_get_invite_by_token.sql`    | RPC: safe anon lookup for /join page (returns type + name only) |
-
-### Pre-requisite
-
-```sql
--- Ensure pgcrypto extension (needed for token generation)
-CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA extensions;
-```
-
-### Post-Migration
-
-```sql
--- Reload PostgREST schema cache
-NOTIFY pgrst, 'reload schema';
-```
-
-### Verification
-
-```sql
--- Check table exists
-SELECT tablename FROM pg_tables WHERE tablename = 'customer_invites';
-
--- Check RLS policies (should have staff_all only, NO anon SELECT)
-SELECT policyname FROM pg_policies WHERE tablename = 'customer_invites';
-
--- Check RPCs registered
-SELECT proname FROM pg_proc
-WHERE proname IN ('create_customer_invite', 'create_order_invite', 'claim_invite', 'get_invite_by_token');
-
--- Test RPC (should return 'Unauthorized' for non-staff or 'Order not found')
-SELECT create_order_invite('00000000-0000-0000-0000-000000000000'::uuid);
-```
-
-### Security Notes
-
-- No anon SELECT policy on `customer_invites` — token lookup via `get_invite_by_token` RPC only
-- `create_*_invite` RPCs require `is_staff()` — website customers cannot generate tokens
-- `claim_invite` uses `FOR UPDATE SKIP LOCKED` — prevents double-claim race condition
-- Generic error messages in EXCEPTION handlers — no DB internals leaked
-
----
-
-## Feature Summary
-
-- **Staff Time Slots**: Work hours now track exact time ranges (e.g. 08:00-16:00) instead of just total hours. Configurable shift presets (Full Day, Morning, Evening). POS dialog with hour-grid picker. Admin schedule timeline with infinite scroll and click-to-edit for future dates.
-- **Ritual System**: Morning (7:30-10:00) and Evening (18:00-22:00) kitchen workflows
-- **Custom Tasks**: Configurable checklist items (clean fridge, check expiry, etc.)
-- **Preparation Scheduling**: Assign preparations to morning/evening with auto/fixed quantities
-- **Pre-made Management**: Half-cooked items with short shelf life, separate config tab
-- **KPI Tracking**: Completion rate, streak, avg duration, per-staff breakdown, history with detail view
-- **Time Windows**: Auto-open/close rituals, session persistence for tablet restart recovery
-- **Customer Invite QR (Order)**: Pre-bill auto-prints QR for orders without customer. Customer scans → registers → order linked via Supabase realtime. POS shows toast notification.
-- **Customer Invite QR (Customer)**: Staff prints invite QR from LoyaltyPanel. Customer scans → registers → linked to existing POS profile (no duplicate). 30-day expiry.
-- **ESC/POS QR Printing**: QR code generation added to thermal printer commands (GS ( k). Standalone invite print + embedded in pre-bill.
+1. Apply all 3 migrations in order (262 → 263 → 264)
+2. Seed default schemes via Settings UI or SQL:
+   ```sql
+   INSERT INTO kpi_bonus_schemes (department, name, pool_type, pool_amount, weight_food_cost, weight_time, weight_production, weight_ritual, threshold_food_cost, threshold_time, threshold_production, threshold_ritual, loss_rate_target)
+   VALUES
+     ('kitchen', 'Kitchen KPI Bonus', 'fixed', 0, 20, 25, 40, 15, 100, 80, 100, 80, 3),
+     ('bar', 'Bar KPI Bonus', 'fixed', 0, 20, 25, 40, 15, 100, 80, 100, 80, 3);
+   ```
+3. Configure actual pool amounts via Settings > KPI > Bonus Pools
+4. Verify with a test payroll calculation

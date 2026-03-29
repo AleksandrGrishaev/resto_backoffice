@@ -66,6 +66,7 @@
               <th class="summary-col salary-col">Salary</th>
               <th class="summary-col service-col">Service 2</th>
               <th class="summary-col bonus-col">Bonus</th>
+              <th class="summary-col kpi-col">KPI</th>
               <th class="summary-col grand-col">Total</th>
             </tr>
           </thead>
@@ -116,6 +117,7 @@
               <td class="summary-col salary-col">{{ fmtNum(row.salary) }}</td>
               <td class="summary-col service-col">{{ fmtNum(row.service2) }}</td>
               <td class="summary-col bonus-col">{{ fmtNum(row.bonusesTotal) }}</td>
+              <td class="summary-col kpi-col">{{ fmtNum(row.kpiBonus) }}</td>
               <td class="summary-col grand-col">{{ fmtNum(row.grandTotal) }}</td>
             </tr>
             <!-- Totals row -->
@@ -134,6 +136,7 @@
               <td class="summary-col salary-col">{{ fmtNum(result.totals.salary) }}</td>
               <td class="summary-col service-col">{{ fmtNum(result.totals.service2) }}</td>
               <td class="summary-col bonus-col">{{ fmtNum(result.totals.bonuses) }}</td>
+              <td class="summary-col kpi-col">{{ fmtNum(result.totals.kpiBonuses) }}</td>
               <td class="summary-col grand-col">{{ fmtNum(result.totals.grandTotal) }}</td>
             </tr>
           </tbody>
@@ -178,6 +181,22 @@
           <div v-if="result.totals.bonuses > 0" class="summary-card bonus-card">
             <div class="card-label">Total Bonuses</div>
             <div class="card-value">{{ formatIDR(result.totals.bonuses) }}</div>
+          </div>
+          <div v-if="result.totals.kpiBonuses > 0" class="summary-card kpi-card">
+            <div class="card-label">KPI Bonuses</div>
+            <div class="card-value">{{ formatIDR(result.totals.kpiBonuses) }}</div>
+            <div v-if="kpiResults.length" class="card-detail">
+              <template v-for="(kpi, i) in kpiResults" :key="kpi.department">
+                <span v-if="i > 0">|</span>
+                {{ kpi.department === 'kitchen' ? 'Kitchen' : 'Bar' }}: score
+                {{ kpi.departmentScore.toFixed(0) }}
+                <template v-if="kpi.poolType === 'percent_revenue'">
+                  ({{ formatIDR(kpi.departmentRevenue) }} rev → pool
+                  {{ formatIDR(kpi.poolAmount) }})
+                </template>
+                → {{ formatIDR(kpi.unlockedAmount) }}
+              </template>
+            </div>
           </div>
           <div class="summary-card grand-card">
             <div class="card-label">Grand Total Payroll</div>
@@ -279,6 +298,136 @@
         </div>
       </div>
 
+      <!-- ==================== KPI BONUS CALCULATION ==================== -->
+      <div v-if="kpiResults.length" class="general-calc-section">
+        <h3>KPI Bonus Calculation</h3>
+
+        <div v-for="kpi in kpiResults" :key="kpi.department" class="calc-block">
+          <div class="calc-block-title">
+            {{ kpi.department === 'kitchen' ? 'Kitchen' : 'Bar' }} Department — Score:
+            {{ kpi.departmentScore.toFixed(1) }} / 100
+          </div>
+          <table class="breakdown-table">
+            <thead>
+              <tr>
+                <td class="detail-label" style="font-weight: 600">Metric</td>
+                <td class="detail-formula" style="font-weight: 600">Result</td>
+                <td class="detail-value" style="font-weight: 600">Score × Weight</td>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Food Cost -->
+              <tr>
+                <td class="detail-label">Food Cost</td>
+                <td class="detail-formula">
+                  <template v-if="kpi.scores.foodCost.score >= 0">
+                    COGS {{ kpi.scores.foodCost.actualPercent.toFixed(1) }}% (target
+                    {{ kpi.scores.foodCost.targetPercent }}%)
+                  </template>
+                  <template v-else>No data</template>
+                </td>
+                <td class="detail-value">
+                  {{ kpi.scores.foodCost.score >= 0 ? kpi.scores.foodCost.score.toFixed(0) : '—' }}
+                  × {{ kpi.weights.foodCost }}%
+                </td>
+              </tr>
+              <!-- Real Food Cost (Loss Rate) -->
+              <tr>
+                <td class="detail-label">Real Food Cost</td>
+                <td class="detail-formula">
+                  <template v-if="kpi.scores.lossRate.score >= 0">
+                    Losses {{ kpi.scores.lossRate.lossPercent.toFixed(1) }}% (target
+                    {{ kpi.scores.lossRate.targetPercent }}%) — spoilage
+                    {{ formatIDR(kpi.scores.lossRate.spoilage) }}, shortage
+                    {{ formatIDR(kpi.scores.lossRate.shortage) }}
+                  </template>
+                  <template v-else>No data</template>
+                </td>
+                <td class="detail-value">
+                  {{ kpi.scores.lossRate.score >= 0 ? kpi.scores.lossRate.score.toFixed(0) : '—' }}
+                  × {{ kpi.weights.production }}%
+                </td>
+              </tr>
+              <!-- Time KPI -->
+              <tr>
+                <td class="detail-label">Time KPI</td>
+                <td class="detail-formula">
+                  <template v-if="kpi.scores.time.score >= 0">
+                    {{ kpi.scores.time.itemsCompleted }} items,
+                    {{ kpi.scores.time.exceededRate.toFixed(0) }}% exceeded plan
+                  </template>
+                  <template v-else>No data</template>
+                </td>
+                <td class="detail-value">
+                  {{ kpi.scores.time.score >= 0 ? kpi.scores.time.score.toFixed(0) : '—' }}
+                  × {{ kpi.weights.time }}%
+                </td>
+              </tr>
+              <!-- Rituals -->
+              <tr>
+                <td class="detail-label">Rituals</td>
+                <td class="detail-formula">
+                  <template v-if="kpi.scores.ritual.score >= 0">
+                    {{ kpi.scores.ritual.completedDays }} / {{ kpi.scores.ritual.totalDays }} days
+                    completed
+                  </template>
+                  <template v-else>No data</template>
+                </td>
+                <td class="detail-value">
+                  {{ kpi.scores.ritual.score >= 0 ? kpi.scores.ritual.score.toFixed(0) : '—' }}
+                  × {{ kpi.weights.ritual }}%
+                </td>
+              </tr>
+              <tr><td colspan="3" style="height: 8px; border: none" /></tr>
+              <!-- Pool -->
+              <tr class="detail-highlight">
+                <td class="detail-label">Dept Score</td>
+                <td class="detail-formula">Weighted average of active metrics</td>
+                <td class="detail-value">= {{ kpi.departmentScore.toFixed(1) }}</td>
+              </tr>
+              <tr>
+                <td class="detail-label">Pool</td>
+                <td class="detail-formula">
+                  <template v-if="kpi.poolType === 'percent_revenue'">
+                    {{ formatIDR(kpi.departmentRevenue) }} revenue × %
+                  </template>
+                  <template v-else>Fixed amount</template>
+                </td>
+                <td class="detail-value">{{ formatIDR(kpi.poolAmount) }}</td>
+              </tr>
+              <tr class="detail-total">
+                <td class="detail-label">Unlocked</td>
+                <td class="detail-formula">Pool × score {{ kpi.departmentScore.toFixed(0) }}%</td>
+                <td class="detail-value">= {{ formatIDR(kpi.unlockedAmount) }}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- Distribution -->
+          <div v-if="kpi.staffDistribution.length" class="mt-3">
+            <div class="calc-block-title" style="font-size: 12px">Distribution by hours × rank</div>
+            <table class="breakdown-table">
+              <thead>
+                <tr>
+                  <td class="detail-label" style="font-weight: 600">Staff</td>
+                  <td class="detail-formula" style="font-weight: 600">Hours × multiplier</td>
+                  <td class="detail-value" style="font-weight: 600">KPI Bonus</td>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in kpi.staffDistribution" :key="item.staffId">
+                  <td class="detail-label">{{ item.staffName }}</td>
+                  <td class="detail-formula">
+                    {{ item.hoursWorked }}h × {{ (item.hoursWeight * 100).toFixed(1) }}%
+                  </td>
+                  <td class="detail-value">{{ formatIDR(item.kpiBonus) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- ==================== PER-PERSON BREAKDOWN ==================== -->
       <div class="breakdown-section">
         <h3>Per-Person Breakdown</h3>
@@ -344,12 +493,28 @@
                   <td class="detail-formula">—</td>
                   <td class="detail-value">0</td>
                 </tr>
+                <tr v-if="row.kpiBonus > 0" class="detail-kpi">
+                  <td class="detail-label">KPI Bonus</td>
+                  <td class="detail-formula">
+                    <template v-if="row.kpiDetails">
+                      {{ row.kpiDetails.department === 'kitchen' ? 'Kitchen' : 'Bar' }}: score
+                      {{ row.kpiDetails.departmentScore.toFixed(0) }}
+                      <template v-if="row.kpiDetails.poolType === 'percent_revenue'">
+                        ({{ formatIDR(row.kpiDetails.departmentRevenue) }} rev)
+                      </template>
+                      — pool {{ formatIDR(row.kpiDetails.unlockedAmount) }} x {{ row.totalHours }}h
+                      / dept hours
+                    </template>
+                  </td>
+                  <td class="detail-value">+ {{ formatIDR(row.kpiBonus) }}</td>
+                </tr>
                 <tr class="detail-total">
                   <td class="detail-label">TOTAL</td>
                   <td class="detail-formula">
                     {{ formatIDR(row.salary) }} + {{ formatIDR(row.service1) }} +
                     {{ formatIDR(row.service2) }}
                     <span v-if="row.bonusesTotal > 0">+ {{ formatIDR(row.bonusesTotal) }}</span>
+                    <span v-if="row.kpiBonus > 0">+ {{ formatIDR(row.kpiBonus) }}</span>
                   </td>
                   <td class="detail-value">= {{ formatIDR(row.grandTotal) }}</td>
                 </tr>
@@ -368,7 +533,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useStaffStore, BASE_MONTHLY_HOURS, formatHour } from '@/stores/staff'
-import type { PayrollResult } from '@/stores/staff'
+import type { PayrollResult, DepartmentKpiResult } from '@/stores/staff'
 import { formatIDR } from '@/utils'
 import DayEditDialog from './components/DayEditDialog.vue'
 
@@ -378,6 +543,7 @@ const now = new Date()
 const selectedYear = ref(now.getFullYear())
 const selectedMonth = ref(now.getMonth() + 1)
 const result = ref<PayrollResult | null>(null)
+const kpiResults = computed<DepartmentKpiResult[]>(() => store.lastKpiResults)
 
 // Auto-calculate on month/year change
 watch([selectedYear, selectedMonth], () => calculate(), { flush: 'post' })
@@ -681,6 +847,9 @@ thead .sticky-col {
 .bonus-col {
   background: rgba(255, 152, 0, 0.06);
 }
+.kpi-col {
+  background: rgba(0, 188, 212, 0.06);
+}
 .grand-col {
   background: rgba(255, 193, 7, 0.08);
   font-weight: 700;
@@ -751,6 +920,9 @@ thead .sticky-col {
 }
 .bonus-card {
   border-left: 3px solid rgba(255, 152, 0, 0.6);
+}
+.kpi-card {
+  border-left: 3px solid rgba(0, 188, 212, 0.6);
 }
 .grand-card {
   border-left: 3px solid rgba(255, 193, 7, 0.8);
@@ -862,6 +1034,11 @@ thead .sticky-col {
 .detail-highlight td {
   background: rgba(33, 150, 243, 0.06);
   font-weight: 600;
+}
+
+.detail-kpi td {
+  background: rgba(0, 188, 212, 0.06);
+  font-weight: 500;
 }
 
 .detail-total td {
