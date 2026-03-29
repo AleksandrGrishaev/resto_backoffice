@@ -174,7 +174,8 @@ async function fetchSalesTransactionsRaw(range: DateRange): Promise<SalesTxRow[]
   // Fetch in pages if needed
   const allRows: SalesTxRow[] = []
   let offset = 0
-  const pageSize = 5000
+  // PostgREST default max is 1000 rows per request
+  const pageSize = 1000
 
   while (true) {
     const { data, error } = await supabase
@@ -315,7 +316,7 @@ async function fetchStaffData(
 ): Promise<{ staffId: string; department: string; timeSlots: any[] }[]> {
   const { data: logs, error } = await supabase
     .from('staff_work_logs')
-    .select('staff_id, time_slots')
+    .select('staff_id, time_slots, hours_worked')
     .gte('work_date', range.from)
     .lte('work_date', range.to)
     .gt('hours_worked', 0)
@@ -333,8 +334,25 @@ async function fetchStaffData(
   return (logs as any[]).map(l => ({
     staffId: l.staff_id,
     department: deptMap.get(l.staff_id) || 'service',
-    timeSlots: Array.isArray(l.time_slots) ? l.time_slots : []
+    timeSlots:
+      Array.isArray(l.time_slots) && l.time_slots.length > 0
+        ? l.time_slots
+        : buildFallbackSlots(Number(l.hours_worked) || 0)
   }))
+}
+
+/** Generate approximate time slots when time_slots is null but hours_worked is known.
+ *  Assumes a typical restaurant shift starting at 09:00. */
+function buildFallbackSlots(hours: number): any[] {
+  if (hours <= 0) return []
+  const startHour = 9
+  const endHour = Math.min(startHour + Math.round(hours), 24)
+  return [
+    {
+      startTime: `${String(startHour).padStart(2, '0')}:00`,
+      endTime: `${String(endHour).padStart(2, '0')}:00`
+    }
+  ]
 }
 
 /** Fetch food cost aggregation for a date range */
