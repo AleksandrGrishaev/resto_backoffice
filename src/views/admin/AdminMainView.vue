@@ -22,8 +22,7 @@
 
       <template #content>
         <div class="admin-screen-content">
-          <MenuScreen v-if="currentScreen === 'menu'" />
-          <ChannelsScreen v-else-if="currentScreen === 'channels'" />
+          <ChannelsScreen v-if="currentScreen === 'channels'" />
           <LoyaltySettingsScreen
             v-else-if="currentScreen === 'loyalty' || currentScreen === 'customers'"
           />
@@ -59,7 +58,6 @@ import type { AdminScreenName } from './types'
 
 // Lazy load screens
 import { defineAsyncComponent } from 'vue'
-const MenuScreen = defineAsyncComponent(() => import('./menu/MenuScreen.vue'))
 const ChannelsScreen = defineAsyncComponent(() => import('./channels/ChannelsScreen.vue'))
 const LoyaltySettingsScreen = defineAsyncComponent(
   () => import('./loyalty/LoyaltySettingsScreen.vue')
@@ -71,7 +69,7 @@ const PayrollScreen = defineAsyncComponent(() => import('./payroll/PayrollScreen
 const authStore = useAuthStore()
 const { state: snackbarState } = useSnackbar()
 
-const currentScreen = ref<AdminScreenName>('menu')
+const currentScreen = ref<AdminScreenName>('channels')
 const loading = ref(true)
 
 const canAccess = computed(() => {
@@ -82,11 +80,6 @@ const canAccess = computed(() => {
 onMounted(async () => {
   // M7 FIX: Independent try-catch per store so one failure doesn't block others
   const inits = [
-    async () => {
-      const { useMenuCollectionsStore } = await import('@/stores/menuCollections')
-      const s = useMenuCollectionsStore()
-      if (!s.initialized) await s.initialize()
-    },
     async () => {
       const { useChannelsStore } = await import('@/stores/channels')
       const s = useChannelsStore()

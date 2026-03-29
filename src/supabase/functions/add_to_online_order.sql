@@ -46,7 +46,7 @@ BEGIN
   END IF;
 
   -- Get order and verify (FOR UPDATE prevents TOCTOU race)
-  SELECT id, status, customer_id, channel_id, subtotal, bills INTO v_order
+  SELECT id, status, customer_id, customer_name, channel_id, subtotal, bills INTO v_order
   FROM orders WHERE id = p_order_id
   FOR UPDATE;
 
@@ -223,6 +223,8 @@ BEGIN
         'status', 'active',
         'paymentStatus', 'unpaid',
         'paidAmount', 0,
+        'customerId', v_order.customer_id,
+        'customerName', v_order.customer_name,
         'createdAt', now(),
         'updatedAt', now()
       ))

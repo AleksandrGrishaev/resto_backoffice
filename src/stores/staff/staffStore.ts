@@ -15,11 +15,13 @@ import type {
 import { staffService } from './staffService'
 import {
   calculatePayrollForMonth,
+  enrichWithKpiBonuses,
   savePayrollToDb,
   updatePayrollStatus,
   getPayrollMonth
 } from './payrollService'
 import type { PayrollResult } from './payrollService'
+import type { DepartmentKpiResult } from './types'
 
 const MODULE = 'StaffStore'
 
@@ -182,17 +184,24 @@ export const useStaffStore = defineStore('staff', () => {
     payrollPeriods.value = await staffService.fetchPayrollPeriods()
   }
 
+  /** Last KPI results from runPayrollCalculation, for display in PayrollScreen */
+  const lastKpiResults = ref<DepartmentKpiResult[]>([])
+
   async function runPayrollCalculation(year: number, month: number): Promise<PayrollResult> {
     loading.value = true
     try {
-      return await calculatePayrollForMonth(year, month, members.value, bonuses.value)
+      const result = await calculatePayrollForMonth(year, month, members.value, bonuses.value)
+      // Enrich with KPI bonuses (kitchen & bar)
+      const kpiResults = await enrichWithKpiBonuses(result)
+      lastKpiResults.value = kpiResults
+      return result
     } finally {
       loading.value = false
     }
   }
 
   async function savePayroll(result: PayrollResult) {
-    const period = await savePayrollToDb(result)
+    const period = await savePayrollToDb(result, lastKpiResults.value)
     const idx = payrollPeriods.value.findIndex(p => p.id === period.id)
     if (idx >= 0) {
       payrollPeriods.value[idx] = period
@@ -223,6 +232,7 @@ export const useStaffStore = defineStore('staff', () => {
     bonuses,
     shiftPresets,
     payrollPeriods,
+    lastKpiResults,
     initialized,
     loading,
     error,

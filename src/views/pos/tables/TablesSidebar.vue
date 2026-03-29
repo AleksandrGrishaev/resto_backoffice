@@ -75,6 +75,9 @@
     <!-- Order Type Dialog -->
     <OrderTypeDialog v-model="showNewOrderDialog" @create="handleCreateOrder" />
 
+    <!-- Guest Count Dialog (dine-in table tap) -->
+    <GuestCountDialog v-model="showGuestCountDialog" @confirm="handleGuestCountConfirm" />
+
     <!-- Unsaved Changes Dialog -->
     <v-dialog v-model="showUnsavedDialog" max-width="400">
       <v-card>
@@ -106,6 +109,7 @@ import type { PosTable, PosOrder, OrderType } from '@/stores/pos/types'
 // Components
 import SidebarItem from './components/SidebarItem.vue'
 import OrderTypeDialog from './dialogs/OrderTypeDialog.vue'
+import GuestCountDialog from '../order/dialogs/GuestCountDialog.vue'
 import PosNavigationMenu from '../components/PosNavigationMenu.vue'
 
 const MODULE_NAME = 'TablesSidebar'
@@ -144,6 +148,8 @@ const emit = defineEmits<{
 // =============================================
 
 const showNewOrderDialog = ref(false)
+const showGuestCountDialog = ref(false)
+const pendingGuestCountTable = ref<PosTable | null>(null)
 const showUnsavedDialog = ref(false)
 const pendingAction = ref<(() => void) | null>(null)
 const loading = ref({
@@ -373,36 +379,9 @@ const performTableSelect = async (table: PosTable): Promise<void> => {
     })
 
     if (table.status === 'free') {
-      // ✅ Auto-cleanup: if current order is an empty draft, delete it before creating new one
-      await autoCleanupCurrentEmptyOrder()
-
-      // Создаем новый заказ для стола с auto-assigned channel
-      // Ensure channels are loaded before creating order
-      if (!channelsStore.initialized) {
-        await channelsStore.initialize()
-      }
-      const dineInChannel = channelsStore.getChannelByCode('dine_in')
-      if (!dineInChannel) {
-        console.error('❌ dine_in channel not found! Channels:', channelsStore.channels.length)
-      }
-      const result = await ordersStore.createOrder({
-        type: 'dine_in',
-        tableId: table.id,
-        channelId: dineInChannel?.id,
-        channelCode: 'dine_in'
-      })
-
-      if (result.success && result.data) {
-        DebugUtils.debug(MODULE_NAME, 'New table order created', {
-          orderId: result.data.id,
-          tableId: table.id,
-          orderNumber: result.data.orderNumber
-        })
-
-        emit('select', result.data.id)
-      } else {
-        throw new Error(result.error || 'Failed to create table order')
-      }
+      // Show guest count dialog before creating dine-in order
+      pendingGuestCountTable.value = table
+      showGuestCountDialog.value = true
     } else if (table.currentOrderId) {
       // Auto-cleanup: if switching away from an empty draft order, delete it
       if (ordersStore.currentOrderId && ordersStore.currentOrderId !== table.currentOrderId) {
@@ -438,6 +417,56 @@ const performTableSelect = async (table: PosTable): Promise<void> => {
     }
   } finally {
     isSelectingTable = false
+  }
+}
+
+// =============================================
+// METHODS - GUEST COUNT
+// =============================================
+
+const handleGuestCountConfirm = async (guestCount: number): Promise<void> => {
+  const table = pendingGuestCountTable.value
+  if (!table) return
+  pendingGuestCountTable.value = null
+
+  try {
+    // Auto-cleanup: if current order is an empty draft, delete it before creating new one
+    await autoCleanupCurrentEmptyOrder()
+
+    // Ensure channels are loaded before creating order
+    if (!channelsStore.initialized) {
+      await channelsStore.initialize()
+    }
+    const dineInChannel = channelsStore.getChannelByCode('dine_in')
+    if (!dineInChannel) {
+      console.error('❌ dine_in channel not found! Channels:', channelsStore.channels.length)
+    }
+    const result = await ordersStore.createOrder({
+      type: 'dine_in',
+      tableId: table.id,
+      channelId: dineInChannel?.id,
+      channelCode: 'dine_in',
+      guestCount
+    })
+
+    if (result.success && result.data) {
+      DebugUtils.debug(MODULE_NAME, 'New table order created', {
+        orderId: result.data.id,
+        tableId: table.id,
+        orderNumber: result.data.orderNumber,
+        guestCount
+      })
+      emit('select', result.data.id)
+    } else {
+      throw new Error(result.error || 'Failed to create table order')
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to create order'
+    if (message.includes('No active shift')) {
+      emit('error', '⚠️ Please start a shift before creating orders', 'warning')
+    } else {
+      emit('error', message, 'error')
+    }
   }
 }
 

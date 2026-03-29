@@ -51,6 +51,7 @@ export interface StaffRank {
   id: string
   name: string
   baseSalary: number
+  kpiMultiplier: number
   sortOrder: number
   isActive: boolean
   createdAt: string
@@ -111,6 +112,7 @@ export interface PayrollPeriod {
   totalServiceTax: number
   totalBaseSalary: number
   totalBonuses: number
+  totalKpiBonuses: number
   totalPayroll: number
   calculatedAt?: string
   approvedBy?: string
@@ -130,6 +132,7 @@ export interface PayrollItem {
   baseSalaryEarned: number
   serviceTaxShare: number
   bonusesTotal: number
+  kpiBonus: number
   totalEarned: number
   createdAt: string
   // Joined
@@ -142,4 +145,109 @@ export const DEPARTMENT_LABELS: Record<StaffDepartment, string> = {
   bar: 'Bar',
   service: 'Service',
   management: 'Management'
+}
+
+// KPI Bonus Pool types
+
+export type KpiDepartment = 'kitchen' | 'bar'
+
+export type KpiPoolType = 'fixed' | 'percent_revenue'
+
+export interface KpiBonusScheme {
+  id: string
+  department: KpiDepartment
+  name: string
+  poolType: KpiPoolType
+  poolAmount: number
+  poolPercent: number
+  isActive: boolean
+  weightFoodCost: number
+  weightTime: number
+  weightProduction: number
+  weightRitual: number
+  minThreshold: number
+  lossRateTarget: number
+  thresholdFoodCost: number
+  thresholdTime: number
+  thresholdProduction: number
+  thresholdRitual: number
+  weightAvgCheck: number
+  thresholdAvgCheck: number
+  avgCheckTarget: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface KpiScoreBreakdown {
+  foodCost: {
+    score: number
+    actualPercent: number
+    targetPercent: number
+    revenue: number
+    spoilage: number
+    shortage: number
+  }
+  time: { score: number; exceededRate: number; itemsCompleted: number }
+  lossRate: {
+    score: number
+    lossPercent: number
+    targetPercent: number
+    spoilage: number
+    shortage: number
+  }
+  ritual: { score: number; completedDays: number; totalDays: number }
+  avgCheck: { score: number; actualAvg: number; targetAvg: number; totalGuests: number }
+}
+
+export interface KpiBonusStaffItem {
+  staffId: string
+  staffName: string
+  department: KpiDepartment
+  hoursWorked: number
+  hoursWeight: number
+  kpiBonus: number
+}
+
+export interface DepartmentKpiResult {
+  department: KpiDepartment
+  scores: KpiScoreBreakdown
+  weights: { foodCost: number; time: number; production: number; ritual: number; avgCheck: number }
+  thresholds: {
+    foodCost: number
+    time: number
+    production: number
+    ritual: number
+    avgCheck: number
+  }
+  departmentScore: number
+  poolType: KpiPoolType
+  poolAmount: number
+  departmentRevenue: number
+  unlockedAmount: number
+  staffDistribution: KpiBonusStaffItem[]
+}
+
+export interface KpiBonusSnapshot {
+  id: string
+  payrollPeriodId: string
+  department: KpiDepartment
+  periodMonth: number
+  periodYear: number
+  scoreFoodCost: number
+  scoreTime: number
+  scoreProduction: number
+  scoreRitual: number
+  scoreAvgCheck: number
+  weightFoodCost: number
+  weightTime: number
+  weightProduction: number
+  weightRitual: number
+  weightAvgCheck: number
+  departmentScore: number
+  poolType: KpiPoolType
+  poolAmount: number
+  departmentRevenue: number
+  unlockedAmount: number
+  rawMetrics: Record<string, unknown>
+  createdAt: string
 }

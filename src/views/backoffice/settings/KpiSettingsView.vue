@@ -28,6 +28,10 @@
         <v-icon start>mdi-delete-variant</v-icon>
         Write-off Reasons
       </v-tab>
+      <v-tab value="bonus-pools">
+        <v-icon start>mdi-trophy-award</v-icon>
+        Bonus Pools
+      </v-tab>
     </v-tabs>
 
     <!-- Targets Tab -->
@@ -202,6 +206,264 @@
       <WriteOffReasonsSettings />
     </div>
 
+    <!-- Bonus Pools Tab -->
+    <div v-if="activeTab === 'bonus-pools'">
+      <v-alert type="info" variant="tonal" class="mb-4">
+        Configure monthly KPI bonus pools per department. Pool is distributed proportionally by
+        hours worked when department meets KPI targets.
+      </v-alert>
+
+      <v-row>
+        <v-col v-for="dept in ['kitchen', 'bar'] as const" :key="dept" cols="12" md="6">
+          <v-card>
+            <v-card-title>
+              <v-icon start :color="dept === 'kitchen' ? 'orange' : 'purple'">
+                {{ dept === 'kitchen' ? 'mdi-chef-hat' : 'mdi-glass-cocktail' }}
+              </v-icon>
+              {{ dept === 'kitchen' ? 'Kitchen' : 'Bar' }} Bonus Pool
+              <v-spacer />
+              <v-switch
+                v-model="bonusSchemes[dept].isActive"
+                hide-details
+                density="compact"
+                color="success"
+              />
+            </v-card-title>
+
+            <v-card-text>
+              <!-- Pool Type -->
+              <v-btn-toggle
+                v-model="bonusSchemes[dept].poolType"
+                mandatory
+                density="compact"
+                class="mb-3"
+                :disabled="!bonusSchemes[dept].isActive"
+                color="primary"
+              >
+                <v-btn value="fixed" size="small">
+                  <v-icon start size="16">mdi-currency-usd</v-icon>
+                  Fixed Amount
+                </v-btn>
+                <v-btn value="percent_revenue" size="small">
+                  <v-icon start size="16">mdi-percent</v-icon>
+                  % of Revenue
+                </v-btn>
+              </v-btn-toggle>
+
+              <!-- Fixed: Pool Amount -->
+              <v-text-field
+                v-if="bonusSchemes[dept].poolType === 'fixed'"
+                v-model.number="bonusSchemes[dept].poolAmount"
+                label="Pool Amount"
+                type="number"
+                prefix="Rp"
+                variant="outlined"
+                density="compact"
+                class="mb-3"
+                :disabled="!bonusSchemes[dept].isActive"
+                :rules="[v => v >= 0 || 'Must be >= 0']"
+              />
+
+              <!-- Percent: Pool Percent -->
+              <v-text-field
+                v-if="bonusSchemes[dept].poolType === 'percent_revenue'"
+                v-model.number="bonusSchemes[dept].poolPercent"
+                label="Percent of Department Revenue"
+                type="number"
+                suffix="%"
+                variant="outlined"
+                density="compact"
+                class="mb-3"
+                :disabled="!bonusSchemes[dept].isActive"
+                :rules="[v => (v >= 0 && v <= 100) || 'Must be 0-100']"
+                hint="Pool = department monthly revenue x this %"
+                persistent-hint
+              />
+
+              <!-- Weights -->
+              <p class="text-subtitle-2 mb-2">
+                Metric Weights
+                <v-chip
+                  size="x-small"
+                  :color="weightsSum(dept) === 100 ? 'success' : 'error'"
+                  class="ml-2"
+                >
+                  {{ weightsSum(dept) }}/100
+                </v-chip>
+              </p>
+
+              <v-row dense>
+                <v-col cols="4">
+                  <v-text-field
+                    v-model.number="bonusSchemes[dept].weightFoodCost"
+                    label="Food Cost"
+                    type="number"
+                    suffix="%"
+                    variant="outlined"
+                    density="compact"
+                    :disabled="!bonusSchemes[dept].isActive"
+                  />
+                </v-col>
+                <v-col cols="2">
+                  <v-text-field
+                    v-model.number="bonusSchemes[dept].thresholdFoodCost"
+                    label="Min"
+                    type="number"
+                    variant="outlined"
+                    density="compact"
+                    :disabled="!bonusSchemes[dept].isActive"
+                    :placeholder="'y/n'"
+                    hint="0=grad"
+                  />
+                </v-col>
+                <v-col cols="4">
+                  <v-text-field
+                    v-model.number="bonusSchemes[dept].weightTime"
+                    label="Time KPI"
+                    type="number"
+                    suffix="%"
+                    variant="outlined"
+                    density="compact"
+                    :disabled="!bonusSchemes[dept].isActive"
+                  />
+                </v-col>
+                <v-col cols="2">
+                  <v-text-field
+                    v-model.number="bonusSchemes[dept].thresholdTime"
+                    label="Min"
+                    type="number"
+                    variant="outlined"
+                    density="compact"
+                    :disabled="!bonusSchemes[dept].isActive"
+                    hint="0=grad"
+                  />
+                </v-col>
+                <v-col cols="4">
+                  <v-text-field
+                    v-model.number="bonusSchemes[dept].weightProduction"
+                    label="Real Food Cost"
+                    type="number"
+                    suffix="%"
+                    variant="outlined"
+                    density="compact"
+                    :disabled="!bonusSchemes[dept].isActive"
+                  />
+                </v-col>
+                <v-col cols="2">
+                  <v-text-field
+                    v-model.number="bonusSchemes[dept].thresholdProduction"
+                    label="Min"
+                    type="number"
+                    variant="outlined"
+                    density="compact"
+                    :disabled="!bonusSchemes[dept].isActive"
+                    hint="0=grad"
+                  />
+                </v-col>
+                <v-col cols="4">
+                  <v-text-field
+                    v-model.number="bonusSchemes[dept].weightRitual"
+                    label="Rituals"
+                    type="number"
+                    suffix="%"
+                    variant="outlined"
+                    density="compact"
+                    :disabled="!bonusSchemes[dept].isActive"
+                  />
+                </v-col>
+                <v-col cols="2">
+                  <v-text-field
+                    v-model.number="bonusSchemes[dept].thresholdRitual"
+                    label="Min"
+                    type="number"
+                    variant="outlined"
+                    density="compact"
+                    :disabled="!bonusSchemes[dept].isActive"
+                    hint="0=grad"
+                  />
+                </v-col>
+                <v-col cols="4">
+                  <v-text-field
+                    v-model.number="bonusSchemes[dept].weightAvgCheck"
+                    label="Avg Check"
+                    type="number"
+                    suffix="%"
+                    variant="outlined"
+                    density="compact"
+                    :disabled="!bonusSchemes[dept].isActive"
+                  />
+                </v-col>
+                <v-col cols="2">
+                  <v-text-field
+                    v-model.number="bonusSchemes[dept].thresholdAvgCheck"
+                    label="Min"
+                    type="number"
+                    variant="outlined"
+                    density="compact"
+                    :disabled="!bonusSchemes[dept].isActive"
+                    hint="0=grad"
+                  />
+                </v-col>
+              </v-row>
+
+              <!-- Loss Rate Target -->
+              <v-text-field
+                v-model.number="bonusSchemes[dept].lossRateTarget"
+                label="Loss Rate Target"
+                type="number"
+                suffix="%"
+                variant="outlined"
+                density="compact"
+                hint="Target (spoilage + shortage) / revenue %. Score 100 at target, 0 at target+5%."
+                persistent-hint
+                class="mb-3"
+                :disabled="!bonusSchemes[dept].isActive"
+              />
+
+              <!-- Avg Check Target -->
+              <v-text-field
+                v-model.number="bonusSchemes[dept].avgCheckTarget"
+                label="Avg Check Per Guest Target"
+                type="number"
+                prefix="Rp"
+                variant="outlined"
+                density="compact"
+                hint="Target average bill per guest (dine-in). Score 100 at target, proportional below."
+                persistent-hint
+                class="mb-3"
+                :disabled="!bonusSchemes[dept].isActive"
+              />
+
+              <!-- Threshold -->
+              <v-text-field
+                v-model.number="bonusSchemes[dept].minThreshold"
+                label="Min Score Threshold"
+                type="number"
+                variant="outlined"
+                density="compact"
+                hint="0 = graduated (pool × score/100). >0 = all-or-nothing cutoff."
+                persistent-hint
+                :disabled="!bonusSchemes[dept].isActive"
+              />
+            </v-card-text>
+
+            <v-card-actions>
+              <v-btn
+                color="primary"
+                variant="flat"
+                :loading="savingScheme[dept]"
+                :disabled="bonusSchemes[dept].isActive && weightsSum(dept) !== 100"
+                @click="saveBonusScheme(dept)"
+              >
+                <v-icon start>mdi-content-save</v-icon>
+                Save
+              </v-btn>
+            </v-card-actions>
+          </v-card>
+        </v-col>
+      </v-row>
+    </div>
+
     <!-- Success Snackbar -->
     <v-snackbar v-model="showSuccess" color="success" timeout="3000" location="top">
       <v-icon start>mdi-check-circle</v-icon>
@@ -217,10 +479,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useProductsStore } from '@/stores/productsStore'
 import { FOOD_COST_TARGETS } from '@/stores/kitchenKpi/types'
 import { getKPISettings, updateKPISettings } from '@/stores/kitchenKpi/services/kpiSettingsService'
+import { getAllKpiBonusSchemes, saveKpiBonusScheme } from '@/stores/staff'
+import type { KpiDepartment } from '@/stores/staff'
 import WriteOffReasonsSettings from './components/WriteOffReasonsSettings.vue'
 import { DebugUtils } from '@/utils'
 import type { Product } from '@/stores/productsStore/types'
@@ -237,7 +501,7 @@ const productsStore = useProductsStore()
 // STATE
 // =============================================
 
-const activeTab = ref<'targets' | 'products' | 'writeoff'>('targets')
+const activeTab = ref<'targets' | 'products' | 'writeoff' | 'bonus-pools'>('targets')
 
 // Targets
 const targets = ref({
@@ -393,6 +657,119 @@ const updateProductKpiDepartment = async (product: Product, department: 'kitchen
   }
 }
 
+// =============================================
+// BONUS POOLS
+// =============================================
+
+const defaultScheme = () => ({
+  id: '',
+  poolType: 'fixed' as 'fixed' | 'percent_revenue',
+  poolAmount: 0,
+  poolPercent: 0,
+  isActive: false,
+  weightFoodCost: 20,
+  weightTime: 20,
+  weightProduction: 40,
+  weightRitual: 20,
+  weightAvgCheck: 0,
+  minThreshold: 0,
+  lossRateTarget: 3,
+  avgCheckTarget: 0,
+  thresholdFoodCost: 100,
+  thresholdTime: 80,
+  thresholdProduction: 100,
+  thresholdRitual: 80,
+  thresholdAvgCheck: 0
+})
+
+const bonusSchemes = reactive<Record<KpiDepartment, ReturnType<typeof defaultScheme>>>({
+  kitchen: defaultScheme(),
+  bar: defaultScheme()
+})
+
+const savingScheme = reactive<Record<KpiDepartment, boolean>>({ kitchen: false, bar: false })
+
+const weightsSum = (dept: KpiDepartment) => {
+  const s = bonusSchemes[dept]
+  return (
+    (s.weightFoodCost || 0) +
+    (s.weightTime || 0) +
+    (s.weightProduction || 0) +
+    (s.weightRitual || 0) +
+    (s.weightAvgCheck || 0)
+  )
+}
+
+const loadBonusSchemes = async () => {
+  try {
+    const schemes = await getAllKpiBonusSchemes()
+    for (const s of schemes) {
+      if (s.department === 'kitchen' || s.department === 'bar') {
+        bonusSchemes[s.department] = {
+          id: s.id,
+          poolType: s.poolType,
+          poolAmount: s.poolAmount,
+          poolPercent: s.poolPercent,
+          isActive: s.isActive,
+          weightFoodCost: s.weightFoodCost,
+          weightTime: s.weightTime,
+          weightProduction: s.weightProduction,
+          weightRitual: s.weightRitual,
+          weightAvgCheck: s.weightAvgCheck,
+          minThreshold: s.minThreshold,
+          lossRateTarget: s.lossRateTarget,
+          avgCheckTarget: s.avgCheckTarget,
+          thresholdFoodCost: s.thresholdFoodCost,
+          thresholdTime: s.thresholdTime,
+          thresholdProduction: s.thresholdProduction,
+          thresholdRitual: s.thresholdRitual,
+          thresholdAvgCheck: s.thresholdAvgCheck
+        }
+      }
+    }
+  } catch (error) {
+    DebugUtils.error(MODULE_NAME, 'Failed to load bonus schemes', { error })
+  }
+}
+
+const saveBonusScheme = async (dept: KpiDepartment) => {
+  savingScheme[dept] = true
+  try {
+    const s = bonusSchemes[dept]
+    const saved = await saveKpiBonusScheme({
+      id: s.id || undefined,
+      department: dept,
+      name: `${dept === 'kitchen' ? 'Kitchen' : 'Bar'} KPI Bonus`,
+      poolType: s.poolType,
+      poolAmount: s.poolAmount,
+      poolPercent: s.poolPercent,
+      isActive: s.isActive,
+      weightFoodCost: s.weightFoodCost,
+      weightTime: s.weightTime,
+      weightProduction: s.weightProduction,
+      weightRitual: s.weightRitual,
+      weightAvgCheck: s.weightAvgCheck,
+      minThreshold: s.minThreshold,
+      lossRateTarget: s.lossRateTarget,
+      avgCheckTarget: s.avgCheckTarget,
+      thresholdFoodCost: s.thresholdFoodCost,
+      thresholdTime: s.thresholdTime,
+      thresholdProduction: s.thresholdProduction,
+      thresholdRitual: s.thresholdRitual,
+      thresholdAvgCheck: s.thresholdAvgCheck
+    })
+    bonusSchemes[dept].id = saved.id
+    successMessage.value = `${dept === 'kitchen' ? 'Kitchen' : 'Bar'} bonus pool saved`
+    showSuccess.value = true
+  } catch (error) {
+    errorMessage.value = `Failed to save ${dept} bonus pool`
+    showError.value = true
+    DebugUtils.error(MODULE_NAME, 'Failed to save bonus scheme', { dept, error })
+  } finally {
+    savingScheme[dept] = false
+  }
+}
+
 const loadProducts = async () => {
   loadingProducts.value = true
   try {
@@ -416,6 +793,7 @@ const loadProducts = async () => {
 onMounted(() => {
   loadKpiSettings()
   loadProducts()
+  loadBonusSchemes()
 })
 </script>
 

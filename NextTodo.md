@@ -1,203 +1,208 @@
-# Sprint: Kitchen Ritual System
+# Current Sprint: KPI → Payroll + Guest Count KPI
 
-## Архитектура
+## What Was Done (2026-03-29)
 
-### Ritual = Morning/Evening workflow с отслеживанием
+### KPI Bonus Pool System — IMPLEMENTED
+
+Connected KPI metrics to payroll via department bonus pools.
+
+**Migrations applied to DEV:**
+
+- `262_kpi_bonus_pools.sql` — tables `kpi_bonus_schemes`, `kpi_bonus_snapshots`, columns `payroll_items.kpi_bonus`, `payroll_periods.total_kpi_bonuses`
+- `263_kpi_rank_multiplier_and_loss_rate.sql` — `staff_ranks.kpi_multiplier`, `kpi_bonus_schemes.loss_rate_target`
+- `264_kpi_per_metric_thresholds.sql` — per-metric thresholds on `kpi_bonus_schemes`
+- **NOT yet applied to PROD**
+
+**Files created:**
+
+- `src/stores/staff/kpiBonusService.ts` — core KPI bonus calculation service
+- `src/supabase/migrations/262_kpi_bonus_pools.sql`
+- `src/supabase/migrations/263_kpi_rank_multiplier_and_loss_rate.sql`
+- `src/supabase/migrations/264_kpi_per_metric_thresholds.sql`
+- `src/views/kitchen/kpi/components/KpiBonusWidget.vue` — tablet KPI bonus dashboard widget
+
+**Files modified:**
+
+- `src/stores/staff/types.ts` — KpiBonusScheme, KpiBonusSnapshot, KpiScoreBreakdown, DepartmentKpiResult, KpiBonusStaffItem, KpiPoolType, KpiDepartment
+- `src/stores/staff/payrollService.ts` — PayrollStaffRow (kpiBonus, kpiMultiplier, kpiDetails), enrichWithKpiBonuses(), savePayrollToDb()
+- `src/stores/staff/staffStore.ts` — runPayrollCalculation + lastKpiResults
+- `src/stores/staff/supabaseMappers.ts` — kpiBonus, totalKpiBonuses, kpiMultiplier
+- `src/stores/staff/index.ts` — re-exports
+- `src/views/backoffice/settings/KpiSettingsView.vue` — Bonus Pools tab (pool type, weights, thresholds, loss rate target)
+- `src/views/admin/payroll/PayrollScreen.vue` — KPI column, summary card, KPI Calculation block, per-person breakdown
+- `src/views/admin/staff/components/RanksDialog.vue` — KPI bonus % display and edit
+- `src/views/admin/staff/components/StaffMemberDialog.vue` — trainee label updated
+
+### Architecture
 
 ```
-Morning Ritual (6:00-15:00):
-  - Auto-generated: pre-made + urgent production tasks
-  - Custom tasks: "Clean fridge", "Check expiry dates", etc.
-  → Finish → Congratulations → record to DB → switch to regular tasks
+Settings > KPI > Bonus Pools → configure per department
+  - Pool type: Fixed Amount | % of Revenue
+  - Pool amount (Rp) or Pool percent (%)
+  - 4 metric weights (must sum to 100%)
+  - Per-metric thresholds (Min score to pass, 0 = graduated)
+  - Loss rate target (%)
+  - Min overall threshold
 
-Evening Ritual (15:00-22:00):
-  - Auto-generated: evening production + write-offs
-  - Custom tasks: "Sweep kitchen", "Cover containers", etc.
-  → Finish → Congratulations → record to DB
+Staff > Ranks → KPI bonus % per rank
+  - Displayed as "+50%" in UI, stored as kpi_multiplier=1.5 in DB
+  - Distribution: hours × multiplier → proportional share
+
+Payroll > Calculate → auto-calculates KPI bonus
+  1. calculatePayrollForMonth() — base salary, service tax, bonuses
+  2. enrichWithKpiBonuses() — scores 4 KPI metrics, resolves pool, distributes
+  3. savePayrollToDb() — persists payroll_items.kpi_bonus + kpi_bonus_snapshots
+
+Kitchen Tablet > KPI Screen → KpiBonusWidget at top
+  - Shows department score, 4 metric progress bars, pool/unlocked amounts
+  - Always visible above Time/FoodCost/Ritual tabs
 ```
 
-### KPI Ritual Tab
+### 4 KPI Metrics
+
+| Metric             | What it measures                | Scoring                            | Data source                          |
+| ------------------ | ------------------------------- | ---------------------------------- | ------------------------------------ |
+| **Food Cost**      | Overall COGS% vs target         | 100 at target, linear to 0 at +10% | `get_cogs_by_date_range()` RPC       |
+| **Real Food Cost** | (spoilage + shortage) / revenue | 100 at target, linear to 0 at +5%  | Same RPC (no extra call)             |
+| **Time KPI**       | On-time order completion rate   | `100 - exceededRate`               | `get_kitchen_time_kpi_summary()` RPC |
+| **Rituals**        | Daily ritual completion rate    | completedDays / totalDays × 100    | `ritual_completions` table           |
+
+Per-metric thresholds: Food Cost min=100 (y/n), Real Food Cost min=100 (y/n), Time min=80, Rituals min=80.
+Below threshold → metric contributes 0 to weighted average.
+Score -1 = no data → metric excluded from weight entirely.
+
+### Rank-based Distribution
 
 ```
-┌──────────┬──────────────┬──────────┐
-│   TIME   │  FOOD COST   │  RITUAL  │  ← new tab
-├──────────┴──────────────┴──────────┤
-│ Completion Rate: 87%  Streak: 5d  │
-│ Avg Duration: 45min   On-Time: 92%│
-├───────────────────────────────────┤
-│ History: date, type, duration,    │
-│ staff, tasks count                │
-└───────────────────────────────────┘
+Senior: hours × 1.5 multiplier → gets 50% more per hour than Junior
+Junior: hours × 1.0 multiplier → base
+Trainee: excluded from KPI bonus (and service tax)
+
+UI shows "+50%" for Senior, "standard" for Junior
+DB stores kpi_multiplier: 1.5, 1.0
 ```
 
 ---
 
-## Phase 1: Database
+## Next: Guest Count + Avg Check Per Guest KPI
 
-### 1.1 Migration 251: `ritual_custom_tasks`
+### Goal
 
-- name, ritual_type (morning/evening), department, sort_order, is_active
-- RLS + trigger
+Add guest count tracking to POS for "average check per guest" KPI — primarily for Bar department.
 
-### 1.2 Migration 252: `ritual_completions`
+### DB Changes Needed
 
-- ritual_type, department, completed_by/name, started_at, completed_at
-- duration_minutes, total_tasks, completed_tasks
-- custom_tasks_completed, schedule_tasks_completed
-- task_details JSONB [{taskId, name, type, completed, completedAt, quantity?}]
-- RLS + indexes
+```sql
+-- Add guest_count to bills (not orders — bills can split)
+ALTER TABLE bills ADD COLUMN guest_count INTEGER;
 
----
-
-## Phase 2: Types + Service
-
-### 2.1 Types (`kitchenKpi/types.ts`)
-
-- RitualCustomTask, RitualCustomTaskRow
-- RitualTask (unified: schedule OR custom)
-- RitualCompletion, RitualCompletionRow
-- RitualKpiSummary, RitualStaffKpi
-
-### 2.2 Service methods (`kitchenKpiService.ts`)
-
-- getCustomTasks, createCustomTask, updateCustomTask, deleteCustomTask
-- recordRitualCompletion
-- getRitualCompletions, getTodayRitualCompletions
-
----
-
-## Phase 3: Store + Composable
-
-### 3.1 Store (`kitchenKpiStore.ts`)
-
-- State: customTasks, ritualCompletions, morningRitualCompleted, eveningRitualCompleted, ritualStartedAt
-- Actions: loadCustomTasks, CRUD custom tasks, loadTodayRitualStatus, startRitual, finishRitual, loadRitualHistory
-
-### 3.2 Composable (`composables/useRitualKpi.ts`)
-
-- Computed: completionRate, avgDuration, onTimeRate, currentStreak, byStaff
-
----
-
-## Phase 4: Core Ritual UI
-
-### 4.1 RitualBanner — add `completed` prop
-
-- Green state when ritual is done
-
-### 4.2 RitualCongratulations component
-
-- Fullscreen overlay: check icon, stats, "Close" button
-
-### 4.3 RitualDialog — support custom tasks + timing + congratulations
-
-- Custom tasks = simple checkbox (tap to toggle)
-- Schedule tasks = existing flow (start → numpad → done)
-- Track startedAt/completedAt timing
-- Show congratulations when all done + Finish
-
-### 4.4 TasksScreen — merge custom tasks, morning→evening transition
-
-- Load custom tasks on mount
-- Query DB for today's ritual completions
-- Merged RitualTask[] = schedule tasks + custom tasks
-- After morning done: show "Complete ✓" banner, regular tasks until 15:00
-- After 15:00: show evening ritual banner
-
----
-
-## Phase 5: KPI Ritual Tab
-
-### 5.1 RitualKpiTab.vue
-
-- Summary cards: Completion Rate, Avg Duration, On-Time Rate, Streak
-- Period selector: 7d / 14d / 30d
-- History list
-
-### 5.2 KpiScreen — add RITUAL tab
-
----
-
-## Phase 6: Ritual Settings (Kitchen UI)
-
-### 6.1 RitualSettingsScreen.vue in Kitchen sidebar
-
-- CRUD list: name, ritual_type, department, is_active toggle
-- Add/Edit dialog
-- Register in KitchenSidebar as "Ritual Settings" screen
-- Accessible from Kitchen interface (not Admin)
-
----
-
-## Implementation Order
-
-| #   | Task                                 | Dependencies | Files                        |
-| --- | ------------------------------------ | ------------ | ---------------------------- |
-| 1   | Migration 251 + 252                  | -            | migrations/                  |
-| 2   | Types                                | 1            | kitchenKpi/types.ts          |
-| 3   | Service methods                      | 2            | kitchenKpiService.ts         |
-| 4   | Store actions                        | 3            | kitchenKpiStore.ts           |
-| 5   | useRitualKpi composable              | 4            | composables/useRitualKpi.ts  |
-| 6   | RitualBanner completed state         | -            | RitualBanner.vue             |
-| 7   | RitualCongratulations                | -            | new component                |
-| 8   | RitualDialog (custom tasks + timing) | 4,7          | RitualDialog.vue             |
-| 9   | TasksScreen (transitions)            | 4,6,8        | TasksScreen.vue              |
-| 10  | RitualKpiTab                         | 5            | new component                |
-| 11  | KpiScreen (add tab)                  | 10           | KpiScreen.vue                |
-| 12  | Kitchen RitualSettingsScreen         | 4            | new screen in KitchenSidebar |
-
----
-
-## Customer Invite Flow — Production Migration Plan
-
-### Overview
-
-Two QR invite flows implemented (DEV applied, PROD pending):
-
-1. **Order Invite (QR-first)** — QR on pre-bill → customer scans → registers → order linked via realtime
-2. **Customer Invite** — staff prints invite QR → customer scans → linked to existing POS customer
-
-### PROD Migration Checklist
-
-| #   | Migration                                | Status       | Notes                                                                |
-| --- | ---------------------------------------- | ------------ | -------------------------------------------------------------------- |
-| 1   | `255_customer_invites.sql` — table + RLS | `[ ]` DEV ✅ | Table, indexes, staff_all policy, service_role grant                 |
-| 2   | `256_rpc_create_customer_invite.sql`     | `[ ]` DEV ✅ | Staff-only, 30-day TTL, expires previous invites                     |
-| 3   | `257_rpc_create_order_invite.sql`        | `[ ]` DEV ✅ | Staff-only, 2-hour TTL, reuses existing active                       |
-| 4   | `258_rpc_claim_invite.sql`               | `[ ]` DEV ✅ | FOR UPDATE SKIP LOCKED, handles trigger conflict, sets customer_name |
-| 5   | `259_rpc_get_invite_by_token.sql`        | `[ ]` DEV ✅ | Safe anon lookup — returns type + name only, no IDs                  |
-
-### PROD Apply Order
-
-```bash
-# 1. Ensure pgcrypto extension exists
-mcp__supabase_prod__execute_sql: CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA extensions;
-
-# 2. Apply table (255)
-mcp__supabase_prod__execute_sql: < 255_customer_invites.sql
-
-# 3. Apply RPCs (256-259) — order matters for dependencies
-mcp__supabase_prod__execute_sql: < 256_rpc_create_customer_invite.sql
-mcp__supabase_prod__execute_sql: < 257_rpc_create_order_invite.sql
-mcp__supabase_prod__execute_sql: < 258_rpc_claim_invite.sql
-mcp__supabase_prod__execute_sql: < 259_rpc_get_invite_by_token.sql
-
-# 4. Verify
-mcp__supabase_prod__execute_sql: SELECT count(*) FROM customer_invites;
-mcp__supabase_prod__execute_sql: SELECT create_order_invite('test'::uuid); -- should return 'Unauthorized' or 'Order not found'
+-- KPI view/function for avg check per guest
+-- Only count dine-in orders (exclude takeaway/delivery)
 ```
 
-### Security Fixes Applied (from code review)
+### POS Flow
 
-- ❌ Removed `read_active_by_token` anon SELECT policy (enumeration risk)
-- ✅ Added `get_invite_by_token` SECURITY DEFINER RPC instead
-- ✅ Added `is_staff()` guard to `create_customer_invite` and `create_order_invite`
-- ✅ Added `FOR UPDATE SKIP LOCKED` to `claim_invite` (double-claim race)
-- ✅ Added `customer_name` to order UPDATE in `claim_invite` (for POS realtime toast)
-- ✅ Generic error messages in EXCEPTION handlers (no DB detail leakage)
+#### 1. Table tap → Guest Count popup
 
-### Web-winter TODO (separate PR)
+**Where:** `src/views/pos/tables/` — when user taps a table to create new order
+**Component:** New `GuestCountDialog.vue` — simple grid with numbers 1-9, quick tap
+**Flow:** Tap table → GuestCountDialog → select count → order + bill created with guest_count
 
-- `[ ]` Page `apps/website/pages/join/[token].vue`
-- `[ ]` Claim invite in auth callbacks (`callback.vue`, `verify.vue`, `telegram-callback.vue`)
-- `[ ]` Save invite-token to localStorage before auth redirect
+#### 2. Split bill → Ask guest count
+
+**Where:** `src/views/pos/order/components/BillsManager.vue` or `MoveItemsDialog.vue`
+**Flow:** When creating new bill (split) → GuestCountDialog → new bill gets its own guest_count
+
+#### 3. Checkout → Show/edit guest count
+
+**Where:** `src/views/pos/order/dialogs/CheckoutDialog.vue`
+**Flow:** Guest count displayed in checkout, editable field to correct
+
+#### 4. Partial checkout → Ask per-payment guest count
+
+**Where:** `CheckoutDialog.vue` — when not all items in bill are selected
+**Flow:** "Payment for how many guests?" → records guest count for this partial payment
+
+#### 5. Takeaway/Delivery → No guest count
+
+**Flow:** `guest_count = null` for non-dine-in orders → excluded from avg check KPI
+
+### GuestCountDialog.vue Design
+
+```
+┌─────────────────────────┐
+│   How many guests?      │
+│                         │
+│   [1]  [2]  [3]        │
+│   [4]  [5]  [6]        │
+│   [7]  [8]  [9]        │
+│                         │
+└─────────────────────────┘
+```
+
+- Large touch targets (tablet)
+- Single tap → closes dialog, returns number
+- No confirm button needed
+
+### KPI Integration
+
+New metric: `avgCheckPerGuest` — add as 5th option in bonus scheme weights.
+Or replace one of the existing 4 for bar (e.g. Real Food Cost less relevant for bar).
+
+```
+avg_check_per_guest = SUM(bill_total) / SUM(guest_count)
+WHERE channel = 'dine_in' AND guest_count > 0
+GROUP BY department, month
+```
+
+Target: configurable in scheme settings (e.g., Rp 85,000 per guest).
+Score: graduated — at target = 100, proportional below.
+
+### Key Files to Modify
+
+**POS:**
+
+- `src/stores/pos/orders/ordersStore.ts` — add guest_count to bill creation
+- `src/views/pos/tables/TableItem.vue` or `TablesSidebar.vue` — trigger GuestCountDialog on table tap
+- `src/views/pos/order/components/BillsManager.vue` — guest count on bill split
+- `src/views/pos/order/dialogs/CheckoutDialog.vue` — display/edit guest count
+- `src/views/pos/order/dialogs/MoveItemsDialog.vue` — guest count on new bill
+
+**New:**
+
+- `src/views/pos/order/dialogs/GuestCountDialog.vue`
+
+**KPI:**
+
+- `src/stores/staff/kpiBonusService.ts` — add scoreAvgCheck() function
+- `src/stores/staff/types.ts` — add to KpiScoreBreakdown
+- `src/views/backoffice/settings/KpiSettingsView.vue` — add weight/threshold for avg check
+
+**DB:**
+
+- Migration 265: `ALTER TABLE bills ADD COLUMN guest_count INTEGER`
+- Maybe RPC for avg check calculation
+
+### Order of Implementation
+
+1. Migration: `bills.guest_count`
+2. `GuestCountDialog.vue` component
+3. POS integration: table tap → guest count → order
+4. POS: split bill → guest count
+5. POS: checkout → display/edit guest count
+6. POS: partial checkout → payment guest count
+7. KPI: `scoreAvgCheck()` function
+8. KPI: add to bonus scheme weights
+9. Settings UI: avg check target + weight
+
+---
+
+## Pending: Apply to PROD
+
+Before deploying KPI bonus to production:
+
+1. Test full payroll calculation on DEV with real data
+2. Configure schemes via Settings UI
+3. Verify scores match expectations
+4. Apply migrations 262-264 to PROD (with confirmation)
+5. Seed default schemes for kitchen/bar on PROD

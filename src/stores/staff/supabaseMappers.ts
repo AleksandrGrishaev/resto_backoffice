@@ -15,6 +15,7 @@ export function mapRankFromDb(row: any): StaffRank {
     id: row.id,
     name: row.name,
     baseSalary: Number(row.base_salary) || 0,
+    kpiMultiplier: Number(row.kpi_multiplier) || 1,
     sortOrder: row.sort_order ?? 0,
     isActive: row.is_active ?? true,
     createdAt: row.created_at,
@@ -26,6 +27,7 @@ export function mapRankToDb(rank: Partial<StaffRank>): Record<string, unknown> {
   const row: Record<string, unknown> = {}
   if (rank.name !== undefined) row.name = rank.name
   if (rank.baseSalary !== undefined) row.base_salary = rank.baseSalary
+  if (rank.kpiMultiplier !== undefined) row.kpi_multiplier = rank.kpiMultiplier
   if (rank.sortOrder !== undefined) row.sort_order = rank.sortOrder
   if (rank.isActive !== undefined) row.is_active = rank.isActive
   return row
@@ -144,6 +146,7 @@ export function mapPayrollPeriodFromDb(row: any): PayrollPeriod {
     totalServiceTax: Number(row.total_service_tax) || 0,
     totalBaseSalary: Number(row.total_base_salary) || 0,
     totalBonuses: Number(row.total_bonuses) || 0,
+    totalKpiBonuses: Number(row.total_kpi_bonuses) || 0,
     totalPayroll: Number(row.total_payroll) || 0,
     calculatedAt: row.calculated_at,
     approvedBy: row.approved_by,
@@ -167,6 +170,7 @@ export function mapPayrollItemFromDb(row: any): PayrollItem {
     baseSalaryEarned: Number(row.base_salary_earned) || 0,
     serviceTaxShare: Number(row.service_tax_share) || 0,
     bonusesTotal: Number(row.bonuses_total) || 0,
+    kpiBonus: Number(row.kpi_bonus) || 0,
     totalEarned: Number(row.total_earned) || 0,
     createdAt: row.created_at,
     staffName: row.staff_members?.name,

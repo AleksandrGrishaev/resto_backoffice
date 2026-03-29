@@ -81,6 +81,7 @@
             @apply-discount="handleApplyDiscount"
             @open-loyalty="handleOpenBillLoyalty"
             @detach-loyalty="handleDetachBillLoyalty"
+            @edit-guest-count="handleEditBillGuestCount"
             @send-to-kitchen="handleSendToKitchen"
             @move-items="handleMoveItems"
             @checkout="handleCheckout"
@@ -260,6 +261,9 @@
       @cancel="showCancelOrderDialog = false"
     />
 
+    <!-- Guest Count Edit Dialog -->
+    <GuestCountDialog v-model="showGuestCountEdit" @confirm="handleGuestCountUpdate" />
+
     <!-- Print Receipt Dialog (after payment) -->
     <PrintReceiptDialog
       v-model="showPrintReceiptDialog"
@@ -319,6 +323,7 @@ import MoveItemsDialog from './dialogs/MoveItemsDialog.vue'
 import CancelOrderDialog from './dialogs/CancelOrderDialog.vue'
 import OrderTypeDialog from './dialogs/OrderTypeDialog.vue'
 import TableSelectionDialog from './dialogs/TableSelectionDialog.vue'
+import GuestCountDialog from './dialogs/GuestCountDialog.vue'
 import CancellationRequestBanner from './components/CancellationRequestBanner.vue'
 
 const MODULE_NAME = 'OrderSection'
@@ -603,6 +608,10 @@ const showCancelOrderDialog = ref(false)
 
 // Table Selection Dialog State
 const showTableSelectionDialog = ref(false)
+
+// Guest Count Edit State
+const showGuestCountEdit = ref(false)
+const editGuestCountBillId = ref<string | null>(null)
 
 // Computed - Main Data
 const currentOrder = computed((): PosOrder | null => {
@@ -969,23 +978,26 @@ const handleSelectBill = (billId: string): void => {
 const handleAddBill = async (): Promise<void> => {
   if (!currentOrder.value) return
 
-  try {
-    loading.value.actions = true
-    loadingMessage.value = 'Adding new bill...'
-
-    const result = await ordersStore.addBillToOrder(currentOrder.value.id, 'New Bill')
-
-    if (result.success) {
-      showSuccess('New bill added successfully')
-      hasUnsavedChanges.value = true
-    } else {
-      throw new Error(result.error || 'Failed to add bill')
+  if (currentOrder.value.type === 'dine_in') {
+    guestCountMode.value = 'new-bill'
+    showGuestCountEdit.value = true
+  } else {
+    try {
+      loading.value.actions = true
+      loadingMessage.value = 'Adding new bill...'
+      const result = await ordersStore.addBillToOrder(currentOrder.value.id, 'New Bill')
+      if (result.success) {
+        showSuccess('New bill added successfully')
+        hasUnsavedChanges.value = true
+      } else {
+        throw new Error(result.error || 'Failed to add bill')
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to add bill'
+      showError(message)
+    } finally {
+      loading.value.actions = false
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to add bill'
-    showError(message)
-  } finally {
-    loading.value.actions = false
   }
 }
 
@@ -2582,6 +2594,50 @@ const handleCompleteOrder = async (): Promise<void> => {
   } finally {
     loading.value.actions = false
     loadingMessage.value = ''
+  }
+}
+
+const guestCountMode = ref<'edit' | 'new-bill'>('edit')
+
+const handleEditBillGuestCount = (billId: string): void => {
+  editGuestCountBillId.value = billId
+  guestCountMode.value = 'edit'
+  showGuestCountEdit.value = true
+}
+
+const handleGuestCountUpdate = async (count: number): Promise<void> => {
+  if (!currentOrder.value) return
+
+  if (guestCountMode.value === 'new-bill') {
+    // Creating a new bill with guest count
+    try {
+      loading.value.actions = true
+      loadingMessage.value = 'Adding new bill...'
+      const result = await ordersStore.addBillToOrder(currentOrder.value.id, 'New Bill', count)
+      if (result.success) {
+        showSuccess('New bill added successfully')
+        hasUnsavedChanges.value = true
+      } else {
+        throw new Error(result.error || 'Failed to add bill')
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to add bill'
+      showError(message)
+    } finally {
+      loading.value.actions = false
+    }
+    return
+  }
+
+  // Edit mode — update specific bill's guest count
+  const billId = editGuestCountBillId.value
+  if (!billId) return
+  try {
+    await ordersStore.updateBillGuestCount(currentOrder.value.id, billId, count)
+    showSuccess(`Guest count updated to ${count}`)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to update guest count'
+    showError(message)
   }
 }
 

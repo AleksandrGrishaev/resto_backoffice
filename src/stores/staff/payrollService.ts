@@ -3,8 +3,17 @@
 import { supabase } from '@/supabase/client'
 import { DebugUtils } from '@/utils'
 import { BASE_MONTHLY_HOURS } from './types'
-import type { StaffMember, StaffBonus, PayrollPeriod, WorkLog, TimeSlot } from './types'
+import type {
+  StaffMember,
+  StaffBonus,
+  PayrollPeriod,
+  WorkLog,
+  TimeSlot,
+  DepartmentKpiResult,
+  KpiDepartment
+} from './types'
 import { staffService } from './staffService'
+import { calculateDepartmentKpiBonus, saveKpiBonusSnapshot } from './kpiBonusService'
 
 const MODULE = 'PayrollService'
 
@@ -99,6 +108,8 @@ export interface PayrollStaffRow {
   staffName: string
   department: string
   rankName: string
+  /** KPI rank multiplier (Senior=1.5, Junior=1.0) */
+  kpiMultiplier: number
   /** Месячная ставка ранга */
   baseSalaryMonthly: number
   /** Почасовая ставка (baseSalaryMonthly / 208) */
@@ -121,11 +132,22 @@ export interface PayrollStaffRow {
   service2: number
   /** Базовая зарплата (hourlyRate × totalHours) */
   salary: number
-  /** Grand total = salary + service1 + service2 + bonuses */
+  /** Grand total = salary + service1 + service2 + bonuses + kpiBonus */
   grandTotal: number
   bonusesTotal: number
   /** Детали бонусов */
   bonusDetails: Array<{ reason: string; amount: number; type: string }>
+  /** KPI bonus from department pool */
+  kpiBonus: number
+  /** KPI bonus details for display */
+  kpiDetails?: {
+    department: string
+    departmentScore: number
+    poolType: string
+    poolAmount: number
+    departmentRevenue: number
+    unlockedAmount: number
+  }
   /** Стажёр — индивидуальная ставка, без service tax */
   isTrainee: boolean
 }
@@ -141,6 +163,7 @@ export interface PayrollResult {
     service2: number
     salary: number
     bonuses: number
+    kpiBonuses: number
     grandTotal: number
   }
   totalServiceTaxP1: number
@@ -268,6 +291,7 @@ export async function calculatePayrollForMonth(
       type: b.type
     }))
 
+    // kpiBonus will be set later by enrichWithKpiBonuses()
     const grandTotal = Math.round((salary + service1 + service2 + bonusesTotal) / 1000) * 1000
 
     rows.push({
@@ -276,6 +300,7 @@ export async function calculatePayrollForMonth(
       department: member.department,
       isTrainee,
       rankName: isTrainee ? 'Trainee' : member.rank?.name || '—',
+      kpiMultiplier: member.rank?.kpiMultiplier ?? 1,
       baseSalaryMonthly: baseSalary,
       hourlyRate: Math.round(hourlyRate * 100) / 100,
       dailyHours,
@@ -289,11 +314,12 @@ export async function calculatePayrollForMonth(
       salary,
       grandTotal,
       bonusesTotal,
-      bonusDetails
+      bonusDetails,
+      kpiBonus: 0
     })
   }
 
-  // 6. Totals row
+  // 6. Totals row (kpiBonuses will be updated after enrichWithKpiBonuses)
   const totals = {
     totalHoursP1: rows.reduce((s, r) => s + r.totalHoursP1, 0),
     totalHoursP2: rows.reduce((s, r) => s + r.totalHoursP2, 0),
@@ -302,6 +328,7 @@ export async function calculatePayrollForMonth(
     service2: rows.reduce((s, r) => s + r.service2, 0),
     salary: rows.reduce((s, r) => s + r.salary, 0),
     bonuses: rows.reduce((s, r) => s + r.bonusesTotal, 0),
+    kpiBonuses: 0,
     grandTotal: rows.reduce((s, r) => s + r.grandTotal, 0)
   }
 
@@ -317,10 +344,65 @@ export async function calculatePayrollForMonth(
 }
 
 // =====================================================
+// KPI BONUS ENRICHMENT
+// =====================================================
+
+/**
+ * Calculate KPI bonuses for kitchen and bar departments and enrich payroll rows.
+ * Call after calculatePayrollForMonth() to add KPI bonus amounts.
+ */
+export async function enrichWithKpiBonuses(result: PayrollResult): Promise<DepartmentKpiResult[]> {
+  const { year, month } = result.month
+  const departments: KpiDepartment[] = ['kitchen', 'bar']
+  const kpiResults: DepartmentKpiResult[] = []
+
+  for (const dept of departments) {
+    let kpiResult: DepartmentKpiResult | null = null
+    try {
+      kpiResult = await calculateDepartmentKpiBonus(dept, year, month, result.rows)
+    } catch (err) {
+      DebugUtils.error(MODULE, `KPI bonus calculation failed for ${dept}, skipping`, { error: err })
+    }
+    if (!kpiResult) continue
+    kpiResults.push(kpiResult)
+
+    // Apply bonuses to matching staff rows
+    for (const item of kpiResult.staffDistribution) {
+      const row = result.rows.find(r => r.staffId === item.staffId)
+      if (row) {
+        row.kpiBonus = item.kpiBonus
+        row.kpiDetails = {
+          department: kpiResult.department,
+          departmentScore: kpiResult.departmentScore,
+          poolType: kpiResult.poolType,
+          poolAmount: kpiResult.poolAmount,
+          departmentRevenue: kpiResult.departmentRevenue,
+          unlockedAmount: kpiResult.unlockedAmount
+        }
+        // Recalculate grand total with KPI bonus
+        row.grandTotal =
+          Math.round(
+            (row.salary + row.service1 + row.service2 + row.bonusesTotal + row.kpiBonus) / 1000
+          ) * 1000
+      }
+    }
+  }
+
+  // Update totals
+  result.totals.kpiBonuses = result.rows.reduce((s, r) => s + r.kpiBonus, 0)
+  result.totals.grandTotal = result.rows.reduce((s, r) => s + r.grandTotal, 0)
+
+  return kpiResults
+}
+
+// =====================================================
 // PERSIST TO DB (optional, for history)
 // =====================================================
 
-export async function savePayrollToDb(result: PayrollResult): Promise<PayrollPeriod> {
+export async function savePayrollToDb(
+  result: PayrollResult,
+  kpiResults?: DepartmentKpiResult[]
+): Promise<PayrollPeriod> {
   const pm = result.month
 
   // Upsert payroll_period
@@ -334,6 +416,7 @@ export async function savePayrollToDb(result: PayrollResult): Promise<PayrollPer
         total_service_tax: result.totalServiceTaxP1 + result.totalServiceTaxP2,
         total_base_salary: result.totals.salary,
         total_bonuses: result.rows.reduce((s, r) => s + r.bonusesTotal, 0),
+        total_kpi_bonuses: result.totals.kpiBonuses,
         total_payroll: result.totals.grandTotal,
         calculated_at: new Date().toISOString()
       },
@@ -353,14 +436,22 @@ export async function savePayrollToDb(result: PayrollResult): Promise<PayrollPer
     payroll_period_id: periodId,
     staff_id: r.staffId,
     hours_worked: r.totalHours,
-    hourly_rate: Math.round((r.salary / r.totalHours || 0) * 100) / 100,
+    hourly_rate: r.totalHours > 0 ? Math.round((r.salary / r.totalHours) * 100) / 100 : 0,
     base_salary_earned: r.salary,
     service_tax_share: r.service1 + r.service2,
     bonuses_total: r.bonusesTotal,
+    kpi_bonus: r.kpiBonus,
     total_earned: r.grandTotal
   }))
 
   await supabase.from('payroll_items').insert(itemRows)
+
+  // Save KPI bonus snapshots
+  if (kpiResults?.length) {
+    for (const kpi of kpiResults) {
+      await saveKpiBonusSnapshot(periodId, kpi, pm.year, pm.month)
+    }
+  }
 
   return staffService.fetchPayrollPeriod(periodId)
 }
