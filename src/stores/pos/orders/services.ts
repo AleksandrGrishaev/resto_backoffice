@@ -204,6 +204,7 @@ export class OrdersService {
     waiterName?: string
     channelId?: string
     channelCode?: string
+    guestCount?: number
   }): Promise<ServiceResponse<PosOrder>>
   async createOrder(
     typeOrData:
@@ -215,6 +216,7 @@ export class OrdersService {
           waiterName?: string
           channelId?: string
           channelCode?: string
+          guestCount?: number
         },
     tableId?: string,
     customerName?: string
@@ -239,6 +241,7 @@ export class OrdersService {
         waiterName: orderData.waiterName,
         channelId: orderData.channelId,
         channelCode: orderData.channelCode,
+        guestCount: orderData.guestCount,
         bills: [],
         totalAmount: 0,
         discountAmount: 0,
@@ -256,8 +259,8 @@ export class OrdersService {
         orderNumber: newOrder.orderNumber
       })
 
-      // Create first bill automatically
-      const firstBill = await this.createBillForOrder(newOrder.id, 'Bill 1')
+      // Create first bill automatically (with guest count for dine-in)
+      const firstBill = await this.createBillForOrder(newOrder.id, 'Bill 1', orderData.guestCount)
       if (firstBill.success && firstBill.data) {
         newOrder.bills = [firstBill.data]
       }
@@ -1292,9 +1295,13 @@ export class OrdersService {
     }
   }
 
-  async addBillToOrder(orderId: string, billName: string): Promise<ServiceResponse<PosBill>> {
+  async addBillToOrder(
+    orderId: string,
+    billName: string,
+    guestCount?: number
+  ): Promise<ServiceResponse<PosBill>> {
     try {
-      return await this.createBillForOrder(orderId, billName)
+      return await this.createBillForOrder(orderId, billName, guestCount)
     } catch (error) {
       return {
         success: false,
@@ -1452,7 +1459,8 @@ export class OrdersService {
 
   private async createBillForOrder(
     orderId: string,
-    billName: string
+    billName: string,
+    guestCount?: number
   ): Promise<ServiceResponse<PosBill>> {
     const newBill: PosBill = {
       id: generateId(),
@@ -1467,6 +1475,7 @@ export class OrdersService {
       total: 0,
       paymentStatus: 'unpaid',
       paidAmount: 0,
+      guestCount,
       createdAt: TimeUtils.getCurrentLocalISO(),
       updatedAt: TimeUtils.getCurrentLocalISO()
     }

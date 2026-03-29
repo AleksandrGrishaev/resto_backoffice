@@ -171,6 +171,9 @@ export interface KpiBonusScheme {
   thresholdTime: number
   thresholdProduction: number
   thresholdRitual: number
+  weightAvgCheck: number
+  thresholdAvgCheck: number
+  avgCheckTarget: number
   createdAt: string
   updatedAt: string
 }
@@ -193,6 +196,7 @@ export interface KpiScoreBreakdown {
     shortage: number
   }
   ritual: { score: number; completedDays: number; totalDays: number }
+  avgCheck: { score: number; actualAvg: number; targetAvg: number; totalGuests: number }
 }
 
 export interface KpiBonusStaffItem {
@@ -207,7 +211,14 @@ export interface KpiBonusStaffItem {
 export interface DepartmentKpiResult {
   department: KpiDepartment
   scores: KpiScoreBreakdown
-  weights: { foodCost: number; time: number; production: number; ritual: number }
+  weights: { foodCost: number; time: number; production: number; ritual: number; avgCheck: number }
+  thresholds: {
+    foodCost: number
+    time: number
+    production: number
+    ritual: number
+    avgCheck: number
+  }
   departmentScore: number
   poolType: KpiPoolType
   poolAmount: number
@@ -226,10 +237,12 @@ export interface KpiBonusSnapshot {
   scoreTime: number
   scoreProduction: number
   scoreRitual: number
+  scoreAvgCheck: number
   weightFoodCost: number
   weightTime: number
   weightProduction: number
   weightRitual: number
+  weightAvgCheck: number
   departmentScore: number
   poolType: KpiPoolType
   poolAmount: number

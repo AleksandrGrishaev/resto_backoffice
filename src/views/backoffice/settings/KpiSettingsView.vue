@@ -382,6 +382,28 @@
                     hint="0=grad"
                   />
                 </v-col>
+                <v-col cols="4">
+                  <v-text-field
+                    v-model.number="bonusSchemes[dept].weightAvgCheck"
+                    label="Avg Check"
+                    type="number"
+                    suffix="%"
+                    variant="outlined"
+                    density="compact"
+                    :disabled="!bonusSchemes[dept].isActive"
+                  />
+                </v-col>
+                <v-col cols="2">
+                  <v-text-field
+                    v-model.number="bonusSchemes[dept].thresholdAvgCheck"
+                    label="Min"
+                    type="number"
+                    variant="outlined"
+                    density="compact"
+                    :disabled="!bonusSchemes[dept].isActive"
+                    hint="0=grad"
+                  />
+                </v-col>
               </v-row>
 
               <!-- Loss Rate Target -->
@@ -393,6 +415,20 @@
                 variant="outlined"
                 density="compact"
                 hint="Target (spoilage + shortage) / revenue %. Score 100 at target, 0 at target+5%."
+                persistent-hint
+                class="mb-3"
+                :disabled="!bonusSchemes[dept].isActive"
+              />
+
+              <!-- Avg Check Target -->
+              <v-text-field
+                v-model.number="bonusSchemes[dept].avgCheckTarget"
+                label="Avg Check Per Guest Target"
+                type="number"
+                prefix="Rp"
+                variant="outlined"
+                density="compact"
+                hint="Target average bill per guest (dine-in). Score 100 at target, proportional below."
                 persistent-hint
                 class="mb-3"
                 :disabled="!bonusSchemes[dept].isActive"
@@ -635,12 +671,15 @@ const defaultScheme = () => ({
   weightTime: 20,
   weightProduction: 40,
   weightRitual: 20,
+  weightAvgCheck: 0,
   minThreshold: 0,
   lossRateTarget: 3,
+  avgCheckTarget: 0,
   thresholdFoodCost: 100,
   thresholdTime: 80,
   thresholdProduction: 100,
-  thresholdRitual: 80
+  thresholdRitual: 80,
+  thresholdAvgCheck: 0
 })
 
 const bonusSchemes = reactive<Record<KpiDepartment, ReturnType<typeof defaultScheme>>>({
@@ -656,7 +695,8 @@ const weightsSum = (dept: KpiDepartment) => {
     (s.weightFoodCost || 0) +
     (s.weightTime || 0) +
     (s.weightProduction || 0) +
-    (s.weightRitual || 0)
+    (s.weightRitual || 0) +
+    (s.weightAvgCheck || 0)
   )
 }
 
@@ -675,12 +715,15 @@ const loadBonusSchemes = async () => {
           weightTime: s.weightTime,
           weightProduction: s.weightProduction,
           weightRitual: s.weightRitual,
+          weightAvgCheck: s.weightAvgCheck,
           minThreshold: s.minThreshold,
           lossRateTarget: s.lossRateTarget,
+          avgCheckTarget: s.avgCheckTarget,
           thresholdFoodCost: s.thresholdFoodCost,
           thresholdTime: s.thresholdTime,
           thresholdProduction: s.thresholdProduction,
-          thresholdRitual: s.thresholdRitual
+          thresholdRitual: s.thresholdRitual,
+          thresholdAvgCheck: s.thresholdAvgCheck
         }
       }
     }
@@ -705,12 +748,15 @@ const saveBonusScheme = async (dept: KpiDepartment) => {
       weightTime: s.weightTime,
       weightProduction: s.weightProduction,
       weightRitual: s.weightRitual,
+      weightAvgCheck: s.weightAvgCheck,
       minThreshold: s.minThreshold,
       lossRateTarget: s.lossRateTarget,
+      avgCheckTarget: s.avgCheckTarget,
       thresholdFoodCost: s.thresholdFoodCost,
       thresholdTime: s.thresholdTime,
       thresholdProduction: s.thresholdProduction,
-      thresholdRitual: s.thresholdRitual
+      thresholdRitual: s.thresholdRitual,
+      thresholdAvgCheck: s.thresholdAvgCheck
     })
     bonusSchemes[dept].id = saved.id
     successMessage.value = `${dept === 'kitchen' ? 'Kitchen' : 'Bar'} bonus pool saved`

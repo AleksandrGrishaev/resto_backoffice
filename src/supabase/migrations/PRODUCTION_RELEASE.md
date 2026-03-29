@@ -49,15 +49,47 @@ ALTER TABLE kpi_bonus_schemes
 
 **Apply:** `mcp__supabase_prod__apply_migration` with content from `264_kpi_per_metric_thresholds.sql`
 
+### Migration 265: `kpi_avg_check_per_guest`
+
+Avg Check Per Guest metric — 5th KPI metric for bonus schemes.
+
+```sql
+ALTER TABLE kpi_bonus_schemes
+  ADD COLUMN IF NOT EXISTS weight_avg_check INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS threshold_avg_check INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS avg_check_target INTEGER DEFAULT 0;
+
+ALTER TABLE kpi_bonus_snapshots
+  ADD COLUMN IF NOT EXISTS score_avg_check NUMERIC DEFAULT -1,
+  ADD COLUMN IF NOT EXISTS weight_avg_check INTEGER DEFAULT 0;
+```
+
+**Apply:** `mcp__supabase_prod__apply_migration` with content from `265_kpi_avg_check_per_guest.sql`
+
+### Migration 266: `get_avg_check_per_guest_rpc`
+
+RPC function to calculate avg check per guest from bill-level guest counts (orders.bills JSONB).
+
+```sql
+CREATE OR REPLACE FUNCTION get_avg_check_per_guest(
+  p_start_date TIMESTAMPTZ,
+  p_end_date TIMESTAMPTZ
+) RETURNS TABLE (total_revenue NUMERIC, total_guests BIGINT)
+-- Queries dine-in orders, extracts guestCount from bills JSONB
+-- Excludes cancelled orders and cancelled bills
+```
+
+**Apply:** `mcp__supabase_prod__apply_migration` with content from `266_get_avg_check_per_guest_rpc.sql`
+
 ### Post-migration Steps
 
-1. Apply all 3 migrations in order (262 → 263 → 264)
+1. Apply all 5 migrations in order (262 → 263 → 264 → 265 → 266)
 2. Seed default schemes via Settings UI or SQL:
    ```sql
-   INSERT INTO kpi_bonus_schemes (department, name, pool_type, pool_amount, weight_food_cost, weight_time, weight_production, weight_ritual, threshold_food_cost, threshold_time, threshold_production, threshold_ritual, loss_rate_target)
+   INSERT INTO kpi_bonus_schemes (department, name, pool_type, pool_amount, weight_food_cost, weight_time, weight_production, weight_ritual, weight_avg_check, threshold_food_cost, threshold_time, threshold_production, threshold_ritual, threshold_avg_check, loss_rate_target, avg_check_target)
    VALUES
-     ('kitchen', 'Kitchen KPI Bonus', 'fixed', 0, 20, 25, 40, 15, 100, 80, 100, 80, 3),
-     ('bar', 'Bar KPI Bonus', 'fixed', 0, 20, 25, 40, 15, 100, 80, 100, 80, 3);
+     ('kitchen', 'Kitchen KPI Bonus', 'fixed', 0, 20, 25, 40, 15, 0, 100, 80, 100, 80, 0, 3, 0),
+     ('bar', 'Bar KPI Bonus', 'fixed', 0, 20, 10, 30, 10, 30, 100, 80, 100, 80, 80, 2, 100000);
    ```
 3. Configure actual pool amounts via Settings > KPI > Bonus Pools
 4. Verify with a test payroll calculation

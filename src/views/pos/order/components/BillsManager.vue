@@ -17,6 +17,7 @@
       @remove-bill="handleRemoveBill"
       @open-loyalty="(billId, tab) => emit('open-loyalty', billId, tab)"
       @detach-loyalty="(billId, what) => emit('detach-loyalty', billId, what)"
+      @edit-guest-count="billId => emit('edit-guest-count', billId)"
     />
 
     <!-- Bill Content -->
@@ -106,6 +107,7 @@ const emit = defineEmits<{
   'apply-discount': [itemId: string]
   'open-loyalty': [billId: string, tab: 'card' | 'customer']
   'detach-loyalty': [billId: string, what: 'card' | 'customer']
+  'edit-guest-count': [billId: string]
 }>()
 
 // Computed

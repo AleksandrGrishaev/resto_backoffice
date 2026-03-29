@@ -34,6 +34,8 @@ interface BillMetadata {
   paymentStatus: 'unpaid' | 'partial' | 'paid'
   paidAmount: number
   notes?: string
+  // Guest count
+  guestCount?: number
   // Loyalty
   customerId?: string
   customerName?: string
@@ -67,6 +69,7 @@ export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
     paymentStatus: bill.paymentStatus,
     paidAmount: bill.paidAmount,
     notes: bill.notes,
+    guestCount: bill.guestCount,
     customerId: bill.customerId,
     customerName: bill.customerName,
     stampCardId: bill.stampCardId,
@@ -90,7 +93,7 @@ export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
     customer_name: order.customerName || null,
     customer_id: order.customerId || null,
     stamp_card_id: order.stampCardId || null,
-    guest_count: order.guestCount || 1,
+    guest_count: order.guestCount ?? 1,
 
     // Bills metadata (without items)
     bills: billsMetadata as any,
@@ -208,6 +211,7 @@ export function fromSupabase(supabaseOrder: SupabaseOrder, items?: PosBillItem[]
     paymentStatus: meta.paymentStatus,
     paidAmount: meta.paidAmount,
     notes: meta.notes,
+    guestCount: meta.guestCount,
     customerId: meta.customerId || supabaseOrder.customer_id || undefined,
     customerName: meta.customerName || supabaseOrder.customer_name || undefined,
     stampCardId: meta.stampCardId,

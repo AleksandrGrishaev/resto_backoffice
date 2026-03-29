@@ -243,6 +243,10 @@ onMounted(() => {
   overflow-y: auto;
 }
 
+.kpi-screen > :first-child {
+  flex-shrink: 0;
+}
+
 .kpi-tabs {
   flex-shrink: 0;
 }

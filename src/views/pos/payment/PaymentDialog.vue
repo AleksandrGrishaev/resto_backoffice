@@ -32,11 +32,23 @@
               <PaymentItemsList v-if="items.length > 0" :items="items" />
             </div>
 
-            <!-- Customer/Loyalty (pinned at bottom of left column) -->
+            <!-- Customer/Loyalty + Guest Count (pinned at bottom of left column) -->
             <div
-              v-if="customerId || stampCardInfo"
-              class="loyalty-section d-flex align-center flex-wrap gap-2 px-4 py-3"
+              v-if="customerId || stampCardInfo || totalGuestCount > 0"
+              class="loyalty-section d-flex align-center flex-wrap gap-3 px-4 py-3"
             >
+              <!-- Guest Count Chip (sum of all bills being paid) -->
+              <v-chip
+                v-if="totalGuestCount > 0"
+                color="light-blue"
+                variant="flat"
+                size="small"
+                class="mr-1"
+                @click="showGuestCountEdit = true"
+              >
+                <v-icon start size="14">mdi-account-group</v-icon>
+                {{ totalGuestCount }} guest{{ totalGuestCount > 1 ? 's' : '' }}
+              </v-chip>
               <v-chip
                 v-if="customerName"
                 color="blue"
@@ -374,6 +386,9 @@
       </v-card-actions>
     </v-card>
 
+    <!-- Guest Count Edit Dialog -->
+    <GuestCountDialog v-model="showGuestCountEdit" @confirm="handleGuestCountUpdate" />
+
     <!-- Bill Discount Dialog (preview mode - don't save to order) -->
     <BillDiscountDialog
       v-model="showBillDiscountDialog"
@@ -402,6 +417,7 @@ import { createPreBillSnapshot } from '@/stores/pos/utils/preBillTracking'
 import PaymentItemsList from './widgets/PaymentItemsList.vue'
 import PrinterStatus from './widgets/PrinterStatus.vue'
 import BillDiscountDialog from '../order/dialogs/BillDiscountDialog.vue'
+import GuestCountDialog from '../order/dialogs/GuestCountDialog.vue'
 import type { Customer } from '@/stores/customers'
 
 interface Props {
@@ -490,6 +506,7 @@ const processing = ref(false)
 const localDiscount = ref<number>(0) // Temporary bill discount (not saved to order)
 const localDiscountReason = ref<string>('') // Reason for bill discount
 const showBillDiscountDialog = ref(false)
+const showGuestCountEdit = ref(false)
 const preBillPrinted = ref(false) // Track if pre-bill was printed in this session
 const usePoints = ref(false) // Whether to apply loyalty points
 const pointsToRedeem = ref<number>(0) // Amount of points to redeem
@@ -561,6 +578,16 @@ const currentBill = computed((): PosBill | null => {
     ...originalBill,
     items: props.items.filter(item => item.paymentStatus !== 'paid' && item.status !== 'cancelled')
   }
+})
+
+// Total guest count across all bills being paid
+const totalGuestCount = computed((): number => {
+  const order = ordersStore.currentOrder
+  if (!order || !props.billIds?.length) return 0
+  return props.billIds.reduce((sum, id) => {
+    const bill = order.bills.find(b => b.id === id)
+    return sum + (bill?.guestCount || 0)
+  }, 0)
 })
 
 // Calculate total item discounts from items
@@ -803,6 +830,16 @@ const handleDiscountSuccess = async (discountData: {
 
 const handleDiscountCancel = () => {
   showBillDiscountDialog.value = false
+}
+
+const handleGuestCountUpdate = async (count: number) => {
+  const bill = currentBill.value
+  if (!bill || !props.orderId) return
+  try {
+    await ordersStore.updateBillGuestCount(props.orderId, bill.id, count)
+  } catch (err) {
+    DebugUtils.error('PaymentDialog', 'Failed to update guest count', { error: err })
+  }
 }
 
 const getMethodColor = (code: string): string => {

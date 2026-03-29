@@ -155,53 +155,68 @@
       <!-- ==================== SUMMARY SECTION ==================== -->
       <div class="summary-section">
         <h3>Summary</h3>
-        <div class="summary-cards">
-          <div class="summary-card">
-            <div class="card-label">Total Hours Worked</div>
-            <div class="card-value">{{ result.totals.totalHours }}h</div>
-            <div class="card-detail">
-              Period 1: {{ result.totals.totalHoursP1 }}h | Period 2:
-              {{ result.totals.totalHoursP2 }}h
-            </div>
+
+        <!-- Row 1: Main payroll numbers -->
+        <div class="summary-cards mb-3">
+          <div class="summary-card grand-card">
+            <div class="card-label">Grand Total</div>
+            <div class="card-value">{{ formatIDR(result.totals.grandTotal) }}</div>
+          </div>
+          <div class="summary-card salary-card">
+            <div class="card-label">Salaries</div>
+            <div class="card-value">{{ formatIDR(result.totals.salary) }}</div>
           </div>
           <div class="summary-card service-card">
-            <div class="card-label">Service Tax Collected (5%)</div>
+            <div class="card-label">Service Tax (5%)</div>
             <div class="card-value">
               {{ formatIDR(result.totalServiceTaxP1 + result.totalServiceTaxP2) }}
             </div>
             <div class="card-detail">
-              Period 1: {{ formatIDR(result.totalServiceTaxP1) }} | Period 2:
+              P1: {{ formatIDR(result.totalServiceTaxP1) }} | P2:
               {{ formatIDR(result.totalServiceTaxP2) }}
             </div>
           </div>
-          <div class="summary-card salary-card">
-            <div class="card-label">Total Salaries</div>
-            <div class="card-value">{{ formatIDR(result.totals.salary) }}</div>
-          </div>
           <div v-if="result.totals.bonuses > 0" class="summary-card bonus-card">
-            <div class="card-label">Total Bonuses</div>
+            <div class="card-label">Bonuses</div>
             <div class="card-value">{{ formatIDR(result.totals.bonuses) }}</div>
           </div>
-          <div v-if="result.totals.kpiBonuses > 0" class="summary-card kpi-card">
-            <div class="card-label">KPI Bonuses</div>
-            <div class="card-value">{{ formatIDR(result.totals.kpiBonuses) }}</div>
-            <div v-if="kpiResults.length" class="card-detail">
-              <template v-for="(kpi, i) in kpiResults" :key="kpi.department">
-                <span v-if="i > 0">|</span>
-                {{ kpi.department === 'kitchen' ? 'Kitchen' : 'Bar' }}: score
-                {{ kpi.departmentScore.toFixed(0) }}
-                <template v-if="kpi.poolType === 'percent_revenue'">
-                  ({{ formatIDR(kpi.departmentRevenue) }} rev → pool
-                  {{ formatIDR(kpi.poolAmount) }})
-                </template>
-                → {{ formatIDR(kpi.unlockedAmount) }}
-              </template>
+        </div>
+
+        <!-- Row 2: Hours + KPI per department -->
+        <div class="summary-cards">
+          <div class="summary-card">
+            <div class="card-label">Hours Worked</div>
+            <div class="card-value">{{ result.totals.totalHours }}h</div>
+            <div class="card-detail">
+              P1: {{ result.totals.totalHoursP1 }}h | P2: {{ result.totals.totalHoursP2 }}h
             </div>
           </div>
-          <div class="summary-card grand-card">
-            <div class="card-label">Grand Total Payroll</div>
-            <div class="card-value">{{ formatIDR(result.totals.grandTotal) }}</div>
-          </div>
+          <template v-for="kpi in kpiResults" :key="kpi.department">
+            <div class="summary-card kpi-card">
+              <div class="card-label">
+                {{ kpi.department === 'kitchen' ? 'Kitchen' : 'Bar' }} KPI
+              </div>
+              <div class="card-value d-flex align-center gap-2">
+                {{ formatIDR(kpi.unlockedAmount) }}
+                <span
+                  class="kpi-score-badge"
+                  :class="{
+                    'badge-green': kpi.departmentScore >= 80,
+                    'badge-yellow': kpi.departmentScore >= 50 && kpi.departmentScore < 80,
+                    'badge-red': kpi.departmentScore < 50
+                  }"
+                >
+                  {{ kpi.departmentScore.toFixed(0) }}
+                </span>
+              </div>
+              <div class="card-detail">
+                Pool: {{ formatIDR(kpi.poolAmount) }}
+                <template v-if="kpi.poolType === 'percent_revenue'">
+                  ({{ formatIDR(kpi.departmentRevenue) }} rev)
+                </template>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
 
@@ -307,101 +322,103 @@
             {{ kpi.department === 'kitchen' ? 'Kitchen' : 'Bar' }} Department — Score:
             {{ kpi.departmentScore.toFixed(1) }} / 100
           </div>
-          <table class="breakdown-table">
-            <thead>
-              <tr>
-                <td class="detail-label" style="font-weight: 600">Metric</td>
-                <td class="detail-formula" style="font-weight: 600">Result</td>
-                <td class="detail-value" style="font-weight: 600">Score × Weight</td>
-              </tr>
-            </thead>
-            <tbody>
-              <!-- Food Cost -->
-              <tr>
-                <td class="detail-label">Food Cost</td>
-                <td class="detail-formula">
-                  <template v-if="kpi.scores.foodCost.score >= 0">
-                    COGS {{ kpi.scores.foodCost.actualPercent.toFixed(1) }}% (target
-                    {{ kpi.scores.foodCost.targetPercent }}%)
-                  </template>
-                  <template v-else>No data</template>
-                </td>
-                <td class="detail-value">
-                  {{ kpi.scores.foodCost.score >= 0 ? kpi.scores.foodCost.score.toFixed(0) : '—' }}
-                  × {{ kpi.weights.foodCost }}%
-                </td>
-              </tr>
-              <!-- Real Food Cost (Loss Rate) -->
-              <tr>
-                <td class="detail-label">Real Food Cost</td>
-                <td class="detail-formula">
-                  <template v-if="kpi.scores.lossRate.score >= 0">
-                    Losses {{ kpi.scores.lossRate.lossPercent.toFixed(1) }}% (target
-                    {{ kpi.scores.lossRate.targetPercent }}%) — spoilage
-                    {{ formatIDR(kpi.scores.lossRate.spoilage) }}, shortage
-                    {{ formatIDR(kpi.scores.lossRate.shortage) }}
-                  </template>
-                  <template v-else>No data</template>
-                </td>
-                <td class="detail-value">
-                  {{ kpi.scores.lossRate.score >= 0 ? kpi.scores.lossRate.score.toFixed(0) : '—' }}
-                  × {{ kpi.weights.production }}%
-                </td>
-              </tr>
-              <!-- Time KPI -->
-              <tr>
-                <td class="detail-label">Time KPI</td>
-                <td class="detail-formula">
-                  <template v-if="kpi.scores.time.score >= 0">
-                    {{ kpi.scores.time.itemsCompleted }} items,
-                    {{ kpi.scores.time.exceededRate.toFixed(0) }}% exceeded plan
-                  </template>
-                  <template v-else>No data</template>
-                </td>
-                <td class="detail-value">
-                  {{ kpi.scores.time.score >= 0 ? kpi.scores.time.score.toFixed(0) : '—' }}
-                  × {{ kpi.weights.time }}%
-                </td>
-              </tr>
-              <!-- Rituals -->
-              <tr>
-                <td class="detail-label">Rituals</td>
-                <td class="detail-formula">
-                  <template v-if="kpi.scores.ritual.score >= 0">
-                    {{ kpi.scores.ritual.completedDays }} / {{ kpi.scores.ritual.totalDays }} days
-                    completed
-                  </template>
-                  <template v-else>No data</template>
-                </td>
-                <td class="detail-value">
-                  {{ kpi.scores.ritual.score >= 0 ? kpi.scores.ritual.score.toFixed(0) : '—' }}
-                  × {{ kpi.weights.ritual }}%
-                </td>
-              </tr>
-              <tr><td colspan="3" style="height: 8px; border: none" /></tr>
-              <!-- Pool -->
-              <tr class="detail-highlight">
-                <td class="detail-label">Dept Score</td>
-                <td class="detail-formula">Weighted average of active metrics</td>
-                <td class="detail-value">= {{ kpi.departmentScore.toFixed(1) }}</td>
-              </tr>
-              <tr>
-                <td class="detail-label">Pool</td>
-                <td class="detail-formula">
+          <!-- Metrics with visual bars -->
+          <div class="kpi-metrics-list">
+            <div
+              v-for="m in getKpiMetrics(kpi)"
+              :key="m.key"
+              class="kpi-metric-row"
+              :class="{
+                'kpi-metric-failed': kpiMetricDisplay(m.score, m.weight, m.threshold).failed
+              }"
+            >
+              <div class="kpi-metric-header">
+                <span class="kpi-metric-name">{{ m.label }}</span>
+                <span class="kpi-metric-weight">{{ m.weight }}%</span>
+              </div>
+              <div class="kpi-metric-body">
+                <div
+                  v-if="kpiMetricDisplay(m.score, m.weight, m.threshold).noData"
+                  class="kpi-metric-nodata"
+                >
+                  No data — excluded
+                </div>
+                <template v-else>
+                  <div class="kpi-bar-track">
+                    <div
+                      class="kpi-bar-fill"
+                      :class="{
+                        'bar-green':
+                          !kpiMetricDisplay(m.score, m.weight, m.threshold).failed && m.score >= 80,
+                        'bar-yellow':
+                          !kpiMetricDisplay(m.score, m.weight, m.threshold).failed &&
+                          m.score >= 50 &&
+                          m.score < 80,
+                        'bar-red':
+                          kpiMetricDisplay(m.score, m.weight, m.threshold).failed || m.score < 50
+                      }"
+                      :style="{ width: Math.min(100, m.score) + '%' }"
+                    />
+                    <span
+                      v-if="m.threshold > 0"
+                      class="kpi-threshold-mark"
+                      :style="{ left: m.threshold + '%' }"
+                    />
+                  </div>
+                  <div class="kpi-metric-score-line">
+                    <span class="kpi-metric-detail">{{ m.detail }}</span>
+                    <span
+                      v-if="kpiMetricDisplay(m.score, m.weight, m.threshold).failed"
+                      class="kpi-metric-score kpi-score-failed"
+                    >
+                      {{ m.score.toFixed(0) }} &lt; min {{ m.threshold }} → 0
+                    </span>
+                    <span v-else class="kpi-metric-score">
+                      {{ m.score.toFixed(0) }}
+                    </span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <!-- Summary -->
+          <div class="kpi-summary-block">
+            <div class="kpi-summary-row kpi-summary-score">
+              <span>Department Score</span>
+              <span
+                class="kpi-summary-value"
+                :class="{
+                  'text-success': kpi.departmentScore >= 80,
+                  'text-warning': kpi.departmentScore >= 50 && kpi.departmentScore < 80,
+                  'text-error': kpi.departmentScore < 50
+                }"
+              >
+                {{ kpi.departmentScore.toFixed(1) }} / 100
+              </span>
+            </div>
+            <div class="kpi-summary-row">
+              <span>
+                Pool
+                <span class="text-medium-emphasis">
                   <template v-if="kpi.poolType === 'percent_revenue'">
-                    {{ formatIDR(kpi.departmentRevenue) }} revenue × %
+                    ({{ formatIDR(kpi.departmentRevenue) }} rev × %)
                   </template>
-                  <template v-else>Fixed amount</template>
-                </td>
-                <td class="detail-value">{{ formatIDR(kpi.poolAmount) }}</td>
-              </tr>
-              <tr class="detail-total">
-                <td class="detail-label">Unlocked</td>
-                <td class="detail-formula">Pool × score {{ kpi.departmentScore.toFixed(0) }}%</td>
-                <td class="detail-value">= {{ formatIDR(kpi.unlockedAmount) }}</td>
-              </tr>
-            </tbody>
-          </table>
+                  <template v-else>(fixed)</template>
+                </span>
+              </span>
+              <span>{{ formatIDR(kpi.poolAmount) }}</span>
+            </div>
+            <div class="kpi-summary-row kpi-summary-unlocked">
+              <span>
+                Unlocked
+                <span class="text-medium-emphasis">
+                  (pool × {{ kpi.departmentScore.toFixed(0) }}%)
+                </span>
+              </span>
+              <span class="kpi-summary-value">{{ formatIDR(kpi.unlockedAmount) }}</span>
+            </div>
+          </div>
 
           <!-- Distribution -->
           <div v-if="kpi.staffDistribution.length" class="mt-3">
@@ -544,6 +561,92 @@ const selectedYear = ref(now.getFullYear())
 const selectedMonth = ref(now.getMonth() + 1)
 const result = ref<PayrollResult | null>(null)
 const kpiResults = computed<DepartmentKpiResult[]>(() => store.lastKpiResults)
+
+function getKpiMetrics(kpi: DepartmentKpiResult) {
+  const t = kpi.thresholds || { foodCost: 0, time: 0, production: 0, ritual: 0, avgCheck: 0 }
+  const s = kpi.scores
+  const w = kpi.weights
+  const all = [
+    {
+      key: 'foodCost',
+      label: 'Food Cost',
+      score: s.foodCost.score,
+      weight: w.foodCost,
+      threshold: t.foodCost,
+      detail:
+        s.foodCost.score >= 0
+          ? 'COGS ' +
+            s.foodCost.actualPercent.toFixed(1) +
+            '% (target ' +
+            s.foodCost.targetPercent +
+            '%)'
+          : ''
+    },
+    {
+      key: 'lossRate',
+      label: 'Real Food Cost',
+      score: s.lossRate.score,
+      weight: w.production,
+      threshold: t.production,
+      detail:
+        s.lossRate.score >= 0
+          ? 'Losses ' +
+            s.lossRate.lossPercent.toFixed(1) +
+            '% (target ' +
+            s.lossRate.targetPercent +
+            '%)'
+          : ''
+    },
+    {
+      key: 'time',
+      label: 'Time KPI',
+      score: s.time.score,
+      weight: w.time,
+      threshold: t.time,
+      detail:
+        s.time.score >= 0
+          ? s.time.itemsCompleted + ' items, ' + s.time.exceededRate.toFixed(0) + '% exceeded'
+          : ''
+    },
+    {
+      key: 'ritual',
+      label: 'Rituals',
+      score: s.ritual.score,
+      weight: w.ritual,
+      threshold: t.ritual,
+      detail:
+        s.ritual.score >= 0 ? s.ritual.completedDays + ' / ' + s.ritual.totalDays + ' days' : ''
+    },
+    {
+      key: 'avgCheck',
+      label: 'Avg Check',
+      score: s.avgCheck.score,
+      weight: w.avgCheck,
+      threshold: t.avgCheck,
+      detail:
+        s.avgCheck.score >= 0
+          ? formatIDR(s.avgCheck.actualAvg) +
+            '/guest (target ' +
+            formatIDR(s.avgCheck.targetAvg) +
+            ') — ' +
+            s.avgCheck.totalGuests +
+            ' guests'
+          : ''
+    }
+  ]
+  return all.filter(m => m.weight > 0)
+}
+
+/** Returns effective score after threshold and display info */
+function kpiMetricDisplay(
+  score: number,
+  weight: number,
+  threshold: number
+): { effective: number; raw: number; failed: boolean; noData: boolean } {
+  if (score < 0) return { effective: -1, raw: -1, failed: false, noData: true }
+  const failed = threshold > 0 && score < threshold
+  return { effective: failed ? 0 : score, raw: score, failed, noData: false }
+}
 
 // Auto-calculate on month/year change
 watch([selectedYear, selectedMonth], () => calculate(), { flush: 'post' })
@@ -924,6 +1027,30 @@ thead .sticky-col {
 .kpi-card {
   border-left: 3px solid rgba(0, 188, 212, 0.6);
 }
+
+.kpi-score-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 28px;
+  height: 20px;
+  border-radius: 10px;
+  padding: 0 6px;
+  color: #fff;
+
+  &.badge-green {
+    background: rgba(76, 175, 80, 0.8);
+  }
+  &.badge-yellow {
+    background: rgba(255, 193, 7, 0.8);
+    color: #111;
+  }
+  &.badge-red {
+    background: rgba(244, 67, 54, 0.7);
+  }
+}
 .grand-card {
   border-left: 3px solid rgba(255, 193, 7, 0.8);
 }
@@ -951,6 +1078,143 @@ thead .sticky-col {
   font-size: 13px;
   margin-bottom: 8px;
   color: rgba(255, 255, 255, 0.7);
+}
+
+// ==================== KPI METRICS VISUAL ====================
+
+.kpi-metrics-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.kpi-metric-row {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 3px solid rgba(76, 175, 80, 0.5);
+
+  &.kpi-metric-failed {
+    border-left-color: rgba(244, 67, 54, 0.6);
+    opacity: 0.7;
+  }
+}
+
+.kpi-metric-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.kpi-metric-name {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.kpi-metric-weight {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-bar-track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  position: relative;
+  overflow: visible;
+  margin-bottom: 4px;
+}
+
+.kpi-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+
+  &.bar-green {
+    background: rgba(76, 175, 80, 0.8);
+  }
+  &.bar-yellow {
+    background: rgba(255, 193, 7, 0.8);
+  }
+  &.bar-red {
+    background: rgba(244, 67, 54, 0.7);
+  }
+}
+
+.kpi-threshold-mark {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.35);
+  transform: translateX(-1px);
+}
+
+.kpi-metric-score-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.kpi-metric-detail {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.kpi-metric-nodata {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.3);
+  font-style: italic;
+}
+
+.kpi-metric-score {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-score-failed {
+  color: rgba(244, 67, 54, 0.8);
+  font-weight: 500;
+  font-size: 11px;
+}
+
+// KPI Summary
+.kpi-summary-block {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.kpi-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.kpi-summary-score {
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+}
+
+.kpi-summary-unlocked {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 6px;
+  margin-top: 2px;
+}
+
+.kpi-summary-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 // ==================== PER-PERSON BREAKDOWN ====================

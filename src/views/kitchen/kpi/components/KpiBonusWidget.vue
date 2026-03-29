@@ -24,76 +24,65 @@
 
     <!-- Content -->
     <div v-else-if="result" class="widget-body">
-      <!-- Score gauge -->
-      <div class="score-section">
+      <!-- Top row: Score + Pool -->
+      <div class="top-row">
         <div class="score-circle" :class="scoreColor">
           <span class="score-value">{{ result.departmentScore.toFixed(0) }}</span>
           <span class="score-label">score</span>
         </div>
-        <div class="score-details">
+        <div class="pool-info">
           <div class="pool-line">
             Pool:
             <strong>{{ formatIDR(result.poolAmount) }}</strong>
             <template v-if="result.poolType === 'percent_revenue'">
               <span class="text-medium-emphasis">
-                (from {{ formatIDR(result.departmentRevenue) }} rev)
+                ({{ formatIDR(result.departmentRevenue) }} rev)
               </span>
             </template>
           </div>
           <div class="unlocked-line">
             Unlocked:
-            <strong :class="result.unlockedAmount > 0 ? 'text-success' : ''">
+            <strong :class="result.unlockedAmount > 0 ? 'text-success' : 'text-error'">
               {{ formatIDR(result.unlockedAmount) }}
             </strong>
           </div>
         </div>
       </div>
 
-      <!-- Metrics bars -->
-      <div class="metrics-bars">
-        <div class="metric-bar-row">
-          <span class="bar-label">Food Cost</span>
-          <div class="bar-track">
-            <div
-              class="bar-fill"
-              :class="barColor(result.scores.foodCost.score)"
-              :style="{ width: barWidth(result.scores.foodCost.score) }"
-            />
+      <!-- Metrics with visual bars + thresholds -->
+      <div class="metrics-list">
+        <div
+          v-for="m in metrics"
+          :key="m.key"
+          class="metric-row"
+          :class="{ 'metric-failed': m.failed }"
+        >
+          <div class="metric-header">
+            <span class="metric-name">{{ m.label }}</span>
+            <span class="metric-weight">{{ m.weight }}%</span>
           </div>
-          <span class="bar-score">{{ scoreText(result.scores.foodCost.score) }}</span>
-        </div>
-        <div class="metric-bar-row">
-          <span class="bar-label">Real Food Cost</span>
-          <div class="bar-track">
-            <div
-              class="bar-fill"
-              :class="barColor(result.scores.lossRate.score)"
-              :style="{ width: barWidth(result.scores.lossRate.score) }"
-            />
-          </div>
-          <span class="bar-score">{{ scoreText(result.scores.lossRate.score) }}</span>
-        </div>
-        <div class="metric-bar-row">
-          <span class="bar-label">Time</span>
-          <div class="bar-track">
-            <div
-              class="bar-fill"
-              :class="barColor(result.scores.time.score)"
-              :style="{ width: barWidth(result.scores.time.score) }"
-            />
-          </div>
-          <span class="bar-score">{{ scoreText(result.scores.time.score) }}</span>
-        </div>
-        <div class="metric-bar-row">
-          <span class="bar-label">Rituals</span>
-          <div class="bar-track">
-            <div
-              class="bar-fill"
-              :class="barColor(result.scores.ritual.score)"
-              :style="{ width: barWidth(result.scores.ritual.score) }"
-            />
-          </div>
-          <span class="bar-score">{{ scoreText(result.scores.ritual.score) }}</span>
+          <div v-if="m.noData" class="metric-nodata">No data — excluded</div>
+          <template v-else>
+            <div class="metric-bar-track">
+              <div
+                class="metric-bar-fill"
+                :class="m.barClass"
+                :style="{ width: Math.min(100, m.score) + '%' }"
+              />
+              <span
+                v-if="m.threshold > 0"
+                class="metric-threshold-mark"
+                :style="{ left: m.threshold + '%' }"
+              />
+            </div>
+            <div class="metric-detail-line">
+              <span class="metric-detail">{{ m.detail }}</span>
+              <span v-if="m.failed" class="metric-score metric-score-failed">
+                {{ m.score.toFixed(0) }} &lt; min {{ m.threshold }} → 0
+              </span>
+              <span v-else class="metric-score">{{ m.score.toFixed(0) }}</span>
+            </div>
+          </template>
         </div>
       </div>
     </div>
@@ -140,22 +129,107 @@ const scoreColor = computed(() => {
   return 'score-red'
 })
 
-function barWidth(score: number): string {
-  if (score < 0) return '0%'
-  return `${Math.min(100, score)}%`
+interface MetricDisplay {
+  key: string
+  label: string
+  score: number
+  weight: number
+  threshold: number
+  detail: string
+  noData: boolean
+  failed: boolean
+  barClass: string
 }
 
-function barColor(score: number): string {
-  if (score < 0) return 'bar-grey'
-  if (score >= 80) return 'bar-green'
-  if (score >= 50) return 'bar-yellow'
-  return 'bar-red'
-}
+const metrics = computed((): MetricDisplay[] => {
+  if (!result.value) return []
+  const r = result.value
+  const t = r.thresholds || { foodCost: 0, time: 0, production: 0, ritual: 0, avgCheck: 0 }
+  const s = r.scores
+  const w = r.weights
 
-function scoreText(score: number): string {
-  if (score < 0) return '—'
-  return score.toFixed(0)
-}
+  function build(
+    key: string,
+    label: string,
+    score: number,
+    weight: number,
+    threshold: number,
+    detail: string
+  ): MetricDisplay {
+    const noData = score < 0
+    const failed = !noData && threshold > 0 && score < threshold
+    let barClass = 'bar-grey'
+    if (!noData) {
+      if (failed || score < 50) barClass = 'bar-red'
+      else if (score < 80) barClass = 'bar-yellow'
+      else barClass = 'bar-green'
+    }
+    return { key, label, score, weight, threshold, detail, noData, failed, barClass }
+  }
+
+  const all = [
+    build(
+      'foodCost',
+      'Food Cost',
+      s.foodCost.score,
+      w.foodCost,
+      t.foodCost,
+      s.foodCost.score >= 0
+        ? 'COGS ' +
+            s.foodCost.actualPercent.toFixed(1) +
+            '% (target ' +
+            s.foodCost.targetPercent +
+            '%)'
+        : ''
+    ),
+    build(
+      'lossRate',
+      'Real Food Cost',
+      s.lossRate.score,
+      w.production,
+      t.production,
+      s.lossRate.score >= 0
+        ? 'Losses ' +
+            s.lossRate.lossPercent.toFixed(1) +
+            '% (target ' +
+            s.lossRate.targetPercent +
+            '%)'
+        : ''
+    ),
+    build(
+      'time',
+      'Time',
+      s.time.score,
+      w.time,
+      t.time,
+      s.time.score >= 0
+        ? s.time.itemsCompleted + ' items, ' + s.time.exceededRate.toFixed(0) + '% exceeded'
+        : ''
+    ),
+    build(
+      'ritual',
+      'Rituals',
+      s.ritual.score,
+      w.ritual,
+      t.ritual,
+      s.ritual.score >= 0 ? s.ritual.completedDays + ' / ' + s.ritual.totalDays + ' days' : ''
+    ),
+    build(
+      'avgCheck',
+      'Avg Check',
+      s.avgCheck.score,
+      w.avgCheck,
+      t.avgCheck,
+      s.avgCheck.score >= 0
+        ? formatIDR(s.avgCheck.actualAvg) +
+            '/guest (target ' +
+            formatIDR(s.avgCheck.targetAvg) +
+            ')'
+        : ''
+    )
+  ]
+  return all.filter(m => m.weight > 0)
+})
 
 async function loadKpiBonus() {
   const dept = kpiDepartment.value
@@ -163,7 +237,6 @@ async function loadKpiBonus() {
 
   loading.value = true
   try {
-    // Pass empty staffRows — we only need scores, not distribution
     result.value = await calculateDepartmentKpiBonus(dept, year, month, [])
   } catch {
     result.value = null
@@ -188,42 +261,42 @@ onMounted(() => loadKpiBonus())
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  padding: 12px 16px;
+  padding: 14px 18px;
+  overflow: visible !important;
+  flex-shrink: 0;
 }
 
 .widget-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .widget-title {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 15px;
   display: flex;
   align-items: center;
 }
 
 .widget-empty {
   text-align: center;
-  padding: 8px 0;
+  padding: 12px 0;
   font-size: 13px;
 }
 
 .widget-body {
   display: flex;
-  gap: 16px;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 12px;
 }
 
-// Score circle
-.score-section {
+// Top row: score circle + pool info
+.top-row {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  min-width: 80px;
+  gap: 16px;
 }
 
 .score-circle {
@@ -235,6 +308,7 @@ onMounted(() => loadKpiBonus())
   align-items: center;
   justify-content: center;
   border: 3px solid rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
 
   &.score-green {
     border-color: rgba(76, 175, 80, 0.8);
@@ -259,10 +333,9 @@ onMounted(() => loadKpiBonus())
   text-transform: uppercase;
 }
 
-.score-details {
-  font-size: 11px;
-  text-align: center;
-  line-height: 1.5;
+.pool-info {
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .pool-line,
@@ -270,38 +343,54 @@ onMounted(() => loadKpiBonus())
   white-space: nowrap;
 }
 
-// Metric bars
-.metrics-bars {
-  flex: 1;
+// Metrics list
+.metrics-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.metric-bar-row {
-  display: flex;
-  align-items: center;
   gap: 8px;
 }
 
-.bar-label {
-  font-size: 12px;
-  width: 100px;
-  color: rgba(255, 255, 255, 0.7);
-  flex-shrink: 0;
+.metric-row {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 3px solid rgba(76, 175, 80, 0.5);
+
+  &.metric-failed {
+    border-left-color: rgba(244, 67, 54, 0.6);
+    opacity: 0.6;
+  }
 }
 
-.bar-track {
-  flex: 1;
-  height: 8px;
+.metric-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.metric-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.metric-weight {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.metric-bar-track {
+  height: 6px;
   background: rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
-  overflow: hidden;
+  border-radius: 3px;
+  position: relative;
+  overflow: visible;
+  margin-bottom: 4px;
 }
 
-.bar-fill {
+.metric-bar-fill {
   height: 100%;
-  border-radius: 4px;
+  border-radius: 3px;
   transition: width 0.4s ease;
 
   &.bar-green {
@@ -311,32 +400,49 @@ onMounted(() => loadKpiBonus())
     background: rgba(255, 193, 7, 0.8);
   }
   &.bar-red {
-    background: rgba(244, 67, 54, 0.8);
+    background: rgba(244, 67, 54, 0.7);
   }
   &.bar-grey {
     background: rgba(255, 255, 255, 0.15);
   }
 }
 
-.bar-score {
-  font-size: 12px;
-  font-weight: 600;
-  width: 28px;
-  text-align: right;
+.metric-threshold-mark {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.4);
+  transform: translateX(-1px);
+}
+
+.metric-detail-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.metric-detail {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.metric-nodata {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.3);
+  font-style: italic;
+  padding: 2px 0;
+}
+
+.metric-score {
+  font-size: 14px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 480px) {
-  .widget-body {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .score-section {
-    flex-direction: row;
-    gap: 12px;
-  }
-  .bar-label {
-    width: 80px;
-  }
+.metric-score-failed {
+  color: rgba(244, 67, 54, 0.8);
+  font-weight: 500;
+  font-size: 11px;
 }
 </style>

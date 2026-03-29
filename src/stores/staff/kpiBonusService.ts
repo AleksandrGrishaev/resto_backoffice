@@ -72,7 +72,10 @@ export async function saveKpiBonusScheme(
     threshold_food_cost: scheme.thresholdFoodCost ?? 0,
     threshold_time: scheme.thresholdTime ?? 0,
     threshold_production: scheme.thresholdProduction ?? 0,
-    threshold_ritual: scheme.thresholdRitual ?? 0
+    threshold_ritual: scheme.thresholdRitual ?? 0,
+    weight_avg_check: scheme.weightAvgCheck ?? 0,
+    threshold_avg_check: scheme.thresholdAvgCheck ?? 0,
+    avg_check_target: scheme.avgCheckTarget ?? 0
   }
 
   const { data, error } = await supabase
@@ -105,6 +108,9 @@ function schemeFromRow(row: any): KpiBonusScheme {
     thresholdTime: row.threshold_time ?? 0,
     thresholdProduction: row.threshold_production ?? 0,
     thresholdRitual: row.threshold_ritual ?? 0,
+    weightAvgCheck: row.weight_avg_check ?? 0,
+    thresholdAvgCheck: row.threshold_avg_check ?? 0,
+    avgCheckTarget: Number(row.avg_check_target) || 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -295,6 +301,84 @@ async function scoreRitual(
   }
 }
 
+/**
+ * Avg Check Per Guest score: actual avg vs target, graduated
+ * Queries dine-in orders with guest_count > 0 for the given month
+ */
+async function scoreAvgCheck(
+  year: number,
+  month: number,
+  target: number
+): Promise<{ score: number; actualAvg: number; targetAvg: number; totalGuests: number }> {
+  if (target <= 0) {
+    return { score: -1, actualAvg: 0, targetAvg: target, totalGuests: 0 }
+  }
+
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01`
+  const lastDay = new Date(year, month, 0).getDate()
+  const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
+  // Query bill-level guest counts from orders.bills JSONB
+  const { data, error } = await supabase.rpc('get_avg_check_per_guest', {
+    p_start_date: `${startDate}T00:00:00`,
+    p_end_date: `${endDate}T23:59:59`
+  })
+
+  if (error) {
+    // Fallback: query order-level guest_count if RPC not available
+    DebugUtils.warn(MODULE, 'RPC get_avg_check_per_guest not found, using order-level fallback', {
+      error
+    })
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('orders')
+      .select('total_amount, guest_count')
+      .eq('type', 'dine_in')
+      .gt('guest_count', 0)
+      .not('status', 'in', '("cancelled")')
+      .gte('created_at', `${startDate}T00:00:00`)
+      .lte('created_at', `${endDate}T23:59:59`)
+
+    if (fallbackError || !fallbackData || fallbackData.length === 0) {
+      return { score: -1, actualAvg: 0, targetAvg: target, totalGuests: 0 }
+    }
+
+    const totalRevenue = fallbackData.reduce((s, r) => s + (Number(r.total_amount) || 0), 0)
+    const totalGuestsFallback = fallbackData.reduce((s, r) => s + (Number(r.guest_count) || 0), 0)
+
+    if (totalGuestsFallback === 0) {
+      return { score: -1, actualAvg: 0, targetAvg: target, totalGuests: 0 }
+    }
+
+    const actualAvgFallback = totalRevenue / totalGuestsFallback
+    const scoreFallback = Math.min(100, (actualAvgFallback / target) * 100)
+    return {
+      score: Math.round(scoreFallback * 100) / 100,
+      actualAvg: Math.round(actualAvgFallback),
+      targetAvg: target,
+      totalGuests: totalGuestsFallback
+    }
+  }
+
+  const totalRevenue = Number(data?.[0]?.total_revenue) || 0
+  const totalGuests = Number(data?.[0]?.total_guests) || 0
+
+  if (totalGuests === 0) {
+    return { score: -1, actualAvg: 0, targetAvg: target, totalGuests: 0 }
+  }
+
+  const actualAvg = totalRevenue / totalGuests
+
+  // Graduated: 100 at target, proportional below, capped at 100 above
+  const score = Math.min(100, (actualAvg / target) * 100)
+
+  return {
+    score: Math.round(score * 100) / 100,
+    actualAvg: Math.round(actualAvg),
+    targetAvg: target,
+    totalGuests
+  }
+}
+
 // =====================================================
 // MAIN CALCULATION
 // =====================================================
@@ -316,14 +400,16 @@ export async function calculateDepartmentKpiBonus(
     foodCost: scheme.weightFoodCost,
     time: scheme.weightTime,
     production: scheme.weightProduction, // DB column stays "production", but it's Loss Rate now
-    ritual: scheme.weightRitual
+    ritual: scheme.weightRitual,
+    avgCheck: scheme.weightAvgCheck
   }
 
-  // 2. Score metrics (food cost + time + ritual in parallel, loss rate from food cost data)
-  const [fc, tm, rit] = await Promise.all([
+  // 2. Score metrics (food cost + time + ritual + avg check in parallel, loss rate from food cost data)
+  const [fc, tm, rit, ac] = await Promise.all([
     scoreFoodCost(department, year, month),
     scoreTime(department, year, month),
-    scoreRitual(department, year, month)
+    scoreRitual(department, year, month),
+    scoreAvgCheck(year, month, scheme.avgCheckTarget)
   ])
 
   // Loss Rate uses data from food cost fetch (no extra RPC)
@@ -343,7 +429,8 @@ export async function calculateDepartmentKpiBonus(
     foodCost: fc,
     time: tm,
     lossRate: lr,
-    ritual: rit
+    ritual: rit,
+    avgCheck: ac
   }
 
   // 3. Apply per-metric thresholds: below threshold → score becomes 0
@@ -351,7 +438,8 @@ export async function calculateDepartmentKpiBonus(
     foodCost: scheme.thresholdFoodCost,
     time: scheme.thresholdTime,
     production: scheme.thresholdProduction,
-    ritual: scheme.thresholdRitual
+    ritual: scheme.thresholdRitual,
+    avgCheck: scheme.thresholdAvgCheck
   }
 
   function applyThreshold(score: number, threshold: number): number {
@@ -364,7 +452,8 @@ export async function calculateDepartmentKpiBonus(
     { score: applyThreshold(fc.score, thresholds.foodCost), weight: weights.foodCost },
     { score: applyThreshold(tm.score, thresholds.time), weight: weights.time },
     { score: applyThreshold(lr.score, thresholds.production), weight: weights.production },
-    { score: applyThreshold(rit.score, thresholds.ritual), weight: weights.ritual }
+    { score: applyThreshold(rit.score, thresholds.ritual), weight: weights.ritual },
+    { score: applyThreshold(ac.score, thresholds.avgCheck), weight: weights.avgCheck }
   ]
   const activeMetrics = metricPairs.filter(m => m.score >= 0)
   const activeWeight = activeMetrics.reduce((s, m) => s + m.weight, 0)
@@ -433,6 +522,7 @@ export async function calculateDepartmentKpiBonus(
     department,
     scores,
     weights,
+    thresholds,
     departmentScore: roundedScore,
     poolType: scheme.poolType,
     poolAmount: resolvedPoolAmount,
@@ -462,10 +552,12 @@ export async function saveKpiBonusSnapshot(
       score_time: Math.max(0, result.scores.time.score),
       score_production: Math.max(0, result.scores.lossRate.score),
       score_ritual: Math.max(0, result.scores.ritual.score),
+      score_avg_check: Math.max(0, result.scores.avgCheck.score),
       weight_food_cost: result.weights.foodCost,
       weight_time: result.weights.time,
       weight_production: result.weights.production,
       weight_ritual: result.weights.ritual,
+      weight_avg_check: result.weights.avgCheck,
       department_score: result.departmentScore,
       pool_type: result.poolType,
       pool_amount: result.poolAmount,
@@ -476,6 +568,7 @@ export async function saveKpiBonusSnapshot(
         time: result.scores.time,
         lossRate: result.scores.lossRate,
         ritual: result.scores.ritual,
+        avgCheck: result.scores.avgCheck,
         staffDistribution: result.staffDistribution
       }
     },
@@ -513,10 +606,12 @@ function snapshotFromRow(row: any): KpiBonusSnapshot {
     scoreTime: Number(row.score_time),
     scoreProduction: Number(row.score_production),
     scoreRitual: Number(row.score_ritual),
+    scoreAvgCheck: Number(row.score_avg_check ?? -1),
     weightFoodCost: row.weight_food_cost,
     weightTime: row.weight_time,
     weightProduction: row.weight_production,
     weightRitual: row.weight_ritual,
+    weightAvgCheck: row.weight_avg_check ?? 0,
     departmentScore: Number(row.department_score),
     poolType: row.pool_type || 'fixed',
     poolAmount: Number(row.pool_amount),

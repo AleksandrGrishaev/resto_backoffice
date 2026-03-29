@@ -184,6 +184,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
           customerName?: string
           channelId?: string
           channelCode?: string
+          guestCount?: number
         },
     tableId?: string,
     customerName?: string
@@ -296,7 +297,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
                 ? 'Takeaway Bill'
                 : 'Delivery Bill'
 
-          const billResult = await addBillToOrder(response.data.id, billName)
+          const billResult = await addBillToOrder(response.data.id, billName, orderData.guestCount)
 
           if (billResult.success) {
             console.log('✅ Auto-created first bill for new order')
@@ -366,10 +367,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
    */
   async function addBillToOrder(
     orderId: string,
-    billName: string = 'Счет'
+    billName: string = 'Счет',
+    guestCount?: number
   ): Promise<ServiceResponse<PosBill>> {
     try {
-      const response = await ordersService.addBillToOrder(orderId, billName)
+      const response = await ordersService.addBillToOrder(orderId, billName, guestCount)
 
       if (response.success && response.data) {
         const orderIndex = orders.value.findIndex(o => o.id === orderId)
@@ -1126,6 +1128,24 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       error.value = errorMsg
       return { success: false, error: errorMsg }
     }
+  }
+
+  /**
+   * Update guest count for a specific bill
+   */
+  async function updateBillGuestCount(
+    orderId: string,
+    billId: string,
+    guestCount: number
+  ): Promise<void> {
+    const order = orders.value.find(o => o.id === orderId)
+    if (!order) throw new Error('Order not found')
+
+    const bill = order.bills.find(b => b.id === billId)
+    if (!bill) throw new Error('Bill not found')
+
+    bill.guestCount = guestCount
+    await ordersService.updateOrder(order)
   }
 
   /**
@@ -2770,6 +2790,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     cancelOrder,
     deleteOrder,
     updateOrder,
+    updateBillGuestCount,
     recalculateOrderTotals,
     updateItemsPaymentStatus,
     updateOrderOnly,

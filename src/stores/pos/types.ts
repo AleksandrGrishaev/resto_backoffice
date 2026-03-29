@@ -259,6 +259,9 @@ export interface PosBill extends BaseEntity {
   paidAmount: number
   notes?: string
 
+  // Guest count for this bill (dine-in)
+  guestCount?: number
+
   // Per-bill loyalty (different customers per bill at same table)
   customerId?: string
   customerName?: string
