@@ -48,10 +48,16 @@ BEGIN
   SELECT name INTO v_customer_name
   FROM customers WHERE id = v_customer_id;
 
-  -- Link orders and update customer_name snapshot
+  -- Link orders and update customer_name snapshot + propagate to bills JSONB
   UPDATE orders
   SET customer_id = v_customer_id,
       customer_name = COALESCE(v_customer_name, customer_name),
+      bills = (
+        SELECT COALESCE(jsonb_agg(
+          bill || jsonb_build_object('customerId', v_customer_id, 'customerName', COALESCE(v_customer_name, customer_name))
+        ), bills)
+        FROM jsonb_array_elements(bills) AS bill
+      ),
       updated_at = now()
   WHERE created_by = v_auth_uid
     AND customer_id IS DISTINCT FROM v_customer_id
