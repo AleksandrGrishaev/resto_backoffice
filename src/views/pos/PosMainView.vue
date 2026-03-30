@@ -433,12 +433,18 @@ const getBillNameForOrderType = (orderType: string): string => {
 
 /**
  * Обработка добавления товара из MenuSection
+ * Guard against double-tap on tablets (touch + click = two events)
  */
+const addItemInProgress = ref(false)
+
 const handleAddItemToOrder = async (
   item: MenuItem,
   variant: MenuItemVariant,
   selectedModifiers?: import('@/stores/menu/types').SelectedModifier[]
 ): Promise<void> => {
+  if (addItemInProgress.value) return
+  addItemInProgress.value = true
+
   try {
     DebugUtils.debug(MODULE_NAME, 'Adding item to order from menu', {
       itemId: item.id,
@@ -594,6 +600,10 @@ const handleAddItemToOrder = async (
     } else {
       showNotification(message, 'error')
     }
+  } finally {
+    setTimeout(() => {
+      addItemInProgress.value = false
+    }, 500)
   }
 }
 
