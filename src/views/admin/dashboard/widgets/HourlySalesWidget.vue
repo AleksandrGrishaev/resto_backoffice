@@ -2,7 +2,7 @@
 <template>
   <WidgetCard title="Sales by Hour" icon="mdi-chart-bar" size="large" :loading="loading">
     <div class="chart-container">
-      <Bar v-if="chartData" :data="chartData" :options="chartOptions" />
+      <Bar v-if="chartData" :data="chartData as any" :options="chartOptions as any" />
       <div v-else class="no-data">No sales data</div>
     </div>
   </WidgetCard>
@@ -45,6 +45,17 @@ const props = defineProps<{
   loading: boolean
 }>()
 
+/** Build per-point radius array: show dot only where count changes from previous hour */
+function transitionPoints(data: number[], radius = 4): number[] {
+  return data.map((v, i) => {
+    if (i === 0) return v > 0 ? radius : 0
+    if (v !== data[i - 1]) return radius
+    // Also mark the last non-zero before a drop to 0
+    if (i < data.length - 1 && data[i + 1] !== v) return radius
+    return 0
+  })
+}
+
 const chartData = computed(() => {
   if (!props.hourlySales.length) return null
 
@@ -53,55 +64,70 @@ const chartData = computed(() => {
   const salesMap = new Map(props.hourlySales.map(s => [s.hour, s]))
   const staffMap = new Map(props.staffByHour.map(s => [s.hour, s]))
 
+  const kitchenData = hours.map(h => staffMap.get(h)?.kitchen || 0)
+  const barData = hours.map(h => staffMap.get(h)?.bar || 0)
+  const serviceData = hours.map(h => staffMap.get(h)?.service || 0)
+
   return {
     labels: hours.map(h => `${h}:00`),
     datasets: [
       {
-        type: 'bar' as const,
+        type: 'bar',
         label: 'Revenue',
         data: hours.map(h => salesMap.get(h)?.revenue || 0),
         backgroundColor: 'rgba(163, 149, 233, 0.6)',
         borderColor: 'rgba(163, 149, 233, 1)',
         borderWidth: 1,
         borderRadius: 4,
+        barPercentage: 0.85,
+        categoryPercentage: 0.9,
         yAxisID: 'y',
         order: 2
       },
       {
-        type: 'line' as const,
+        type: 'line',
         label: 'Kitchen staff',
-        data: hours.map(h => staffMap.get(h)?.kitchen || 0),
+        data: kitchenData,
         borderColor: '#ff9676',
-        backgroundColor: 'rgba(255, 150, 118, 0.1)',
-        borderWidth: 2,
-        pointRadius: 0,
-        tension: 0.3,
+        backgroundColor: 'rgba(255, 150, 118, 0.08)',
+        borderWidth: 2.5,
+        pointRadius: transitionPoints(kitchenData),
+        pointBackgroundColor: '#ff9676',
+        pointBorderColor: '#1a1a1e',
+        pointBorderWidth: 2,
+        stepped: 'before' as const,
         fill: false,
         yAxisID: 'y1',
         order: 1
       },
       {
-        type: 'line' as const,
+        type: 'line',
         label: 'Bar staff',
-        data: hours.map(h => staffMap.get(h)?.bar || 0),
+        data: barData,
         borderColor: '#76b0ff',
-        backgroundColor: 'rgba(118, 176, 255, 0.1)',
-        borderWidth: 2,
-        pointRadius: 0,
-        tension: 0.3,
+        backgroundColor: 'rgba(118, 176, 255, 0.08)',
+        borderWidth: 2.5,
+        pointRadius: transitionPoints(barData),
+        pointBackgroundColor: '#76b0ff',
+        pointBorderColor: '#1a1a1e',
+        pointBorderWidth: 2,
+        stepped: 'before' as const,
         fill: false,
         yAxisID: 'y1',
         order: 1
       },
       {
-        type: 'line' as const,
+        type: 'line',
         label: 'Service staff',
-        data: hours.map(h => staffMap.get(h)?.service || 0),
+        data: serviceData,
         borderColor: '#92c9af',
-        backgroundColor: 'rgba(146, 201, 175, 0.1)',
-        borderWidth: 2,
-        pointRadius: 0,
-        tension: 0.3,
+        backgroundColor: 'rgba(146, 201, 175, 0.08)',
+        borderWidth: 2.5,
+        pointRadius: transitionPoints(serviceData),
+        pointBackgroundColor: '#92c9af',
+        pointBorderColor: '#1a1a1e',
+        pointBorderWidth: 2,
+        stepped: 'before' as const,
         fill: false,
         yAxisID: 'y1',
         order: 1
@@ -133,21 +159,46 @@ const chartOptions = computed(() => ({
       bodyColor: 'rgba(255, 255, 255, 0.8)',
       borderColor: 'rgba(255, 255, 255, 0.1)',
       borderWidth: 1,
-      padding: 10,
+      padding: 12,
       callbacks: {
         label: (ctx: any) => {
           if (ctx.dataset.yAxisID === 'y') {
-            return `Revenue: ${formatIDR(Number(ctx.raw))}`
+            return ` Revenue: ${formatIDR(Number(ctx.raw))}`
           }
-          return `${ctx.dataset.label}: ${ctx.raw} people`
+          const val = Number(ctx.raw)
+          if (val === 0) return ''
+          return ` ${ctx.dataset.label}: ${val}`
+        },
+        afterBody: (items: any[]) => {
+          const revenue = Number(items[0]?.raw || 0)
+          const totalStaff = items
+            .slice(1)
+            .reduce((s: number, i: any) => s + (Number(i.raw) || 0), 0)
+          if (revenue > 0 && totalStaff === 0) {
+            return '\n⚠ No staff scheduled — revenue present'
+          }
+          if (revenue === 0 && totalStaff > 0) {
+            return '\n⚠ Staff on duty — no revenue'
+          }
+          if (revenue > 3_000_000 && totalStaff <= 2) {
+            return '\n⚠ High revenue, low staffing'
+          }
+          return ''
         }
       }
     }
   },
   scales: {
     x: {
-      grid: { color: 'rgba(255, 255, 255, 0.04)' },
-      ticks: { color: 'rgba(255, 255, 255, 0.5)', font: { size: 10 } }
+      offset: false,
+      grid: {
+        color: 'rgba(255, 255, 255, 0.06)',
+        offset: false
+      },
+      ticks: {
+        color: 'rgba(255, 255, 255, 0.5)',
+        font: { size: 10 }
+      }
     },
     y: {
       position: 'left' as const,
