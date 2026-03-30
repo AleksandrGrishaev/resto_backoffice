@@ -77,7 +77,7 @@ const isOpen = computed({
   set: value => emit('update:modelValue', value)
 })
 
-// Check if this transaction belongs to an active shift (created after shift start)
+// Check if this transaction belongs to an active shift (created after shift start AND in a shift account)
 watch(
   [isOpen, () => props.transaction],
   async ([open, tx]) => {
@@ -86,12 +86,18 @@ watch(
     try {
       const { data: activeShift } = await supabase
         .from('shifts')
-        .select('start_time')
+        .select('start_time, account_balances')
         .eq('status', 'active')
         .limit(1)
         .maybeSingle()
       if (activeShift && new Date(tx.createdAt) >= new Date(activeShift.start_time)) {
-        belongsToActiveShift.value = true
+        // Only block if transaction belongs to one of the shift's tracked accounts
+        const shiftAccountIds = (activeShift.account_balances || []).map(
+          (ab: { accountId: string }) => ab.accountId
+        )
+        if (shiftAccountIds.includes(tx.accountId)) {
+          belongsToActiveShift.value = true
+        }
       }
     } catch {
       // If check fails, allow correction
