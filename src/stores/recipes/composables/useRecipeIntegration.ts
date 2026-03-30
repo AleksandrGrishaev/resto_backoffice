@@ -282,6 +282,20 @@ export function useRecipeIntegration() {
     }
   }
 
+  /**
+   * Обновляет usage только для конкретных продуктов (оптимизация)
+   */
+  async function updateUsageForProductIds(productIds: Set<string>): Promise<void> {
+    try {
+      for (const productId of productIds) {
+        await updateProductUsageInProductStore(productId)
+      }
+      DebugUtils.info(MODULE_NAME, `✅ Updated usage for ${productIds.size} products (targeted)`)
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, 'Error updating usage for products', { error })
+    }
+  }
+
   // =============================================
   // RETURN COMPOSABLE
   // =============================================
@@ -300,6 +314,7 @@ export function useRecipeIntegration() {
 
     // Usage tracking
     updateProductUsageInProductStore,
-    updateUsageForAllProducts
+    updateUsageForAllProducts,
+    updateUsageForProductIds
   }
 }

@@ -694,6 +694,54 @@ export class RecipesService {
   }
 
   /**
+   * Update a single field on preparation (lightweight, no ingredients rewrite)
+   */
+  async updatePreparationField(id: string, field: string, value: unknown): Promise<void> {
+    if (!isSupabaseAvailable()) return
+
+    await executeSupabaseMutation(async () => {
+      const { error } = await supabase
+        .from('preparations')
+        .update({ [field]: value })
+        .eq('id', id)
+
+      if (error) throw error
+    }, `${MODULE_NAME}.updatePreparationField`)
+  }
+
+  /**
+   * Cascade unit change: update all preparation_ingredients and recipe_components
+   * that reference this preparation as an ingredient
+   */
+  async cascadePreparationUnitChange(preparationId: string, newUnit: string): Promise<void> {
+    if (!isSupabaseAvailable()) return
+
+    // Update preparation_ingredients where this prep is used as ingredient
+    await executeSupabaseMutation(async () => {
+      const { error } = await supabase
+        .from('preparation_ingredients')
+        .update({ unit: newUnit })
+        .eq('ingredient_id', preparationId)
+        .eq('type', 'preparation')
+
+      if (error) throw error
+    }, `${MODULE_NAME}.cascadePreparationUnitChange.preparationIngredients`)
+
+    // Update recipe_components where this prep is used as component
+    await executeSupabaseMutation(async () => {
+      const { error } = await supabase
+        .from('recipe_components')
+        .update({ unit: newUnit })
+        .eq('component_id', preparationId)
+        .eq('component_type', 'preparation')
+
+      if (error) throw error
+    }, `${MODULE_NAME}.cascadePreparationUnitChange.recipeComponents`)
+
+    DebugUtils.info(MODULE_NAME, '✅ Cascaded unit change', { preparationId, newUnit })
+  }
+
+  /**
    * Delete preparation
    */
   async deletePreparation(id: string): Promise<void> {
