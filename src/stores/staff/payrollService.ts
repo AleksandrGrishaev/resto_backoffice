@@ -35,7 +35,7 @@ function formatDate(d: Date): string {
 export interface PayrollMonth {
   year: number
   month: number
-  /** Полный период зарплаты: последний день пред. месяца → предпоследний день текущего */
+  /** Полный период зарплаты: последний день пред. месяца → последний день текущего */
   salaryStart: string
   salaryEnd: string
   /** Service period 1: последний день пред. месяца → 14-е текущего */
@@ -53,10 +53,13 @@ export interface PayrollMonth {
 /**
  * Рассчитать все периоды для данного месяца
  *
- * Зарплата: последний день пред. месяца → предпоследний день текущего (1 раз)
+ * Зарплата: последний день пред. месяца → последний день текущего
  * Service 1: последний день пред. месяца → 14-е текущего
  * Service 2: 15-е текущего → предпоследний день текущего
  * Выплата: последний день текущего месяца
+ *
+ * Salary period включает последний день (payment day) — часы за этот день
+ * учитываются в зарплате, но НЕ в распределении service tax.
  */
 export function getPayrollMonth(year: number, month: number): PayrollMonth {
   // Последний день предыдущего месяца
@@ -67,19 +70,21 @@ export function getPayrollMonth(year: number, month: number): PayrollMonth {
   const secondToLast = currentMonthLastDay - 1
 
   const salaryStart = formatDate(prevMonthLastDay)
-  const salaryEnd = formatDate(new Date(year, month - 1, secondToLast))
+  // Salary period includes the last day of the month
+  const salaryEnd = formatDate(new Date(year, month - 1, currentMonthLastDay))
 
   const service1Start = salaryStart
   const service1End = formatDate(new Date(year, month - 1, 14))
   const service2Start = formatDate(new Date(year, month - 1, 15))
-  const service2End = salaryEnd
+  // Service period ends on second-to-last day (service tax is counted until then)
+  const service2End = formatDate(new Date(year, month - 1, secondToLast))
 
-  const paymentDate = formatDate(new Date(year, month - 1, currentMonthLastDay))
+  const paymentDate = salaryEnd
 
-  // Генерация всех дат периода
+  // Генерация всех дат периода (включая последний день)
   const allDates: string[] = []
   const cursor = new Date(prevMonthLastDay)
-  const endDate = new Date(year, month - 1, secondToLast)
+  const endDate = new Date(year, month - 1, currentMonthLastDay)
   while (cursor <= endDate) {
     allDates.push(formatDate(cursor))
     cursor.setDate(cursor.getDate() + 1)
@@ -246,15 +251,16 @@ export async function calculatePayrollForMonth(
       dailyTimeSlots[date] = log?.timeSlots ?? null
     }
 
-    // Sub-period hours
+    // Sub-period hours (for service tax distribution)
     let totalHoursP1 = 0
     let totalHoursP2 = 0
+    let totalHours = 0
     for (const date of pm.allDates) {
       const h = dailyHours[date]
+      totalHours += h
       if (date >= pm.service1Start && date <= pm.service1End) totalHoursP1 += h
       if (date >= pm.service2Start && date <= pm.service2End) totalHoursP2 += h
     }
-    const totalHours = totalHoursP1 + totalHoursP2
 
     // Salary — trainees use customSalary, regular staff use rank
     const isTrainee = member.isTrainee

@@ -29,10 +29,9 @@
 
     <!-- Period info -->
     <div v-if="payrollMonth" class="period-info">
-      Salary: {{ payrollMonth.salaryStart }} — {{ payrollMonth.salaryEnd }} | Service 1:
-      {{ payrollMonth.service1Start }} — {{ payrollMonth.service1End }} | Service 2:
-      {{ payrollMonth.service2Start }} — {{ payrollMonth.service2End }} | Payment:
-      {{ payrollMonth.paymentDate }}
+      Working days: {{ salaryPeriodLabel }} | Service 1:
+      {{ shortPeriodLabel(payrollMonth.service1Start, payrollMonth.service1End) }} | Service 2:
+      {{ shortPeriodLabel(payrollMonth.service2Start, payrollMonth.service2End) }}
     </div>
 
     <!-- Content area (scrollable) -->
@@ -187,9 +186,7 @@
           <div class="summary-card">
             <div class="card-label">Hours Worked</div>
             <div class="card-value">{{ result.totals.totalHours }}h</div>
-            <div class="card-detail">
-              P1: {{ result.totals.totalHoursP1 }}h | P2: {{ result.totals.totalHoursP2 }}h
-            </div>
+            <div class="card-detail">{{ salaryPeriodLabel }}</div>
           </div>
           <template v-for="kpi in kpiResults" :key="kpi.department">
             <div class="summary-card kpi-card">
@@ -314,7 +311,7 @@
               </tr>
               <tr class="detail-total">
                 <td class="detail-label">Total team hours</td>
-                <td class="detail-formula">P1 + P2</td>
+                <td class="detail-formula">{{ salaryPeriodLabel }}</td>
                 <td class="detail-value">= {{ result.totals.totalHours }}h</td>
               </tr>
             </tbody>
@@ -502,7 +499,7 @@
                 <tr>
                   <td class="detail-label">Hours worked</td>
                   <td class="detail-formula">
-                    P1: {{ row.totalHoursP1 }}h + P2: {{ row.totalHoursP2 }}h
+                    {{ salaryPeriodLabel }}
                   </td>
                   <td class="detail-value">= {{ row.totalHours }}h</td>
                 </tr>
@@ -725,6 +722,16 @@ function shortPeriodLabel(start: string, end: string): string {
   if (sMonth === eMonth) return `(${sMonth} ${sDay}–${eDay})`
   return `(${sMonth} ${sDay} – ${eMonth} ${eDay})`
 }
+
+/** Human-readable salary period, e.g. "1 – 31 March" */
+const salaryPeriodLabel = computed(() => {
+  if (!payrollMonth.value) return ''
+  const m = payrollMonth.value
+  const monthLabel = months[m.month - 1]?.label || ''
+  // First calendar day of the month = day 1, last = last day
+  const lastDay = new Date(m.year, m.month, 0).getDate()
+  return `1 – ${lastDay} ${monthLabel}`
+})
 
 const uniqueRanks = computed(() => {
   if (!result.value) return []
