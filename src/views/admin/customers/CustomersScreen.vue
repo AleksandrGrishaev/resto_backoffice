@@ -286,7 +286,7 @@
               density="compact"
               variant="outlined"
               class="mb-3"
-              :rules="[v => !!v?.trim() || 'Name is required']"
+              :rules="nameRules"
             />
 
             <v-row dense class="mb-3">
@@ -406,6 +406,16 @@
             >
               Switch to Cashback
             </v-btn>
+            <v-btn
+              variant="tonal"
+              color="warning"
+              size="small"
+              prepend-icon="mdi-merge"
+              class="ml-2"
+              @click="openMergeDialog"
+            >
+              Merge Into...
+            </v-btn>
             <v-spacer />
             <v-btn variant="outlined" prepend-icon="mdi-pencil" @click="startEditing">Edit</v-btn>
             <v-btn variant="text" @click="showDetail = false">Close</v-btn>
@@ -419,7 +429,10 @@
               color="primary"
               variant="flat"
               :loading="saving"
-              :disabled="!editForm.name?.trim()"
+              :disabled="
+                !editForm.name?.trim() ||
+                !/^[a-zA-Z0-9\s\u00C0-\u024F\-'.]+$/.test(editForm.name.trim())
+              "
               @click="saveCustomer"
             >
               Save
@@ -440,7 +453,7 @@
             density="compact"
             variant="outlined"
             class="mb-3"
-            :rules="[v => !!v?.trim() || 'Name is required']"
+            :rules="nameRules"
           />
 
           <v-row dense class="mb-3">
@@ -532,10 +545,68 @@
             color="primary"
             variant="flat"
             :loading="creating"
-            :disabled="!createForm.name?.trim()"
+            :disabled="
+              !createForm.name?.trim() ||
+              !/^[a-zA-Z0-9\s\u00C0-\u024F\-'.]+$/.test(createForm.name.trim())
+            "
             @click="createCustomer"
           >
             Create
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- ========== Merge Customer Dialog ========== -->
+    <v-dialog v-model="showMergeDialog" max-width="500">
+      <v-card>
+        <v-card-title class="bg-warning text-white">Merge Customer</v-card-title>
+        <v-card-text class="pt-4">
+          <v-alert type="info" variant="tonal" density="compact" class="mb-4">
+            Merge
+            <strong>{{ mergeSource?.name }}</strong>
+            into another customer. All orders, transactions, loyalty points, and identities will be
+            transferred to the target. This action cannot be undone.
+          </v-alert>
+
+          <v-autocomplete
+            v-model="mergeTargetId"
+            :items="mergeTargetOptions"
+            item-title="label"
+            item-value="id"
+            label="Merge into customer *"
+            density="compact"
+            variant="outlined"
+            placeholder="Search by name, phone, telegram..."
+            no-data-text="No matching customers"
+            :loading="false"
+          />
+
+          <div v-if="mergeTargetId" class="mt-3 pa-3 bg-grey-darken-3 rounded">
+            <div class="text-subtitle-2 mb-1">Target: {{ mergeTargetCustomer?.name }}</div>
+            <div class="text-caption">
+              Balance: {{ formatIDR(mergeTargetCustomer?.loyaltyBalance || 0) }} | Visits:
+              {{ mergeTargetCustomer?.totalVisits || 0 }} | Spent:
+              {{ formatIDR(mergeTargetCustomer?.totalSpent || 0) }}
+            </div>
+          </div>
+
+          <v-alert v-if="mergeError" type="error" variant="tonal" density="compact" class="mt-3">
+            {{ mergeError }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showMergeDialog = false">Cancel</v-btn>
+          <v-btn
+            color="warning"
+            variant="flat"
+            :loading="merging"
+            :disabled="!mergeTargetId"
+            prepend-icon="mdi-merge"
+            @click="executeMerge"
+          >
+            Merge
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -578,6 +649,13 @@ const showCreateDialog = ref(false)
 const creating = ref(false)
 const createError = ref('')
 
+// Merge dialog
+const showMergeDialog = ref(false)
+const mergeSource = ref<Customer | null>(null)
+const mergeTargetId = ref<string | null>(null)
+const merging = ref(false)
+const mergeError = ref('')
+
 // Edit form
 const editForm = ref({
   name: '',
@@ -605,6 +683,13 @@ const createForm = ref({
 
 const tierOptions = ['member', 'regular', 'vip']
 const statusOptions = ['active', 'blocked']
+
+// Latin-only name validation (no Cyrillic or other scripts)
+const nameRules = [
+  (v: string) => !!v?.trim() || 'Name is required',
+  (v: string) =>
+    /^[a-zA-Z0-9\s\u00C0-\u024F\-'.]+$/.test(v?.trim() || '') || 'Only Latin characters allowed'
+]
 
 const headers = [
   { title: 'Name', key: 'name', sortable: true },
@@ -835,6 +920,51 @@ async function createCustomer() {
     createError.value = err instanceof Error ? err.message : 'Failed to create customer'
   } finally {
     creating.value = false
+  }
+}
+
+// ========== Merge ==========
+
+const mergeTargetOptions = computed(() => {
+  if (!mergeSource.value) return []
+  return customersStore.customers
+    .filter(c => c.id !== mergeSource.value!.id && c.status === 'active')
+    .map(c => ({
+      id: c.id,
+      label: `${c.name}${c.phone ? ' | ' + c.phone : ''}${c.telegramUsername ? ' | @' + c.telegramUsername : ''} — ${formatIDR(c.totalSpent)}`
+    }))
+})
+
+const mergeTargetCustomer = computed(() => {
+  if (!mergeTargetId.value) return null
+  return customersStore.getById(mergeTargetId.value)
+})
+
+function openMergeDialog() {
+  if (!selectedCustomer.value) return
+  mergeSource.value = selectedCustomer.value
+  mergeTargetId.value = null
+  mergeError.value = ''
+  showMergeDialog.value = true
+}
+
+async function executeMerge() {
+  if (!mergeSource.value || !mergeTargetId.value) return
+  merging.value = true
+  mergeError.value = ''
+
+  try {
+    const result = await customersStore.mergeCustomers(mergeSource.value.id, mergeTargetId.value)
+    if (!result.success) {
+      mergeError.value = result.error || 'Merge failed'
+      return
+    }
+    showMergeDialog.value = false
+    showDetail.value = false
+  } catch (err) {
+    mergeError.value = err instanceof Error ? err.message : 'Merge failed'
+  } finally {
+    merging.value = false
   }
 }
 

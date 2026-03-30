@@ -65,6 +65,9 @@ begin
     );
   end if;
 
+  -- Transliterate Cyrillic to Latin (customers must have Latin names)
+  v_name := transliterate_to_latin(v_name);
+
   -- Smart match: for Telegram, try to find customer by telegram_id first
   if v_provider = 'telegram' and v_telegram_id is not null then
     select id into v_customer_id

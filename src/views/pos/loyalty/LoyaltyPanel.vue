@@ -530,10 +530,10 @@
         <div v-if="showNewCustomer" class="new-customer pa-2 rounded loyalty-surface mt-2">
           <v-text-field
             v-model="newCustomerName"
-            placeholder="Customer name *"
+            placeholder="Customer name (Latin only) *"
             density="compact"
             variant="outlined"
-            hide-details
+            :rules="[(v: string) => /^[a-zA-Z0-9\s\u00C0-\u024F\-'.]*$/.test(v) || 'Latin only']"
             class="mb-2"
           />
           <div class="d-flex gap-2 mb-2">
@@ -612,7 +612,10 @@
               variant="flat"
               color="primary"
               :loading="creatingCustomer"
-              :disabled="!newCustomerName.trim()"
+              :disabled="
+                !newCustomerName.trim() ||
+                !/^[a-zA-Z0-9\s\u00C0-\u024F\-'.]+$/.test(newCustomerName.trim())
+              "
               @click="createNewCustomer"
             >
               Create
