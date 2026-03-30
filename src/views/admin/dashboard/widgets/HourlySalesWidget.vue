@@ -75,23 +75,34 @@ const chartData = computed(() => {
 
   // Stacked: each line = cumulative total so you see total headcount
   // Kitchen at bottom, Bar on top of Kitchen, Service on top of both
-  const kitchenData = hours.map(h => staffMap.get(h)?.kitchen || 0)
-  const barData = hours.map((h, i) => kitchenData[i] + (staffMap.get(h)?.bar || 0))
-  const serviceData = hours.map((h, i) => barData[i] + (staffMap.get(h)?.service || 0))
+  // Use {x, y} points on linear scale. Add point at x=24 to extend stepped lines to edge.
+  const gridHours = [...hours, 24]
+  const kitchenData = gridHours.map(h => ({
+    x: h,
+    y: staffMap.get(h === 24 ? 23 : h)?.kitchen || 0
+  }))
+  const barData = gridHours.map((h, i) => ({
+    x: h,
+    y: kitchenData[i].y + (staffMap.get(h === 24 ? 23 : h)?.bar || 0)
+  }))
+  const serviceData = gridHours.map((h, i) => ({
+    x: h,
+    y: barData[i].y + (staffMap.get(h === 24 ? 23 : h)?.service || 0)
+  }))
 
   return {
-    labels: hours.map(h => `${h}:00`),
     datasets: [
       {
         type: 'bar',
         label: 'Revenue',
-        data: hours.map(h => salesMap.get(h)?.revenue || 0),
+        // Bars at x+0.5 so they center between gridlines (e.g. 8.5 = between 8:00 and 9:00)
+        data: hours.map(h => ({ x: h + 0.5, y: salesMap.get(h)?.revenue || 0 })),
         backgroundColor: 'rgba(163, 149, 233, 0.6)',
         borderColor: 'rgba(163, 149, 233, 1)',
         borderWidth: 1,
-        borderRadius: 4,
-        barPercentage: 0.85,
-        categoryPercentage: 0.9,
+        borderRadius: 2,
+        barPercentage: 1,
+        categoryPercentage: 1,
         yAxisID: 'y',
         order: 2
       },
@@ -102,7 +113,8 @@ const chartData = computed(() => {
         borderColor: '#92c9af',
         backgroundColor: 'rgba(146, 201, 175, 0.12)',
         borderWidth: 2,
-        pointRadius: transitionPoints(serviceData),
+        pointRadius: 0,
+        pointHoverRadius: 4,
         pointBackgroundColor: '#92c9af',
         pointBorderColor: '#1a1a1e',
         pointBorderWidth: 2,
@@ -118,7 +130,8 @@ const chartData = computed(() => {
         borderColor: '#76b0ff',
         backgroundColor: 'rgba(118, 176, 255, 0.15)',
         borderWidth: 2,
-        pointRadius: transitionPoints(barData),
+        pointRadius: 0,
+        pointHoverRadius: 4,
         pointBackgroundColor: '#76b0ff',
         pointBorderColor: '#1a1a1e',
         pointBorderWidth: 2,
@@ -134,7 +147,8 @@ const chartData = computed(() => {
         borderColor: '#ff9676',
         backgroundColor: 'rgba(255, 150, 118, 0.2)',
         borderWidth: 2,
-        pointRadius: transitionPoints(kitchenData),
+        pointRadius: 0,
+        pointHoverRadius: 4,
         pointBackgroundColor: '#ff9676',
         pointBorderColor: '#1a1a1e',
         pointBorderWidth: 2,
@@ -151,7 +165,8 @@ const chartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
   interaction: {
-    mode: 'index' as const,
+    mode: 'nearest' as const,
+    axis: 'x' as const,
     intersect: false
   },
   plugins: {
@@ -172,18 +187,30 @@ const chartOptions = computed(() => ({
       borderWidth: 1,
       padding: 12,
       callbacks: {
+        title: (items: any[]) => {
+          if (!items.length) return ''
+          const raw = items[0].raw
+          const xVal = typeof raw === 'object' ? raw.x : items[0].parsed.x
+          // Bar data is at x+0.5, lines at integer x
+          const hour = Math.floor(xVal)
+          return `${hour}:00 – ${hour + 1}:00`
+        },
         label: (ctx: any) => {
+          const yVal = typeof ctx.raw === 'object' ? ctx.raw.y : ctx.raw
           if (ctx.dataset.yAxisID === 'y') {
-            return ` Revenue: ${formatIDR(Number(ctx.raw))}`
+            return ` Revenue: ${formatIDR(Number(yVal))}`
           }
           // Datasets order: Revenue, Service(stacked), Bar(stacked), Kitchen(base)
-          // Service = total, Bar = kitchen+bar, Kitchen = kitchen only
           // Show unstacked values in tooltip
           const items = ctx.chart.data.datasets
           const idx = ctx.dataIndex
-          const serviceStacked = Number(items[1]?.data?.[idx] || 0)
-          const barStacked = Number(items[2]?.data?.[idx] || 0)
-          const kitchenVal = Number(items[3]?.data?.[idx] || 0)
+          const getY = (ds: number) => {
+            const d = items[ds]?.data?.[idx]
+            return typeof d === 'object' ? (d as any).y : Number(d || 0)
+          }
+          const serviceStacked = getY(1)
+          const barStacked = getY(2)
+          const kitchenVal = getY(3)
           const barVal = barStacked - kitchenVal
           const serviceVal = serviceStacked - barStacked
 
@@ -197,9 +224,12 @@ const chartOptions = computed(() => ({
           return ` ${label}: ${val}${suffix}`
         },
         afterBody: (items: any[]) => {
-          const revenue = Number(items[0]?.raw || 0)
-          // Service dataset has the total stacked value
-          const totalStaff = Number(items[1]?.raw || 0)
+          const getY = (item: any) => {
+            if (!item) return 0
+            return typeof item.raw === 'object' ? item.raw.y : Number(item.raw || 0)
+          }
+          const revenue = getY(items[0])
+          const totalStaff = getY(items[1])
           if (revenue > 0 && totalStaff === 0) {
             return '\n⚠ No staff scheduled — revenue present'
           }
@@ -216,12 +246,17 @@ const chartOptions = computed(() => ({
   },
   scales: {
     x: {
+      type: 'linear' as const,
+      min: 8,
+      max: 24,
       grid: {
         color: 'rgba(255, 255, 255, 0.06)'
       },
       ticks: {
+        stepSize: 1,
         color: 'rgba(255, 255, 255, 0.5)',
-        font: { size: 10 }
+        font: { size: 10 },
+        callback: (val: any) => `${val}:00`
       }
     },
     y: {
