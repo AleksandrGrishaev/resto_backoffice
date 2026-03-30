@@ -434,6 +434,21 @@
                 :disabled="!bonusSchemes[dept].isActive"
               />
 
+              <!-- Cancellation Penalty Rate -->
+              <v-text-field
+                v-model.number="bonusSchemes[dept].cancellationPenaltyRate"
+                label="Cancellation Penalty Rate"
+                type="number"
+                suffix="%"
+                variant="outlined"
+                density="compact"
+                hint="% of cancelled item price (kitchen mistakes) deducted from bonus pool. 100 = full price, 0 = disabled."
+                persistent-hint
+                class="mb-3"
+                :disabled="!bonusSchemes[dept].isActive"
+                :rules="[v => (v >= 0 && v <= 100) || 'Must be 0-100']"
+              />
+
               <!-- Threshold -->
               <v-text-field
                 v-model.number="bonusSchemes[dept].minThreshold"
@@ -679,7 +694,8 @@ const defaultScheme = () => ({
   thresholdTime: 80,
   thresholdProduction: 100,
   thresholdRitual: 80,
-  thresholdAvgCheck: 0
+  thresholdAvgCheck: 0,
+  cancellationPenaltyRate: 100
 })
 
 const bonusSchemes = reactive<Record<KpiDepartment, ReturnType<typeof defaultScheme>>>({
@@ -723,7 +739,8 @@ const loadBonusSchemes = async () => {
           thresholdTime: s.thresholdTime,
           thresholdProduction: s.thresholdProduction,
           thresholdRitual: s.thresholdRitual,
-          thresholdAvgCheck: s.thresholdAvgCheck
+          thresholdAvgCheck: s.thresholdAvgCheck,
+          cancellationPenaltyRate: s.cancellationPenaltyRate ?? 100
         }
       }
     }
@@ -756,7 +773,8 @@ const saveBonusScheme = async (dept: KpiDepartment) => {
       thresholdTime: s.thresholdTime,
       thresholdProduction: s.thresholdProduction,
       thresholdRitual: s.thresholdRitual,
-      thresholdAvgCheck: s.thresholdAvgCheck
+      thresholdAvgCheck: s.thresholdAvgCheck,
+      cancellationPenaltyRate: s.cancellationPenaltyRate
     })
     bonusSchemes[dept].id = saved.id
     successMessage.value = `${dept === 'kitchen' ? 'Kitchen' : 'Bar'} bonus pool saved`

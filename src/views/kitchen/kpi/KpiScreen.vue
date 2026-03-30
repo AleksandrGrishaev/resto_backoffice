@@ -18,6 +18,10 @@
         <v-icon icon="mdi-calendar-check" class="mr-2" />
         Ritual
       </v-tab>
+      <v-tab value="cancellations">
+        <v-icon icon="mdi-cancel" class="mr-2" />
+        Cancellations
+      </v-tab>
     </v-tabs>
 
     <!-- Dashboard Cards -->
@@ -55,6 +59,10 @@
         :loading="foodCostLoading"
       />
       <RitualKpiTab v-else-if="activeTab === 'ritual'" :department="effectiveDepartment" />
+      <CancellationsKpiTab
+        v-else-if="activeTab === 'cancellations'"
+        :department="effectiveDepartment"
+      />
     </div>
   </div>
 </template>
@@ -70,6 +78,7 @@ import TimeKpiTab from './components/TimeKpiTab.vue'
 import FoodCostKpiCard from './components/FoodCostKpiCard.vue'
 import FoodCostKpiTab from './components/FoodCostKpiTab.vue'
 import RitualKpiTab from './components/RitualKpiTab.vue'
+import CancellationsKpiTab from './components/CancellationsKpiTab.vue'
 
 const MODULE_NAME = 'KpiScreen'
 
@@ -95,7 +104,7 @@ const authStore = useAuthStore()
 // STATE
 // =============================================
 
-const activeTab = ref<'time' | 'foodcost' | 'ritual'>('time')
+const activeTab = ref<'time' | 'foodcost' | 'ritual' | 'cancellations'>('time')
 const detailOffset = ref(0)
 const DETAIL_LIMIT = 50
 

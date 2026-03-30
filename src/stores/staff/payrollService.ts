@@ -147,6 +147,8 @@ export interface PayrollStaffRow {
     poolAmount: number
     departmentRevenue: number
     unlockedAmount: number
+    cancellationPenalty: number
+    finalAmount: number
   }
   /** Стажёр — индивидуальная ставка, без service tax */
   isTrainee: boolean
@@ -377,7 +379,9 @@ export async function enrichWithKpiBonuses(result: PayrollResult): Promise<Depar
           poolType: kpiResult.poolType,
           poolAmount: kpiResult.poolAmount,
           departmentRevenue: kpiResult.departmentRevenue,
-          unlockedAmount: kpiResult.unlockedAmount
+          unlockedAmount: kpiResult.unlockedAmount,
+          cancellationPenalty: kpiResult.cancellationPenalty.penaltyAmount,
+          finalAmount: kpiResult.finalAmount
         }
         // Recalculate grand total with KPI bonus
         row.grandTotal =

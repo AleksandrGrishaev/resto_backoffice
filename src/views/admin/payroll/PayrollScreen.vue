@@ -197,7 +197,7 @@
                 {{ kpi.department === 'kitchen' ? 'Kitchen' : 'Bar' }} KPI
               </div>
               <div class="card-value d-flex align-center gap-2">
-                {{ formatIDR(kpi.unlockedAmount) }}
+                {{ formatIDR(kpi.finalAmount) }}
                 <span
                   class="kpi-score-badge"
                   :class="{
@@ -213,6 +213,15 @@
                 Pool: {{ formatIDR(kpi.poolAmount) }}
                 <template v-if="kpi.poolType === 'percent_revenue'">
                   ({{ formatIDR(kpi.departmentRevenue) }} rev)
+                </template>
+                <template v-if="kpi.cancellationPenalty.penaltyAmount > 0">
+                  <br />
+                  <span class="text-error">
+                    Cancellations: -{{ formatIDR(kpi.cancellationPenalty.penaltyAmount) }} ({{
+                      kpi.cancellationPenalty.count
+                    }}
+                    items)
+                  </span>
                 </template>
               </div>
             </div>
@@ -418,6 +427,28 @@
               </span>
               <span class="kpi-summary-value">{{ formatIDR(kpi.unlockedAmount) }}</span>
             </div>
+            <div
+              v-if="kpi.cancellationPenalty.penaltyAmount > 0"
+              class="kpi-summary-row"
+              style="color: rgb(244, 67, 54)"
+            >
+              <span>
+                Cancellation Penalty
+                <span class="text-medium-emphasis">
+                  ({{ kpi.cancellationPenalty.count }} items ×
+                  {{ kpi.cancellationPenalty.penaltyRate }}%)
+                </span>
+              </span>
+              <span>-{{ formatIDR(kpi.cancellationPenalty.penaltyAmount) }}</span>
+            </div>
+            <div
+              v-if="kpi.cancellationPenalty.penaltyAmount > 0"
+              class="kpi-summary-row kpi-summary-unlocked"
+              style="border-top: 1px solid rgba(255, 255, 255, 0.15)"
+            >
+              <span>Final Amount</span>
+              <span class="kpi-summary-value">{{ formatIDR(kpi.finalAmount) }}</span>
+            </div>
           </div>
 
           <!-- Distribution -->
@@ -519,8 +550,8 @@
                       <template v-if="row.kpiDetails.poolType === 'percent_revenue'">
                         ({{ formatIDR(row.kpiDetails.departmentRevenue) }} rev)
                       </template>
-                      — pool {{ formatIDR(row.kpiDetails.unlockedAmount) }} x {{ row.totalHours }}h
-                      / dept hours
+                      — pool {{ formatIDR(row.kpiDetails.finalAmount) }} x {{ row.totalHours }}h /
+                      dept hours
                     </template>
                   </td>
                   <td class="detail-value">+ {{ formatIDR(row.kpiBonus) }}</td>

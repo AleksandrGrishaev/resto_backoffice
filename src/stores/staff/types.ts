@@ -174,6 +174,7 @@ export interface KpiBonusScheme {
   weightAvgCheck: number
   thresholdAvgCheck: number
   avgCheckTarget: number
+  cancellationPenaltyRate: number
   createdAt: string
   updatedAt: string
 }
@@ -224,6 +225,13 @@ export interface DepartmentKpiResult {
   poolAmount: number
   departmentRevenue: number
   unlockedAmount: number
+  cancellationPenalty: {
+    count: number
+    totalPrice: number
+    penaltyRate: number
+    penaltyAmount: number
+  }
+  finalAmount: number
   staffDistribution: KpiBonusStaffItem[]
 }
 
@@ -248,6 +256,10 @@ export interface KpiBonusSnapshot {
   poolAmount: number
   departmentRevenue: number
   unlockedAmount: number
+  cancellationPenalty: number
+  cancellationCount: number
+  cancellationTotalPrice: number
+  finalAmount: number
   rawMetrics: Record<string, unknown>
   createdAt: string
 }

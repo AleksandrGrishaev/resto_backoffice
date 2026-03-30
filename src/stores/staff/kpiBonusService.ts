@@ -75,7 +75,8 @@ export async function saveKpiBonusScheme(
     threshold_ritual: scheme.thresholdRitual ?? 0,
     weight_avg_check: scheme.weightAvgCheck ?? 0,
     threshold_avg_check: scheme.thresholdAvgCheck ?? 0,
-    avg_check_target: scheme.avgCheckTarget ?? 0
+    avg_check_target: scheme.avgCheckTarget ?? 0,
+    cancellation_penalty_rate: scheme.cancellationPenaltyRate ?? 100
   }
 
   const { data, error } = await supabase
@@ -111,6 +112,8 @@ function schemeFromRow(row: any): KpiBonusScheme {
     weightAvgCheck: row.weight_avg_check ?? 0,
     thresholdAvgCheck: row.threshold_avg_check ?? 0,
     avgCheckTarget: Number(row.avg_check_target) || 0,
+    cancellationPenaltyRate:
+      row.cancellation_penalty_rate != null ? Number(row.cancellation_penalty_rate) : 100,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -380,6 +383,43 @@ async function scoreAvgCheck(
 }
 
 // =====================================================
+// CANCELLATION PENALTY
+// =====================================================
+
+/**
+ * Query cancelled items with reason 'kitchen_mistake' for a department and date range.
+ * Returns count and total selling price of cancelled items.
+ */
+async function getCancellationPenalty(
+  department: KpiDepartment,
+  year: number,
+  month: number
+): Promise<{ count: number; totalPrice: number }> {
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01T00:00:00`
+  const lastDay = new Date(year, month, 0).getDate()
+  const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}T23:59:59`
+
+  const { data, error } = await supabase
+    .from('order_items')
+    .select('total_price')
+    .eq('status', 'cancelled')
+    .eq('cancellation_reason', 'kitchen_mistake')
+    .eq('department', department)
+    .gte('cancelled_at', startDate)
+    .lte('cancelled_at', endDate)
+
+  if (error) {
+    DebugUtils.error(MODULE, 'Failed to query cancellation penalty', { department, error })
+    return { count: 0, totalPrice: 0 }
+  }
+
+  const count = data?.length || 0
+  const totalPrice = (data || []).reduce((sum, row) => sum + (Number(row.total_price) || 0), 0)
+
+  return { count, totalPrice }
+}
+
+// =====================================================
 // MAIN CALCULATION
 // =====================================================
 
@@ -404,12 +444,13 @@ export async function calculateDepartmentKpiBonus(
     avgCheck: scheme.weightAvgCheck
   }
 
-  // 2. Score metrics (food cost + time + ritual + avg check in parallel, loss rate from food cost data)
-  const [fc, tm, rit, ac] = await Promise.all([
+  // 2. Score metrics + cancellation penalty in parallel
+  const [fc, tm, rit, ac, cancel] = await Promise.all([
     scoreFoodCost(department, year, month),
     scoreTime(department, year, month),
     scoreRitual(department, year, month),
-    scoreAvgCheck(year, month, scheme.avgCheckTarget)
+    scoreAvgCheck(year, month, scheme.avgCheckTarget),
+    getCancellationPenalty(department, year, month)
   ])
 
   // Loss Rate uses data from food cost fetch (no extra RPC)
@@ -471,6 +512,33 @@ export async function calculateDepartmentKpiBonus(
     unlockedAmount = Math.round(resolvedPoolAmount * (roundedScore / 100))
   }
 
+  // 4b. Apply cancellation penalty (kitchen_mistake items deduct from pool)
+  const penaltyRate = scheme.cancellationPenaltyRate ?? 100
+  const penaltyAmount =
+    penaltyRate > 0 && cancel.totalPrice > 0
+      ? Math.round(cancel.totalPrice * (penaltyRate / 100))
+      : 0
+  const finalAmount = Math.max(0, unlockedAmount - penaltyAmount)
+
+  const cancellationPenalty = {
+    count: cancel.count,
+    totalPrice: cancel.totalPrice,
+    penaltyRate,
+    penaltyAmount
+  }
+
+  if (penaltyAmount > 0) {
+    DebugUtils.info(MODULE, '⚠️ Cancellation penalty applied', {
+      department,
+      cancelledItems: cancel.count,
+      totalPrice: cancel.totalPrice,
+      penaltyRate,
+      penaltyAmount,
+      unlockedBefore: unlockedAmount,
+      finalAmount
+    })
+  }
+
   // 5. Distribute to staff (non-trainee, matching department)
   //    Weighted by hours × rank kpiMultiplier (Senior=1.5, Junior=1.0)
   const deptStaff = staffRows.filter(
@@ -485,10 +553,10 @@ export async function calculateDepartmentKpiBonus(
   const staffDistribution: KpiBonusStaffItem[] = []
   let distributedSum = 0
 
-  if (totalEffective > 0 && unlockedAmount > 0) {
+  if (totalEffective > 0 && finalAmount > 0) {
     for (const { row, effective } of effectiveHours) {
       const hoursWeight = effective / totalEffective
-      const bonus = Math.round(unlockedAmount * hoursWeight)
+      const bonus = Math.round(finalAmount * hoursWeight)
       distributedSum += bonus
       staffDistribution.push({
         staffId: row.staffId,
@@ -501,7 +569,7 @@ export async function calculateDepartmentKpiBonus(
     }
 
     // Fix rounding remainder — give to top-hours person
-    const remainder = unlockedAmount - distributedSum
+    const remainder = finalAmount - distributedSum
     if (remainder !== 0 && staffDistribution.length > 0) {
       const top = staffDistribution.reduce((a, b) => (a.hoursWorked >= b.hoursWorked ? a : b))
       top.kpiBonus += remainder
@@ -515,6 +583,8 @@ export async function calculateDepartmentKpiBonus(
     pool: resolvedPoolAmount,
     revenue: departmentRevenue,
     unlocked: unlockedAmount,
+    penalty: penaltyAmount,
+    final: finalAmount,
     staffCount: staffDistribution.length
   })
 
@@ -528,6 +598,8 @@ export async function calculateDepartmentKpiBonus(
     poolAmount: resolvedPoolAmount,
     departmentRevenue,
     unlockedAmount,
+    cancellationPenalty,
+    finalAmount,
     staffDistribution
   }
 }
@@ -563,12 +635,17 @@ export async function saveKpiBonusSnapshot(
       pool_amount: result.poolAmount,
       department_revenue: result.departmentRevenue,
       unlocked_amount: result.unlockedAmount,
+      cancellation_penalty: result.cancellationPenalty.penaltyAmount,
+      cancellation_count: result.cancellationPenalty.count,
+      cancellation_total_price: result.cancellationPenalty.totalPrice,
+      final_amount: result.finalAmount,
       raw_metrics: {
         foodCost: result.scores.foodCost,
         time: result.scores.time,
         lossRate: result.scores.lossRate,
         ritual: result.scores.ritual,
         avgCheck: result.scores.avgCheck,
+        cancellationPenalty: result.cancellationPenalty,
         staffDistribution: result.staffDistribution
       }
     },
@@ -617,6 +694,10 @@ function snapshotFromRow(row: any): KpiBonusSnapshot {
     poolAmount: Number(row.pool_amount),
     departmentRevenue: Number(row.department_revenue) || 0,
     unlockedAmount: Number(row.unlocked_amount),
+    cancellationPenalty: Number(row.cancellation_penalty) || 0,
+    cancellationCount: Number(row.cancellation_count) || 0,
+    cancellationTotalPrice: Number(row.cancellation_total_price) || 0,
+    finalAmount: Number(row.final_amount) || 0,
     rawMetrics: row.raw_metrics || {},
     createdAt: row.created_at
   }

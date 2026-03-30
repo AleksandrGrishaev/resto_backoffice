@@ -46,6 +46,19 @@
               {{ formatIDR(result.unlockedAmount) }}
             </strong>
           </div>
+          <div v-if="result.cancellationPenalty.penaltyAmount > 0" class="penalty-line">
+            Cancellations:
+            <strong class="text-error">
+              -{{ formatIDR(result.cancellationPenalty.penaltyAmount) }}
+            </strong>
+            <span class="text-medium-emphasis">({{ result.cancellationPenalty.count }} items)</span>
+          </div>
+          <div v-if="result.cancellationPenalty.penaltyAmount > 0" class="final-line">
+            Final:
+            <strong :class="result.finalAmount > 0 ? 'text-success' : 'text-error'">
+              {{ formatIDR(result.finalAmount) }}
+            </strong>
+          </div>
         </div>
       </div>
 
@@ -339,8 +352,20 @@ onMounted(() => loadKpiBonus())
 }
 
 .pool-line,
-.unlocked-line {
+.unlocked-line,
+.penalty-line,
+.final-line {
   white-space: nowrap;
+}
+
+.penalty-line {
+  color: rgba(244, 67, 54, 0.9);
+}
+
+.final-line {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 2px;
+  margin-top: 2px;
 }
 
 // Metrics list
