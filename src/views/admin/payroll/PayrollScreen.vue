@@ -563,6 +563,14 @@
                   </td>
                   <td class="detail-value">= {{ formatIDR(row.grandTotal) }}</td>
                 </tr>
+                <tr v-if="row.service1 > 0" class="detail-total-split">
+                  <td class="detail-label"></td>
+                  <td class="detail-formula">
+                    Service 1: {{ formatIDR(row.service1) }} &nbsp;|&nbsp; End of month:
+                    {{ formatIDR(row.grandTotal - row.service1) }}
+                  </td>
+                  <td class="detail-value"></td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -1347,6 +1355,12 @@ thead .sticky-col {
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   font-weight: 700;
   padding-top: 6px;
+}
+
+.detail-total-split td {
+  padding-top: 4px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 // ==================== EMPTY STATE ====================
