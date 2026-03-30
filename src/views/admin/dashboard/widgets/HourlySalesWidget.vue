@@ -64,9 +64,11 @@ const chartData = computed(() => {
   const salesMap = new Map(props.hourlySales.map(s => [s.hour, s]))
   const staffMap = new Map(props.staffByHour.map(s => [s.hour, s]))
 
+  // Stacked: each line = cumulative total so you see total headcount
+  // Kitchen at bottom, Bar on top of Kitchen, Service on top of both
   const kitchenData = hours.map(h => staffMap.get(h)?.kitchen || 0)
-  const barData = hours.map(h => staffMap.get(h)?.bar || 0)
-  const serviceData = hours.map(h => staffMap.get(h)?.service || 0)
+  const barData = hours.map((h, i) => kitchenData[i] + (staffMap.get(h)?.bar || 0))
+  const serviceData = hours.map((h, i) => barData[i] + (staffMap.get(h)?.service || 0))
 
   return {
     labels: hours.map(h => `${h}:00`),
@@ -86,51 +88,51 @@ const chartData = computed(() => {
       },
       {
         type: 'line',
-        label: 'Kitchen staff',
-        data: kitchenData,
-        borderColor: '#ff9676',
-        backgroundColor: 'rgba(255, 150, 118, 0.08)',
-        borderWidth: 2.5,
-        pointRadius: transitionPoints(kitchenData),
-        pointBackgroundColor: '#ff9676',
+        label: 'Service staff',
+        data: serviceData,
+        borderColor: '#92c9af',
+        backgroundColor: 'rgba(146, 201, 175, 0.12)',
+        borderWidth: 2,
+        pointRadius: transitionPoints(serviceData),
+        pointBackgroundColor: '#92c9af',
         pointBorderColor: '#1a1a1e',
         pointBorderWidth: 2,
         stepped: 'before' as const,
-        fill: false,
+        fill: 'origin',
         yAxisID: 'y1',
-        order: 1
+        order: 0
       },
       {
         type: 'line',
         label: 'Bar staff',
         data: barData,
         borderColor: '#76b0ff',
-        backgroundColor: 'rgba(118, 176, 255, 0.08)',
-        borderWidth: 2.5,
+        backgroundColor: 'rgba(118, 176, 255, 0.15)',
+        borderWidth: 2,
         pointRadius: transitionPoints(barData),
         pointBackgroundColor: '#76b0ff',
         pointBorderColor: '#1a1a1e',
         pointBorderWidth: 2,
         stepped: 'before' as const,
-        fill: false,
+        fill: 'origin',
         yAxisID: 'y1',
-        order: 1
+        order: 0
       },
       {
         type: 'line',
-        label: 'Service staff',
-        data: serviceData,
-        borderColor: '#92c9af',
-        backgroundColor: 'rgba(146, 201, 175, 0.08)',
-        borderWidth: 2.5,
-        pointRadius: transitionPoints(serviceData),
-        pointBackgroundColor: '#92c9af',
+        label: 'Kitchen staff',
+        data: kitchenData,
+        borderColor: '#ff9676',
+        backgroundColor: 'rgba(255, 150, 118, 0.2)',
+        borderWidth: 2,
+        pointRadius: transitionPoints(kitchenData),
+        pointBackgroundColor: '#ff9676',
         pointBorderColor: '#1a1a1e',
         pointBorderWidth: 2,
         stepped: 'before' as const,
-        fill: false,
+        fill: 'origin',
         yAxisID: 'y1',
-        order: 1
+        order: 0
       }
     ]
   }
@@ -165,15 +167,29 @@ const chartOptions = computed(() => ({
           if (ctx.dataset.yAxisID === 'y') {
             return ` Revenue: ${formatIDR(Number(ctx.raw))}`
           }
-          const val = Number(ctx.raw)
+          // Datasets order: Revenue, Service(stacked), Bar(stacked), Kitchen(base)
+          // Service = total, Bar = kitchen+bar, Kitchen = kitchen only
+          // Show unstacked values in tooltip
+          const items = ctx.chart.data.datasets
+          const idx = ctx.dataIndex
+          const serviceStacked = Number(items[1]?.data?.[idx] || 0)
+          const barStacked = Number(items[2]?.data?.[idx] || 0)
+          const kitchenVal = Number(items[3]?.data?.[idx] || 0)
+          const barVal = barStacked - kitchenVal
+          const serviceVal = serviceStacked - barStacked
+
+          const label = ctx.dataset.label
+          let val = 0
+          if (label === 'Kitchen staff') val = kitchenVal
+          else if (label === 'Bar staff') val = barVal
+          else if (label === 'Service staff') val = serviceVal
           if (val === 0) return ''
-          return ` ${ctx.dataset.label}: ${val}`
+          return ` ${label}: ${val}`
         },
         afterBody: (items: any[]) => {
           const revenue = Number(items[0]?.raw || 0)
-          const totalStaff = items
-            .slice(1)
-            .reduce((s: number, i: any) => s + (Number(i.raw) || 0), 0)
+          // Service dataset has the total stacked value
+          const totalStaff = Number(items[1]?.raw || 0)
           if (revenue > 0 && totalStaff === 0) {
             return '\n⚠ No staff scheduled — revenue present'
           }
