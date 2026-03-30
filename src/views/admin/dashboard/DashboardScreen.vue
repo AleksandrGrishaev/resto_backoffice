@@ -59,6 +59,7 @@
           v-if="isWidgetVisible('hourly-sales')"
           :hourly-sales="data.hourlySales"
           :staff-by-hour="data.staffByHour"
+          :date-range="dateRange"
           :loading="loading"
         />
         <RevenueByDeptWidget

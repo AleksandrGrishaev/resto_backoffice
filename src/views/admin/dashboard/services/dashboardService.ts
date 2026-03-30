@@ -73,7 +73,7 @@ export async function fetchDashboardData(range: DateRange): Promise<DashboardDat
   const paymentMethods = buildPaymentMethods(currentDailySales)
   const channelSales = buildChannelSales(currentDailySales)
   const loyaltySales = ordersData.loyaltySales
-  const staffByHour = buildStaffByHour(staffData, range)
+  const staffByHour = buildStaffByHour(staffData)
 
   return {
     summary,
@@ -539,8 +539,7 @@ function buildChannelSales(rows: DailySalesRow[]): ChannelSale[] {
 }
 
 function buildStaffByHour(
-  staffData: { staffId: string; department: string; timeSlots: any[] }[],
-  range: DateRange
+  staffData: { staffId: string; department: string; timeSlots: any[] }[]
 ): StaffHourly[] {
   const hourMap = new Map<number, { kitchen: number; bar: number; service: number }>()
   for (let h = 0; h < 24; h++) {
@@ -582,21 +581,7 @@ function buildStaffByHour(
     }
   }
 
-  // For multi-day ranges, show average staff per hour (not sum across all days)
-  const dayCount = Math.max(1, getDaysBetween(range.from, range.to))
-
   return Array.from(hourMap.entries())
-    .map(([hour, counts]) => ({
-      hour,
-      kitchen: Math.round(counts.kitchen / dayCount),
-      bar: Math.round(counts.bar / dayCount),
-      service: Math.round(counts.service / dayCount)
-    }))
+    .map(([hour, counts]) => ({ hour, ...counts }))
     .sort((a, b) => a.hour - b.hour)
-}
-
-function getDaysBetween(from: string, to: string): number {
-  const d1 = new Date(from)
-  const d2 = new Date(to)
-  return Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1
 }

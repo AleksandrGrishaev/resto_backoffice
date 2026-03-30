@@ -24,7 +24,7 @@ import {
 } from 'chart.js'
 import { Bar } from 'vue-chartjs'
 import { formatIDR } from '@/utils'
-import type { HourlySale, StaffHourly } from '../types'
+import type { DateRange, HourlySale, StaffHourly } from '../types'
 import WidgetCard from '../components/WidgetCard.vue'
 
 ChartJS.register(
@@ -42,8 +42,17 @@ ChartJS.register(
 const props = defineProps<{
   hourlySales: HourlySale[]
   staffByHour: StaffHourly[]
+  dateRange: DateRange
   loading: boolean
 }>()
+
+const dayCount = computed(() => {
+  const d1 = new Date(props.dateRange.from)
+  const d2 = new Date(props.dateRange.to)
+  return Math.max(1, Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1)
+})
+
+const isMultiDay = computed(() => dayCount.value > 1)
 
 /** Build per-point radius array: show dot only where count changes from previous hour */
 function transitionPoints(data: number[], radius = 4): number[] {
@@ -184,7 +193,8 @@ const chartOptions = computed(() => ({
           else if (label === 'Bar staff') val = barVal
           else if (label === 'Service staff') val = serviceVal
           if (val === 0) return ''
-          return ` ${label}: ${val}`
+          const suffix = isMultiDay.value ? 'h' : ''
+          return ` ${label}: ${val}${suffix}`
         },
         afterBody: (items: any[]) => {
           const revenue = Number(items[0]?.raw || 0)
@@ -206,10 +216,8 @@ const chartOptions = computed(() => ({
   },
   scales: {
     x: {
-      offset: false,
       grid: {
-        color: 'rgba(255, 255, 255, 0.06)',
-        offset: false
+        color: 'rgba(255, 255, 255, 0.06)'
       },
       ticks: {
         color: 'rgba(255, 255, 255, 0.5)',
@@ -231,11 +239,11 @@ const chartOptions = computed(() => ({
       ticks: {
         color: 'rgba(255, 255, 255, 0.4)',
         font: { size: 10 },
-        stepSize: 1
+        ...(isMultiDay.value ? {} : { stepSize: 1 })
       },
       title: {
         display: true,
-        text: 'Staff',
+        text: isMultiDay.value ? 'Hours' : 'Staff',
         color: 'rgba(255, 255, 255, 0.4)',
         font: { size: 10 }
       },
