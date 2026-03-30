@@ -29,14 +29,18 @@
         :class="hourCellClass(hour)"
         @click="onHourTap(hour)"
       >
-        {{ hour }}
+        <span class="hour-range">
+          {{ hour }}
+          <span class="hour-sep">–</span>
+          {{ hour + 1 }}
+        </span>
       </button>
     </div>
 
     <!-- Selection hint -->
     <div v-if="selecting && selectStart !== null && selectEnd === null" class="selection-hint">
       <span>
-        {{ addingNew ? 'Adding shift:' : 'Select end hour:' }}
+        {{ addingNew ? 'Adding shift:' : 'Select last hour:' }}
         <span class="hint-range">{{ formatHour(selectStart) }} — ?</span>
       </span>
       <v-btn size="x-small" variant="text" @click="cancelSelection">Cancel</v-btn>
@@ -256,7 +260,7 @@ function applyPreset(preset: ShiftPreset) {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.7);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   border: none;
@@ -301,6 +305,17 @@ function applyPreset(preset: ShiftPreset) {
     background: rgba(var(--v-theme-primary), 0.5);
     color: #fff;
   }
+}
+
+.hour-range {
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+}
+
+.hour-sep {
+  font-size: 11px;
+  opacity: 0.5;
 }
 
 .selection-hint {
