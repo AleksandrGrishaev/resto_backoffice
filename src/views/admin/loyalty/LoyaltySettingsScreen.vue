@@ -558,14 +558,14 @@
               style="max-width: 280px"
             />
             <v-select
-              v-model="customerTierFilter"
-              :items="tierOptions"
-              label="Tier"
+              v-model="customerLevelFilter"
+              :items="levelFilterOptions"
+              label="Level"
               density="compact"
               variant="outlined"
               hide-details
               clearable
-              style="max-width: 140px"
+              style="max-width: 160px"
             />
             <v-select
               v-model="customerStatusFilter"
@@ -599,16 +599,7 @@
               hover
               @click:row="(_: Event, row: any) => openCustomerDetail(row.item)"
             >
-              <template #[`item.loyaltyProgram`]="{ item }">
-                <v-chip
-                  size="x-small"
-                  :color="item.loyaltyProgram === 'cashback' ? 'teal' : 'amber-darken-1'"
-                  variant="tonal"
-                >
-                  {{ item.loyaltyProgram === 'cashback' ? 'cashback' : 'stamps' }}
-                </v-chip>
-              </template>
-              <template #[`item.tier`]="{ item }">
+              <template #[`item.level`]="{ item }">
                 <v-chip
                   v-if="item.personalDiscount > 0"
                   size="small"
@@ -616,7 +607,16 @@
                   variant="flat"
                   class="text-white"
                 >
-                  DISCOUNT
+                  {{ item.personalDiscount }}%
+                </v-chip>
+                <v-chip
+                  v-else-if="item.loyaltyProgram === 'stamps'"
+                  size="small"
+                  color="amber-darken-1"
+                  variant="flat"
+                  class="text-white"
+                >
+                  STAMPS
                 </v-chip>
                 <v-chip
                   v-else
@@ -636,17 +636,6 @@
               </template>
               <template #[`item.averageCheck`]="{ item }">
                 {{ item.averageCheck ? formatIDR(item.averageCheck) : '-' }}
-              </template>
-              <template #[`item.personalDiscount`]="{ item }">
-                <v-chip
-                  v-if="item.personalDiscount > 0"
-                  size="x-small"
-                  color="orange"
-                  variant="tonal"
-                >
-                  {{ item.personalDiscount }}%
-                </v-chip>
-                <span v-else class="text-medium-emphasis">-</span>
               </template>
               <template #[`item.createdAt`]="{ item }">
                 {{ item.createdAt ? formatDate(item.createdAt) : '-' }}
@@ -1572,8 +1561,9 @@ async function loadCards() {
 
 const loadingCustomers = ref(false)
 const customerSearch = ref('')
-const customerTierFilter = ref<string | null>(null)
+const customerLevelFilter = ref<string | null>(null)
 const customerStatusFilter = ref<string | null>(null)
+const levelFilterOptions = ['stamps', 'member', 'regular', 'vip', 'discount']
 const showCustomerDetail = ref(false)
 const showCreateCustomerDialog = ref(false)
 const selectedCustomer = ref<Customer | null>(null)
@@ -1612,17 +1602,21 @@ const balanceChanged = computed(
 
 const customerHeaders = [
   { title: 'Name', key: 'name', sortable: true },
-  { title: 'Program', key: 'loyaltyProgram', sortable: true },
-  { title: 'Tier', key: 'tier', sortable: true },
+  { title: 'Level', key: 'level', sortable: true },
   { title: 'Balance', key: 'loyaltyBalance', sortable: true },
   { title: 'Total Spent', key: 'totalSpent', sortable: true },
   { title: 'Visits', key: 'totalVisits', sortable: true },
   { title: 'Avg Check', key: 'averageCheck', sortable: true },
-  { title: 'Discount', key: 'personalDiscount', sortable: true },
   { title: 'Registered', key: 'createdAt', sortable: true },
   { title: 'Last Visit', key: 'lastVisitAt', sortable: true },
   { title: 'Status', key: 'status', sortable: true }
 ]
+
+function getLevel(c: Customer): string {
+  if (c.personalDiscount > 0) return `discount_${c.personalDiscount}`
+  if (c.loyaltyProgram === 'stamps') return 'stamps'
+  return c.tier
+}
 
 const filteredCustomers = computed(() => {
   let list = customersStore.customers
@@ -1635,13 +1629,20 @@ const filteredCustomers = computed(() => {
         (c.phone && c.phone.includes(q))
     )
   }
-  if (customerTierFilter.value) {
-    list = list.filter(c => c.tier === customerTierFilter.value)
+  if (customerLevelFilter.value) {
+    const f = customerLevelFilter.value
+    if (f === 'stamps')
+      list = list.filter(c => c.loyaltyProgram === 'stamps' && !c.personalDiscount)
+    else if (f === 'discount') list = list.filter(c => c.personalDiscount > 0)
+    else
+      list = list.filter(
+        c => c.tier === f && c.loyaltyProgram === 'cashback' && !c.personalDiscount
+      )
   }
   if (customerStatusFilter.value) {
     list = list.filter(c => c.status === customerStatusFilter.value)
   }
-  return list
+  return list.map(c => ({ ...c, level: getLevel(c) }))
 })
 
 const customerStats = computed(() => {
