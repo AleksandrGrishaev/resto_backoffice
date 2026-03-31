@@ -11,6 +11,39 @@ import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'POSOrdersRealtime'
 
+// Online order sound — simple module-level Audio element (no AudioContext!)
+// AudioContext.resume() consumes the transient user activation, leaving nothing
+// for Audio.play(). So we skip AudioContext entirely and use Audio directly.
+const ONLINE_ORDER_SOUND_URL = '/sounds/online-order.mp3'
+let _audio: HTMLAudioElement | null = null
+let _audioUnlocked = false
+
+/**
+ * Unlock audio for browser autoplay policy.
+ * Must be called from a Vue @click handler (real user gesture).
+ * IMPORTANT: Fully synchronous — async functions lose user activation in some browsers.
+ */
+export function unlockOnlineOrderAudio(): void {
+  if (_audioUnlocked) return
+  if (!_audio) {
+    _audio = new Audio(ONLINE_ORDER_SOUND_URL)
+    _audio.volume = 0.8
+  }
+  // play() MUST be called synchronously in the user gesture call stack.
+  // Do NOT use async/await — Chrome loses user activation across microtask boundaries.
+  const p = _audio.play()
+  if (p) {
+    p.then(() => {
+      _audio!.pause()
+      _audio!.currentTime = 0
+      _audioUnlocked = true
+      DebugUtils.info(MODULE_NAME, 'Online order audio unlocked')
+    }).catch(err => {
+      DebugUtils.warn(MODULE_NAME, 'Could not unlock online order audio', { error: err })
+    })
+  }
+}
+
 // Cancellation request callback type
 type CancellationRequestCallback = (order: {
   orderId: string
@@ -24,6 +57,17 @@ type CustomerLinkedCallback = (info: {
   orderNumber: string
   customerId: string
   customerName?: string
+}) => void
+
+// Online order received callback type
+type OnlineOrderReceivedCallback = (order: {
+  orderId: string
+  orderNumber: string
+  type: string
+  itemCount: number
+  total: number
+  customerName?: string
+  fulfillmentMethod?: string
 }) => void
 
 /**
@@ -47,6 +91,7 @@ export function useOrdersRealtime() {
   const ordersStore = usePosOrdersStore()
   let onCancellationRequest: CancellationRequestCallback | null = null
   let onCustomerLinked: CustomerLinkedCallback | null = null
+  let onOnlineOrder: OnlineOrderReceivedCallback | null = null
 
   // Reconnect state
   let isUnsubscribing = false
@@ -283,6 +328,32 @@ export function useOrdersRealtime() {
         itemCount: items.length,
         total: order.finalAmount
       })
+
+      // Play online order sound (only if audio was unlocked by user interaction)
+      if (_audioUnlocked && _audio) {
+        _audio.currentTime = 0
+        _audio.play().catch(err => {
+          DebugUtils.warn(MODULE_NAME, 'Failed to play online order sound', { error: err })
+        })
+      } else {
+        DebugUtils.debug(
+          MODULE_NAME,
+          'Audio not yet unlocked — sound skipped (will work after first click)'
+        )
+      }
+
+      // Notify POS view via callback
+      if (onOnlineOrder) {
+        onOnlineOrder({
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          type: order.type,
+          itemCount: items.length,
+          total: order.finalAmount,
+          customerName: order.customerName,
+          fulfillmentMethod: order.fulfillmentMethod
+        })
+      }
     } catch (err) {
       DebugUtils.error(MODULE_NAME, 'Error loading online order', { err, orderId: newOrder.id })
     }
@@ -617,11 +688,19 @@ export function useOrdersRealtime() {
     onCustomerLinked = callback
   }
 
+  /**
+   * Register callback for online order received notifications
+   */
+  function onOnlineOrderReceived(callback: OnlineOrderReceivedCallback) {
+    onOnlineOrder = callback
+  }
+
   return {
     subscribe,
     unsubscribe,
     isConnected,
     onCancellationRequested,
-    onCustomerLinkedToOrder
+    onCustomerLinkedToOrder,
+    onOnlineOrderReceived
   }
 }

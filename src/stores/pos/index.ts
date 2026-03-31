@@ -25,7 +25,7 @@ import { ShiftUpdateAdapter } from '@/core/sync/adapters/ShiftUpdateAdapter'
 import { migrateLegacyShiftQueue } from '@/core/sync/migrations/migrateLegacyShiftQueue'
 
 // ✅ Sprint 7: Realtime integration for Kitchen updates
-import { useOrdersRealtime } from './orders/useOrdersRealtime'
+import { useOrdersRealtime, unlockOnlineOrderAudio } from './orders/useOrdersRealtime'
 import { useTablesRealtime } from './tables/useTablesRealtime'
 import { ENV } from '@/config/environment'
 
@@ -167,12 +167,15 @@ export const usePosStore = defineStore('pos', () => {
         ordersRealtime = useOrdersRealtime()
         ordersRealtime.subscribe()
 
-        // Register cancellation request callback if already set
+        // Register callbacks if already set (late registration)
         if (_cancellationCallback) {
           ordersRealtime.onCancellationRequested(_cancellationCallback)
         }
         if (_customerLinkedCallback) {
           ordersRealtime.onCustomerLinkedToOrder(_customerLinkedCallback)
+        }
+        if (_onlineOrderCallback) {
+          ordersRealtime.onOnlineOrderReceived(_onlineOrderCallback)
         }
 
         // 🆕 Tables Realtime for sync between tabs/devices
@@ -403,6 +406,45 @@ export const usePosStore = defineStore('pos', () => {
       }) => void)
     | null = null
 
+  /**
+   * Register callback for online order received notifications
+   */
+  function onOnlineOrderReceived(
+    callback: (order: {
+      orderId: string
+      orderNumber: string
+      type: string
+      itemCount: number
+      total: number
+      customerName?: string
+      fulfillmentMethod?: string
+    }) => void
+  ) {
+    if (ordersRealtime) {
+      ordersRealtime.onOnlineOrderReceived(callback)
+    }
+    _onlineOrderCallback = callback
+  }
+  let _onlineOrderCallback:
+    | ((order: {
+        orderId: string
+        orderNumber: string
+        type: string
+        itemCount: number
+        total: number
+        customerName?: string
+        fulfillmentMethod?: string
+      }) => void)
+    | null = null
+
+  /**
+   * Unlock audio for browser autoplay policy (must be called from user interaction).
+   * Uses module-level singleton — works even before realtime is initialized.
+   */
+  function unlockOrderAudio(): void {
+    unlockOnlineOrderAudio()
+  }
+
   // ===== RETURN =====
 
   return {
@@ -425,6 +467,8 @@ export const usePosStore = defineStore('pos', () => {
     reset,
     cleanup,
     onCancellationRequested,
-    onCustomerLinkedToOrder
+    onCustomerLinkedToOrder,
+    onOnlineOrderReceived,
+    unlockOrderAudio
   }
 })

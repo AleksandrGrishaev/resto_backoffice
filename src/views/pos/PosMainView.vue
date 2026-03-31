@@ -95,10 +95,24 @@
           </p>
         </v-card-text>
         <v-card-actions class="justify-center pb-6">
-          <v-btn color="grey" variant="text" @click="showNoShiftDialog = false">
+          <v-btn
+            color="grey"
+            variant="text"
+            @click="
+              tryUnlockAudio()
+              showNoShiftDialog = false
+            "
+          >
             Continue Without Shift
           </v-btn>
-          <v-btn color="primary" size="large" @click="goToShiftManagement">
+          <v-btn
+            color="primary"
+            size="large"
+            @click="
+              tryUnlockAudio()
+              goToShiftManagement()
+            "
+          >
             <v-icon left>mdi-play-circle</v-icon>
             Start Shift
           </v-btn>
@@ -131,6 +145,7 @@ import { useShiftsStore } from '@/stores/pos/shifts/shiftsStore'
 import { useAuthStore } from '@/stores/auth' // 🆕 ДОБАВЛЕН
 import { useChannelsStore } from '@/stores/channels'
 import { useWakeLock } from '@/core/pwa'
+import { unlockOnlineOrderAudio } from '@/stores/pos/orders/useOrdersRealtime'
 import { DebugUtils } from '@/utils'
 import type { MenuItem, MenuItemVariant } from '@/stores/menu/types'
 import type { PosOrder } from '@/stores/pos/types'
@@ -314,6 +329,16 @@ const initializePOS = async (): Promise<void> => {
       const name = info.customerName || 'Customer'
       showNotification(`${name} linked to Order #${info.orderNumber}`, 'success')
     })
+
+    // Register online order received handler (sound is auto-played by realtime)
+    posStore.onOnlineOrderReceived(order => {
+      const name = order.customerName || 'Customer'
+      const method = order.fulfillmentMethod === 'self_pickup' ? 'Pickup' : 'Delivery'
+      showNotification(
+        `New online order #${order.orderNumber} from ${name} (${method}, ${order.itemCount} items)`,
+        'info'
+      )
+    })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     initError.value = errorMessage
@@ -369,6 +394,9 @@ const formatPrice = (price: number): string => {
  * Обработка выбора заказа из TablesSidebar
  */
 const handleOrderSelect = async (orderId: string): Promise<void> => {
+  // Unlock audio on first interaction (must be FIRST call — before any await)
+  tryUnlockAudio()
+
   try {
     DebugUtils.debug(MODULE_NAME, 'Order selected from sidebar', { orderId })
 
@@ -442,6 +470,9 @@ const handleAddItemToOrder = async (
   variant: MenuItemVariant,
   selectedModifiers?: import('@/stores/menu/types').SelectedModifier[]
 ): Promise<void> => {
+  // Unlock audio on first interaction (must be FIRST call — before any await)
+  tryUnlockAudio()
+
   if (addItemInProgress.value) return
   addItemInProgress.value = true
 
@@ -610,6 +641,12 @@ const handleAddItemToOrder = async (
 // =============================================
 // LIFECYCLE
 // =============================================
+
+// Unlock audio on first real user interaction (browser autoplay policy).
+// Calls Audio.play() synchronously in the click handler call stack — no async.
+const tryUnlockAudio = () => {
+  unlockOnlineOrderAudio()
+}
 
 onMounted(async () => {
   DebugUtils.debug(MODULE_NAME, 'PosMainView mounted')
