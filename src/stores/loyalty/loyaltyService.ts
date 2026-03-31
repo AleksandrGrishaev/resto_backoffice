@@ -574,6 +574,52 @@ export class LoyaltyService {
 
     return (data || []).map(mapTransactionFromDb)
   }
+
+  /** Get all transactions across all customers (for audit/history) */
+  async getAllTransactions(
+    limit = 500
+  ): Promise<(LoyaltyTransaction & { customerName?: string; performedBy?: string })[]> {
+    const { data, error } = await supabase
+      .from('loyalty_transactions')
+      .select('*, customers(name)')
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load all transactions', { error })
+      throw error
+    }
+
+    return (data || []).map(row => ({
+      ...mapTransactionFromDb(row),
+      customerName: (row as any).customers?.name || '',
+      performedBy: row.performed_by || null
+    }))
+  }
+
+  /** Atomic balance adjustment via RPC (transaction + balance update in one call) */
+  async adjustBalance(customerId: string, amount: number, description: string): Promise<number> {
+    const { data, error } = await supabase.rpc('adjust_loyalty_balance', {
+      p_customer_id: customerId,
+      p_amount: amount,
+      p_description: description
+    })
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to adjust balance', { error })
+      throw error
+    }
+
+    const result = data as any
+    if (!result.success) throw new Error(result.error)
+
+    DebugUtils.info(MODULE_NAME, 'Balance adjusted', {
+      customerId,
+      amount,
+      newBalance: result.new_balance
+    })
+    return result.new_balance
+  }
 }
 
 // Singleton

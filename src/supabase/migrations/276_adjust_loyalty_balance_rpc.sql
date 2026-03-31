@@ -1,0 +1,9 @@
+-- Migration: 276_adjust_loyalty_balance_rpc
+-- Description: Atomic RPC for manual loyalty balance adjustments
+-- Date: 2026-03-31
+--
+-- CONTEXT: Manual balance edits from admin UI need atomic update + audit trail.
+-- Previous approach (read balance, insert tx, update balance) had race condition.
+-- This RPC does UPDATE RETURNING + INSERT in a single Postgres transaction.
+--
+-- See src/supabase/functions/adjust_loyalty_balance.sql for full source.

@@ -47,6 +47,10 @@
             class="ml-1"
           />
         </v-tab>
+        <v-tab value="history">
+          <v-icon start size="18">mdi-history</v-icon>
+          History
+        </v-tab>
       </v-tabs>
     </div>
 
@@ -644,6 +648,9 @@
                 </v-chip>
                 <span v-else class="text-medium-emphasis">-</span>
               </template>
+              <template #[`item.createdAt`]="{ item }">
+                {{ item.createdAt ? formatDate(item.createdAt) : '-' }}
+              </template>
               <template #[`item.lastVisitAt`]="{ item }">
                 {{ item.lastVisitAt ? formatRelative(item.lastVisitAt) : 'Never' }}
               </template>
@@ -852,6 +859,52 @@
                     variant="outlined"
                     hide-details
                     class="mb-3"
+                  />
+
+                  <v-divider class="my-3" />
+                  <div class="text-subtitle-2 mb-2">Loyalty</div>
+                  <v-row dense class="mb-2">
+                    <v-col cols="4">
+                      <v-select
+                        v-model="custForm.loyaltyProgram"
+                        :items="['stamps', 'cashback']"
+                        label="Program"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                      />
+                    </v-col>
+                    <v-col cols="4">
+                      <v-text-field
+                        v-model.number="custForm.loyaltyBalance"
+                        type="number"
+                        label="Cashback Balance"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                        prefix="Rp"
+                      />
+                    </v-col>
+                    <v-col cols="4">
+                      <v-text-field
+                        v-model.number="custForm.stamps"
+                        type="number"
+                        label="Stamps"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                        :min="0"
+                      />
+                    </v-col>
+                  </v-row>
+                  <v-text-field
+                    v-model="custForm.balanceAdjustReason"
+                    label="Adjustment reason (required if balance changed)"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="mb-3"
+                    :rules="balanceChanged ? [v => !!v?.trim() || 'Reason required'] : []"
                   />
 
                   <v-divider class="my-3" />
@@ -1226,6 +1279,70 @@
             </v-card>
           </v-dialog>
         </div>
+
+        <!-- ===================== HISTORY TAB ===================== -->
+        <div v-show="activeTab === 'history'">
+          <div class="d-flex gap-2 mb-3">
+            <v-text-field
+              v-model="historySearch"
+              placeholder="Search customer name..."
+              density="compact"
+              variant="outlined"
+              hide-details
+              prepend-inner-icon="mdi-magnify"
+              clearable
+              style="max-width: 250px"
+            />
+            <v-select
+              v-model="historyTypeFilter"
+              :items="transactionTypes"
+              label="Type"
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+              style="max-width: 160px"
+            />
+            <v-spacer />
+            <v-btn
+              variant="outlined"
+              prepend-icon="mdi-refresh"
+              size="small"
+              :loading="loadingHistory"
+              @click="loadHistory"
+            >
+              Refresh
+            </v-btn>
+          </div>
+
+          <v-card variant="outlined">
+            <v-data-table
+              :headers="historyHeaders"
+              :items="filteredHistory"
+              :loading="loadingHistory"
+              :items-per-page="50"
+              density="compact"
+              hover
+            >
+              <template #[`item.type`]="{ item }">
+                <v-chip size="x-small" :color="txTypeColor(item.type)" variant="tonal">
+                  {{ item.type }}
+                </v-chip>
+              </template>
+              <template #[`item.amount`]="{ item }">
+                <span :class="item.amount >= 0 ? 'text-success' : 'text-error'">
+                  {{ item.amount >= 0 ? '+' : '' }}{{ formatIDR(item.amount) }}
+                </span>
+              </template>
+              <template #[`item.balanceAfter`]="{ item }">
+                {{ formatIDR(item.balanceAfter) }}
+              </template>
+              <template #[`item.createdAt`]="{ item }">
+                {{ formatDateTime(item.createdAt) }}
+              </template>
+            </v-data-table>
+          </v-card>
+        </div>
       </template>
     </div>
 
@@ -1238,6 +1355,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { useLoyaltyStore } from '@/stores/loyalty'
+import { loyaltyService } from '@/stores/loyalty/loyaltyService'
 import { useCustomersStore } from '@/stores/customers'
 import { useMenuStore } from '@/stores/menu'
 import type {
@@ -1269,7 +1387,7 @@ const menuCategoryItems = computed(() =>
 // SHARED STATE
 // =============================================
 
-const activeTab = ref<'settings' | 'cards' | 'customers'>('settings')
+const activeTab = ref<'settings' | 'cards' | 'customers' | 'history'>('settings')
 const loading = ref(true)
 const saving = ref(false)
 const snackbar = reactive({ show: false, message: '', color: 'success' })
@@ -1278,6 +1396,7 @@ const snackbar = reactive({ show: false, message: '', color: 'success' })
 watch(activeTab, tab => {
   if (tab === 'customers') customersStore.reload()
   if (tab === 'cards') loadCards()
+  if (tab === 'history' && !historyLoaded.value) loadHistory()
 })
 
 // =============================================
@@ -1475,10 +1594,21 @@ const custForm = ref({
   telegramUsername: '',
   notes: '',
   tier: 'member' as string,
+  loyaltyProgram: 'stamps' as string,
+  loyaltyBalance: 0,
+  originalBalance: 0,
+  stamps: 0,
+  originalStamps: 0,
+  activeCardId: null as string | null,
+  balanceAdjustReason: '',
   personalDiscount: 0,
   discountNote: '',
   disableLoyaltyAccrual: false
 })
+
+const balanceChanged = computed(
+  () => custForm.value.loyaltyBalance !== custForm.value.originalBalance
+)
 
 const customerHeaders = [
   { title: 'Name', key: 'name', sortable: true },
@@ -1489,6 +1619,7 @@ const customerHeaders = [
   { title: 'Visits', key: 'totalVisits', sortable: true },
   { title: 'Avg Check', key: 'averageCheck', sortable: true },
   { title: 'Discount', key: 'personalDiscount', sortable: true },
+  { title: 'Registered', key: 'createdAt', sortable: true },
   { title: 'Last Visit', key: 'lastVisitAt', sortable: true },
   { title: 'Status', key: 'status', sortable: true }
 ]
@@ -1548,6 +1679,13 @@ function resetCustForm() {
     telegramUsername: '',
     notes: '',
     tier: 'member',
+    loyaltyProgram: 'stamps',
+    loyaltyBalance: 0,
+    originalBalance: 0,
+    stamps: 0,
+    originalStamps: 0,
+    activeCardId: null,
+    balanceAdjustReason: '',
     personalDiscount: 0,
     discountNote: '',
     disableLoyaltyAccrual: false
@@ -1580,10 +1718,24 @@ async function openCustomerDetail(customer: Customer) {
 }
 
 // ---- Edit mode ----
-function startCustomerEdit() {
+async function startCustomerEdit() {
   if (!selectedCustomer.value) return
   const c = selectedCustomer.value
   const parsed = parsePhone(c.phone)
+
+  // Get current stamps from active card via service
+  let currentStamps = 0
+  let activeCardId: string | null = null
+  try {
+    const cardInfo = await loyaltyStore.getActiveCardByCustomerId(c.id)
+    if (cardInfo) {
+      currentStamps = cardInfo.stamps
+      activeCardId = cardInfo.cardId
+    }
+  } catch {
+    // No active card
+  }
+
   custForm.value = {
     name: c.name,
     phoneCode: parsed.code,
@@ -1591,6 +1743,13 @@ function startCustomerEdit() {
     telegramUsername: c.telegramUsername || '',
     notes: c.notes || '',
     tier: c.tier,
+    loyaltyProgram: c.loyaltyProgram || 'stamps',
+    loyaltyBalance: c.loyaltyBalance || 0,
+    originalBalance: c.loyaltyBalance || 0,
+    stamps: currentStamps,
+    originalStamps: currentStamps,
+    activeCardId,
+    balanceAdjustReason: '',
     personalDiscount: c.personalDiscount || 0,
     discountNote: c.discountNote || '',
     disableLoyaltyAccrual: c.disableLoyaltyAccrual || false
@@ -1601,6 +1760,14 @@ function startCustomerEdit() {
 
 async function saveCustomerEdit() {
   if (!selectedCustomer.value || !custForm.value.name.trim()) return
+
+  // Validate: balance change requires reason
+  const balanceDiff = custForm.value.loyaltyBalance - custForm.value.originalBalance
+  if (balanceDiff !== 0 && !custForm.value.balanceAdjustReason.trim()) {
+    custSaveError.value = 'Adjustment reason is required when changing balance'
+    return
+  }
+
   custSaving.value = true
   custSaveError.value = ''
 
@@ -1612,11 +1779,31 @@ async function saveCustomerEdit() {
       telegramUsername: custForm.value.telegramUsername.trim() || null,
       notes: custForm.value.notes.trim() || null,
       tier: custForm.value.tier,
+      loyaltyProgram: custForm.value.loyaltyProgram,
       personalDiscount: Math.max(0, Math.min(100, custForm.value.personalDiscount || 0)),
       discountNote: custForm.value.discountNote.trim() || null,
       disableLoyaltyAccrual: custForm.value.disableLoyaltyAccrual
     } as Partial<Customer>)
+
+    // Handle balance adjustment (creates audit trail via loyalty_transactions)
+    if (balanceDiff !== 0) {
+      await loyaltyService.adjustBalance(
+        selectedCustomer.value.id,
+        balanceDiff,
+        custForm.value.balanceAdjustReason.trim()
+      )
+    }
+
+    // Handle stamps change (use cached card ID from startCustomerEdit)
+    const stampsDiff = custForm.value.stamps - custForm.value.originalStamps
+    if (stampsDiff !== 0 && custForm.value.activeCardId) {
+      await loyaltyStore.updateCard(custForm.value.activeCardId, { stamps: custForm.value.stamps })
+    }
+
     selectedCustomer.value = updated
+    // Refresh to get updated balance
+    await customersStore.refreshCustomer(selectedCustomer.value.id)
+    selectedCustomer.value = customersStore.getById(selectedCustomer.value.id) || updated
     customerEditing.value = false
     snackbar.message = 'Customer updated'
     snackbar.color = 'success'
@@ -1750,6 +1937,73 @@ async function executeMerge() {
   } finally {
     merging.value = false
   }
+}
+
+// =============================================
+// HISTORY TAB
+// =============================================
+
+type HistoryTransaction = LoyaltyTransaction & { customerName?: string; performedBy?: string }
+
+const historyTransactions = ref<HistoryTransaction[]>([])
+const historyLoaded = ref(false)
+const loadingHistory = ref(false)
+const historySearch = ref('')
+const historyTypeFilter = ref<string | null>(null)
+const transactionTypes = ['cashback', 'redemption', 'conversion', 'adjustment', 'expiration']
+
+const historyHeaders = [
+  { title: 'Date', key: 'createdAt', sortable: true },
+  { title: 'Customer', key: 'customerName', sortable: true },
+  { title: 'Type', key: 'type', sortable: true },
+  { title: 'Amount', key: 'amount', sortable: true },
+  { title: 'Balance After', key: 'balanceAfter', sortable: true },
+  { title: 'Description', key: 'description', sortable: false }
+]
+
+const filteredHistory = computed(() => {
+  let list = historyTransactions.value
+  if (historySearch.value) {
+    const q = historySearch.value.toLowerCase()
+    list = list.filter(t => t.customerName?.toLowerCase().includes(q))
+  }
+  if (historyTypeFilter.value) {
+    list = list.filter(t => t.type === historyTypeFilter.value)
+  }
+  return list
+})
+
+async function loadHistory() {
+  loadingHistory.value = true
+  try {
+    historyTransactions.value = await loyaltyService.getAllTransactions(500)
+    historyLoaded.value = true
+  } catch (err) {
+    console.error('Failed to load history:', err)
+  } finally {
+    loadingHistory.value = false
+  }
+}
+
+function txTypeColor(type: string): string {
+  switch (type) {
+    case 'cashback':
+      return 'success'
+    case 'redemption':
+      return 'error'
+    case 'conversion':
+      return 'purple'
+    case 'adjustment':
+      return 'warning'
+    case 'expiration':
+      return 'grey'
+    default:
+      return 'grey'
+  }
+}
+
+function formatDateTime(date: string): string {
+  return TimeUtils.formatDateTimeForDisplay(date)
 }
 
 // =============================================
