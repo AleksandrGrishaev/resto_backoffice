@@ -44,6 +44,18 @@
           <v-icon size="16">mdi-qrcode</v-icon>
           <v-tooltip activator="parent" location="top">Print Invite QR</v-tooltip>
         </v-btn>
+        <v-btn
+          v-if="!customerHasAuth && !checkingAuth"
+          icon
+          size="x-small"
+          variant="text"
+          color="info"
+          :loading="showingInviteQR"
+          @click="handleShowInviteQR"
+        >
+          <v-icon size="16">mdi-eye</v-icon>
+          <v-tooltip activator="parent" location="top">Show QR on screen</v-tooltip>
+        </v-btn>
         <v-alert
           v-if="inviteError"
           type="error"
@@ -479,18 +491,30 @@
 
           <!-- Invite QR: show when customer has no linked auth account -->
           <div v-if="!customerHasAuth && !checkingAuth" class="mt-2">
-            <v-btn
-              size="small"
-              variant="tonal"
-              color="amber-darken-2"
-              prepend-icon="mdi-qrcode"
-              :loading="printingInvite"
-              @click="handlePrintInviteQR"
-            >
-              Print Invite QR
-            </v-btn>
+            <div class="d-flex gap-2">
+              <v-btn
+                size="small"
+                variant="tonal"
+                color="amber-darken-2"
+                prepend-icon="mdi-qrcode"
+                :loading="printingInvite"
+                @click="handlePrintInviteQR"
+              >
+                Print Invite QR
+              </v-btn>
+              <v-btn
+                size="small"
+                variant="tonal"
+                color="info"
+                prepend-icon="mdi-qrcode-scan"
+                :loading="showingInviteQR"
+                @click="handleShowInviteQR"
+              >
+                Show QR
+              </v-btn>
+            </div>
             <div class="text-caption text-medium-emphasis mt-1">
-              Customer has no linked account. Print QR so they can register online.
+              Customer has no linked account. Print or show QR so they can register online.
             </div>
             <v-alert
               v-if="inviteError"
@@ -625,6 +649,9 @@
         </div>
       </div>
     </div>
+
+    <!-- Show QR Dialog (for testing without printer) -->
+    <ShowQrDialog v-model="showQrDialog" :url="showQrUrl" title="Invite QR Code" />
   </div>
 </template>
 
@@ -641,6 +668,7 @@ import { NumericInputField } from '@/components/input'
 import { supabase } from '@/supabase/client'
 import { usePrinter } from '@/core/printing'
 import QrScanner from './QrScanner.vue'
+import ShowQrDialog from '@/components/common/ShowQrDialog.vue'
 
 const props = defineProps<{
   orderId?: string
@@ -662,6 +690,9 @@ const { isConnected: isPrinterConnected, printInviteQR } = usePrinter()
 
 // Invite QR state
 const printingInvite = ref(false)
+const showingInviteQR = ref(false)
+const showQrDialog = ref(false)
+const showQrUrl = ref('')
 const inviteError = ref<string | null>(null)
 const customerHasAuth = ref(false)
 const checkingAuth = ref(false)
@@ -679,6 +710,30 @@ async function checkCustomerAuth(customerId: string) {
     customerHasAuth.value = false
   } finally {
     checkingAuth.value = false
+  }
+}
+
+async function handleShowInviteQR() {
+  if (!attachedCustomer.value || showingInviteQR.value) return
+
+  showingInviteQR.value = true
+  try {
+    const { data } = await supabase.rpc('create_customer_invite', {
+      p_customer_id: attachedCustomer.value.id
+    })
+
+    if (data?.success && data?.url) {
+      showQrUrl.value = data.url
+      showQrDialog.value = true
+    } else {
+      DebugUtils.error('LoyaltyPanel', 'Failed to create invite for show', { data })
+      inviteError.value = data?.error || 'Failed to create invite'
+    }
+  } catch (e) {
+    DebugUtils.error('LoyaltyPanel', 'Error creating invite QR for show', { error: e })
+    inviteError.value = 'Failed to generate invite QR'
+  } finally {
+    showingInviteQR.value = false
   }
 }
 

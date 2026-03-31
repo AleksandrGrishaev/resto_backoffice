@@ -22,6 +22,8 @@ DECLARE
   v_provider TEXT;
   v_email TEXT;
   v_provider_uid TEXT;
+  v_telegram_id TEXT;
+  v_telegram_username TEXT;
   v_customer_id UUID;
   v_trigger_customer_id UUID;
   v_customer_name TEXT;
@@ -41,12 +43,14 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Invite not found, expired, or already being claimed');
   END IF;
 
-  -- Get auth user info
+  -- Get auth user info (including telegram data)
   SELECT
     coalesce(raw_user_meta_data->>'custom_provider', raw_app_meta_data->>'provider', 'email'),
     email,
-    coalesce(raw_user_meta_data->>'sub', email)
-  INTO v_provider, v_email, v_provider_uid
+    coalesce(raw_user_meta_data->>'sub', email),
+    raw_user_meta_data->>'telegram_id',
+    raw_user_meta_data->>'telegram_username'
+  INTO v_provider, v_email, v_provider_uid, v_telegram_id, v_telegram_username
   FROM auth.users WHERE id = v_auth_uid;
 
   -- Check if auth user already has an identity (created by handle_new_auth_user trigger)
@@ -86,9 +90,12 @@ BEGIN
       )
     WHERE id = v_invite.order_id AND customer_id IS NULL;
 
-    -- Set loyalty program to stamps
-    UPDATE customers SET loyalty_program = 'stamps'
-    WHERE id = v_customer_id AND loyalty_program IS NULL;
+    -- Set loyalty program and telegram data
+    UPDATE customers SET
+      loyalty_program = coalesce(loyalty_program, 'stamps'),
+      telegram_id = coalesce(telegram_id, v_telegram_id),
+      telegram_username = coalesce(telegram_username, v_telegram_username)
+    WHERE id = v_customer_id;
 
     -- Claim invite (with status guard for extra safety)
     UPDATE customer_invites SET status = 'claimed', claimed_by = v_auth_uid, claimed_at = now()
@@ -141,6 +148,8 @@ BEGIN
 
     UPDATE customers SET
       email = coalesce(email, v_email),
+      telegram_id = coalesce(telegram_id, v_telegram_id),
+      telegram_username = coalesce(telegram_username, v_telegram_username),
       loyalty_program = coalesce(loyalty_program, 'stamps')
     WHERE id = v_customer_id;
 
@@ -156,7 +165,7 @@ BEGIN
         ), bills)
         FROM jsonb_array_elements(bills) AS bill
       )
-    WHERE created_by = v_auth_uid::text AND customer_id IS NULL;
+    WHERE created_by = v_auth_uid AND customer_id IS NULL;
 
     UPDATE customer_invites SET status = 'claimed', claimed_by = v_auth_uid, claimed_at = now()
     WHERE id = v_invite.id AND status = 'active'
