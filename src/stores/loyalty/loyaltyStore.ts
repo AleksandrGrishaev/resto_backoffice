@@ -151,6 +151,11 @@ export const useLoyaltyStore = defineStore('loyalty', () => {
     return loyaltyService.getTransactions(customerId, limit)
   }
 
+  // Refund reversal
+  async function reverseLoyaltyOnRefund(customerId: string, orderId: string, refundAmount: number) {
+    return loyaltyService.reverseLoyaltyOnRefund(customerId, orderId, refundAmount)
+  }
+
   return {
     // State
     settings,
@@ -180,6 +185,7 @@ export const useLoyaltyStore = defineStore('loyalty', () => {
     redeemPoints,
     convertCard,
     createRedemption,
-    getTransactions
+    getTransactions,
+    reverseLoyaltyOnRefund
   }
 })

@@ -386,6 +386,10 @@ export interface PosPayment extends BaseEntity {
   billIds: string[] // Which bills
   itemIds: string[] // Which items (for partial payments)
 
+  // Customer linkage (denormalized from bill at payment time)
+  customerId?: string
+  customerName?: string
+
   // Refund data
   refundedAt?: string
   refundReason?: string

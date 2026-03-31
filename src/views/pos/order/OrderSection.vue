@@ -1765,6 +1765,19 @@ const handlePaymentConfirm = async (paymentData: {
       orderId: paymentDialogData.value.orderId
     })
 
+    // Resolve customer for payment record (denormalize from bill)
+    const checkoutBillIds = paymentDialogData.value.billIds
+    const checkoutBills = checkoutBillIds
+      .map(id => currentOrder.value?.bills.find(b => b.id === id))
+      .filter(Boolean) as import('@/stores/pos/types').PosBill[]
+    const paymentCustomerId =
+      checkoutBills.find(b => b.customerId)?.customerId ||
+      currentOrder.value?.customerId ||
+      undefined
+    const paymentCustomerName = paymentCustomerId
+      ? customersStore.getById(paymentCustomerId)?.name
+      : undefined
+
     // ✅ OPTIMISTIC UI: Update UI immediately (before payment completes)
     // User sees immediate feedback instead of waiting 6 seconds
     const billIds = paymentDialogData.value.billIds
@@ -1787,7 +1800,10 @@ const handlePaymentConfirm = async (paymentData: {
       paymentDialogData.value.itemIds,
       paymentData.method,
       paymentData.amount,
-      paymentData.receivedAmount
+      paymentData.receivedAmount,
+      paymentCustomerId
+        ? { customerId: paymentCustomerId, customerName: paymentCustomerName }
+        : undefined
     )
 
     if (result.success) {
@@ -1817,14 +1833,11 @@ const handlePaymentConfirm = async (paymentData: {
       showPrintReceiptDialog.value = true
 
       // 🎯 Redeem loyalty points AFTER payment success (P2 fix: no orphan deductions)
-      if (
-        paymentData.pointsRedeemed &&
-        paymentData.pointsRedeemed > 0 &&
-        currentOrder.value?.customerId
-      ) {
+      // Use paymentCustomerId (resolved from bill) — order.customerId is often null
+      if (paymentData.pointsRedeemed && paymentData.pointsRedeemed > 0 && paymentCustomerId) {
         try {
           const redeemResult = await loyaltyStore.redeemPoints(
-            currentOrder.value.customerId,
+            paymentCustomerId,
             paymentDialogData.value.orderId,
             paymentData.pointsRedeemed
           )
@@ -1923,50 +1936,52 @@ async function processLoyaltyAfterPayment(
     .filter(Boolean) as import('@/stores/pos/types').PosBill[]
   const billCustomerId = paidBills.find(b => b.customerId)?.customerId || order.customerId || null
 
-  if (!billCustomerId) return // No customer — nothing to do
-
-  const customer = customersStore.getById(billCustomerId)
+  const customer = billCustomerId ? customersStore.getById(billCustomerId) : null
   const loyaltyDisabled = customer?.disableLoyaltyAccrual === true
 
-  // 1. ALWAYS update customer stats (regardless of loyalty settings)
-  try {
-    const statsResult = await customersService.updateStats(billCustomerId, orderId, paidAmount)
-    if (statsResult.success) {
-      console.log(
-        `📊 Customer stats updated: ${customer?.name} — visits: ${statsResult.totalVisits}, spent: ${formatIDR(statsResult.totalSpent || 0)}`
-      )
-      if (statsResult.tierChanged) {
-        showSuccess(`${customer?.name} upgraded to ${statsResult.tier?.toUpperCase()}!`)
-      }
-      await customersStore.refreshCustomer(billCustomerId)
-    }
-  } catch (err) {
-    console.error('📊 Customer stats update failed:', err)
-  }
-
-  // 2. Apply cashback for digital loyalty customer (only if loyalty enabled AND on cashback program)
-  const onCashbackProgram = customer?.loyaltyProgram === 'cashback'
-  if (!loyaltyDisabled && onCashbackProgram) {
+  // 1. Update customer stats + cashback (only if customer is attached)
+  if (billCustomerId) {
+    // 1a. ALWAYS update customer stats (regardless of loyalty settings)
     try {
-      const result = await loyaltyStore.applyCashback(billCustomerId, orderId, paidAmount)
-      if (result.success) {
+      const statsResult = await customersService.updateStats(billCustomerId, orderId, paidAmount)
+      if (statsResult.success) {
         console.log(
-          `🎯 Cashback applied: ${formatIDR(result.cashback)} (${result.cashbackPct}% ${result.tier})`
+          `📊 Customer stats updated: ${customer?.name} — visits: ${statsResult.totalVisits}, spent: ${formatIDR(statsResult.totalSpent || 0)}`
         )
-        showSuccess(
-          `Cashback +${formatIDR(result.cashback)} (${result.cashbackPct}%). Balance: ${formatIDR(result.newBalance)}`
-        )
+        if (statsResult.tierChanged) {
+          showSuccess(`${customer?.name} upgraded to ${statsResult.tier?.toUpperCase()}!`)
+        }
+        await customersStore.refreshCustomer(billCustomerId)
       }
     } catch (err) {
-      console.error('🎯 Cashback failed:', err)
+      console.error('📊 Customer stats update failed:', err)
     }
-  } else if (loyaltyDisabled) {
-    console.log('🎯 Cashback skipped: loyalty accrual disabled for', customer?.name)
-  } else if (!onCashbackProgram) {
-    console.log('🎯 Cashback skipped: customer on stamps program', customer?.name)
+
+    // 1b. Apply cashback for digital loyalty customer (only if loyalty enabled AND on cashback program)
+    const onCashbackProgram = customer?.loyaltyProgram === 'cashback'
+    if (!loyaltyDisabled && onCashbackProgram) {
+      try {
+        const result = await loyaltyStore.applyCashback(billCustomerId, orderId, paidAmount)
+        if (result.success) {
+          console.log(
+            `🎯 Cashback applied: ${formatIDR(result.cashback)} (${result.cashbackPct}% ${result.tier})`
+          )
+          showSuccess(
+            `Cashback +${formatIDR(result.cashback)} (${result.cashbackPct}%). Balance: ${formatIDR(result.newBalance)}`
+          )
+        }
+      } catch (err) {
+        console.error('🎯 Cashback failed:', err)
+      }
+    } else if (loyaltyDisabled) {
+      console.log('🎯 Cashback skipped: loyalty accrual disabled for', customer?.name)
+    } else if (!onCashbackProgram) {
+      console.log('🎯 Cashback skipped: customer on stamps program', customer?.name)
+    }
   }
 
-  // 3. Add stamps — resolve card: loyaltyCard ref → bill.stampCardId → customer's active card
+  // 2. Add stamps — works with OR without customer (anonymous stamp cards supported)
+  // Resolve card: loyaltyCard ref → bill.stampCardId → customer's active card
   let card = loyaltyCard.value
   if (!card) {
     // Try to load from bill's stampCardId
@@ -1978,8 +1993,8 @@ async function processLoyaltyAfterPayment(
         console.error('🎯 Failed to load stamp card from bill:', err)
       }
     }
-    // Fallback: find customer's active stamp card
-    if (!card) {
+    // Fallback: find customer's active stamp card (only if customer exists)
+    if (!card && billCustomerId) {
       try {
         card = await loyaltyStore.getActiveCardByCustomerId(billCustomerId)
       } catch (err) {
@@ -1988,7 +2003,7 @@ async function processLoyaltyAfterPayment(
     }
   }
 
-  const onStampsProgram = customer?.loyaltyProgram !== 'cashback'
+  const onStampsProgram = !customer || customer.loyaltyProgram !== 'cashback'
   if (card && card.status === 'active' && !loyaltyDisabled && onStampsProgram) {
     try {
       const result = await loyaltyStore.addStamps(card.cardNumber, orderId, paidAmount)
@@ -2001,8 +2016,10 @@ async function processLoyaltyAfterPayment(
         )
         if (result.newCycle) {
           showSuccess('Stamp cycle complete! New cycle started.')
-          await customersStore.refreshCustomer(billCustomerId)
-          console.log('🎯 Customer upgraded to cashback program after stamp cycle completion')
+          if (billCustomerId) {
+            await customersStore.refreshCustomer(billCustomerId)
+            console.log('🎯 Customer upgraded to cashback program after stamp cycle completion')
+          }
         }
       }
     } catch (err) {

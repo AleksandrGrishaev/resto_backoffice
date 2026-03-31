@@ -112,14 +112,14 @@ Then recalculate all customer stats from payments.
 
 ## Implementation Order
 
-- [ ] **1. Migration:** Add `customer_id`, `customer_name` to payments table
-- [ ] **2. POS:** Record customer_id on payment at checkout time
-- [ ] **3. RPC:** Update `recalculate_tiers` to use payments.customer_id
-- [ ] **4. RPC:** Update `update_customer_stats` tier window to use payments
-- [ ] **5. RPC:** Create `reverse_loyalty_on_refund`
-- [ ] **6. POS:** Call reversal on refund in `processRefund()`
-- [ ] **7. Backfill:** Populate customer_id on existing payments from bills
-- [ ] **8. Backfill:** Recalculate all customer stats from payments
+- [x] **1. Migration:** Add `customer_id`, `customer_name` to payments table (278, DEV applied)
+- [x] **2. POS:** Record customer_id on payment at checkout time (OrderSection.vue + paymentsStore)
+- [x] **3. RPC:** Update `recalculate_tiers` to use payments.customer_id (280, DEV applied)
+- [x] **4. RPC:** Update `update_customer_stats` tier window to use payments (280, DEV applied)
+- [x] **5. RPC:** Create `reverse_loyalty_on_refund` (281, DEV applied)
+- [x] **6. POS:** Call reversal on refund in `processRefund()` (paymentsStore.ts)
+- [x] **7. Backfill:** Populate customer_id on existing payments from bills (279, DEV applied)
+- [ ] **8. Apply all to PROD** (278→279→280→281) + recalculate_tiers()
 
 ---
 

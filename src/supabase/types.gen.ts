@@ -2044,6 +2044,8 @@ export type Database = {
           bill_ids: string[] | null
           change_amount: number | null
           created_at: string
+          customer_id: string | null
+          customer_name: string | null
           details: Json
           id: string
           item_ids: string[] | null
@@ -2073,6 +2075,8 @@ export type Database = {
           bill_ids?: string[] | null
           change_amount?: number | null
           created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
           details?: Json
           id?: string
           item_ids?: string[] | null
@@ -2102,6 +2106,8 @@ export type Database = {
           bill_ids?: string[] | null
           change_amount?: number | null
           created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
           details?: Json
           id?: string
           item_ids?: string[] | null

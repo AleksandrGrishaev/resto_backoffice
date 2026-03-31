@@ -33,12 +33,13 @@ BEGIN
     FROM customers
     WHERE status = 'active' AND loyalty_program = 'cashback'
   LOOP
-    -- 3. Calculate spending in window (all non-cancelled orders)
-    SELECT COALESCE(SUM(o.final_amount), 0) INTO v_spent_window
-    FROM orders o
-    WHERE o.customer_id = v_customer.id
-      AND o.status NOT IN ('cancelled')
-      AND o.created_at >= now() - (v_settings.tier_window_days || ' days')::interval;
+    -- 3. Calculate spending in window (completed payments only)
+    SELECT COALESCE(SUM(p.amount), 0) INTO v_spent_window
+    FROM payments p
+    WHERE p.customer_id = v_customer.id
+      AND p.status = 'completed'
+      AND p.amount > 0
+      AND p.created_at >= now() - (v_settings.tier_window_days || ' days')::interval;
 
     -- 4. Determine target tier (highest threshold met)
     v_target_tier := 'member';

@@ -37,6 +37,10 @@ export function toSupabaseInsert(payment: PosPayment): SupabasePaymentInsert {
     refunded_by: payment.refundedBy || null,
     original_payment_id: payment.originalPaymentId || null,
 
+    // Customer linkage
+    customer_id: payment.customerId || null,
+    customer_name: payment.customerName || null,
+
     // Reconciliation
     processed_by_name: payment.processedBy, // NOTE: processedBy is cashier name, not UUID
     processed_at: payment.processedAt,
@@ -103,6 +107,10 @@ export function fromSupabase(supabasePayment: SupabasePayment): PosPayment {
     refundReason: supabasePayment.refund_reason || undefined,
     refundedBy: supabasePayment.refunded_by || undefined,
     originalPaymentId: supabasePayment.original_payment_id || undefined,
+
+    // Customer linkage
+    customerId: supabasePayment.customer_id || undefined,
+    customerName: supabasePayment.customer_name || undefined,
 
     // Reconciliation
     processedBy: supabasePayment.processed_by_name || '', // Cashier name

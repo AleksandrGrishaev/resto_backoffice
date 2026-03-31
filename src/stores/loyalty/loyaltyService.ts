@@ -579,22 +579,50 @@ export class LoyaltyService {
   async getAllTransactions(
     limit = 500
   ): Promise<(LoyaltyTransaction & { customerName?: string; performedBy?: string })[]> {
-    const { data, error } = await supabase
-      .from('loyalty_transactions')
-      .select('*, customers(name)')
-      .order('created_at', { ascending: false })
-      .limit(limit)
+    // Fetch loyalty_transactions and stamp_entries in parallel
+    const [txResult, stampResult] = await Promise.all([
+      supabase
+        .from('loyalty_transactions')
+        .select('*, customers(name)')
+        .order('created_at', { ascending: false })
+        .limit(limit),
+      supabase
+        .from('stamp_entries')
+        .select('*, stamp_cards(card_number, customer_id, customers(name))')
+        .order('created_at', { ascending: false })
+        .limit(limit)
+    ])
 
-    if (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to load all transactions', { error })
-      throw error
+    if (txResult.error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load all transactions', { error: txResult.error })
+      throw txResult.error
     }
 
-    return (data || []).map(row => ({
+    const loyaltyRows = (txResult.data || []).map(row => ({
       ...mapTransactionFromDb(row),
       customerName: (row as any).customers?.name || '',
       performedBy: row.performed_by || null
     }))
+
+    // Map stamp_entries into the same shape as loyalty transactions
+    const stampRows = (stampResult.data || []).map((row: any) => ({
+      id: row.id,
+      customerId: row.stamp_cards?.customer_id || '',
+      type: 'stamp' as any,
+      amount: row.stamps,
+      balanceAfter: 0,
+      orderId: row.order_id || null,
+      description: `+${row.stamps} stamp(s) on card ${row.stamp_cards?.card_number || '?'} (order ${row.order_amount ? 'Rp ' + Number(row.order_amount).toLocaleString('id-ID') : 'manual'})`,
+      createdAt: row.created_at,
+      customerName:
+        row.stamp_cards?.customers?.name || `Card ${row.stamp_cards?.card_number || '?'}`,
+      performedBy: null
+    }))
+
+    // Merge and sort by date descending
+    return [...loyaltyRows, ...stampRows]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, limit)
   }
 
   /** Atomic balance adjustment via RPC (transaction + balance update in one call) */
@@ -619,6 +647,34 @@ export class LoyaltyService {
       newBalance: result.new_balance
     })
     return result.new_balance
+  }
+
+  /** Reverse loyalty cashback on payment refund */
+  async reverseLoyaltyOnRefund(
+    customerId: string,
+    orderId: string,
+    refundAmount: number
+  ): Promise<{ success: boolean; reversed: number; newBalance?: number }> {
+    const { data, error } = await supabase.rpc('reverse_loyalty_on_refund', {
+      p_customer_id: customerId,
+      p_order_id: orderId,
+      p_refund_amount: refundAmount
+    })
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to reverse loyalty on refund', { error })
+      throw error
+    }
+
+    const result = data as any
+    if (!result.success) throw new Error(result.error)
+
+    DebugUtils.info(MODULE_NAME, 'Loyalty reversed on refund', {
+      customerId,
+      reversed: result.reversed,
+      newBalance: result.new_balance
+    })
+    return { success: true, reversed: result.reversed, newBalance: result.new_balance }
   }
 }
 

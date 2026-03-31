@@ -1324,12 +1324,15 @@
                 </v-chip>
               </template>
               <template #[`item.amount`]="{ item }">
-                <span :class="item.amount >= 0 ? 'text-success' : 'text-error'">
+                <span v-if="item.type === 'stamp'" class="text-success">
+                  +{{ item.amount }} stamp{{ item.amount > 1 ? 's' : '' }}
+                </span>
+                <span v-else :class="item.amount >= 0 ? 'text-success' : 'text-error'">
                   {{ item.amount >= 0 ? '+' : '' }}{{ formatIDR(item.amount) }}
                 </span>
               </template>
               <template #[`item.balanceAfter`]="{ item }">
-                {{ formatIDR(item.balanceAfter) }}
+                {{ item.type === 'stamp' ? '-' : formatIDR(item.balanceAfter) }}
               </template>
               <template #[`item.createdAt`]="{ item }">
                 {{ formatDateTime(item.createdAt) }}
@@ -1985,7 +1988,15 @@ const historyLoaded = ref(false)
 const loadingHistory = ref(false)
 const historySearch = ref('')
 const historyTypeFilter = ref<string | null>(null)
-const transactionTypes = ['cashback', 'redemption', 'conversion', 'adjustment', 'expiration']
+const transactionTypes = [
+  'cashback',
+  'redemption',
+  'conversion',
+  'adjustment',
+  'expiration',
+  'reversal',
+  'stamp'
+]
 
 const historyHeaders = [
   { title: 'Date', key: 'createdAt', sortable: true },

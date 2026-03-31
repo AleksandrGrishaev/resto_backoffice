@@ -223,7 +223,7 @@ async function fetchOrdersWithCustomers(
 
   const { data: orders, error } = await supabase
     .from('orders')
-    .select('created_at, customer_id, stamp_card_id, final_amount, guest_count, status')
+    .select('id, created_at, customer_id, stamp_card_id, final_amount, guest_count, status')
     .gte('created_at', widerStart)
     .lt('created_at', widerEnd)
     .neq('status', 'cancelled')
@@ -256,15 +256,40 @@ async function fetchOrdersWithCustomers(
     }
   }
 
-  // Loyalty breakdown (current period only)
-  const customerIds = [...new Set(currentOrders.filter(o => o.customer_id).map(o => o.customer_id))]
+  // Loyalty breakdown (current period only) — uses payments.customer_id as source of truth
+  const currentOrderIds = currentOrders.map(o => o.id || o.order_id).filter(Boolean)
+
+  // Fetch payments for current period orders to get accurate customer attribution
+  const paymentCustomerIds: string[] = []
+  const paymentsByOrder = new Map<string, { customerId: string | null; amount: number }[]>()
+
+  if (currentOrderIds.length > 0) {
+    const { data: payments } = await supabase
+      .from('payments')
+      .select('order_id, customer_id, amount, status')
+      .in('order_id', currentOrderIds)
+      .eq('status', 'completed')
+
+    if (payments) {
+      for (const p of payments as any[]) {
+        const list = paymentsByOrder.get(p.order_id) || []
+        list.push({ customerId: p.customer_id, amount: Number(p.amount) || 0 })
+        paymentsByOrder.set(p.order_id, list)
+        if (p.customer_id) paymentCustomerIds.push(p.customer_id)
+      }
+    }
+  }
+
+  // Also check order-level customer_id as fallback
+  const orderCustomerIds = currentOrders.filter(o => o.customer_id).map(o => o.customer_id)
+  const allCustomerIds = [...new Set([...paymentCustomerIds, ...orderCustomerIds])]
 
   let customerMap = new Map<string, string>()
-  if (customerIds.length > 0) {
+  if (allCustomerIds.length > 0) {
     const { data: customers } = await supabase
       .from('customers')
       .select('id, loyalty_program')
-      .in('id', customerIds)
+      .in('id', allCustomerIds)
 
     if (customers) {
       customerMap = new Map((customers as any[]).map(c => [c.id, c.loyalty_program || 'cashback']))
@@ -281,12 +306,18 @@ async function fetchOrdersWithCustomers(
   for (const order of currentOrders) {
     const revenue = Number(order.final_amount) || 0
     const guests = Number(order.guest_count) || 0
+    const orderId = order.id || order.order_id
 
-    if (!order.customer_id) {
+    // Resolve customer: payment.customer_id > order.customer_id > null
+    const orderPayments = paymentsByOrder.get(orderId) || []
+    const paymentCustomerId = orderPayments.find(p => p.customerId)?.customerId
+    const customerId = paymentCustomerId || order.customer_id || null
+
+    if (!customerId) {
       buckets.anonymous.orders++
       buckets.anonymous.revenue += revenue
       buckets.anonymous.guests += guests
-    } else if (order.stamp_card_id || customerMap.get(order.customer_id) === 'stamps') {
+    } else if (order.stamp_card_id || customerMap.get(customerId) === 'stamps') {
       buckets.stamp_card.orders++
       buckets.stamp_card.revenue += revenue
       buckets.stamp_card.guests += guests
