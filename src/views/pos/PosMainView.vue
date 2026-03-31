@@ -95,24 +95,10 @@
           </p>
         </v-card-text>
         <v-card-actions class="justify-center pb-6">
-          <v-btn
-            color="grey"
-            variant="text"
-            @click="
-              tryUnlockAudio()
-              showNoShiftDialog = false
-            "
-          >
+          <v-btn color="grey" variant="text" @click="handleContinueWithoutShift">
             Continue Without Shift
           </v-btn>
-          <v-btn
-            color="primary"
-            size="large"
-            @click="
-              tryUnlockAudio()
-              goToShiftManagement()
-            "
-          >
+          <v-btn color="primary" size="large" @click="handleStartShift">
             <v-icon left>mdi-play-circle</v-icon>
             Start Shift
           </v-btn>
@@ -361,6 +347,16 @@ const retryInitialization = (): void => {
  */
 const goToShiftManagement = (): void => {
   router.push('/pos/shift-management')
+}
+
+const handleContinueWithoutShift = (): void => {
+  tryUnlockAudio()
+  showNoShiftDialog.value = false
+}
+
+const handleStartShift = (): void => {
+  tryUnlockAudio()
+  goToShiftManagement()
 }
 
 /**
