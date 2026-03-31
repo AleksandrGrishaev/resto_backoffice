@@ -629,7 +629,12 @@
                 </v-chip>
               </template>
               <template #[`item.loyaltyBalance`]="{ item }">
-                {{ formatIDR(item.loyaltyBalance) }}
+                <template v-if="item.personalDiscount > 0">-</template>
+                <template v-else-if="item.loyaltyProgram === 'stamps'">
+                  {{ customerStampsMap[item.id] ?? 0 }} /
+                  {{ loyaltyStore.settings?.stampsPerCycle ?? 15 }}
+                </template>
+                <template v-else>{{ formatIDR(item.loyaltyBalance) }}</template>
               </template>
               <template #[`item.totalSpent`]="{ item }">
                 {{ formatIDR(item.totalSpent) }}
@@ -1359,6 +1364,7 @@ import {
   buildOverrides,
   type ConflictItem
 } from '@/stores/customers/mergeConflicts'
+import { supabase } from '@/supabase/client'
 import { formatIDR, TimeUtils } from '@/utils'
 import { usePhoneCodes, buildFullPhone } from '@/composables/usePhoneCodes'
 
@@ -1382,8 +1388,11 @@ const saving = ref(false)
 const snackbar = reactive({ show: false, message: '', color: 'success' })
 
 // Reload fresh data when switching tabs
-watch(activeTab, tab => {
-  if (tab === 'customers') customersStore.reload()
+watch(activeTab, async tab => {
+  if (tab === 'customers') {
+    await customersStore.reload()
+    loadCustomerStamps()
+  }
   if (tab === 'cards') loadCards()
   if (tab === 'history' && !historyLoaded.value) loadHistory()
 })
@@ -1560,6 +1569,7 @@ async function loadCards() {
 // =============================================
 
 const loadingCustomers = ref(false)
+const customerStampsMap = ref<Record<string, number>>({})
 const customerSearch = ref('')
 const customerLevelFilter = ref<string | null>(null)
 const customerStatusFilter = ref<string | null>(null)
@@ -1611,6 +1621,30 @@ const customerHeaders = [
   { title: 'Last Visit', key: 'lastVisitAt', sortable: true },
   { title: 'Status', key: 'status', sortable: true }
 ]
+
+async function loadCustomerStamps() {
+  try {
+    const { data } = await supabase
+      .from('stamp_cards')
+      .select('customer_id, stamp_entries(stamps)')
+      .eq('status', 'active')
+      .not('customer_id', 'is', null)
+    if (data) {
+      const map: Record<string, number> = {}
+      for (const card of data) {
+        if (card.customer_id) {
+          map[card.customer_id] = ((card as any).stamp_entries || []).reduce(
+            (sum: number, e: any) => sum + (e.stamps || 0),
+            0
+          )
+        }
+      }
+      customerStampsMap.value = map
+    }
+  } catch {
+    // Non-critical
+  }
+}
 
 function getLevel(c: Customer): string {
   if (c.personalDiscount > 0) return `discount_${c.personalDiscount}`
@@ -2064,8 +2098,8 @@ onMounted(async () => {
       original.value = JSON.stringify(form.value)
     }
 
-    // Load stamp cards
-    await loadCards()
+    // Load stamp cards + customer stamps in parallel
+    await Promise.all([loadCards(), loadCustomerStamps()])
   } catch (err) {
     snackbar.message = 'Failed to load loyalty data'
     snackbar.color = 'error'
