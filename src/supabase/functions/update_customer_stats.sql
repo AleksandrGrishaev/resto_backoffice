@@ -60,11 +60,11 @@ BEGIN
   IF v_settings IS NOT NULL AND v_settings.tiers IS NOT NULL THEN
     v_tiers := v_settings.tiers;
 
-    -- Calculate spending in window (include current order amount since it may not be 'completed' yet)
+    -- Calculate spending in window — count all paid orders (any non-cancelled status with payment)
     SELECT COALESCE(SUM(final_amount), 0) + p_order_amount INTO v_spent_window
     FROM orders
     WHERE customer_id = p_customer_id
-      AND status IN ('completed', 'collected')
+      AND status NOT IN ('cancelled')
       AND created_at >= now() - (v_settings.tier_window_days || ' days')::interval;
 
     -- Find target tier (highest qualifying)

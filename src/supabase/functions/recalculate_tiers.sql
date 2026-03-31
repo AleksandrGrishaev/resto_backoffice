@@ -27,17 +27,17 @@ BEGIN
   END IF;
   v_tiers := v_settings.tiers;
 
-  -- 2. Process each digital customer (has telegram_id)
+  -- 2. Process all active cashback customers
   FOR v_customer IN
-    SELECT id, tier, telegram_id
+    SELECT id, tier
     FROM customers
-    WHERE status = 'active' AND telegram_id IS NOT NULL
+    WHERE status = 'active' AND loyalty_program = 'cashback'
   LOOP
-    -- 3. Calculate spending in window
+    -- 3. Calculate spending in window (all non-cancelled orders)
     SELECT COALESCE(SUM(o.final_amount), 0) INTO v_spent_window
     FROM orders o
     WHERE o.customer_id = v_customer.id
-      AND o.status IN ('completed', 'collected')
+      AND o.status NOT IN ('cancelled')
       AND o.created_at >= now() - (v_settings.tier_window_days || ' days')::interval;
 
     -- 4. Determine target tier (highest threshold met)
