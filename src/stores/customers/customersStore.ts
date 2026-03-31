@@ -123,8 +123,12 @@ export const useCustomersStore = defineStore('customers', () => {
     }
   }
 
-  async function mergeCustomers(sourceId: string, targetId: string) {
-    const result = await customersService.mergeCustomers(sourceId, targetId)
+  async function mergeCustomers(
+    sourceId: string,
+    targetId: string,
+    fieldOverrides?: Record<string, any>
+  ) {
+    const result = await customersService.mergeCustomers(sourceId, targetId, fieldOverrides)
     if (result.success) {
       // Remove source from local state
       customers.value = customers.value.filter(c => c.id !== sourceId)

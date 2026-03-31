@@ -174,7 +174,8 @@ export class CustomersService {
   /** Merge source customer into target. Transfers all data, marks source as merged. */
   async mergeCustomers(
     sourceId: string,
-    targetId: string
+    targetId: string,
+    fieldOverrides?: Record<string, any>
   ): Promise<{
     success: boolean
     error?: string
@@ -190,7 +191,8 @@ export class CustomersService {
   }> {
     const { data, error } = await supabase.rpc('merge_customers', {
       p_source_id: sourceId,
-      p_target_id: targetId
+      p_target_id: targetId,
+      p_field_overrides: fieldOverrides ?? {}
     })
 
     if (error) {

@@ -713,24 +713,30 @@ async function checkCustomerAuth(customerId: string) {
   }
 }
 
+async function createInviteUrl(): Promise<{ url: string; customerName: string } | null> {
+  if (!attachedCustomer.value) return null
+  inviteError.value = null
+  const { data } = await supabase.rpc('create_customer_invite', {
+    p_customer_id: attachedCustomer.value.id
+  })
+  if (data?.success && data?.url) {
+    return { url: data.url, customerName: data.customerName || attachedCustomer.value.name }
+  }
+  DebugUtils.error('LoyaltyPanel', 'Failed to create invite', { data })
+  inviteError.value = data?.error || 'Failed to create invite'
+  return null
+}
+
 async function handleShowInviteQR() {
   if (!attachedCustomer.value || showingInviteQR.value) return
-
   showingInviteQR.value = true
   try {
-    const { data } = await supabase.rpc('create_customer_invite', {
-      p_customer_id: attachedCustomer.value.id
-    })
-
-    if (data?.success && data?.url) {
-      showQrUrl.value = data.url
+    const result = await createInviteUrl()
+    if (result) {
+      showQrUrl.value = result.url
       showQrDialog.value = true
-    } else {
-      DebugUtils.error('LoyaltyPanel', 'Failed to create invite for show', { data })
-      inviteError.value = data?.error || 'Failed to create invite'
     }
-  } catch (e) {
-    DebugUtils.error('LoyaltyPanel', 'Error creating invite QR for show', { error: e })
+  } catch {
     inviteError.value = 'Failed to generate invite QR'
   } finally {
     showingInviteQR.value = false
@@ -739,21 +745,13 @@ async function handleShowInviteQR() {
 
 async function handlePrintInviteQR() {
   if (!attachedCustomer.value || printingInvite.value) return
-
   printingInvite.value = true
   try {
-    const { data } = await supabase.rpc('create_customer_invite', {
-      p_customer_id: attachedCustomer.value.id
-    })
-
-    if (data?.success && data?.url) {
-      await printInviteQR(data.url, data.customerName || attachedCustomer.value.name)
-    } else {
-      DebugUtils.error('LoyaltyPanel', 'Failed to create invite', { data })
-      inviteError.value = data?.error || 'Failed to create invite'
+    const result = await createInviteUrl()
+    if (result) {
+      await printInviteQR(result.url, result.customerName)
     }
-  } catch (e) {
-    DebugUtils.error('LoyaltyPanel', 'Error creating invite QR', { error: e })
+  } catch {
     inviteError.value = 'Failed to print invite QR'
   } finally {
     printingInvite.value = false

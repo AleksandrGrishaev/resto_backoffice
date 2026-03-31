@@ -1,0 +1,10 @@
+-- Migration: 275_merge_customers_field_overrides
+-- Description: Add p_field_overrides parameter to merge_customers RPC
+-- Date: 2026-03-31
+--
+-- CONTEXT: When merging customers, staff can now choose which field values to keep
+-- when both source and target have conflicting data (e.g., different names, phones).
+-- The UI detects conflicts and sends user choices as a JSONB override map.
+-- DEFAULT '{}' keeps backward compatibility with existing callers.
+--
+-- See src/supabase/functions/merge_customers.sql for full source.

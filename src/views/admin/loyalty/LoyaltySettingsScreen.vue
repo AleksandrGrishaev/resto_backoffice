@@ -595,8 +595,27 @@
               hover
               @click:row="(_: Event, row: any) => openCustomerDetail(row.item)"
             >
+              <template #[`item.loyaltyProgram`]="{ item }">
+                <v-chip
+                  size="x-small"
+                  :color="item.loyaltyProgram === 'cashback' ? 'teal' : 'amber-darken-1'"
+                  variant="tonal"
+                >
+                  {{ item.loyaltyProgram === 'cashback' ? 'cashback' : 'stamps' }}
+                </v-chip>
+              </template>
               <template #[`item.tier`]="{ item }">
                 <v-chip
+                  v-if="item.personalDiscount > 0"
+                  size="small"
+                  color="orange"
+                  variant="flat"
+                  class="text-white"
+                >
+                  DISCOUNT
+                </v-chip>
+                <v-chip
+                  v-else
                   size="small"
                   :color="getTierColor(item.tier)"
                   variant="flat"
@@ -893,6 +912,16 @@
                   >
                     {{ selectedCustomer.status === 'active' ? 'Deactivate' : 'Activate' }}
                   </v-btn>
+                  <v-btn
+                    variant="tonal"
+                    color="warning"
+                    size="small"
+                    prepend-icon="mdi-merge"
+                    class="ml-2"
+                    @click="openMergeDialog"
+                  >
+                    Merge Into...
+                  </v-btn>
                   <v-spacer />
                   <v-btn variant="outlined" prepend-icon="mdi-pencil" @click="startCustomerEdit">
                     Edit
@@ -912,6 +941,176 @@
                     Save
                   </v-btn>
                 </template>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+
+          <!-- ===== Merge Customer Dialog ===== -->
+          <v-dialog v-model="showMergeDialog" max-width="700">
+            <v-card>
+              <v-card-title class="bg-warning">
+                Merge Customer
+                <span v-if="mergeStep === 'resolve'" class="text-body-2 ml-2">
+                  — Resolve Conflicts
+                </span>
+              </v-card-title>
+              <v-card-text class="pt-4">
+                <!-- Step 1: Select target -->
+                <template v-if="mergeStep === 'select'">
+                  <v-alert type="info" variant="tonal" density="compact" class="mb-4">
+                    All orders, transactions, loyalty points, and identities will be transferred to
+                    the target. This action cannot be undone.
+                  </v-alert>
+
+                  <div class="text-body-2 mb-2">
+                    Source:
+                    <strong>{{ mergeSource?.name }}</strong>
+                  </div>
+
+                  <v-autocomplete
+                    v-model="mergeTargetId"
+                    :items="mergeTargetOptions"
+                    item-title="label"
+                    item-value="id"
+                    label="Merge into (target customer)..."
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="mb-3"
+                  />
+
+                  <div
+                    v-if="mergeTargetCustomer"
+                    class="pa-3 rounded bg-grey-darken-3 text-body-2 mb-3"
+                  >
+                    <div>
+                      Balance:
+                      <strong>{{ formatIDR(mergeTargetCustomer.loyaltyBalance) }}</strong>
+                    </div>
+                    <div>
+                      Visits:
+                      <strong>{{ mergeTargetCustomer.totalVisits }}</strong>
+                    </div>
+                    <div>
+                      Total Spent:
+                      <strong>{{ formatIDR(mergeTargetCustomer.totalSpent) }}</strong>
+                    </div>
+                  </div>
+                </template>
+
+                <!-- Step 2: Resolve conflicts -->
+                <template v-if="mergeStep === 'resolve'">
+                  <v-alert type="info" variant="tonal" density="compact" class="mb-4">
+                    Both customers have different values for these fields. Choose which to keep.
+                  </v-alert>
+
+                  <v-table density="compact" class="merge-conflicts-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 130px">Field</th>
+                        <th>
+                          <v-icon size="14" class="mr-1">mdi-arrow-right-bold</v-icon>
+                          {{ mergeSource?.name }}
+                          <span class="text-caption text-medium-emphasis ml-1">(source)</span>
+                        </th>
+                        <th>
+                          <v-icon size="14" class="mr-1">mdi-bullseye-arrow</v-icon>
+                          {{ mergeTargetCustomer?.name }}
+                          <span class="text-caption text-medium-emphasis ml-1">(target)</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="c in mergeConflicts" :key="c.field.key">
+                        <td class="text-body-2 font-weight-medium">{{ c.field.label }}</td>
+                        <td
+                          class="merge-cell"
+                          :class="{
+                            'merge-cell--selected': mergeChoices[c.field.key] === 'source'
+                          }"
+                          style="cursor: pointer"
+                          @click="mergeChoices[c.field.key] = 'source'"
+                        >
+                          <div class="d-flex align-center gap-1">
+                            <v-icon
+                              size="18"
+                              :color="mergeChoices[c.field.key] === 'source' ? 'warning' : 'grey'"
+                            >
+                              {{
+                                mergeChoices[c.field.key] === 'source'
+                                  ? 'mdi-radiobox-marked'
+                                  : 'mdi-radiobox-blank'
+                              }}
+                            </v-icon>
+                            <span class="text-body-2">
+                              {{ c.field.format ? c.field.format(c.sourceValue) : c.sourceValue }}
+                            </span>
+                          </div>
+                        </td>
+                        <td
+                          class="merge-cell"
+                          :class="{
+                            'merge-cell--selected': mergeChoices[c.field.key] === 'target'
+                          }"
+                          style="cursor: pointer"
+                          @click="mergeChoices[c.field.key] = 'target'"
+                        >
+                          <div class="d-flex align-center gap-1">
+                            <v-icon
+                              size="18"
+                              :color="mergeChoices[c.field.key] === 'target' ? 'warning' : 'grey'"
+                            >
+                              {{
+                                mergeChoices[c.field.key] === 'target'
+                                  ? 'mdi-radiobox-marked'
+                                  : 'mdi-radiobox-blank'
+                              }}
+                            </v-icon>
+                            <span class="text-body-2">
+                              {{ c.field.format ? c.field.format(c.targetValue) : c.targetValue }}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </template>
+
+                <v-alert
+                  v-if="mergeError"
+                  type="error"
+                  variant="tonal"
+                  density="compact"
+                  class="mt-3"
+                >
+                  {{ mergeError }}
+                </v-alert>
+              </v-card-text>
+              <v-card-actions class="px-4 pb-4">
+                <v-btn v-if="mergeStep === 'resolve'" variant="text" @click="mergeStep = 'select'">
+                  Back
+                </v-btn>
+                <v-spacer />
+                <v-btn variant="text" @click="showMergeDialog = false">Cancel</v-btn>
+                <v-btn
+                  v-if="mergeStep === 'select'"
+                  color="warning"
+                  variant="flat"
+                  :disabled="!mergeTargetId"
+                  @click="proceedToResolve"
+                >
+                  Next
+                </v-btn>
+                <v-btn
+                  v-if="mergeStep === 'resolve'"
+                  color="warning"
+                  variant="flat"
+                  prepend-icon="mdi-merge"
+                  :loading="merging"
+                  @click="executeMerge"
+                >
+                  Merge
+                </v-btn>
               </v-card-actions>
             </v-card>
           </v-dialog>
@@ -1048,6 +1247,11 @@ import type {
   LoyaltyTransaction
 } from '@/stores/loyalty'
 import type { Customer } from '@/stores/customers'
+import {
+  detectConflicts,
+  buildOverrides,
+  type ConflictItem
+} from '@/stores/customers/mergeConflicts'
 import { formatIDR, TimeUtils } from '@/utils'
 import { usePhoneCodes, buildFullPhone } from '@/composables/usePhoneCodes'
 
@@ -1278,6 +1482,7 @@ const custForm = ref({
 
 const customerHeaders = [
   { title: 'Name', key: 'name', sortable: true },
+  { title: 'Program', key: 'loyaltyProgram', sortable: true },
   { title: 'Tier', key: 'tier', sortable: true },
   { title: 'Balance', key: 'loyaltyBalance', sortable: true },
   { title: 'Total Spent', key: 'totalSpent', sortable: true },
@@ -1477,6 +1682,77 @@ async function createNewCustomer() {
 }
 
 // =============================================
+// MERGE CUSTOMER
+// =============================================
+
+const showMergeDialog = ref(false)
+const mergeStep = ref<'select' | 'resolve'>('select')
+const mergeSource = ref<Customer | null>(null)
+const mergeTargetId = ref<string | null>(null)
+const merging = ref(false)
+const mergeError = ref('')
+const mergeConflicts = ref<ConflictItem[]>([])
+const mergeChoices = ref<Record<string, 'source' | 'target'>>({})
+
+const mergeTargetOptions = computed(() => {
+  if (!mergeSource.value) return []
+  return customersStore.customers
+    .filter(c => c.id !== mergeSource.value!.id && c.status === 'active')
+    .map(c => ({
+      id: c.id,
+      label: `${c.name}${c.phone ? ' · ' + c.phone : ''}${c.telegramUsername ? ' · @' + c.telegramUsername : ''}`
+    }))
+})
+
+const mergeTargetCustomer = computed(() => {
+  if (!mergeTargetId.value) return null
+  return customersStore.getById(mergeTargetId.value)
+})
+
+function openMergeDialog() {
+  mergeSource.value = selectedCustomer.value
+  mergeTargetId.value = null
+  mergeError.value = ''
+  mergeStep.value = 'select'
+  mergeConflicts.value = []
+  mergeChoices.value = {}
+  showMergeDialog.value = true
+}
+
+function proceedToResolve() {
+  if (!mergeSource.value || !mergeTargetCustomer.value) return
+  const conflicts = detectConflicts(mergeSource.value, mergeTargetCustomer.value)
+  if (conflicts.length === 0) {
+    executeMerge()
+    return
+  }
+  mergeConflicts.value = conflicts
+  // Default all choices to 'target'
+  mergeChoices.value = Object.fromEntries(conflicts.map(c => [c.field.key, 'target' as const]))
+  mergeStep.value = 'resolve'
+}
+
+async function executeMerge() {
+  if (!mergeSource.value || !mergeTargetId.value) return
+  merging.value = true
+  mergeError.value = ''
+
+  try {
+    const overrides = buildOverrides(mergeChoices.value, mergeSource.value)
+    await customersStore.mergeCustomers(mergeSource.value.id, mergeTargetId.value, overrides)
+    showMergeDialog.value = false
+    showCustomerDetail.value = false
+    snackbar.message = 'Customer merged successfully'
+    snackbar.color = 'success'
+    snackbar.show = true
+  } catch (err) {
+    mergeError.value = err instanceof Error ? err.message : 'Merge failed'
+  } finally {
+    merging.value = false
+  }
+}
+
+// =============================================
 // SHARED HELPERS
 // =============================================
 
@@ -1564,5 +1840,14 @@ onMounted(async () => {
 .transaction-list {
   max-height: 250px;
   overflow-y: auto;
+}
+
+.merge-cell {
+  transition: background-color 0.15s;
+  border-radius: 4px;
+}
+
+.merge-cell--selected {
+  background-color: rgba(255, 152, 0, 0.12);
 }
 </style>

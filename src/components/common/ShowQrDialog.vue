@@ -1,5 +1,4 @@
-<!-- src/views/pos/payment/dialogs/ShowQrDialog.vue -->
-<!-- Debug dialog to display invite QR code on screen (for testing without printer) -->
+<!-- src/components/common/ShowQrDialog.vue -->
 <template>
   <v-dialog
     :model-value="modelValue"
@@ -58,6 +57,7 @@ watch(
     if (open && props.url) {
       loading.value = true
       error.value = ''
+      qrDataUrl.value = ''
       try {
         qrDataUrl.value = await QRCode.toDataURL(props.url, {
           width: 280,

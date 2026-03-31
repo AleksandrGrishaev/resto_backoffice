@@ -8,7 +8,8 @@
 
 CREATE OR REPLACE FUNCTION public.merge_customers(
   p_source_id UUID,
-  p_target_id UUID
+  p_target_id UUID,
+  p_field_overrides JSONB DEFAULT '{}'::jsonb
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -103,7 +104,9 @@ BEGIN
   WHERE customer_id = p_source_id;
   GET DIAGNOSTICS v_invites_moved = ROW_COUNT;
 
-  -- 7. Merge balances and stats into target
+  -- 7. Merge balances, stats, and fields into target
+  -- Numeric fields: always summed
+  -- Other fields: p_field_overrides wins > target > source (COALESCE)
   UPDATE customers SET
     loyalty_balance = loyalty_balance + v_source.loyalty_balance,
     total_spent = total_spent + v_source.total_spent,
@@ -116,11 +119,23 @@ BEGIN
     END,
     first_visit_at = LEAST(first_visit_at, v_source.first_visit_at),
     last_visit_at = GREATEST(last_visit_at, v_source.last_visit_at),
-    -- Fill in contact info from source if target is missing it
-    telegram_id = COALESCE(telegram_id, v_source.telegram_id),
-    telegram_username = COALESCE(telegram_username, v_source.telegram_username),
-    phone = COALESCE(phone, v_source.phone),
-    email = COALESCE(email, v_source.email),
+    -- User-resolvable fields (override > target > source)
+    name = COALESCE(p_field_overrides->>'name', v_target.name),
+    phone = COALESCE(p_field_overrides->>'phone', v_target.phone, v_source.phone),
+    email = COALESCE(p_field_overrides->>'email', v_target.email, v_source.email),
+    telegram_username = COALESCE(p_field_overrides->>'telegram_username', v_target.telegram_username, v_source.telegram_username),
+    telegram_id = CASE
+      WHEN p_field_overrides->>'telegram_username' IS NOT NULL
+        THEN CASE WHEN p_field_overrides->>'telegram_username' = v_source.telegram_username
+          THEN v_source.telegram_id ELSE v_target.telegram_id END
+      ELSE COALESCE(v_target.telegram_id, v_source.telegram_id)
+    END,
+    notes = COALESCE(p_field_overrides->>'notes', v_target.notes, v_source.notes),
+    tier = COALESCE(p_field_overrides->>'tier', v_target.tier),
+    loyalty_program = COALESCE(p_field_overrides->>'loyalty_program', v_target.loyalty_program),
+    personal_discount = COALESCE((p_field_overrides->>'personal_discount')::numeric, v_target.personal_discount),
+    discount_note = COALESCE(p_field_overrides->>'discount_note', v_target.discount_note, v_source.discount_note),
+    disable_loyalty_accrual = COALESCE((p_field_overrides->>'disable_loyalty_accrual')::boolean, v_target.disable_loyalty_accrual),
     updated_at = now()
   WHERE id = p_target_id;
 
