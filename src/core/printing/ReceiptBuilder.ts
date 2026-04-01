@@ -49,15 +49,26 @@ export class ReceiptBuilder {
     // Taxes
     this.buildTaxes(cmd, data)
 
-    // Total
+    // Total + loyalty points deduction
     cmd.hr()
-    cmd.setBold(true)
-    cmd.leftRight('TOTAL:', cmd.formatIDR(data.totalAmount))
-    cmd.setBold(false)
+    const pointsUsed = data.loyalty?.pointsRedeemed || 0
+    if (pointsUsed > 0) {
+      // Show total before points, then deduction, then final amount
+      cmd.leftRight('TOTAL:', cmd.formatIDR(data.totalAmount + pointsUsed))
+      this.buildLoyalty(cmd, data)
+      cmd.hr()
+      cmd.setBold(true)
+      cmd.setTextSize('double-width')
+      cmd.leftRight('TO PAY:', cmd.formatIDR(data.totalAmount))
+      cmd.setTextSize('normal')
+      cmd.setBold(false)
+    } else {
+      cmd.setBold(true)
+      cmd.leftRight('TOTAL:', cmd.formatIDR(data.totalAmount))
+      cmd.setBold(false)
+      this.buildLoyalty(cmd, data)
+    }
     cmd.hr()
-
-    // Loyalty points info (pre-bill shows redemption that will be applied)
-    this.buildLoyalty(cmd, data)
 
     // Pre-bill notice
     cmd.emptyLine()
@@ -130,13 +141,27 @@ export class ReceiptBuilder {
     // Taxes
     this.buildTaxes(cmd, data)
 
-    // Total
+    // Total + loyalty points deduction
     cmd.hr()
-    cmd.setBold(true)
-    cmd.setTextSize('double-width')
-    cmd.leftRight('TOTAL:', cmd.formatIDR(data.totalAmount))
-    cmd.setTextSize('normal')
-    cmd.setBold(false)
+    const pointsUsed = data.loyalty?.pointsRedeemed || 0
+    if (pointsUsed > 0) {
+      // Show total before points, then deduction, then final amount
+      cmd.leftRight('TOTAL:', cmd.formatIDR(data.totalAmount + pointsUsed))
+      this.buildLoyalty(cmd, data)
+      cmd.hr()
+      cmd.setBold(true)
+      cmd.setTextSize('double-width')
+      cmd.leftRight('TO PAY:', cmd.formatIDR(data.totalAmount))
+      cmd.setTextSize('normal')
+      cmd.setBold(false)
+    } else {
+      cmd.setBold(true)
+      cmd.setTextSize('double-width')
+      cmd.leftRight('TOTAL:', cmd.formatIDR(data.totalAmount))
+      cmd.setTextSize('normal')
+      cmd.setBold(false)
+      this.buildLoyalty(cmd, data)
+    }
     cmd.hr()
 
     // Payment info
@@ -154,9 +179,6 @@ export class ReceiptBuilder {
         }
       }
     }
-
-    // Loyalty points info
-    this.buildLoyalty(cmd, data)
 
     cmd.dash()
 
@@ -362,9 +384,7 @@ export class ReceiptBuilder {
   private buildLoyalty(cmd: EscPosCommandBuilder, data: ReceiptData): void {
     if (!data.loyalty) return
     const { customerName, pointsRedeemed, pointsBalance } = data.loyalty
-    if (!pointsRedeemed && pointsBalance === undefined) return
 
-    cmd.dash()
     if (customerName) {
       cmd.leftRight('Customer:', customerName)
     }
@@ -372,7 +392,7 @@ export class ReceiptBuilder {
       cmd.leftRight('Points Used:', `-${cmd.formatIDR(pointsRedeemed)}`)
     }
     if (pointsBalance !== undefined) {
-      cmd.leftRight('Points Balance:', cmd.formatIDR(pointsBalance))
+      cmd.leftRight('Pts Balance:', cmd.formatIDR(pointsBalance))
     }
   }
 
