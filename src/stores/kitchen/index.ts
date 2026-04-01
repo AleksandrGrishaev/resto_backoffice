@@ -9,6 +9,7 @@ import {
   fromSupabase as orderFromSupabase,
   fromOrderItemRow
 } from '@/stores/pos/orders/supabaseMappers'
+import { KITCHEN_ACTIVE_STATUSES } from '@/stores/pos/types'
 import { startScheduledOrdersService, stopScheduledOrdersService } from './scheduledOrdersService'
 import { DebugUtils, syncServerTime } from '@/utils'
 import { ENV } from '@/config/environment'
@@ -256,7 +257,51 @@ export const useKitchenStore = defineStore('kitchen', () => {
           addItemToOrder(order, item)
         }
       } else if (eventType === 'UPDATE') {
-        // Item status changed
+        // Item status changed (or item moved between orders via merge)
+
+        // Handle item migration: if item's order_id changed (merge), remove it from the old order.
+        // This happens when a website order is merged into a dine-in order —
+        // items get upserted with the new order_id, but kitchen still has them
+        // under the old order. Without this cleanup, items appear duplicated.
+        // Guard: only scan when order_id actually changed (oldItem available from realtime)
+        const orderIdChanged = oldItem && oldItem.order_id && oldItem.order_id !== item.order_id
+        let migratedFromOrderId: string | null = null
+        if (orderIdChanged)
+          for (const existingOrder of posOrdersStore.orders) {
+            if (existingOrder.id === orderId) continue // skip target order
+            for (const bill of existingOrder.bills) {
+              const oldIndex = bill.items.findIndex(i => i.id === itemId)
+              if (oldIndex !== -1) {
+                bill.items.splice(oldIndex, 1)
+                migratedFromOrderId = existingOrder.id
+                DebugUtils.info(MODULE_NAME, '🔀 Item migrated from order (merge)', {
+                  fromOrder: existingOrder.orderNumber,
+                  toOrderId: orderId,
+                  itemName: item.menu_item_name
+                })
+                break
+              }
+            }
+            if (migratedFromOrderId) break
+          }
+
+        // Clean up source order if it has no more kitchen items after migration
+        if (migratedFromOrderId) {
+          const srcIdx = posOrdersStore.orders.findIndex(o => o.id === migratedFromOrderId)
+          if (srcIdx !== -1) {
+            const srcOrder = posOrdersStore.orders[srcIdx]
+            const hasKitchenItems = srcOrder.bills.some(b =>
+              b.items.some(i => KITCHEN_ACTIVE_STATUSES.includes(i.status))
+            )
+            if (!hasKitchenItems) {
+              posOrdersStore.orders.splice(srcIdx, 1)
+              DebugUtils.info(MODULE_NAME, '📤 Old order removed after merge', {
+                orderNumber: srcOrder.orderNumber
+              })
+            }
+          }
+        }
+
         if (order) {
           const appItem = fromOrderItemRow(item)
           // Find item in any bill
@@ -354,7 +399,7 @@ export const useKitchenStore = defineStore('kitchen', () => {
 
           // Check if order should be removed (no more kitchen items)
           const hasKitchenItems = order.bills.some(b =>
-            b.items.some(i => ['scheduled', 'waiting', 'cooking', 'ready'].includes(i.status))
+            b.items.some(i => KITCHEN_ACTIVE_STATUSES.includes(i.status))
           )
 
           if (!hasKitchenItems) {

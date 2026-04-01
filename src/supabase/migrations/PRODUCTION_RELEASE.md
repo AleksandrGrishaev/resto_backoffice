@@ -1,95 +1,63 @@
-# Production Release — Pending Migrations
+# Production Release Notes
 
-## KPI Bonus Pools (2026-03-29)
+## Release: fix/kitchen-duplicate-on-website-order-merge
 
-**Status:** Applied to DEV, NOT yet applied to PROD
+**Date:** 2026-04-01
 
-### Migration 262: `kpi_bonus_pools`
+### Summary
 
-New tables + columns for KPI bonus pool system.
+Fix kitchen order duplication when website orders are moved/merged to a table in POS.
+Also: extract `KITCHEN_ACTIVE_STATUSES` constant, update `types.gen.ts` for `accrual_date`.
 
-```sql
--- New tables:
--- kpi_bonus_schemes — per-department bonus pool config (pool type, weights, thresholds)
--- kpi_bonus_snapshots — immutable KPI calculation snapshots per payroll period
+### DB Migrations Required
 
--- Altered tables:
--- payroll_items: +kpi_bonus NUMERIC NOT NULL DEFAULT 0
--- payroll_periods: +total_kpi_bonuses NUMERIC NOT NULL DEFAULT 0
+**None.** This is a frontend-only fix.
 
--- Also includes: RLS, grants, triggers, index on kpi_bonus_snapshots(payroll_period_id)
-```
+Migration `282_add_accrual_date_to_transactions.sql` — already applied to PROD ✅
 
-**Apply:** `mcp__supabase_prod__apply_migration` with content from `262_kpi_bonus_pools.sql`
+### What Changed
 
-### Migration 263: `kpi_rank_multiplier_and_loss_rate`
+#### Bug Fix: Kitchen Duplication on Merge
 
-Rank-based KPI distribution + loss rate target.
+**Problem:** When a website order was merged into an existing dine-in order (occupied table), the kitchen display showed items twice — under both old and new order numbers. Additionally, `source: 'website'` and customer metadata were lost.
 
-```sql
-ALTER TABLE staff_ranks ADD COLUMN kpi_multiplier NUMERIC NOT NULL DEFAULT 1.0;
-UPDATE staff_ranks SET kpi_multiplier = 1.5 WHERE name = 'Senior';
-UPDATE staff_ranks SET kpi_multiplier = 1.0 WHERE name = 'Junior';
-ALTER TABLE kpi_bonus_schemes ADD COLUMN loss_rate_target NUMERIC NOT NULL DEFAULT 3;
-```
+**Fix (2 files):**
 
-**Apply:** `mcp__supabase_prod__apply_migration` with content from `263_kpi_rank_multiplier_and_loss_rate.sql`
+1. **`src/stores/kitchen/index.ts`** — When an `order_items` UPDATE event arrives with a changed `order_id` (merge), remove the item from the old order in kitchen store before adding to new. Guard: only scans when `oldItem.order_id !== item.order_id` (requires `REPLICA IDENTITY FULL` on `order_items` — already set on both DEV and PROD).
 
-### Migration 264: `kpi_per_metric_thresholds`
+2. **`src/stores/pos/orders/ordersStore.ts`** — New `preserveWebsiteMetadata()` function copies `source`, `externalOrderId`, `customerPhone`, `comment`, `fulfillmentMethod`, `pickupTime`, `estimatedReadyTime` from source to target order during merge. Called in both `moveOrderToTable` and `convertOrderToDineIn`.
 
-Per-metric minimum score thresholds (y/n or minimum % to pass).
+#### Refactoring
 
-```sql
-ALTER TABLE kpi_bonus_schemes
-  ADD COLUMN threshold_food_cost INTEGER NOT NULL DEFAULT 0,
-  ADD COLUMN threshold_time INTEGER NOT NULL DEFAULT 0,
-  ADD COLUMN threshold_production INTEGER NOT NULL DEFAULT 0,
-  ADD COLUMN threshold_ritual INTEGER NOT NULL DEFAULT 0;
-```
+3. **`src/stores/pos/types.ts`** — New `KITCHEN_ACTIVE_STATUSES` constant (`['scheduled', 'waiting', 'cooking', 'ready']`). Replaces 7 inline duplicates across 4 kitchen files.
 
-**Apply:** `mcp__supabase_prod__apply_migration` with content from `264_kpi_per_metric_thresholds.sql`
+4. **`src/supabase/types.gen.ts`** — Added `accrual_date` to transactions table types (column already exists in both DBs). Removes `as any` casts from `src/stores/account/supabaseMappers.ts`.
 
-### Migration 265: `kpi_avg_check_per_guest`
+### Pre-deploy Checklist
 
-Avg Check Per Guest metric — 5th KPI metric for bonus schemes.
+- [ ] Verify `REPLICA IDENTITY FULL` on `order_items` table (required for migration guard):
+  ```sql
+  SELECT relreplident FROM pg_class WHERE relname = 'order_items';
+  -- Expected: 'f' (full)
+  ```
+- [ ] Deploy to Vercel (push to `main`)
 
-```sql
-ALTER TABLE kpi_bonus_schemes
-  ADD COLUMN IF NOT EXISTS weight_avg_check INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS threshold_avg_check INTEGER DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS avg_check_target INTEGER DEFAULT 0;
+### Post-deploy Verification
 
-ALTER TABLE kpi_bonus_snapshots
-  ADD COLUMN IF NOT EXISTS score_avg_check NUMERIC DEFAULT -1,
-  ADD COLUMN IF NOT EXISTS weight_avg_check INTEGER DEFAULT 0;
-```
+1. **Kitchen duplication test:**
 
-**Apply:** `mcp__supabase_prod__apply_migration` with content from `265_kpi_avg_check_per_guest.sql`
+   - Create order from website
+   - In POS, convert to dine-in → select an occupied table (merge)
+   - Verify kitchen display shows items only ONCE under target order number
+   - Verify no duplicate notification sound
 
-### Migration 266: `get_avg_check_per_guest_rpc`
+2. **Website metadata test:**
 
-RPC function to calculate avg check per guest from bill-level guest counts (orders.bills JSONB).
+   - Create order from website with customer name + comment
+   - Merge into existing order in POS
+   - Verify target order shows `source: 'website'`, customer name, comment
 
-```sql
-CREATE OR REPLACE FUNCTION get_avg_check_per_guest(
-  p_start_date TIMESTAMPTZ,
-  p_end_date TIMESTAMPTZ
-) RETURNS TABLE (total_revenue NUMERIC, total_guests BIGINT)
--- Queries dine-in orders, extracts guestCount from bills JSONB
--- Excludes cancelled orders and cancelled bills
-```
-
-**Apply:** `mcp__supabase_prod__apply_migration` with content from `266_get_avg_check_per_guest_rpc.sql`
-
-### Post-migration Steps
-
-1. Apply all 5 migrations in order (262 → 263 → 264 → 265 → 266)
-2. Seed default schemes via Settings UI or SQL:
-   ```sql
-   INSERT INTO kpi_bonus_schemes (department, name, pool_type, pool_amount, weight_food_cost, weight_time, weight_production, weight_ritual, weight_avg_check, threshold_food_cost, threshold_time, threshold_production, threshold_ritual, threshold_avg_check, loss_rate_target, avg_check_target)
-   VALUES
-     ('kitchen', 'Kitchen KPI Bonus', 'fixed', 0, 20, 25, 40, 15, 0, 100, 80, 100, 80, 0, 3, 0),
-     ('bar', 'Bar KPI Bonus', 'fixed', 0, 20, 10, 30, 10, 30, 100, 80, 100, 80, 80, 2, 100000);
-   ```
-3. Configure actual pool amounts via Settings > KPI > Bonus Pools
-4. Verify with a test payroll calculation
+3. **Normal kitchen flow (regression):**
+   - Create regular POS order, send to kitchen
+   - Verify items appear correctly
+   - Change status (waiting → cooking → ready) — verify updates work

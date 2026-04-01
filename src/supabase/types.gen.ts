@@ -4466,6 +4466,7 @@ export type Database = {
       transactions: {
         Row: {
           account_id: string
+          accrual_date: string
           amount: number
           balance_after: number
           counteragent_id: string | null
@@ -4485,6 +4486,7 @@ export type Database = {
         }
         Insert: {
           account_id: string
+          accrual_date?: string
           amount: number
           balance_after: number
           counteragent_id?: string | null
@@ -4504,6 +4506,7 @@ export type Database = {
         }
         Update: {
           account_id?: string
+          accrual_date?: string
           amount?: number
           balance_after?: number
           counteragent_id?: string | null

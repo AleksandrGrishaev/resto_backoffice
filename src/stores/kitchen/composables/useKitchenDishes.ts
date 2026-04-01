@@ -3,6 +3,7 @@ import { computed, type Ref } from 'vue'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
 import { usePosTablesStore } from '@/stores/pos/tables/tablesStore'
 import { useAuthStore } from '@/stores/auth'
+import { KITCHEN_ACTIVE_STATUSES } from '@/stores/pos/types'
 import type { PosOrder, PosBillItem, ServiceResponse, Department } from '@/stores/pos/types'
 import type { SelectedModifier } from '@/stores/menu/types'
 
@@ -174,10 +175,7 @@ export function useKitchenDishes(selectedDepartment?: Ref<'all' | 'kitchen' | 'b
           const itemDepartment = item.department || 'kitchen'
 
           // Фильтруем только Kitchen/Bar статусы И разрешенные департаменты
-          if (
-            ['scheduled', 'waiting', 'cooking', 'ready'].includes(item.status) &&
-            allowed.includes(itemDepartment)
-          ) {
+          if (KITCHEN_ACTIVE_STATUSES.includes(item.status) && allowed.includes(itemDepartment)) {
             // Разворачиваем item в отдельные блюда
             const expandedDishes = expandBillItemToDishes(item, order, bill)
             dishes.push(...expandedDishes)

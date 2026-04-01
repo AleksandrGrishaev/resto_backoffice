@@ -88,7 +88,18 @@
       "mcp__supabase_prod__apply_migration",
       "mcp__supabase_dev__apply_migration",
       "mcp__supabase_prod__list_tables",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "mcp__supabase_prod__list_migrations",
+      "mcp__supabase_dev__search_docs",
+      "mcp__supabase_dev__list_migrations",
+      "Bash(git status:*)",
+      "mcp__supabase_prod__get_logs",
+      "Bash(sort -t_ -k1 -n)",
+      "Bash(git rm:*)",
+      "mcp__supabase_dev__generate_typescript_types",
+      "Read(path:/Users/peaker/dev/kitchen-app/web-winter/**)",
+      "Glob(path:/Users/peaker/dev/kitchen-app/web-winter/**)",
+      "Grep(path:/Users/peaker/dev/kitchen-app/web-winter/**)"
     ]
   },
   "enableAllProjectMcpServers": true,

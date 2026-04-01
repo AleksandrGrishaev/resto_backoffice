@@ -1,143 +1,152 @@
-# Sprint: Loyalty Source of Truth — Payment-based Accrual
+# Sprint: Website Order ↔ POS Sync — Item-level Origin Tracking
 
 ## Problem Statement
 
-Loyalty system has architectural inconsistencies in how customer is resolved and how stats/tiers are calculated. Multiple sources of truth (order.customer_id, bill.customerId, payment has nothing) lead to data integrity issues.
+Когда онлайн-заказ с сайта перемещается в POS (merge на занятый стол, перенос bill на другой стол), клиент на сайте **теряет видимость своих позиций**, потому что `order_id` меняется, а RPC `get_my_orders` ищет items только по `order_id`.
 
-### Evidence (Ivan n alexandrin case, PROD)
+### Текущая архитектура
 
-- 9 orders linked to Ivan via bill.customerId, but only 4 have order.customer_id set
-- Cashback correctly applied for all 9 (reads from bill) = Rp 92,749
-- `recalculate_tiers` only sees 4 orders (reads from order.customer_id) → tier stays "member"
-- `total_spent` = Rp 1,854,949 (correct, because `update_customer_stats` was called at payment time)
-- But tier recalculation can't verify this because it queries `orders.customer_id`
+- **Сайт (web-winter)** polling каждые 15 сек через `get_my_orders` RPC
+- Заказ идентифицируется по `orders.id` (UUID), items привязаны через `order_items.order_id`
+- Bills — чисто POS-концепция, клиент их не видит
+- `external_order_id` — для GoFood/Grab, НЕ для website orders
 
-### Root Cause
+### Что ломается при операциях POS
 
-Three different "sources of truth" for customer-order relationship:
+| Действие в POS                                | Что видит клиент на сайте                       |
+| --------------------------------------------- | ----------------------------------------------- |
+| Merge на занятый стол                         | Items получают новый `order_id` → **пропадают** |
+| Перемещение bill на другой стол (новый заказ) | Items получают новый `order_id` → **пропадают** |
+| Перемещение items между bills того же заказа  | ✅ Ничего не меняется (тот же `order_id`)       |
+| Изменение статуса (waiting→cooking→ready)     | ✅ Клиент видит обновление                      |
 
-| System                                              | Source                                     | Problem                                                                                                         |
-| --------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| **Cashback accrual** (`processLoyaltyAfterPayment`) | `bill.customerId` with order fallback      | Works correctly at payment time                                                                                 |
-| **Stats update** (`update_customer_stats` RPC)      | Receives customer_id as parameter from POS | Works at payment time, but RPC internally queries `orders.customer_id` for tier window — misses bill-only links |
-| **Tier recalculation** (`recalculate_tiers` RPC)    | `orders.customer_id`                       | Misses orders where customer is only on bill level                                                              |
-| **Payments table**                                  | No customer_id at all                      | Can't trace who paid, can't reverse on refund                                                                   |
+### Уже исправлено (текущий sprint)
 
-### Additional Issues Found
-
-1. **No cashback reversal on refund** — refunded payments keep their cashback, stats, and stamps
-2. **One order can have multiple bills with different customers** — order.customer_id can't represent this
-3. **`processLoyaltyAfterPayment` is fire-and-forget** — if it fails, payment succeeds but loyalty is lost silently
-4. **Partial bill payment** — customer can pay for selected items from a bill, but cashback is calculated on full paidAmount which is correct, though the bill→customer link doesn't capture this granularity
+- ✅ **Kitchen duplication fix** — при merge items удаляются из старого заказа в kitchen store (guard по `oldItem.order_id !== item.order_id`)
+- ✅ **Website metadata preserved** — `preserveWebsiteMetadata()` копирует `source`, `customerPhone`, `comment`, `fulfillmentMethod` и т.д. при merge
+- ✅ **Double updateOrder removed** — убран дублирующий вызов после merge
+- ✅ **KITCHEN_ACTIVE_STATUSES** — вынесена константа, заменены 7 inline-дупликатов
+- ✅ **accrual_date types** — убраны `as any` касты
 
 ---
 
-## Solution: Payment as Source of Truth
+## Solution: Origin Tracking на уровне items
 
-### Phase 1: Add customer_id to payments (DB migration)
+### Концепция
 
-**Goal:** Every payment records which customer paid, creating an immutable audit trail.
+Добавить `origin_order_id` на `order_items` — "из какого заказа этот item изначально пришёл". При merge/split это поле сохраняется, и RPC `get_my_orders` собирает items по обоим полям.
 
-```sql
-ALTER TABLE payments ADD COLUMN customer_id UUID REFERENCES customers(id);
-ALTER TABLE payments ADD COLUMN customer_name TEXT;
-```
-
-**POS change:** In `processLoyaltyAfterPayment()` (OrderSection.vue:1912), after resolving `billCustomerId`, update the payment record:
-
-```ts
-// After payment is created, stamp customer on payment
-if (billCustomerId) {
-  await paymentsService.updateCustomerId(paymentId, billCustomerId, customerName)
-}
-```
-
-### Phase 2: Fix tier/stats to use payments (not orders)
-
-**Goal:** `recalculate_tiers` and tier window calculation use payments.customer_id instead of orders.customer_id.
+### Phase 1: DB Migration — добавить `origin_order_id`
 
 ```sql
--- recalculate_tiers: use payments as source
-SELECT COALESCE(SUM(p.amount), 0) INTO v_spent_window
-FROM payments p
-WHERE p.customer_id = v_customer.id
-  AND p.status = 'completed'
-  AND p.created_at >= now() - (v_settings.tier_window_days || ' days')::interval;
+-- Migration: NNN_add_origin_order_id.sql
+ALTER TABLE order_items ADD COLUMN origin_order_id UUID REFERENCES orders(id) ON DELETE SET NULL;
+
+-- Backfill: для существующих items origin = текущий order
+UPDATE order_items SET origin_order_id = order_id WHERE origin_order_id IS NULL;
+
+-- Index for get_my_orders performance
+CREATE INDEX idx_order_items_origin_order_id ON order_items(origin_order_id);
 ```
 
-Same for `update_customer_stats` inline tier check.
+### Phase 2: POS — сохранять origin при merge/move
 
-**Benefits:**
+**Файлы:**
 
-- Payments are immutable (not re-linked like bills/orders)
-- Handles multiple customers per order (each payment has its own customer_id)
-- Refund payments have negative amounts → naturally subtract from tier window
-- Partial payments correctly attributed
+- `src/stores/pos/orders/ordersStore.ts` — `mergeBillsIntoOrder()`, `moveBillToTable()`
+- `src/stores/pos/orders/services.ts` — `updateOrder()` upsert logic
+- `src/stores/pos/orders/supabaseMappers.ts` — `toOrderItemInsert()`, `fromOrderItemRow()`
+- `src/stores/pos/types.ts` — добавить `originOrderId` в `PosBillItem`
 
-### Phase 3: Cashback reversal on refund
+**Логика:**
 
-**Goal:** When a payment is refunded, reverse the cashback that was earned.
+- При создании item: `origin_order_id = order_id`
+- При merge/move: `order_id` меняется, но `origin_order_id` остаётся прежним
+- `toOrderItemInsert()` должен передавать `origin_order_id` в upsert
+
+### Phase 3: RPC — обновить `get_my_orders`
+
+**Файл:** `src/supabase/functions/get_my_orders_v2.sql`
 
 ```sql
-CREATE FUNCTION reverse_loyalty_on_refund(p_original_payment_id UUID)
--- 1. Find loyalty_transactions linked to the original payment's order
--- 2. Create negative adjustment transaction
--- 3. Update customer.loyalty_balance
--- 4. Update customer stats (decrement total_spent, total_visits)
+-- Текущий запрос:
+SELECT * FROM order_items WHERE order_id = v_order.id
+
+-- Новый запрос: включить items, которые были перемещены в другой заказ
+SELECT * FROM order_items
+WHERE order_id = v_order.id
+   OR (origin_order_id = v_order.id AND order_id != v_order.id)
 ```
 
-**POS change:** In `paymentsStore.processRefund()`, after creating the refund payment, call the reversal RPC.
+Клиент увидит все свои items, даже если POS переместил их.
 
-### Phase 4: Backfill existing payments
+### Phase 4: Клиентское отображение (web-winter)
 
-**Goal:** Populate customer_id on historical payments from bill data.
+**Файлы web-winter:**
 
-```sql
--- Backfill: for each payment, find customer from bill JSONB
-UPDATE payments p SET
-  customer_id = (
-    SELECT (bill->>'customerId')::uuid
-    FROM orders o, jsonb_array_elements(o.bills) AS bill
-    WHERE o.id = p.order_id
-      AND bill->>'id' = ANY(p.bill_ids::text[])
-      AND bill->>'customerId' IS NOT NULL
-    LIMIT 1
-  )
-WHERE p.customer_id IS NULL AND p.status = 'completed';
-```
+- `apps/website/composables/useOrders.ts` — `refreshOrders()` вызывает `get_my_orders`
+- `apps/website/pages/orders.vue` — polling каждые 15 сек
+- `apps/website/composables/useOrderActions.ts` — `updateOrder()`, `cancelOrder()`, `addToOrder()`
 
-Then recalculate all customer stats from payments.
+**Изменения:**
+
+- Items с `order_id != origin_order_id` отображать с пометкой "moved to table" (или просто показывать как обычно)
+- `update_online_order` и `add_to_online_order` — работают по `order_id`, поэтому добавление в перемещённый заказ требует решения: либо добавлять в новый order, либо блокировать если заказ был перемещён
+
+---
+
+## Ключевые файлы
+
+### Backoffice (POS + Kitchen)
+
+| Файл                                         | Роль                                                                                                          |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `src/stores/pos/orders/ordersStore.ts`       | Merge (`mergeBillsIntoOrder`), move (`moveBillToTable`, `moveOrderToTable`), convert (`convertOrderToDineIn`) |
+| `src/stores/pos/orders/services.ts`          | `updateOrder()` — upsert items, `deleteOrder()`, `createOrder()`                                              |
+| `src/stores/pos/orders/supabaseMappers.ts`   | `toOrderItemInsert()`, `fromOrderItemRow()`, `toSupabaseUpdate()`                                             |
+| `src/stores/pos/orders/useOrdersRealtime.ts` | POS realtime: `handleOrderInsert` (website orders), `handleItemUpdate`                                        |
+| `src/stores/pos/types.ts`                    | `PosOrder`, `PosBillItem`, `KITCHEN_ACTIVE_STATUSES`                                                          |
+| `src/stores/kitchen/index.ts`                | Kitchen store: `handleItemUpdate` с migration guard                                                           |
+| `src/stores/kitchen/useKitchenRealtime.ts`   | Kitchen realtime subscriptions                                                                                |
+| `src/stores/kitchen/kitchenService.ts`       | `getActiveKitchenOrders()`                                                                                    |
+| `src/views/pos/order/OrderSection.vue`       | UI: `handleTableSelectionConfirm`, `handleOrderTypeConfirm`                                                   |
+
+### Supabase RPCs
+
+| Файл                                             | Роль                                             |
+| ------------------------------------------------ | ------------------------------------------------ |
+| `src/supabase/functions/create_online_order.sql` | Создание заказа с сайта (items status='waiting') |
+| `src/supabase/functions/get_my_orders_v2.sql`    | Клиентский polling — **нужно обновить**          |
+| `src/supabase/functions/update_online_order.sql` | Обновление заказа клиентом (full item replace)   |
+| `src/supabase/functions/add_to_online_order.sql` | Добавление items к существующему заказу          |
+| `src/supabase/functions/cancel_online_order.sql` | Отмена / запрос отмены                           |
+
+### Web-winter (клиент)
+
+| Файл                                          | Роль                                              |
+| --------------------------------------------- | ------------------------------------------------- |
+| `apps/website/composables/useOrders.ts`       | `refreshOrders()` — polling через `get_my_orders` |
+| `apps/website/pages/orders.vue`               | UI заказов, 15-сек polling                        |
+| `apps/website/composables/useOrderActions.ts` | `updateOrder()`, `cancelOrder()`, `addToOrder()`  |
 
 ---
 
 ## Implementation Order
 
-- [x] **1. Migration:** Add `customer_id`, `customer_name` to payments table (278, DEV applied)
-- [x] **2. POS:** Record customer_id on payment at checkout time (OrderSection.vue + paymentsStore)
-- [x] **3. RPC:** Update `recalculate_tiers` to use payments.customer_id (280, DEV applied)
-- [x] **4. RPC:** Update `update_customer_stats` tier window to use payments (280, DEV applied)
-- [x] **5. RPC:** Create `reverse_loyalty_on_refund` (281, DEV applied)
-- [x] **6. POS:** Call reversal on refund in `processRefund()` (paymentsStore.ts)
-- [x] **7. Backfill:** Populate customer_id on existing payments from bills (279, DEV applied)
-- [ ] **8. Apply all to PROD** (278→279→280→281) + recalculate_tiers()
+- [ ] **1. Migration:** Add `origin_order_id` to `order_items` + backfill + index (DEV)
+- [ ] **2. Types:** Add `originOrderId` to `PosBillItem` in `types.ts`
+- [ ] **3. Mappers:** Update `toOrderItemInsert()` and `fromOrderItemRow()` in `supabaseMappers.ts`
+- [ ] **4. POS logic:** Set `origin_order_id = order_id` on item creation; preserve on merge/move
+- [ ] **5. RPC:** Update `get_my_orders_v2` to include items by `origin_order_id`
+- [ ] **6. Test on DEV:** Create website order → merge to table → verify client still sees items
+- [ ] **7. Web-winter:** Handle moved items in UI (if needed)
+- [ ] **8. Apply to PROD**
 
 ---
 
-## Current State (what was fixed today, 2026-03-31)
+## Edge Cases to Consider
 
-### Completed
-
-- [x] **Tier status filter bug** — `recalculate_tiers` and `update_customer_stats` now use `status NOT IN ('cancelled')` instead of `IN ('completed', 'collected')` — was missing 2100+ `served` orders
-- [x] **recalculate_tiers scope** — now processes all cashback customers, not just `telegram_id IS NOT NULL`
-- [x] **Hardcoded tier constraint** — removed `customers_tier_check` CHECK constraint, tiers are dynamic from `loyalty_settings`
-- [x] **Ran recalculate on PROD** — 2 customers upgraded (Luna→family, Alex→regular)
-- [x] **claim_invite telegram data** — copies telegram_id/username on invite claim
-- [x] **Show QR button** — test invite QR without printer
-- [x] **Merge customers with conflict resolution** — two-step dialog, field override JSONB
-- [x] **Loyalty UI improvements** — unified Level column, Program edit, History tab, balance/stamps edit
-- [x] **Atomic balance adjustment** — `adjust_loyalty_balance` RPC eliminates race condition
-
-### Known Data Issues (PROD)
-
-- Ivan n alexandrin: total_spent/visits inflated? Or correct if we count bill-level links. Needs verification after Phase 4 backfill.
-- 5 orders have customer only at bill level but not order level — this is by design (bill = source of truth), but tier calculation doesn't see them yet.
+1. **Клиент добавляет items к перемещённому заказу** — `add_to_online_order` работает по `order_id`. Если заказ удалён (merged), RPC вернёт ошибку. Нужно решить: блокировать или перенаправлять на новый заказ.
+2. **Клиент отменяет перемещённый заказ** — `cancel_online_order` по старому `order_id` не найдёт заказ. Нужна обработка.
+3. **Двойной merge** — item перемещается A→B→C. `origin_order_id` должен оставаться = A (первый заказ).
+4. **Refund** — если клиент запросил refund, нужно найти payment по origin order.

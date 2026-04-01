@@ -6,6 +6,7 @@ import { ref } from 'vue'
 import { supabase } from '@/supabase/client'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { DebugUtils } from '@/utils'
+import { KITCHEN_ACTIVE_STATUSES } from '@/stores/pos/types'
 
 const MODULE_NAME = 'KitchenRealtime'
 
@@ -75,10 +76,8 @@ export function useKitchenRealtime() {
             timestamp: new Date().toISOString()
           })
 
-          // Kitchen statuses we care about
-          const kitchenStatuses = ['scheduled', 'waiting', 'cooking', 'ready']
-          const isKitchenItem = item && kitchenStatuses.includes(item.status)
-          const wasKitchenItem = oldItem && kitchenStatuses.includes(oldItem.status)
+          const isKitchenItem = item && KITCHEN_ACTIVE_STATUSES.includes(item.status)
+          const wasKitchenItem = oldItem && KITCHEN_ACTIVE_STATUSES.includes(oldItem.status)
 
           // Department filter (if configured)
           const itemDepartment = item?.department || 'kitchen'
@@ -194,9 +193,7 @@ export function useKitchenRealtime() {
             const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE'
             const order = payload.new || payload.old
 
-            // We only care about orders that might have items in kitchen
-            const kitchenStatuses = ['scheduled', 'waiting', 'cooking', 'ready']
-            const isKitchenOrder = order && kitchenStatuses.includes(order.status)
+            const isKitchenOrder = order && KITCHEN_ACTIVE_STATUSES.includes(order.status)
 
             if (eventType === 'DELETE' || isKitchenOrder) {
               DebugUtils.debug(MODULE_NAME, 'Order metadata change', {
