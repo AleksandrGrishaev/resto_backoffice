@@ -101,6 +101,10 @@ export function useOrdersRealtime() {
   let itemsRetryCount = 0
   const MAX_RETRY_DELAY_MS = 30_000 // 30s cap
 
+  // Visibility change catch-up: track when page was last active
+  let lastActiveTimestamp: string = new Date().toISOString()
+  let visibilityHandler: (() => void) | null = null
+
   function getRetryDelay(attempt: number): number {
     // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s, 30s...
     return Math.min(1000 * Math.pow(2, attempt), MAX_RETRY_DELAY_MS)
@@ -234,6 +238,102 @@ export function useOrdersRealtime() {
   }
 
   /**
+   * Catch-up: fetch online orders that arrived while the page was hidden.
+   * Supabase Realtime does NOT replay missed events, so we query the DB directly.
+   */
+  async function catchUpMissedOrders() {
+    try {
+      DebugUtils.info(MODULE_NAME, '🔄 Catching up missed online orders since', {
+        since: lastActiveTimestamp
+      })
+
+      const { data: newOrders, error: fetchError } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('source', 'website')
+        .gte('created_at', lastActiveTimestamp)
+        .not('status', 'eq', 'cancelled')
+        .order('created_at', { ascending: true })
+
+      if (fetchError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to catch up missed orders', { error: fetchError })
+        return
+      }
+
+      if (!newOrders || newOrders.length === 0) {
+        DebugUtils.debug(MODULE_NAME, 'No missed online orders')
+        return
+      }
+
+      let addedCount = 0
+      for (const orderRow of newOrders) {
+        // Skip if already in store
+        if (ordersStore.orders.some(o => o.id === orderRow.id)) continue
+
+        // Load items
+        const { data: itemRows } = await supabase
+          .from('order_items')
+          .select('*')
+          .eq('order_id', orderRow.id)
+
+        const items = (itemRows || []).map(fromOrderItemRow)
+        const order = fromSupabase(orderRow, items)
+        ordersStore.orders.push(order)
+        addedCount++
+
+        // Play sound + notify for each missed order
+        if (_audioUnlocked && _audio) {
+          _audio.currentTime = 0
+          _audio.play().catch(() => {})
+        }
+        if (onOnlineOrder) {
+          onOnlineOrder({
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            type: order.type,
+            itemCount: items.length,
+            total: order.finalAmount,
+            customerName: order.customerName,
+            fulfillmentMethod: order.fulfillmentMethod
+          })
+        }
+      }
+
+      if (addedCount > 0) {
+        DebugUtils.info(MODULE_NAME, `✅ Caught up ${addedCount} missed online order(s)`)
+      }
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Error during catch-up', { err })
+    }
+  }
+
+  /**
+   * Handle page visibility change (tablet sleep/wake, tab switch).
+   * On return to foreground: catch up missed orders + re-subscribe if needed.
+   */
+  function handleVisibilityChange() {
+    if (document.hidden) {
+      // Going to background — record timestamp
+      lastActiveTimestamp = new Date().toISOString()
+      DebugUtils.debug(MODULE_NAME, 'Page hidden, recording timestamp', {
+        at: lastActiveTimestamp
+      })
+    } else {
+      // Returning to foreground — catch up missed orders
+      DebugUtils.info(MODULE_NAME, '👁️ Page visible again, checking for missed orders...')
+
+      // Re-subscribe channels if they disconnected while in background
+      if (!ordersConnected.value || !itemsConnected.value) {
+        DebugUtils.warn(MODULE_NAME, 'Channels disconnected while hidden, re-subscribing')
+        subscribeOrders()
+        subscribeItems()
+      }
+
+      catchUpMissedOrders()
+    }
+  }
+
+  /**
    * Subscribe to orders and order_items table changes
    * POS listens for updates from Kitchen (item status changes)
    */
@@ -251,6 +351,13 @@ export function useOrdersRealtime() {
     DebugUtils.info(MODULE_NAME, 'Subscribing to POS orders + order_items...')
     subscribeOrders()
     subscribeItems()
+
+    // Register visibility change handler for catch-up on tablet wake
+    if (!visibilityHandler) {
+      visibilityHandler = handleVisibilityChange
+      document.addEventListener('visibilitychange', visibilityHandler)
+      DebugUtils.debug(MODULE_NAME, 'Registered visibilitychange handler for catch-up')
+    }
   }
 
   /**
@@ -672,6 +779,12 @@ export function useOrdersRealtime() {
     }
     ordersConnected.value = false
     itemsConnected.value = false
+
+    // Remove visibility handler
+    if (visibilityHandler) {
+      document.removeEventListener('visibilitychange', visibilityHandler)
+      visibilityHandler = null
+    }
   }
 
   /**
