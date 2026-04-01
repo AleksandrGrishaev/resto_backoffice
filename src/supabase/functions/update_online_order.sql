@@ -1,6 +1,6 @@
 -- RPC: update_online_order
 -- Replaces all items in an online order (full replacement)
--- Auth: Required. Owner check. Only if status = 'waiting'.
+-- Auth: Required. Owner check. Only if status in ('draft', 'waiting').
 -- Returns: { success: boolean, total?: number, error?: string }
 
 CREATE OR REPLACE FUNCTION public.update_online_order(p_order_id UUID, p_items JSONB)
@@ -46,7 +46,7 @@ BEGIN
   END IF;
 
   -- Get order and verify (FOR UPDATE prevents TOCTOU race)
-  SELECT id, status, customer_id, customer_name, channel_id INTO v_order
+  SELECT id, status, customer_id, customer_name, channel_id, bills INTO v_order
   FROM orders WHERE id = p_order_id
   FOR UPDATE;
 
@@ -58,8 +58,8 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Not authorized');
   END IF;
 
-  IF v_order.status != 'waiting' THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Can only update orders with status waiting');
+  IF v_order.status NOT IN ('draft', 'waiting') THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Can only update orders with status draft or waiting');
   END IF;
 
   IF p_items IS NULL OR jsonb_array_length(p_items) = 0 THEN
@@ -75,8 +75,12 @@ BEGIN
   -- Delete existing items
   DELETE FROM order_items WHERE order_id = p_order_id;
 
-  -- Re-create bill
-  v_bill_id := gen_random_uuid();
+  -- Reuse existing bill_id to preserve POS local state references
+  IF v_order.bills IS NOT NULL AND jsonb_array_length(v_order.bills) > 0 THEN
+    v_bill_id := (v_order.bills->0->>'id')::uuid;
+  ELSE
+    v_bill_id := gen_random_uuid();
+  END IF;
 
   -- Process new items (same logic as create_online_order)
   FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
@@ -189,8 +193,8 @@ BEGIN
         v_menu_item.id, v_menu_item.name, v_item->>'variantId', COALESCE(v_variant->>'name', NULL),
         1, v_unit_price, v_modifiers_total, v_single_item_total,
         CASE WHEN jsonb_array_length(v_selected_modifiers) > 0 THEN v_selected_modifiers ELSE NULL END,
-        'waiting', v_menu_item.department, v_item->>'kitchenNotes',
-        now(), now(), now(), now()
+        'draft', v_menu_item.department, v_item->>'kitchenNotes',
+        now(), NULL, now(), now()
       );
 
       v_bill_items := v_bill_items || jsonb_build_array(jsonb_build_object(

@@ -24,6 +24,7 @@ import {
   determineStatusByOrderType as determineStatus
 } from './composables'
 import { usePosTablesStore } from '../tables/tablesStore'
+import { useOnlineOrderAlerts } from './composables/useOnlineOrderAlerts'
 import {
   discountService,
   discountSupabaseService,
@@ -54,6 +55,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   // ===== SERVICES =====
   const ordersService = new OrdersService()
   const tablesStore = usePosTablesStore()
+  const onlineOrderAlerts = useOnlineOrderAlerts()
 
   // ===== COMPUTED =====
   const currentOrder = computed(() =>
@@ -336,6 +338,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
     currentOrderId.value = orderId
     const order = orders.value.find(o => o.id === orderId)
+
+    // Acknowledge online order alert (stops blinking + sound for this order)
+    if (order?.source === 'website') {
+      onlineOrderAlerts.acknowledgeOrder(orderId)
+    }
 
     if (order && order.bills.length > 0) {
       // Выбираем первый активный счет автоматически

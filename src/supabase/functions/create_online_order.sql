@@ -1,8 +1,8 @@
--- Migration: 228_add_scheduled_item_status
--- Description: Add 'scheduled' status for order items with future pickup times.
---              Online orders with pickup_time != 'asap' will use 'scheduled' status
---              instead of 'waiting', so kitchen doesn't see them until it's time to cook.
--- Date: 2026-03-17
+-- Migration: 283_online_order_draft_status
+-- Description: Online orders now arrive as 'draft' instead of 'waiting'.
+--   POS must review and confirm before items appear on kitchen display.
+--   Scheduled orders also start as 'draft' (POS confirms → scheduled/waiting).
+-- Date: 2026-04-01
 
 -- ============================================================
 -- 1. Update create_online_order RPC
@@ -53,11 +53,9 @@ DECLARE
   v_item_quantity INTEGER;
   v_single_item_total NUMERIC;
   v_q INTEGER;
-  -- NEW: scheduled order support
+  -- Scheduled order support
   v_pickup_time TEXT;
   v_is_scheduled BOOLEAN := false;
-  v_item_status TEXT;
-  v_sent_to_kitchen TIMESTAMPTZ;
   v_estimated_ready TIMESTAMPTZ;
 BEGIN
   -- ============================================================
@@ -96,22 +94,15 @@ BEGIN
     END IF;
   END IF;
 
-  -- ============================================================
-  -- 1b. Determine if this is a scheduled order
-  -- ============================================================
+  -- 1b. Determine if this is a scheduled order (for display only, items still start as draft)
   v_is_scheduled := (v_pickup_time IS NOT NULL AND v_pickup_time != 'asap' AND v_pickup_time ~ '^\d{1,2}:\d{2}$');
 
   IF v_is_scheduled THEN
-    v_item_status := 'scheduled';
-    v_sent_to_kitchen := NULL;
-    -- Calculate estimated_ready_time from pickup_time (today, Jakarta timezone)
     v_estimated_ready := (
       (now() AT TIME ZONE 'Asia/Jakarta')::date
       + v_pickup_time::time
     ) AT TIME ZONE 'Asia/Jakarta';
   ELSE
-    v_item_status := 'waiting';
-    v_sent_to_kitchen := now();
     v_estimated_ready := NULL;
   END IF;
 
@@ -215,7 +206,7 @@ BEGIN
     estimated_ready_time,
     bills, created_by
   ) VALUES (
-    v_order_id, v_order_number, v_type, 'waiting', 'unpaid',
+    v_order_id, v_order_number, v_type, 'draft', 'unpaid',
     v_customer_id, v_customer_name, v_customer_phone,
     p_data->>'tableNumber', v_pickup_time, p_data->>'comment',
     'website', v_fulfillment,
@@ -351,9 +342,9 @@ BEGIN
         v_item->>'variantId', COALESCE(v_variant->>'name', NULL),
         1, v_unit_price, v_modifiers_total, v_single_item_total,
         CASE WHEN jsonb_array_length(v_selected_modifiers) > 0 THEN v_selected_modifiers ELSE NULL END,
-        v_item_status, v_menu_item.department,
+        'draft', v_menu_item.department,
         v_item->>'kitchenNotes',
-        now(), v_sent_to_kitchen, now(), now()
+        now(), NULL, now(), now()
       );
 
       -- Collect for bill and result

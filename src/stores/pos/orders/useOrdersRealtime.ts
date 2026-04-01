@@ -8,6 +8,7 @@ import { usePosOrdersStore } from './ordersStore'
 import { fromSupabase, fromOrderItemRow } from './supabaseMappers'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { DebugUtils } from '@/utils'
+import { useOnlineOrderAlerts } from './composables/useOnlineOrderAlerts'
 
 const MODULE_NAME = 'POSOrdersRealtime'
 
@@ -89,9 +90,18 @@ export function useOrdersRealtime() {
   const itemsConnected = ref(false)
   const isConnected = computed(() => ordersConnected.value && itemsConnected.value)
   const ordersStore = usePosOrdersStore()
+  const alerts = useOnlineOrderAlerts()
   let onCancellationRequest: CancellationRequestCallback | null = null
   let onCustomerLinked: CustomerLinkedCallback | null = null
   let onOnlineOrder: OnlineOrderReceivedCallback | null = null
+
+  // Register sound player for the alerts system (reuses existing audio element)
+  alerts.registerSoundPlayer(() => {
+    if (_audioUnlocked && _audio) {
+      _audio.currentTime = 0
+      _audio.play().catch(() => {})
+    }
+  })
 
   // Reconnect state
   let isUnsubscribing = false
@@ -247,11 +257,16 @@ export function useOrdersRealtime() {
         since: lastActiveTimestamp
       })
 
+      // Also filter by today to avoid loading stale orders from previous days/shifts
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+
       const { data: newOrders, error: fetchError } = await supabase
         .from('orders')
         .select('*')
         .eq('source', 'website')
         .gte('created_at', lastActiveTimestamp)
+        .gte('created_at', todayStart.toISOString())
         .not('status', 'eq', 'cancelled')
         .order('created_at', { ascending: true })
 
@@ -280,6 +295,9 @@ export function useOrdersRealtime() {
         const order = fromSupabase(orderRow, items)
         ordersStore.orders.push(order)
         addedCount++
+
+        // Mark as unacknowledged — triggers persistent sound + blinking
+        alerts.markOrderUnacknowledged(order.id)
 
         // Play sound + notify for each missed order
         if (_audioUnlocked && _audio) {
@@ -429,6 +447,9 @@ export function useOrdersRealtime() {
       // Add to store
       ordersStore.orders.push(order)
 
+      // Mark as unacknowledged — triggers persistent sound loop + blinking
+      alerts.markOrderUnacknowledged(order.id)
+
       DebugUtils.info(MODULE_NAME, '✅ Online order added to POS', {
         orderNumber: order.orderNumber,
         type: order.type,
@@ -436,7 +457,7 @@ export function useOrdersRealtime() {
         total: order.finalAmount
       })
 
-      // Play online order sound (only if audio was unlocked by user interaction)
+      // Play online order sound immediately (first alert)
       if (_audioUnlocked && _audio) {
         _audio.currentTime = 0
         _audio.play().catch(err => {
@@ -674,6 +695,11 @@ export function useOrdersRealtime() {
           paidAmount: 0
         } as any)
       }
+      // If this is a website order and the item is draft on an active order,
+      // alert POS that there are new pending items to review
+      if (order.source === 'website' && item.status === 'draft' && order.status !== 'draft') {
+        alerts.markOrderHasPendingItems(order.id)
+      }
     } else if (eventType === 'UPDATE') {
       // Find item in any bill and update it
       for (const bill of order.bills) {
@@ -785,6 +811,9 @@ export function useOrdersRealtime() {
       document.removeEventListener('visibilitychange', visibilityHandler)
       visibilityHandler = null
     }
+
+    // Cleanup alerts (stop sound loop)
+    alerts.destroy()
   }
 
   /**
@@ -814,6 +843,7 @@ export function useOrdersRealtime() {
     isConnected,
     onCancellationRequested,
     onCustomerLinkedToOrder,
-    onOnlineOrderReceived
+    onOnlineOrderReceived,
+    alerts
   }
 }

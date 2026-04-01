@@ -1,6 +1,6 @@
 -- RPC: add_to_online_order
 -- Appends items to an existing online order
--- Auth: Required. Owner check. Allowed if status in ('waiting', 'cooking').
+-- Auth: Required. Owner check. Allowed if status in ('draft', 'waiting', 'cooking').
 -- Returns: { success: boolean, total?: number, error?: string }
 
 CREATE OR REPLACE FUNCTION public.add_to_online_order(p_order_id UUID, p_items JSONB)
@@ -58,7 +58,7 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Not authorized');
   END IF;
 
-  IF v_order.status NOT IN ('waiting', 'cooking') THEN
+  IF v_order.status NOT IN ('draft', 'waiting', 'cooking') THEN
     RETURN jsonb_build_object('success', false, 'error', 'Cannot add items when order status is ' || v_order.status);
   END IF;
 
@@ -157,7 +157,12 @@ BEGIN
           'groupId', v_modifier->>'groupId', 'groupName', v_mod_group->>'name',
           'optionId', v_modifier->>'optionId', 'optionName', v_mod_option->>'name',
           'priceAdjustment', COALESCE((v_mod_option->>'priceAdjustment')::numeric, 0),
-          'quantity', COALESCE((v_modifier->>'quantity')::integer, 1)
+          'quantity', COALESCE((v_modifier->>'quantity')::integer, 1),
+          -- Fields required by DecompositionEngine for ingredient write-offs
+          'groupType', v_mod_group->>'type',
+          'isDefault', COALESCE((v_mod_option->>'isDefault')::boolean, false),
+          'composition', COALESCE(v_mod_option->'composition', '[]'::jsonb),
+          'targetComponents', COALESCE(v_mod_group->'targetComponents', '[]'::jsonb)
         ));
       END LOOP;
     END IF;
@@ -182,8 +187,8 @@ BEGIN
         v_menu_item.id, v_menu_item.name, v_item->>'variantId', COALESCE(v_variant->>'name', NULL),
         1, v_unit_price, v_modifiers_total, v_single_item_total,
         CASE WHEN jsonb_array_length(v_selected_modifiers) > 0 THEN v_selected_modifiers ELSE NULL END,
-        'waiting', v_menu_item.department, v_item->>'kitchenNotes',
-        now(), now(), now(), now()
+        'draft', v_menu_item.department, v_item->>'kitchenNotes',
+        now(), NULL, now(), now()
       );
     END LOOP;
   END LOOP;

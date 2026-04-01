@@ -21,10 +21,12 @@
 import { computed } from 'vue'
 import type { PosTable, PosOrder, TableStatus } from '@/stores/pos/types'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { useOnlineOrderAlerts } from '@/stores/pos/orders/composables/useOnlineOrderAlerts'
 import { getOrderVisual } from '@/stores/channels'
 
 // Get ordersStore for checking payment status
 const ordersStore = usePosOrdersStore()
+const { alertOrderIds } = useOnlineOrderAlerts()
 
 // =============================================
 // PROPS & EMITS
@@ -194,6 +196,17 @@ const itemClasses = computed((): Record<string, boolean> => {
     classes[`sidebar-item--order-${props.order.status}`] = true
     if (props.order.channelCode) {
       classes[`sidebar-item--channel-${props.order.channelCode}`] = true
+    }
+    // Online order alert — blink when unacknowledged or has pending items
+    if (alertOrderIds.value.has(props.order.id)) {
+      classes['sidebar-item--alerting'] = true
+    }
+  }
+
+  // Also blink tables whose current order is alerting
+  if (isTable.value && props.table?.currentOrderId) {
+    if (alertOrderIds.value.has(props.table.currentOrderId)) {
+      classes['sidebar-item--alerting'] = true
     }
   }
 
@@ -434,6 +447,29 @@ const handleClick = (): void => {
   50% {
     transform: scale(1.3);
     opacity: 0.7;
+  }
+}
+
+/* =============================================
+   ONLINE ORDER ALERT (blinking)
+   ============================================= */
+
+.sidebar-item--alerting {
+  animation: online-order-blink 1s ease-in-out infinite !important;
+  z-index: 2;
+}
+
+@keyframes online-order-blink {
+  0%,
+  100% {
+    border-color: #009688;
+    background: color-mix(in srgb, #009688 8%, transparent);
+    box-shadow: 0 0 8px rgba(0, 150, 136, 0.3);
+  }
+  50% {
+    border-color: #ff5722;
+    background: color-mix(in srgb, #ff5722 15%, transparent);
+    box-shadow: 0 0 12px rgba(255, 87, 34, 0.5);
   }
 }
 
