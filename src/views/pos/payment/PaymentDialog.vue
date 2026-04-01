@@ -663,8 +663,26 @@ const effectivePointsRedeem = computed(() => {
 
 const hasPersonalDiscount = computed(() => (props.customerPersonalDiscount || 0) > 0)
 
-const totalAmount = computed(() => {
+// Whether any discount is applied (bill, item, or points)
+const hasAnyDiscount = computed(
+  () => localDiscount.value > 0 || itemDiscounts.value > 0 || effectivePointsRedeem.value > 0
+)
+
+const rawTotalAmount = computed(() => {
   return amountAfterDiscount.value + totalTaxAmount.value - effectivePointsRedeem.value
+})
+
+// Round to nearest 1000 when discount is applied; difference absorbed into discount
+const totalAmount = computed(() => {
+  if (hasAnyDiscount.value) {
+    return Math.round(rawTotalAmount.value / 1000) * 1000
+  }
+  return rawTotalAmount.value
+})
+
+// Positive = rounded down (discount increases), negative = rounded up (discount decreases)
+const discountRoundingAdjustment = computed(() => {
+  return rawTotalAmount.value - totalAmount.value
 })
 
 const change = computed(() => {
@@ -716,13 +734,14 @@ const handleConfirm = () => {
     paymentData.change = change.value
   }
 
-  // Include bill discount if applied
-  if (localDiscount.value > 0) {
+  // Include bill discount if applied (with rounding adjustment absorbed into discount)
+  const adjustedDiscount = localDiscount.value + discountRoundingAdjustment.value
+  if (adjustedDiscount > 0) {
     paymentData.billDiscount = {
-      amount: localDiscount.value,
-      reason: localDiscountReason.value,
+      amount: adjustedDiscount,
+      reason: localDiscountReason.value || (discountRoundingAdjustment.value ? 'rounding' : ''),
       type: 'bill',
-      value: localDiscount.value
+      value: adjustedDiscount
     }
 
     // Include stamp card reward metadata for post-payment consumption
@@ -730,7 +749,11 @@ const handleConfirm = () => {
       paymentData.billDiscount.stampCardReward = { ...localStampCardReward.value }
     }
 
-    console.log('💰 Bill discount included in payment:', paymentData.billDiscount)
+    console.log('💰 Bill discount included in payment:', {
+      original: localDiscount.value,
+      rounding: discountRoundingAdjustment.value,
+      adjusted: adjustedDiscount
+    })
   }
 
   // Include points redemption if used
@@ -897,7 +920,7 @@ const buildReceiptData = (): ReceiptData => {
     items,
     subtotal: props.amount,
     itemDiscounts: itemDiscounts.value,
-    billDiscount: localDiscount.value,
+    billDiscount: localDiscount.value + discountRoundingAdjustment.value,
     billDiscountReason: localDiscountReason.value,
     subtotalAfterDiscounts: amountAfterDiscount.value,
     taxes: taxBreakdown.value,
