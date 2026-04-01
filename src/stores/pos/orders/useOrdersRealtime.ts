@@ -697,8 +697,20 @@ export function useOrdersRealtime() {
       }
       // If this is a website order and the item is draft on an active order,
       // alert POS that there are new pending items to review
+      console.log('🔔 [POSRealtime] Checking pending item alert:', {
+        orderSource: order.source,
+        itemStatus: item.status,
+        orderStatus: order.status,
+        orderId: order.id,
+        willAlert: order.source === 'website' && item.status === 'draft' && order.status !== 'draft'
+      })
       if (order.source === 'website' && item.status === 'draft' && order.status !== 'draft') {
         alerts.markOrderHasPendingItems(order.id)
+        // Also play sound immediately for new pending items
+        if (_audioUnlocked && _audio) {
+          _audio.currentTime = 0
+          _audio.play().catch(() => {})
+        }
       }
     } else if (eventType === 'UPDATE') {
       // Find item in any bill and update it
