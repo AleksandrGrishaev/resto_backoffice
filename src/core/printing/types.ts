@@ -120,6 +120,13 @@ export interface ReceiptData {
   cashierName?: string
   footerMessage?: string
 
+  // Loyalty / Points
+  loyalty?: {
+    customerName?: string
+    pointsRedeemed?: number // IDR amount redeemed from balance
+    pointsBalance?: number // Customer's remaining balance after redemption
+  }
+
   // Invite QR (printed on pre-bill for orders without customer)
   inviteQR?: {
     url: string

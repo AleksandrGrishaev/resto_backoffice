@@ -1814,12 +1814,29 @@ const handlePaymentConfirm = async (paymentData: {
         }`
       )
 
+      // Build loyalty info for receipt
+      const customerForReceipt = paymentCustomerId
+        ? customersStore.getById(paymentCustomerId)
+        : null
+      const loyaltyInfoForReceipt =
+        paymentData.pointsRedeemed || customerForReceipt?.loyaltyBalance
+          ? {
+              customerName: paymentCustomerName,
+              pointsRedeemed: paymentData.pointsRedeemed,
+              pointsBalance:
+                customerForReceipt?.loyaltyBalance !== undefined
+                  ? customerForReceipt.loyaltyBalance - (paymentData.pointsRedeemed || 0)
+                  : undefined
+            }
+          : undefined
+
       // Show print receipt dialog
       const receiptData = buildPaymentReceiptData(
         paymentData.method,
         paymentData.amount,
         paymentData.receivedAmount || 0,
-        paymentData.change || 0
+        paymentData.change || 0,
+        loyaltyInfoForReceipt
       )
 
       printReceiptData.value = {
@@ -2434,7 +2451,8 @@ function buildPaymentReceiptData(
   paymentMethod: string,
   _amount: number, // Used for logging, actual amount comes from paymentDialogData
   receivedAmount: number,
-  change: number
+  change: number,
+  loyaltyInfo?: { pointsRedeemed?: number; customerName?: string; pointsBalance?: number }
 ): ReceiptData | null {
   if (!currentOrder.value) return null
 
@@ -2506,7 +2524,14 @@ function buildPaymentReceiptData(
     paymentMethod: paymentMethod as 'cash' | 'card' | 'qr',
     receivedAmount: paymentMethod === 'cash' ? receivedAmount : undefined,
     change: paymentMethod === 'cash' ? change : undefined,
-    cashierName: order.createdBy || 'Staff'
+    cashierName: order.createdBy || 'Staff',
+    loyalty: loyaltyInfo
+      ? {
+          customerName: loyaltyInfo.customerName,
+          pointsRedeemed: loyaltyInfo.pointsRedeemed,
+          pointsBalance: loyaltyInfo.pointsBalance
+        }
+      : undefined
   }
 }
 

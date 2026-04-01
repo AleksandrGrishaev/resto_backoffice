@@ -56,6 +56,9 @@ export class ReceiptBuilder {
     cmd.setBold(false)
     cmd.hr()
 
+    // Loyalty points info (pre-bill shows redemption that will be applied)
+    this.buildLoyalty(cmd, data)
+
     // Pre-bill notice
     cmd.emptyLine()
     cmd.setAlign('center')
@@ -151,6 +154,9 @@ export class ReceiptBuilder {
         }
       }
     }
+
+    // Loyalty points info
+    this.buildLoyalty(cmd, data)
 
     cmd.dash()
 
@@ -350,6 +356,23 @@ export class ReceiptBuilder {
       data.subtotalAfterDiscounts !== data.subtotal
     ) {
       cmd.leftRight('After Disc:', cmd.formatIDR(data.subtotalAfterDiscounts))
+    }
+  }
+
+  private buildLoyalty(cmd: EscPosCommandBuilder, data: ReceiptData): void {
+    if (!data.loyalty) return
+    const { customerName, pointsRedeemed, pointsBalance } = data.loyalty
+    if (!pointsRedeemed && pointsBalance === undefined) return
+
+    cmd.dash()
+    if (customerName) {
+      cmd.leftRight('Customer:', customerName)
+    }
+    if (pointsRedeemed && pointsRedeemed > 0) {
+      cmd.leftRight('Points Used:', `-${cmd.formatIDR(pointsRedeemed)}`)
+    }
+    if (pointsBalance !== undefined) {
+      cmd.leftRight('Points Balance:', cmd.formatIDR(pointsBalance))
     }
   }
 

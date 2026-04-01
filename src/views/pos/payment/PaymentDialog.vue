@@ -903,7 +903,19 @@ const buildReceiptData = (): ReceiptData => {
     taxes: taxBreakdown.value,
     taxInclusive: taxMode.value === 'inclusive',
     totalAmount: totalAmount.value,
-    footerMessage: printerSettings.value.footerMessage
+    footerMessage: printerSettings.value.footerMessage,
+    loyalty:
+      effectivePointsRedeem.value > 0 || (props.customerBalance && props.customerBalance > 0)
+        ? {
+            customerName: props.customerName || undefined,
+            pointsRedeemed:
+              effectivePointsRedeem.value > 0 ? effectivePointsRedeem.value : undefined,
+            pointsBalance:
+              props.customerBalance > 0
+                ? props.customerBalance - effectivePointsRedeem.value
+                : undefined
+          }
+        : undefined
   }
 }
 
