@@ -315,15 +315,9 @@ function handleBlur() {
 }
 
 function openKeypad() {
-  // Start with 0 so user can immediately type new value
-  // The previous value is shown in the text field behind the dialog
-  tempValue.value = 0
+  // Start with current value so user can confirm or modify
+  tempValue.value = numericValue.value
   showKeypad.value = true
-
-  // Clear the keypad display after it opens
-  nextTick(() => {
-    keypadRef.value?.clear?.()
-  })
 }
 
 function closeKeypad() {

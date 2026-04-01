@@ -94,11 +94,11 @@
             </div>
           </v-col>
 
-          <!-- RIGHT COLUMN: Summary + Payment -->
-          <v-col cols="12" md="7" class="right-column pa-4">
+          <!-- RIGHT COLUMN: Summary + Payment (scrollable) -->
+          <v-col cols="12" md="7" class="right-column" style="padding: 20px 16px 24px">
             <!-- Order Summary (Compact) -->
-            <div class="order-summary-compact mb-4">
-              <h3 class="text-subtitle-2 font-weight-bold mb-2">Order Summary</h3>
+            <div class="order-summary-compact mb-3">
+              <h3 class="text-subtitle-2 font-weight-bold mb-1">Order Summary</h3>
 
               <div class="summary-row-compact">
                 <span class="text-body-2">Subtotal:</span>
@@ -162,7 +162,7 @@
             </div>
 
             <!-- Use Points Section -->
-            <div v-if="customerId && customerBalance > 0" class="use-points mb-4">
+            <div v-if="customerId && customerBalance > 0" class="use-points mb-3">
               <div class="d-flex align-center justify-space-between">
                 <div class="d-flex align-center gap-2">
                   <v-icon size="18" color="deep-purple">mdi-wallet</v-icon>
@@ -1012,6 +1012,13 @@ watch(
     }
   }
 )
+
+// Auto-fill cashReceived when switching to cash method
+watch(selectedMethod, newMethod => {
+  if (newMethod === 'cash' && cashReceived.value === 0) {
+    cashReceived.value = totalAmount.value
+  }
+})
 
 // Watchers
 watch(
