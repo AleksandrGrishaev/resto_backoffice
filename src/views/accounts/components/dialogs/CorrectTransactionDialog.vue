@@ -99,6 +99,27 @@
             @update:model-value="onCounteragentChange"
           />
 
+          <!-- Accrual Date -->
+          <v-text-field
+            v-if="transaction.type === 'expense'"
+            v-model="form.accrualDate"
+            label="Expense Period Date"
+            type="date"
+            variant="outlined"
+            class="mb-3"
+          />
+          <v-alert
+            v-if="transaction.type === 'expense' && isAccrualDateDifferent"
+            type="warning"
+            variant="tonal"
+            density="compact"
+            class="mb-3"
+          >
+            This expense will be attributed to
+            <strong>{{ form.accrualDate }}</strong>
+            instead of today. It will appear in that period's P&L (accrual basis).
+          </v-alert>
+
           <!-- Description -->
           <v-text-field
             v-model="form.description"
@@ -177,6 +198,7 @@ const form = ref({
   category: '',
   counteragentId: '',
   counteragentName: '',
+  accrualDate: '',
   description: '',
   reason: ''
 })
@@ -195,12 +217,22 @@ const isSupplierCategory = computed(() => form.value.category === 'supplier')
 
 const hasChanges = computed(() => {
   if (!props.transaction) return false
+  const origAccrualDate = props.transaction.accrualDate
+    ? props.transaction.accrualDate.split('T')[0]
+    : ''
   return (
     form.value.amount !== props.transaction.amount ||
     form.value.description !== props.transaction.description ||
     form.value.category !== (props.transaction.expenseCategory?.category || '') ||
-    form.value.counteragentId !== (props.transaction.counteragentId || '')
+    form.value.counteragentId !== (props.transaction.counteragentId || '') ||
+    form.value.accrualDate !== origAccrualDate
   )
+})
+
+const isAccrualDateDifferent = computed(() => {
+  if (!form.value.accrualDate) return false
+  const today = new Date().toISOString().split('T')[0]
+  return form.value.accrualDate !== today
 })
 
 function getCategoryLabel(code: string): string {
@@ -242,6 +274,10 @@ async function handleSubmit() {
         form.value.counteragentName !== (tx.counteragentName || '')
           ? form.value.counteragentName
           : undefined,
+      accrualDate:
+        form.value.accrualDate !== (tx.accrualDate ? tx.accrualDate.split('T')[0] : '')
+          ? form.value.accrualDate
+          : undefined,
       reason: form.value.reason.trim(),
       performedBy: {
         type: 'user',
@@ -273,6 +309,7 @@ watch(
         category: tx.expenseCategory?.category || '',
         counteragentId: tx.counteragentId || '',
         counteragentName: tx.counteragentName || '',
+        accrualDate: tx.accrualDate ? tx.accrualDate.split('T')[0] : '',
         description: tx.description,
         reason: ''
       }

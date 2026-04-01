@@ -779,6 +779,9 @@ export const useAccountStore = defineStore('account', () => {
           counteragentId: data.counteragentId ?? originalTx.counteragentId,
           counteragentName: data.counteragentName ?? originalTx.counteragentName,
           relatedPaymentId: originalTx.relatedPaymentId,
+          accrualDate: data.accrualDate
+            ? new Date(data.accrualDate + 'T12:00:00').toISOString()
+            : originalTx.accrualDate,
           source: 'backoffice'
         })
       } catch (err) {
@@ -1278,13 +1281,20 @@ export const useAccountStore = defineStore('account', () => {
   /**
    * ✅ SPRINT 3: Get all transactions (expenses and income) by date range
    * Returns all transactions (both positive and negative amounts) for inventory adjustments
+   *
+   * @param dateField - 'createdAt' for cash basis (payment date), 'accrualDate' for accrual basis (expense period)
    */
   async function getTransactionsByDateRange(
     dateFrom: string,
-    dateTo: string
+    dateTo: string,
+    dateField: 'createdAt' | 'accrualDate' = 'createdAt'
   ): Promise<Transaction[]> {
     try {
-      DebugUtils.info(MODULE_NAME, 'Fetching all transactions by date range', { dateFrom, dateTo })
+      DebugUtils.info(MODULE_NAME, 'Fetching all transactions by date range', {
+        dateFrom,
+        dateTo,
+        dateField
+      })
 
       // ✅ FIX: Refresh cache if empty to ensure we have latest data from DB
       if (!state.value.allTransactionsCache || state.value.allTransactionsCache.length === 0) {
@@ -1295,14 +1305,16 @@ export const useAccountStore = defineStore('account', () => {
       // Get all transactions from cache
       const allTransactions = getAllTransactions.value
 
-      // Filter by date range only (include both income and expenses)
+      // Filter by date range using selected date field
       const transactions = allTransactions.filter(t => {
-        const transactionDate = t.createdAt.split('T')[0] // Extract date part
+        const dateValue = dateField === 'accrualDate' ? t.accrualDate || t.createdAt : t.createdAt
+        const transactionDate = dateValue.split('T')[0] // Extract date part
         return transactionDate >= dateFrom && transactionDate <= dateTo
       })
 
       DebugUtils.info(MODULE_NAME, 'Transactions filtered', {
         total: transactions.length,
+        dateField,
         expenseCount: transactions.filter(t => t.type === 'expense').length,
         incomeCount: transactions.filter(t => t.type === 'income').length,
         categories: [...new Set(transactions.map(t => t.expenseCategory?.category).filter(Boolean))]

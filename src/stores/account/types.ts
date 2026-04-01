@@ -96,6 +96,11 @@ export interface Transaction extends BaseEntity {
   // ✅ ИСПРАВЛЕНИЕ: Опциональное, но обязательное для expense в runtime
   expenseCategory?: ExpenseCategory // Опционально в типе, но проверяется в валидации
 
+  // Accrual date: к какому периоду относится расход (может отличаться от createdAt)
+  // createdAt = когда оплата прошла (cash basis)
+  // accrualDate = когда расход признан (accrual basis, e.g. дата получения товара)
+  accrualDate?: string
+
   // ✅ НОВЫЕ ПОЛЯ для связей
   counteragentId?: string // ID контрагента (для supplier payments)
   counteragentName?: string // Кешированное имя контрагента
@@ -122,6 +127,10 @@ export interface CreateOperationDto {
   relatedOrderIds?: string[]
   relatedPaymentId?: string
   source?: 'pos' | 'backoffice' // ✅ NEW: Источник создания операции
+
+  // Accrual date: к какому периоду относится расход
+  // Если не указано, используется текущая дата (created_at)
+  accrualDate?: string
 }
 
 export interface CreateTransferDto {
@@ -152,6 +161,7 @@ export interface CorrectTransactionDto {
   category?: string
   counteragentId?: string
   counteragentName?: string
+  accrualDate?: string
   reason: string
   performedBy: TransactionPerformer
 }

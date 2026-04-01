@@ -140,8 +140,8 @@
                   {{ formatIDR(methodDifference) }}
                   <br />
                   <span class="text-medium-emphasis">
-                    Difference may indicate accounts payable, goods in transit, or timing
-                    differences.
+                    Difference may indicate cross-period payments (paid this month for last month's
+                    expenses), accounts payable, or goods in transit.
                   </span>
                 </div>
               </v-alert>
@@ -558,6 +558,110 @@
                     </td>
                   </tr>
 
+                  <tr><td colspan="3" class="py-2"></td></tr>
+
+                  <!-- Cross-Period Transactions Section -->
+                  <template v-if="hasCrossPeriodTransactions">
+                    <tr class="section-header">
+                      <td colspan="3" class="font-weight-bold text-blue-grey">
+                        CROSS-PERIOD TRANSACTIONS
+                        <v-chip size="x-small" color="info" variant="flat" class="ml-2">
+                          Accrual vs Cash
+                        </v-chip>
+                      </td>
+                    </tr>
+
+                    <!-- Paid in this period for prior periods -->
+                    <template v-if="report.crossPeriodSummary?.paidForPriorPeriods?.count">
+                      <tr>
+                        <td class="pl-8">
+                          Paid this period for prior periods
+                          <v-tooltip location="top">
+                            <template #activator="{ props: tp }">
+                              <v-icon v-bind="tp" size="x-small" class="ml-1">
+                                mdi-information-outline
+                              </v-icon>
+                            </template>
+                            Payments made in this period but the expense belongs to a prior month.
+                            In accrual basis, these are NOT counted in this period's OPEX.
+                          </v-tooltip>
+                        </td>
+                        <td class="text-right text-blue-grey">
+                          {{ formatIDR(report.crossPeriodSummary.paidForPriorPeriods.total) }}
+                        </td>
+                        <td class="text-right text-caption text-medium-emphasis">
+                          {{ report.crossPeriodSummary.paidForPriorPeriods.count }} txn(s)
+                        </td>
+                      </tr>
+                      <tr
+                        v-for="item in report.crossPeriodSummary.paidForPriorPeriods.items.slice(
+                          0,
+                          5
+                        )"
+                        :key="item.id"
+                        class="text-caption"
+                      >
+                        <td class="pl-14 text-medium-emphasis">
+                          {{ item.counteragentName || item.description }}
+                          <v-chip size="x-small" variant="outlined" class="ml-1">
+                            accrued {{ formatDate(item.accrualDate) }}
+                          </v-chip>
+                        </td>
+                        <td class="text-right text-medium-emphasis">
+                          {{ formatIDR(item.amount) }}
+                        </td>
+                        <td class="text-right text-medium-emphasis">
+                          paid {{ formatDate(item.paymentDate) }}
+                        </td>
+                      </tr>
+                    </template>
+
+                    <!-- Accrued this period but paid elsewhere -->
+                    <template v-if="report.crossPeriodSummary?.accruedNotYetPaid?.count">
+                      <tr>
+                        <td class="pl-8">
+                          Accrued this period, paid in other period
+                          <v-tooltip location="top">
+                            <template #activator="{ props: tp }">
+                              <v-icon v-bind="tp" size="x-small" class="ml-1">
+                                mdi-information-outline
+                              </v-icon>
+                            </template>
+                            Expenses that belong to this period but payment was made in a different
+                            month. In accrual basis, these ARE counted in this period's OPEX.
+                          </v-tooltip>
+                        </td>
+                        <td class="text-right text-blue-grey">
+                          {{ formatIDR(report.crossPeriodSummary.accruedNotYetPaid.total) }}
+                        </td>
+                        <td class="text-right text-caption text-medium-emphasis">
+                          {{ report.crossPeriodSummary.accruedNotYetPaid.count }} txn(s)
+                        </td>
+                      </tr>
+                      <tr
+                        v-for="item in report.crossPeriodSummary.accruedNotYetPaid.items.slice(
+                          0,
+                          5
+                        )"
+                        :key="item.id"
+                        class="text-caption"
+                      >
+                        <td class="pl-14 text-medium-emphasis">
+                          {{ item.counteragentName || item.description }}
+                          <v-chip size="x-small" variant="outlined" class="ml-1">
+                            paid {{ formatDate(item.paymentDate) }}
+                          </v-chip>
+                        </td>
+                        <td class="text-right text-medium-emphasis">
+                          {{ formatIDR(item.amount) }}
+                        </td>
+                        <td class="text-right text-medium-emphasis">
+                          accrued {{ formatDate(item.accrualDate) }}
+                        </td>
+                      </tr>
+                    </template>
+                  </template>
+
                   <tr><td colspan="3" class="py-4"></td></tr>
 
                   <!-- Cash Flow Section (Shareholders) -->
@@ -818,6 +922,15 @@ const retainedProfitClass = computed(() => {
   if (!report.value?.finalProfit) return ''
   const retained = (report.value.finalProfit.amount || 0) - (report.value.shareholdersPayout || 0)
   return retained >= 0 ? 'text-success' : 'text-error'
+})
+
+// Cross-period transactions indicator
+const hasCrossPeriodTransactions = computed(() => {
+  if (!report.value?.crossPeriodSummary) return false
+  return (
+    report.value.crossPeriodSummary.paidForPriorPeriods.count > 0 ||
+    report.value.crossPeriodSummary.accruedNotYetPaid.count > 0
+  )
 })
 
 // Total Expenses (Commissions + COGS + OPEX + Tax)
