@@ -159,6 +159,23 @@
                   {{ formatPrice(totalAmount) }}
                 </span>
               </div>
+
+              <!-- Stamps earned info -->
+              <div v-if="stampCardInfo && stampsEarned > 0" class="stamps-earned-row mt-2">
+                <div class="d-flex align-center justify-space-between">
+                  <span class="text-body-2 d-flex align-center">
+                    <v-icon size="16" color="amber-darken-2" class="mr-1">mdi-stamper</v-icon>
+                    Stamps earned:
+                  </span>
+                  <span class="text-body-2 font-weight-bold text-amber-darken-2">
+                    +{{ stampsEarned }}
+                    <span class="text-medium-emphasis font-weight-regular">
+                      ({{ stampCardInfo.stamps }} + {{ stampsEarned }} =
+                      {{ stampCardInfo.stamps + stampsEarned }}/{{ stampCardInfo.stampsPerCycle }})
+                    </span>
+                  </span>
+                </div>
+              </div>
             </div>
 
             <!-- Use Points Section -->
@@ -407,6 +424,7 @@ import type { PosBillItem, PosBill, PreBillSnapshot } from '@/stores/pos/types'
 import type { StampCardInfo } from '@/stores/loyalty'
 import type { ReceiptData, ReceiptItem } from '@/core/printing/types'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { useLoyaltyStore } from '@/stores/loyalty'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import { useChannelsStore } from '@/stores/channels'
 import { DISCOUNT_REASON_LABELS } from '@/stores/discounts/constants'
@@ -458,6 +476,7 @@ const props = withDefaults(defineProps<Props>(), {
 const ordersStore = usePosOrdersStore()
 const paymentSettingsStore = usePaymentSettingsStore()
 const channelsStore = useChannelsStore()
+const loyaltyStore = useLoyaltyStore()
 
 // Printer
 const { isConnected: isPrinterConnected, settings: printerSettings, printPreBill } = usePrinter()
@@ -683,6 +702,13 @@ const totalAmount = computed(() => {
 // Positive = rounded down (discount increases), negative = rounded up (discount decreases)
 const discountRoundingAdjustment = computed(() => {
   return rawTotalAmount.value - totalAmount.value
+})
+
+// Stamps earned calculation: floor(total / threshold)
+const stampsEarned = computed(() => {
+  const threshold = loyaltyStore.stampThreshold
+  if (threshold <= 0 || totalAmount.value <= 0) return 0
+  return Math.floor(totalAmount.value / threshold)
 })
 
 const change = computed(() => {
@@ -1089,22 +1115,21 @@ watch(
   display: flex;
   flex-direction: column;
   max-height: 90vh;
+  max-height: 90dvh;
 }
 
 .dialog-content {
   flex: 1 1 auto;
-  overflow: hidden;
+  overflow-y: auto;
   min-height: 0;
-}
-
-.dialog-content :deep(.v-row) {
-  height: 100%;
 }
 
 /* Left column: items list + loyalty at bottom */
 .left-column {
   border-right: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .items-scroll {
@@ -1118,9 +1143,8 @@ watch(
   flex-shrink: 0;
 }
 
-/* Right column: scrollable if content overflows */
+/* Right column */
 .right-column {
-  overflow-y: auto;
   min-height: 0;
 }
 
@@ -1166,7 +1190,6 @@ watch(
   .left-column {
     border-right: none;
     border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-    max-height: 40vh;
   }
 }
 </style>
@@ -1174,7 +1197,8 @@ watch(
 <!-- Global style for dialog wrapper -->
 <style>
 .payment-dialog-wrapper {
-  max-height: 95vh !important;
+  max-height: calc(100vh - 32px) !important;
+  max-height: calc(100dvh - 32px) !important;
   margin: 16px !important;
 }
 </style>
