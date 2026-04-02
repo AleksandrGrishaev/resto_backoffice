@@ -717,13 +717,25 @@ export function useOrdersRealtime() {
       for (const bill of order.bills) {
         const itemIndex = bill.items.findIndex(i => i.id === item.id)
         if (itemIndex !== -1) {
-          // Preserve kitchenNotes from local if not in Supabase
+          // Preserve local-only fields that may not be in Supabase row
           const localItem = bill.items[itemIndex]
           const updatedItem = fromOrderItemRow(item)
 
           // Merge: keep local kitchenNotes if Supabase doesn't have it
           if (localItem.kitchenNotes && !updatedItem.kitchenNotes) {
             updatedItem.kitchenNotes = localItem.kitchenNotes
+          }
+
+          // ✅ FIX: Preserve cancellation metadata set locally (race with cancelItem)
+          if (
+            localItem.status === 'cancelled' &&
+            !updatedItem.cancelledAt &&
+            localItem.cancelledAt
+          ) {
+            updatedItem.cancelledAt = localItem.cancelledAt
+            updatedItem.cancelledBy = localItem.cancelledBy
+            updatedItem.cancellationReason = localItem.cancellationReason
+            updatedItem.cancellationNotes = localItem.cancellationNotes
           }
 
           bill.items[itemIndex] = updatedItem

@@ -203,8 +203,10 @@ export const useAlertsStore = defineStore('alerts', () => {
     try {
       const alert = await alertsService.createAlert(payload)
 
-      // Add to local state
-      alerts.value.unshift(alert)
+      // ✅ FIX: Dedup — realtime INSERT may have already added this alert
+      if (!alerts.value.some(a => a.id === alert.id)) {
+        alerts.value.unshift(alert)
+      }
 
       DebugUtils.info(MODULE_NAME, 'Alert created', { id: alert.id })
       return alert
@@ -298,6 +300,8 @@ export const useAlertsStore = defineStore('alerts', () => {
     unsubscribe = alertsService.subscribeToAlerts(
       // On insert
       alert => {
+        // ✅ FIX: Dedup — createAlert() may have already pushed this alert before realtime fires
+        if (alerts.value.some(a => a.id === alert.id)) return
         // Add to beginning of list
         alerts.value.unshift(alert)
         DebugUtils.debug(MODULE_NAME, 'New alert received via realtime', { id: alert.id })

@@ -706,15 +706,17 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         if (orderIndex !== -1) {
           const billIndex = orders.value[orderIndex].bills.findIndex(b => b.id === billId)
           if (billIndex !== -1) {
+            // ✅ FIX: Re-find by ID right before splice to avoid race with realtime DELETE
+            // If realtime already removed it, findIndex returns -1 and we skip safely
             const itemIndex = orders.value[orderIndex].bills[billIndex].items.findIndex(
               i => i.id === itemId
             )
             if (itemIndex !== -1) {
               orders.value[orderIndex].bills[billIndex].items.splice(itemIndex, 1)
-
-              // Пересчитать суммы заказа (автоматически обновит статус стола)
-              await recalculateOrderTotals(orderId)
             }
+
+            // Пересчитать суммы заказа (автоматически обновит статус стола)
+            await recalculateOrderTotals(orderId)
           }
         }
       }
