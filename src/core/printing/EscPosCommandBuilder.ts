@@ -255,6 +255,42 @@ export class EscPosCommandBuilder {
     return this.textLine(`${qtyStr} ${truncatedName} ${price}`)
   }
 
+  // ===== QR Code =====
+
+  /**
+   * Print QR code - GS ( k
+   * Uses QR Code Model 2, error correction level M (15%)
+   * @param data The data to encode (URL or text)
+   * @param moduleSize Module size 1-16 (default: 6, good for 58mm printer)
+   */
+  qrCode(data: string, moduleSize: number = 6): this {
+    const encoded = this.encodeText(data)
+    const dataLen = encoded.length
+
+    // 1. Select QR model: GS ( k pL pH cn fn n1 n2
+    //    cn=49 (QR), fn=65 (model), n1=50 n2=0 (Model 2)
+    this.buffer.push(EscPosCommandBuilder.GS, 0x28, 0x6b, 4, 0, 49, 65, 50, 0)
+
+    // 2. Set module size: GS ( k pL pH cn fn n
+    this.buffer.push(EscPosCommandBuilder.GS, 0x28, 0x6b, 3, 0, 49, 67, moduleSize)
+
+    // 3. Set error correction: GS ( k pL pH cn fn n
+    //    n=49=M (15% recovery)
+    this.buffer.push(EscPosCommandBuilder.GS, 0x28, 0x6b, 3, 0, 49, 69, 49)
+
+    // 4. Store data: GS ( k pL pH cn fn m d1...dk
+    //    pL pH = (dataLen + 3) as little-endian 16-bit
+    const storeLen = dataLen + 3
+    const pL = storeLen & 0xff
+    const pH = (storeLen >> 8) & 0xff
+    this.buffer.push(EscPosCommandBuilder.GS, 0x28, 0x6b, pL, pH, 49, 80, 48, ...encoded)
+
+    // 5. Print QR code: GS ( k pL pH cn fn m
+    this.buffer.push(EscPosCommandBuilder.GS, 0x28, 0x6b, 3, 0, 49, 81, 48)
+
+    return this
+  }
+
   // ===== Currency Formatting =====
 
   /**

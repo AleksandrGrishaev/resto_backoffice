@@ -1,78 +1,75 @@
 <!-- src/views/kitchen/preparation/components/ScheduleTaskCard.vue -->
-<!-- Schedule Task Card - Individual task item with checkbox and Done button -->
+<!-- Schedule Task Card - Checklist-style task with one-tap Done and optional Edit -->
 <template>
   <div
     class="task-card"
-    :class="{ 'task-completed': isCompleted, 'task-in-progress': isInProgress }"
+    :class="{
+      'task-completed': isCompleted,
+      'task-writeoff': isWriteOff && !isCompleted
+    }"
   >
-    <!-- Checkbox / Status -->
-    <div class="task-checkbox">
-      <v-icon v-if="isCompleted" color="success" size="24">mdi-checkbox-marked-circle</v-icon>
-      <v-icon v-else-if="isInProgress" color="primary" size="24">mdi-progress-clock</v-icon>
-      <v-icon v-else color="grey" size="24">mdi-checkbox-blank-circle-outline</v-icon>
+    <!-- Checkbox / Status (large touch target) -->
+    <div class="task-checkbox" @click="!isCompleted && handleQuickComplete()">
+      <v-icon v-if="isCompleted" color="success" size="28">mdi-checkbox-marked-circle</v-icon>
+      <v-icon v-else-if="isWriteOff" color="error" size="28">mdi-delete-circle-outline</v-icon>
+      <v-icon v-else color="grey-lighten-1" size="28">mdi-checkbox-blank-circle-outline</v-icon>
     </div>
 
     <!-- Task Info -->
     <div class="task-info">
-      <div class="task-name">{{ task.preparationName }}</div>
+      <div class="task-name" :class="{ 'text-decoration-line-through': isCompleted }">
+        <v-chip
+          v-if="isWriteOff && !isCompleted"
+          color="error"
+          size="x-small"
+          class="mr-1"
+          variant="flat"
+        >
+          WRITE-OFF
+        </v-chip>
+        {{ task.preparationName }}
+      </div>
       <div class="task-details">
-        <span class="detail-item">
-          <v-icon size="14" class="mr-1">mdi-target</v-icon>
-          Need: {{ formatDisplayQuantity(task.targetQuantity) }}
+        <span class="detail-item detail-target">
+          {{ formatDisplayQuantity(task.targetQuantity) }}
         </span>
-        <span v-if="task.currentStockAtGeneration !== undefined" class="detail-item">
-          <v-icon size="14" class="mr-1">mdi-package-variant</v-icon>
-          Stock: {{ formatDisplayQuantity(task.currentStockAtGeneration) }}
+        <span
+          v-if="task.recommendationReason && !isCompleted"
+          class="detail-item detail-reason"
+          :class="`text-${isWriteOff ? 'error' : getReasonColor(task.recommendationReason)}`"
+        >
+          {{ getReasonLabel(task.recommendationReason) }}
         </span>
       </div>
 
       <!-- Completion Details (if completed) -->
       <div v-if="isCompleted && task.completedAt" class="task-completion">
         <v-icon size="12" class="mr-1">mdi-check</v-icon>
-        Completed {{ formatTime(task.completedAt) }}
-        <span v-if="task.completedByName">by {{ task.completedByName }}</span>
-        <span v-if="task.completedQuantity">
+        {{ formatTime(task.completedAt) }}
+        <span v-if="task.completedByName" class="ml-1">{{ task.completedByName }}</span>
+        <span v-if="task.completedQuantity" class="ml-1">
           ({{ formatDisplayQuantity(task.completedQuantity) }})
         </span>
       </div>
     </div>
 
-    <!-- Status Badge -->
-    <div class="task-status">
-      <v-chip v-if="isCompleted" color="success" size="small" variant="flat">Done</v-chip>
-      <v-chip v-else-if="isInProgress" color="primary" size="small" variant="flat">
-        In Progress
-      </v-chip>
-      <v-chip
-        v-else-if="task.recommendationReason"
-        :color="getReasonColor(task.recommendationReason)"
-        size="small"
-        variant="tonal"
-      >
-        {{ getReasonLabel(task.recommendationReason) }}
-      </v-chip>
-    </div>
-
     <!-- Actions -->
-    <div class="task-actions">
+    <div v-if="!isCompleted" class="task-actions">
       <v-btn
-        v-if="!isCompleted && !isInProgress"
-        color="primary"
-        variant="outlined"
+        color="default"
+        variant="text"
         size="small"
-        @click="handleStart"
-      >
-        Start
-      </v-btn>
+        icon="mdi-pencil"
+        @click.stop="handleEditComplete"
+      />
       <v-btn
-        v-if="!isCompleted"
-        color="success"
+        :color="isWriteOff ? 'error' : 'success'"
         variant="flat"
-        size="small"
-        @click="handleComplete"
+        class="done-btn"
+        @click.stop="handleQuickComplete"
       >
-        <v-icon start size="small">mdi-check</v-icon>
-        Done
+        <v-icon start size="20">{{ isWriteOff ? 'mdi-delete' : 'mdi-check' }}</v-icon>
+        {{ isWriteOff ? 'Write-off' : 'Done' }}
       </v-btn>
     </div>
   </div>
@@ -97,8 +94,8 @@ const props = defineProps<Props>()
 // =============================================
 
 const emit = defineEmits<{
-  complete: [task: ProductionScheduleItem]
-  start: [task: ProductionScheduleItem]
+  'quick-complete': [task: ProductionScheduleItem]
+  'edit-complete': [task: ProductionScheduleItem]
 }>()
 
 // =============================================
@@ -106,18 +103,18 @@ const emit = defineEmits<{
 // =============================================
 
 const isCompleted = computed(() => props.task.status === 'completed')
-const isInProgress = computed(() => props.task.status === 'in_progress')
+const isWriteOff = computed(() => props.task.taskType === 'write_off')
 
 // =============================================
 // METHODS
 // =============================================
 
-function handleComplete(): void {
-  emit('complete', props.task)
+function handleQuickComplete(): void {
+  emit('quick-complete', props.task)
 }
 
-function handleStart(): void {
-  emit('start', props.task)
+function handleEditComplete(): void {
+  emit('edit-complete', props.task)
 }
 
 /**
@@ -126,7 +123,7 @@ function handleStart(): void {
  * - portion type: shows portions with total weight (e.g., "10 pcs (300g)")
  */
 function formatDisplayQuantity(value: number): string {
-  if (value <= 0) return '0'
+  if (value <= 0) return `0${props.task.targetUnit || 'g'}`
 
   // For portion-type preparations, show portions
   if (
@@ -144,13 +141,6 @@ function formatDisplayQuantity(value: number): string {
     return `${(value / 1000).toFixed(1)}kg`
   }
   return `${Math.round(value)}${props.task.targetUnit}`
-}
-
-function formatQuantity(value: number, unit: string): string {
-  if (value >= 1000) {
-    return `${(value / 1000).toFixed(1)}kg`
-  }
-  return `${value}${unit}`
 }
 
 function formatTime(isoDate: string): string {
@@ -180,9 +170,8 @@ function getReasonColor(reason: string): string {
 }
 
 function getReasonLabel(reason: string): string {
-  // Truncate long reasons
-  if (reason.length > 20) {
-    return reason.substring(0, 20) + '...'
+  if (reason.length > 50) {
+    return reason.substring(0, 50) + '...'
   }
   return reason
 }
@@ -193,26 +182,42 @@ function getReasonLabel(reason: string): string {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 14px 16px;
+  min-height: 56px;
   background-color: var(--v-theme-surface);
-  transition: background-color 0.2s;
+  transition:
+    background-color 0.2s,
+    opacity 0.3s;
 
   &:hover:not(.task-completed) {
     background-color: rgba(var(--v-theme-on-surface), 0.04);
   }
 
   &.task-completed {
-    opacity: 0.7;
-    background-color: rgba(var(--v-theme-success), 0.05);
+    opacity: 0.55;
+    background-color: rgba(var(--v-theme-success), 0.04);
   }
 
-  &.task-in-progress {
-    background-color: rgba(var(--v-theme-primary), 0.05);
+  &.task-writeoff {
+    border-left: 3px solid rgb(var(--v-theme-error));
+    background-color: rgba(var(--v-theme-error), 0.03);
   }
 }
 
 .task-checkbox {
   flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 50%;
+  -webkit-tap-highlight-color: transparent;
+
+  &:active {
+    background-color: rgba(var(--v-theme-success), 0.12);
+  }
 }
 
 .task-info {
@@ -221,8 +226,8 @@ function getReasonLabel(reason: string): string {
 }
 
 .task-name {
-  font-weight: 500;
-  font-size: 14px;
+  font-weight: 600;
+  font-size: 15px;
   color: var(--v-theme-on-surface);
   white-space: nowrap;
   overflow: hidden;
@@ -232,33 +237,42 @@ function getReasonLabel(reason: string): string {
 .task-details {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 4px;
-  font-size: 12px;
+  gap: 10px;
+  margin-top: 3px;
+  font-size: 13px;
   color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
-.detail-item {
-  display: flex;
-  align-items: center;
+.detail-target {
+  font-weight: 500;
+}
+
+.detail-reason {
+  font-size: 12px;
 }
 
 .task-completion {
   display: flex;
   align-items: center;
-  margin-top: 4px;
-  font-size: 11px;
+  margin-top: 3px;
+  font-size: 12px;
   color: rgb(var(--v-theme-success));
-}
-
-.task-status {
-  flex-shrink: 0;
 }
 
 .task-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
+  align-items: center;
+}
+
+.done-btn {
+  min-width: 88px;
+  height: 40px !important;
+  font-weight: 600;
+  font-size: 14px;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 @media (max-width: 600px) {
@@ -268,12 +282,7 @@ function getReasonLabel(reason: string): string {
   }
 
   .task-info {
-    flex-basis: calc(100% - 50px);
-  }
-
-  .task-status {
-    order: 2;
-    flex-basis: auto;
+    flex-basis: calc(100% - 60px);
   }
 
   .task-actions {

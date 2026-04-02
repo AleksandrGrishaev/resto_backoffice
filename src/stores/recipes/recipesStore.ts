@@ -376,16 +376,21 @@ export const useRecipesStore = defineStore('recipes', () => {
   async function updatePreparation(id: string, data: Partial<Preparation>): Promise<Preparation> {
     try {
       loading.value = true
+
+      // Capture old preparation state before update (for cascading unit changes)
+      const oldPrep = preparationsComposable.getPreparationById(id)
+      const oldPortionType = oldPrep?.portionType
+      const oldOutputUnit = oldPrep?.outputUnit
+
       const preparation = await preparationsComposable.updatePreparation(id, data)
 
       // Пересчитываем стоимость если изменился рецепт
       if (data.recipe || data.outputQuantity !== undefined) {
         const costResult = await costCalculationComposable.calculatePreparationCost(preparation)
 
-        // ✅ FIX: Update last_known_cost in database (always per BASE UNIT, i.e. per gram)
+        // Update last_known_cost (always per BASE UNIT, i.e. per gram)
         if (costResult.success && costResult.cost) {
           const preparationCost = costResult.cost as PreparationPlanCost
-          // costPerOutputUnit is per-portion for portion-type preps — normalize to per-gram
           let costPerBaseUnit = preparationCost.costPerOutputUnit
           if (
             preparation.portionType === 'portion' &&
@@ -394,19 +399,61 @@ export const useRecipesStore = defineStore('recipes', () => {
           ) {
             costPerBaseUnit = preparationCost.costPerOutputUnit / preparation.portionSize
           }
-          await preparationsComposable.updatePreparation(id, {
-            lastKnownCost: costPerBaseUnit
-          })
-          // Update local state
+          // Save lastKnownCost directly via service to avoid double full save
           preparation.lastKnownCost = costPerBaseUnit
+          const { recipesService } = await import('./recipesService')
+          await recipesService.updatePreparationField(id, 'last_known_cost', costPerBaseUnit)
         }
 
         // Пересчитываем рецепты, использующие этот полуфабрикат
         await recalculateRecipesUsingPreparation(id)
       }
 
-      // Обновляем usage в Product Store
-      await integrationComposable.updateUsageForAllProducts()
+      // Cascade unit update: if portionType or outputUnit changed, update all referencing ingredients
+      const newUnit =
+        preparation.portionType === 'portion' ? 'portion' : preparation.outputUnit || 'gram'
+      const oldUnit = oldPortionType === 'portion' ? 'portion' : oldOutputUnit || 'gram'
+      if (oldUnit !== newUnit) {
+        const { recipesService } = await import('./recipesService')
+        await recipesService.cascadePreparationUnitChange(id, newUnit)
+        // Update in-memory state: preparations that reference this one
+        preparationsComposable.getAllPreparations().forEach(p => {
+          p.recipe.forEach(ing => {
+            if (ing.type === 'preparation' && ing.id === id) {
+              ing.unit = newUnit as any
+            }
+          })
+        })
+        // Update in-memory state: recipes that reference this preparation
+        recipesComposable.getAllRecipes().forEach(r => {
+          r.components.forEach(comp => {
+            if (comp.componentType === 'preparation' && comp.componentId === id) {
+              comp.unit = newUnit as any
+            }
+          })
+        })
+        DebugUtils.info(MODULE_NAME, `Cascaded unit change for preparation ${id}`, {
+          oldUnit,
+          newUnit
+        })
+      }
+
+      // Обновляем usage только для затронутых продуктов
+      const affectedProductIds = new Set<string>()
+      if (data.recipe) {
+        data.recipe.forEach(ing => {
+          if (ing.type === 'product') affectedProductIds.add(ing.id)
+        })
+      }
+      // Also include old recipe products (they may have been removed)
+      if (oldPrep?.recipe) {
+        oldPrep.recipe.forEach(ing => {
+          if (ing.type === 'product') affectedProductIds.add(ing.id)
+        })
+      }
+      if (affectedProductIds.size > 0) {
+        await integrationComposable.updateUsageForProductIds(affectedProductIds)
+      }
 
       return preparation
     } catch (err) {

@@ -5,6 +5,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { DebugUtils, TimeUtils } from '@/utils'
 import type { PLReport, COGSMethod, COGSCalculation } from './types'
+import type { Transaction } from '@/stores/account/types'
 import { useSalesStore } from '@/stores/sales/salesStore'
 import { useAccountStore } from '@/stores/account'
 import { getCOGSForPL } from './services/cogsService'
@@ -247,8 +248,29 @@ export const usePLReportStore = defineStore('plReport', () => {
       // ============================================
       DebugUtils.info(MODULE_NAME, 'Calculating OPEX from account transactions')
 
-      // Load all account transactions for OPEX
-      const allTransactions = await accountStore.getTransactionsByDateRange(dateFrom, dateTo)
+      // Accrual basis: filter by accrualDate (when expense was incurred)
+      // Cash basis: filter by createdAt (when payment was made)
+      const expenseDateField = method === 'accrual' ? 'accrualDate' : 'createdAt'
+      const allTransactions = await accountStore.getTransactionsByDateRange(
+        dateFrom,
+        dateTo,
+        expenseDateField
+      )
+
+      // Cash-basis set for cross-period analysis (different filter field, may contain different transactions).
+      // Both calls filter an in-memory cache so the overhead is negligible.
+      const cashTransactions =
+        method === 'accrual'
+          ? await accountStore.getTransactionsByDateRange(dateFrom, dateTo, 'createdAt')
+          : allTransactions
+
+      // Cross-period transactions: paid in this period but accrued to a different period
+      const crossPeriodTransactions = cashTransactions.filter(t => {
+        if (!t.accrualDate || !t.createdAt) return false
+        const accrualMonth = t.accrualDate.substring(0, 7) // YYYY-MM
+        const paymentMonth = t.createdAt.substring(0, 7)
+        return accrualMonth !== paymentMonth
+      })
 
       DebugUtils.info(MODULE_NAME, 'Account transactions loaded for OPEX', {
         count: allTransactions.length
@@ -429,7 +451,64 @@ export const usePLReportStore = defineStore('plReport', () => {
         retainedInBusiness: finalProfitAmount - shareholdersPayout
       })
 
-      // 9. Create report with new structure
+      // ============================================
+      // 9. Build cross-period summary
+      // ============================================
+      const periodStart = dateFrom.substring(0, 7) // YYYY-MM
+      const periodEnd = dateTo.substring(0, 7)
+
+      const mapCrossPeriodItem = (t: Transaction) => ({
+        id: t.id,
+        amount: Math.abs(t.amount),
+        description: t.description,
+        accrualDate: t.accrualDate || t.createdAt,
+        paymentDate: t.createdAt,
+        counteragentName: t.counteragentName,
+        category: t.expenseCategory?.category
+      })
+
+      // Paid in this period but accrued to prior period
+      const paidForPrior = crossPeriodTransactions.filter(t => {
+        const accrualMonth = (t.accrualDate || t.createdAt).substring(0, 7)
+        return accrualMonth < periodStart
+      })
+
+      // Accrued in this period but paid in a different period (from accrual-filtered set)
+      const accruedHereButPaidElsewhere =
+        method === 'accrual'
+          ? allTransactions.filter(t => {
+              if (!t.accrualDate || !t.createdAt) return false
+              const paymentMonth = t.createdAt.substring(0, 7)
+              return paymentMonth < periodStart || paymentMonth > periodEnd
+            })
+          : []
+
+      const crossPeriodSummary = {
+        paidForPriorPeriods: {
+          count: paidForPrior.length,
+          total: paidForPrior.reduce((sum, t) => sum + Math.abs(t.amount), 0),
+          items: paidForPrior.map(mapCrossPeriodItem)
+        },
+        accruedNotYetPaid: {
+          count: accruedHereButPaidElsewhere.length,
+          total: accruedHereButPaidElsewhere.reduce((sum, t) => sum + Math.abs(t.amount), 0),
+          items: accruedHereButPaidElsewhere.map(mapCrossPeriodItem)
+        }
+      }
+
+      if (
+        crossPeriodSummary.paidForPriorPeriods.count > 0 ||
+        crossPeriodSummary.accruedNotYetPaid.count > 0
+      ) {
+        DebugUtils.info(MODULE_NAME, 'Cross-period transactions detected', {
+          paidForPrior: crossPeriodSummary.paidForPriorPeriods.count,
+          paidForPriorTotal: crossPeriodSummary.paidForPriorPeriods.total,
+          accruedNotPaid: crossPeriodSummary.accruedNotYetPaid.count,
+          accruedNotPaidTotal: crossPeriodSummary.accruedNotYetPaid.total
+        })
+      }
+
+      // 10. Create report with new structure
       const report: PLReport = {
         period: { dateFrom, dateTo },
         revenue,
@@ -449,6 +528,7 @@ export const usePLReportStore = defineStore('plReport', () => {
         shareholdersPayout,
         cashCorrections,
         finalProfit,
+        crossPeriodSummary,
         generatedAt: TimeUtils.getCurrentLocalISO()
       }
 

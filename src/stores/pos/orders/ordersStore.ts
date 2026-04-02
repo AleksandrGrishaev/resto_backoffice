@@ -24,6 +24,7 @@ import {
   determineStatusByOrderType as determineStatus
 } from './composables'
 import { usePosTablesStore } from '../tables/tablesStore'
+import { useOnlineOrderAlerts } from './composables/useOnlineOrderAlerts'
 import {
   discountService,
   discountSupabaseService,
@@ -54,6 +55,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   // ===== SERVICES =====
   const ordersService = new OrdersService()
   const tablesStore = usePosTablesStore()
+  const onlineOrderAlerts = useOnlineOrderAlerts()
 
   // ===== COMPUTED =====
   const currentOrder = computed(() =>
@@ -184,6 +186,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
           customerName?: string
           channelId?: string
           channelCode?: string
+          guestCount?: number
         },
     tableId?: string,
     customerName?: string
@@ -296,7 +299,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
                 ? 'Takeaway Bill'
                 : 'Delivery Bill'
 
-          const billResult = await addBillToOrder(response.data.id, billName)
+          const billResult = await addBillToOrder(response.data.id, billName, orderData.guestCount)
 
           if (billResult.success) {
             console.log('✅ Auto-created first bill for new order')
@@ -336,6 +339,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     currentOrderId.value = orderId
     const order = orders.value.find(o => o.id === orderId)
 
+    // Acknowledge online order alert (stops blinking + sound for this order)
+    if (order?.source === 'website') {
+      onlineOrderAlerts.acknowledgeOrder(orderId)
+    }
+
     if (order && order.bills.length > 0) {
       // Выбираем первый активный счет автоматически
       const activeBill = order.bills.find(b => b.status === 'active')
@@ -366,10 +374,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
    */
   async function addBillToOrder(
     orderId: string,
-    billName: string = 'Счет'
+    billName: string = 'Счет',
+    guestCount?: number
   ): Promise<ServiceResponse<PosBill>> {
     try {
-      const response = await ordersService.addBillToOrder(orderId, billName)
+      const response = await ordersService.addBillToOrder(orderId, billName, guestCount)
 
       if (response.success && response.data) {
         const orderIndex = orders.value.findIndex(o => o.id === orderId)
@@ -548,7 +557,13 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         if (orderIndex !== -1) {
           const billIndex = orders.value[orderIndex].bills.findIndex(b => b.id === billId)
           if (billIndex !== -1) {
-            orders.value[orderIndex].bills[billIndex].items.push(response.data)
+            // ✅ FIX: Check if item already exists (realtime may have pushed it first)
+            const alreadyExists = orders.value[orderIndex].bills[billIndex].items.some(
+              i => i.id === response.data!.id
+            )
+            if (!alreadyExists) {
+              orders.value[orderIndex].bills[billIndex].items.push(response.data)
+            }
             // Пересчитать суммы заказа (автоматически обновит статус стола)
             await recalculateOrderTotals(orderId)
           }
@@ -691,15 +706,17 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         if (orderIndex !== -1) {
           const billIndex = orders.value[orderIndex].bills.findIndex(b => b.id === billId)
           if (billIndex !== -1) {
+            // ✅ FIX: Re-find by ID right before splice to avoid race with realtime DELETE
+            // If realtime already removed it, findIndex returns -1 and we skip safely
             const itemIndex = orders.value[orderIndex].bills[billIndex].items.findIndex(
               i => i.id === itemId
             )
             if (itemIndex !== -1) {
               orders.value[orderIndex].bills[billIndex].items.splice(itemIndex, 1)
-
-              // Пересчитать суммы заказа (автоматически обновит статус стола)
-              await recalculateOrderTotals(orderId)
             }
+
+            // Пересчитать суммы заказа (автоматически обновит статус стола)
+            await recalculateOrderTotals(orderId)
           }
         }
       }
@@ -1126,6 +1143,24 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       error.value = errorMsg
       return { success: false, error: errorMsg }
     }
+  }
+
+  /**
+   * Update guest count for a specific bill
+   */
+  async function updateBillGuestCount(
+    orderId: string,
+    billId: string,
+    guestCount: number
+  ): Promise<void> {
+    const order = orders.value.find(o => o.id === orderId)
+    if (!order) throw new Error('Order not found')
+
+    const bill = order.bills.find(b => b.id === billId)
+    if (!bill) throw new Error('Bill not found')
+
+    bill.guestCount = guestCount
+    await ordersService.updateOrder(order)
   }
 
   /**
@@ -1697,6 +1732,30 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   // ===== ORDER MOVEMENT METHODS =====
 
   /**
+   * Copy website-specific metadata from source order to target order.
+   * Called during merge to preserve the connection to the website order.
+   */
+  function preserveWebsiteMetadata(source: PosOrder, target: PosOrder): void {
+    target.source = source.source
+    target.externalOrderId = source.externalOrderId ?? target.externalOrderId
+    target.externalStatus = source.externalStatus ?? target.externalStatus
+    target.fulfillmentMethod = source.fulfillmentMethod ?? target.fulfillmentMethod
+    target.customerPhone = source.customerPhone ?? target.customerPhone
+    target.customerName = source.customerName ?? target.customerName
+    target.comment = source.comment ?? target.comment
+    target.pickupTime = source.pickupTime ?? target.pickupTime
+    target.estimatedReadyTime = source.estimatedReadyTime ?? target.estimatedReadyTime
+
+    DebugUtils.info(MODULE_NAME, '🌐 Website metadata preserved on target order', {
+      targetOrderId: target.id,
+      source: target.source,
+      externalOrderId: target.externalOrderId,
+      customerName: target.customerName,
+      fulfillmentMethod: target.fulfillmentMethod
+    })
+  }
+
+  /**
    * Move a dine-in order to a different table
    * If target table is occupied, merges the moving order's bills into the existing order
    * If target table is free, assigns the order to the table
@@ -1765,6 +1824,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
           targetOrderId: targetOrder.id,
           billsToMerge: orderToMove.bills.length
         })
+
+        // Preserve website metadata on target order if source is a website order
+        if (orderToMove.source === 'website') {
+          preserveWebsiteMetadata(orderToMove, targetOrder)
+        }
 
         // Merge all bills from moving order into target order
         const mergeResult = await mergeBillsIntoOrder(orderToMove.bills, targetOrder.id, {
@@ -1963,6 +2027,11 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
           targetOrderId: targetOrder.id,
           billsToMerge: orderToConvert.bills.length
         })
+
+        // Preserve website metadata on target order if source is a website order
+        if (orderToConvert.source === 'website') {
+          preserveWebsiteMetadata(orderToConvert, targetOrder)
+        }
 
         // Reprice items if moving between different channels (e.g., GoJek → dine_in)
         if (orderToConvert.channelId !== targetOrder.channelId && targetOrder.channelId) {
@@ -2770,6 +2839,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
     cancelOrder,
     deleteOrder,
     updateOrder,
+    updateBillGuestCount,
     recalculateOrderTotals,
     updateItemsPaymentStatus,
     updateOrderOnly,

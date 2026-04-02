@@ -1,6 +1,9 @@
 <!-- src/views/kitchen/kpi/KpiScreen.vue -->
 <template>
   <div class="kpi-screen">
+    <!-- KPI Bonus Widget (always visible) -->
+    <KpiBonusWidget :department="effectiveDepartment" />
+
     <!-- KPI Type Tabs -->
     <v-tabs v-model="activeTab" color="primary" class="kpi-tabs">
       <v-tab value="time">
@@ -10,6 +13,14 @@
       <v-tab value="foodcost">
         <v-icon icon="mdi-currency-usd" class="mr-2" />
         Food Cost
+      </v-tab>
+      <v-tab value="ritual">
+        <v-icon icon="mdi-calendar-check" class="mr-2" />
+        Ritual
+      </v-tab>
+      <v-tab value="cancellations">
+        <v-icon icon="mdi-cancel" class="mr-2" />
+        Cancellations
       </v-tab>
     </v-tabs>
 
@@ -28,6 +39,7 @@
         :loading="foodCostLoading"
         :error="foodCostError"
       />
+      <!-- Ritual tab has no top-level card -->
     </div>
 
     <!-- Detail Tabs -->
@@ -46,6 +58,11 @@
         :department="effectiveDepartment"
         :loading="foodCostLoading"
       />
+      <RitualKpiTab v-else-if="activeTab === 'ritual'" :department="effectiveDepartment" />
+      <CancellationsKpiTab
+        v-else-if="activeTab === 'cancellations'"
+        :department="effectiveDepartment"
+      />
     </div>
   </div>
 </template>
@@ -55,10 +72,13 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useTimeKpi, useFoodCostKpi } from '@/stores/kitchenKpi/composables'
 import { useAuthStore } from '@/stores/auth'
 import { DebugUtils } from '@/utils'
+import KpiBonusWidget from './components/KpiBonusWidget.vue'
 import TimeKpiCard from './components/TimeKpiCard.vue'
 import TimeKpiTab from './components/TimeKpiTab.vue'
 import FoodCostKpiCard from './components/FoodCostKpiCard.vue'
 import FoodCostKpiTab from './components/FoodCostKpiTab.vue'
+import RitualKpiTab from './components/RitualKpiTab.vue'
+import CancellationsKpiTab from './components/CancellationsKpiTab.vue'
 
 const MODULE_NAME = 'KpiScreen'
 
@@ -84,7 +104,7 @@ const authStore = useAuthStore()
 // STATE
 // =============================================
 
-const activeTab = ref<'time' | 'foodcost'>('time')
+const activeTab = ref<'time' | 'foodcost' | 'ritual' | 'cancellations'>('time')
 const detailOffset = ref(0)
 const DETAIL_LIMIT = 50
 
@@ -230,6 +250,10 @@ onMounted(() => {
   padding: var(--spacing-md);
   gap: var(--spacing-md);
   overflow-y: auto;
+}
+
+.kpi-screen > :first-child {
+  flex-shrink: 0;
 }
 
 .kpi-tabs {

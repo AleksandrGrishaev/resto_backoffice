@@ -90,6 +90,7 @@ export function transactionToSupabaseInsert(transaction: Transaction): SupabaseT
     status: transaction.status,
     transfer_details: transaction.transferDetails || null,
     is_correction: transaction.isCorrection || false,
+    accrual_date: transaction.accrualDate || null,
     updated_at: transaction.updatedAt
   }
 }
@@ -123,6 +124,7 @@ export function transactionFromSupabase(row: SupabaseTransaction): Transaction {
     status: row.status as any, // TransactionStatus
     transferDetails: (row.transfer_details as any) || undefined,
     isCorrection: row.is_correction || false,
+    accrualDate: row.accrual_date || row.created_at || new Date().toISOString(),
     createdAt: row.created_at || new Date().toISOString(),
     updatedAt: row.updated_at || new Date().toISOString()
   }

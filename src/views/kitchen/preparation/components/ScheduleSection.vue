@@ -1,5 +1,5 @@
 <!-- src/views/kitchen/preparation/components/ScheduleSection.vue -->
-<!-- Schedule Section - Groups tasks by time slot -->
+<!-- Schedule Section - Groups tasks by time slot with progress bar -->
 <template>
   <div class="schedule-section">
     <!-- Section Header -->
@@ -11,19 +11,27 @@
           <span class="text-caption text-medium-emphasis">{{ subtitle }}</span>
         </div>
       </div>
-      <v-chip size="small" :color="color" variant="tonal">
+      <v-chip size="small" :color="allCompleted ? 'success' : color" variant="tonal">
         {{ completedCount }}/{{ items.length }}
       </v-chip>
     </div>
 
-    <!-- Tasks List -->
+    <!-- Progress Bar -->
+    <v-progress-linear
+      :model-value="progressPercent"
+      :color="allCompleted ? 'success' : color"
+      height="3"
+      bg-color="transparent"
+    />
+
+    <!-- Tasks List (pending first, then completed) -->
     <div class="section-tasks">
       <ScheduleTaskCard
-        v-for="task in items"
+        v-for="task in sortedItems"
         :key="task.id"
         :task="task"
-        @complete="handleComplete"
-        @start="handleStart"
+        @quick-complete="handleQuickComplete"
+        @edit-complete="handleEditComplete"
       />
     </div>
   </div>
@@ -53,8 +61,8 @@ const props = defineProps<Props>()
 // =============================================
 
 const emit = defineEmits<{
-  complete: [task: ProductionScheduleItem]
-  start: [task: ProductionScheduleItem]
+  'quick-complete': [task: ProductionScheduleItem]
+  'edit-complete': [task: ProductionScheduleItem]
 }>()
 
 // =============================================
@@ -65,16 +73,34 @@ const completedCount = computed(() => {
   return props.items.filter(t => t.status === 'completed').length
 })
 
+const progressPercent = computed(() => {
+  if (props.items.length === 0) return 0
+  return (completedCount.value / props.items.length) * 100
+})
+
+const allCompleted = computed(() => {
+  return props.items.length > 0 && completedCount.value === props.items.length
+})
+
+/** Sort: pending items first, completed at bottom */
+const sortedItems = computed(() => {
+  return [...props.items].sort((a, b) => {
+    if (a.status === 'completed' && b.status !== 'completed') return 1
+    if (a.status !== 'completed' && b.status === 'completed') return -1
+    return 0
+  })
+})
+
 // =============================================
 // METHODS
 // =============================================
 
-function handleComplete(task: ProductionScheduleItem): void {
-  emit('complete', task)
+function handleQuickComplete(task: ProductionScheduleItem): void {
+  emit('quick-complete', task)
 }
 
-function handleStart(task: ProductionScheduleItem): void {
-  emit('start', task)
+function handleEditComplete(task: ProductionScheduleItem): void {
+  emit('edit-complete', task)
 }
 </script>
 
@@ -104,6 +130,12 @@ function handleStart(task: ProductionScheduleItem): void {
   }
   &.border-purple {
     border-left-color: #9c27b0;
+  }
+  &.border-success {
+    border-left-color: rgb(var(--v-theme-success));
+  }
+  &.border-teal {
+    border-left-color: #009688;
   }
 }
 

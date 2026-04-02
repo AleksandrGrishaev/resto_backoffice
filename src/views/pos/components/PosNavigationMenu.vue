@@ -29,6 +29,9 @@
 
     <!-- Printer Settings Dialog -->
     <PrinterSettingsDialog v-model="showPrinterSettingsDialog" />
+
+    <!-- Work Hours Dialog -->
+    <WorkHoursDialog v-model="showWorkHoursDialog" />
   </div>
 </template>
 
@@ -49,6 +52,9 @@ import EndShiftDialog from '@/views/pos/shifts/dialogs/EndShiftDialog.vue'
 
 // Import printer settings dialog
 import PrinterSettingsDialog from '@/views/pos/settings/PrinterSettingsDialog.vue'
+
+// Import work hours dialog
+import WorkHoursDialog from '@/views/pos/staff/WorkHoursDialog.vue'
 
 // Import stores
 import { usePosStore } from '@/stores/pos'
@@ -93,6 +99,7 @@ const swUpdateAvailable = ref(false)
 const showStartShiftDialog = ref(false)
 const showEndShiftDialog = ref(false)
 const showPrinterSettingsDialog = ref(false)
+const showWorkHoursDialog = ref(false)
 
 // Time update interval
 let timeInterval: NodeJS.Timeout | null = null
@@ -204,6 +211,12 @@ const menuSections = computed(() => [
         color: 'info' as const
       },
       {
+        id: POS_ACTIONS.WORK_HOURS,
+        icon: 'mdi-clock-outline',
+        label: 'Work Hours',
+        disabled: loading.value
+      },
+      {
         id: POS_ACTIONS.SYNC_DATA,
         icon: 'mdi-refresh',
         label: 'Sync Data',
@@ -301,6 +314,10 @@ const handleAction = async (actionId: string) => {
 
       case POS_ACTIONS.PRINTER_SETTINGS:
         handlePrinterSettings()
+        break
+
+      case POS_ACTIONS.WORK_HOURS:
+        showWorkHoursDialog.value = true
         break
 
       case POS_ACTIONS.LOGOUT:

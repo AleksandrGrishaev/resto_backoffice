@@ -9,6 +9,7 @@ import {
   fromSupabase as orderFromSupabase,
   fromOrderItemRow
 } from '@/stores/pos/orders/supabaseMappers'
+import { KITCHEN_ACTIVE_STATUSES } from '@/stores/pos/types'
 import { startScheduledOrdersService, stopScheduledOrdersService } from './scheduledOrdersService'
 import { DebugUtils, syncServerTime } from '@/utils'
 import { ENV } from '@/config/environment'
@@ -30,6 +31,13 @@ export const useKitchenStore = defineStore('kitchen', () => {
 
   // Track orders currently being fetched to prevent duplicate fetches
   const fetchingOrders = new Set<string>()
+
+  // Buffer events that arrive while an order is being fetched
+  // After fetch completes, buffered events are replayed to catch items added mid-fetch
+  const pendingItemEvents = new Map<
+    string,
+    Array<{ item: any; eventType: 'INSERT' | 'UPDATE' | 'DELETE'; oldItem?: any }>
+  >()
 
   // Track items from fetched orders to prevent re-processing
   const fetchedOrderItems = new Set<string>()
@@ -179,12 +187,16 @@ export const useKitchenStore = defineStore('kitchen', () => {
 
         // New item arrived (status changed to waiting, cooking, or ready)
         if (!order) {
-          // Check if order is already being fetched
+          // Check if order is already being fetched — buffer the event for replay
           if (fetchingOrders.has(orderId)) {
-            DebugUtils.debug(MODULE_NAME, 'Order fetch already in progress, skipping', {
+            const buffer = pendingItemEvents.get(orderId) || []
+            buffer.push({ item, eventType, oldItem })
+            pendingItemEvents.set(orderId, buffer)
+            DebugUtils.debug(MODULE_NAME, 'Buffered item event during order fetch', {
               orderId,
               itemId,
-              itemName: item.menu_item_name
+              itemName: item.menu_item_name,
+              bufferSize: buffer.length
             })
             return
           }
@@ -221,32 +233,75 @@ export const useKitchenStore = defineStore('kitchen', () => {
               }, 5000)
             }
           } finally {
-            // Always remove from fetching set
             fetchingOrders.delete(orderId)
+
+            // Replay buffered events only if fetch succeeded (order is in store)
+            const buffered = pendingItemEvents.get(orderId)
+            pendingItemEvents.delete(orderId)
+            if (buffered && buffered.length > 0 && order) {
+              DebugUtils.info(MODULE_NAME, 'Replaying buffered events after fetch', {
+                orderId,
+                count: buffered.length
+              })
+              for (const evt of buffered) {
+                if (!fetchedOrderItems.has(evt.item?.id || evt.oldItem?.id)) {
+                  // Direct add instead of recursive handleItemUpdate to prevent re-fetch loops
+                  if (evt.eventType === 'INSERT' || evt.eventType === 'UPDATE') {
+                    addItemToOrder(order, evt.item)
+                  }
+                }
+              }
+            }
           }
         } else {
-          // Order exists - add item to correct bill
-          const appItem = fromOrderItemRow(item)
-          const bill = order.bills.find(b => b.id === item.bill_id)
-          if (bill) {
-            const existingItemIndex = bill.items.findIndex(i => i.id === item.id)
-            if (existingItemIndex === -1) {
-              bill.items.push(appItem)
-              DebugUtils.info(MODULE_NAME, '➕ Item added to order', {
-                orderNumber: order.orderNumber,
-                itemName: item.menu_item_name,
-                status: item.status
-              })
-            } else {
-              DebugUtils.debug(MODULE_NAME, 'Item already exists in bill (skipping INSERT)', {
-                itemId: item.id,
-                itemName: item.menu_item_name
+          addItemToOrder(order, item)
+        }
+      } else if (eventType === 'UPDATE') {
+        // Item status changed (or item moved between orders via merge)
+
+        // Handle item migration: if item's order_id changed (merge), remove it from the old order.
+        // This happens when a website order is merged into a dine-in order —
+        // items get upserted with the new order_id, but kitchen still has them
+        // under the old order. Without this cleanup, items appear duplicated.
+        // Guard: only scan when order_id actually changed (oldItem available from realtime)
+        const orderIdChanged = oldItem && oldItem.order_id && oldItem.order_id !== item.order_id
+        let migratedFromOrderId: string | null = null
+        if (orderIdChanged)
+          for (const existingOrder of posOrdersStore.orders) {
+            if (existingOrder.id === orderId) continue // skip target order
+            for (const bill of existingOrder.bills) {
+              const oldIndex = bill.items.findIndex(i => i.id === itemId)
+              if (oldIndex !== -1) {
+                bill.items.splice(oldIndex, 1)
+                migratedFromOrderId = existingOrder.id
+                DebugUtils.info(MODULE_NAME, '🔀 Item migrated from order (merge)', {
+                  fromOrder: existingOrder.orderNumber,
+                  toOrderId: orderId,
+                  itemName: item.menu_item_name
+                })
+                break
+              }
+            }
+            if (migratedFromOrderId) break
+          }
+
+        // Clean up source order if it has no more kitchen items after migration
+        if (migratedFromOrderId) {
+          const srcIdx = posOrdersStore.orders.findIndex(o => o.id === migratedFromOrderId)
+          if (srcIdx !== -1) {
+            const srcOrder = posOrdersStore.orders[srcIdx]
+            const hasKitchenItems = srcOrder.bills.some(b =>
+              b.items.some(i => KITCHEN_ACTIVE_STATUSES.includes(i.status))
+            )
+            if (!hasKitchenItems) {
+              posOrdersStore.orders.splice(srcIdx, 1)
+              DebugUtils.info(MODULE_NAME, '📤 Old order removed after merge', {
+                orderNumber: srcOrder.orderNumber
               })
             }
           }
         }
-      } else if (eventType === 'UPDATE') {
-        // Item status changed
+
         if (order) {
           const appItem = fromOrderItemRow(item)
           // Find item in any bill
@@ -293,15 +348,38 @@ export const useKitchenStore = defineStore('kitchen', () => {
             // Recalculate order status based on items
             recalculateOrderStatus(order)
           } else {
-            DebugUtils.warn(MODULE_NAME, 'Item not found in order for update', {
+            // Item not found in any bill — add it (may have arrived via new bill)
+            DebugUtils.warn(MODULE_NAME, 'Item not found in order for update, adding it', {
               orderId,
               itemId: item.id,
               itemName: item.menu_item_name
             })
+            addItemToOrder(order, item)
+            recalculateOrderStatus(order)
           }
         } else {
-          // Order not found - might need to fetch it
-          DebugUtils.debug(MODULE_NAME, 'Item update for unknown order', { orderId, item })
+          // Order not found — fetch it from DB (e.g., after reconnect)
+          // Guard against concurrent fetches for the same order
+          if (fetchingOrders.has(orderId)) {
+            DebugUtils.debug(MODULE_NAME, 'Order fetch already in progress for UPDATE, skipping', {
+              orderId,
+              itemId: item.id
+            })
+          } else {
+            fetchingOrders.add(orderId)
+            try {
+              const fetchedOrder = await kitchenService.getOrderById(orderId)
+              if (fetchedOrder && fetchedOrder.bills.some(b => b.items.length > 0)) {
+                posOrdersStore.orders.push(fetchedOrder)
+                DebugUtils.info(MODULE_NAME, '📥 Order fetched for unknown update', {
+                  orderNumber: fetchedOrder.orderNumber,
+                  totalItems: fetchedOrder.bills.reduce((sum, b) => sum + b.items.length, 0)
+                })
+              }
+            } finally {
+              fetchingOrders.delete(orderId)
+            }
+          }
         }
       } else if (eventType === 'DELETE') {
         // Item removed from kitchen view (served, cancelled, or department changed)
@@ -321,7 +399,7 @@ export const useKitchenStore = defineStore('kitchen', () => {
 
           // Check if order should be removed (no more kitchen items)
           const hasKitchenItems = order.bills.some(b =>
-            b.items.some(i => ['scheduled', 'waiting', 'cooking', 'ready'].includes(i.status))
+            b.items.some(i => KITCHEN_ACTIVE_STATUSES.includes(i.status))
           )
 
           if (!hasKitchenItems) {
@@ -337,6 +415,55 @@ export const useKitchenStore = defineStore('kitchen', () => {
       }
     } catch (err) {
       DebugUtils.error(MODULE_NAME, 'Failed to handle item update', { err, eventType, item })
+    }
+  }
+
+  /**
+   * Add item to order with bill_id fallback
+   * If exact bill not found, uses first bill (prevents silent item loss)
+   */
+  function addItemToOrder(order: any, item: any) {
+    // Check if item already exists in any bill (before expensive mapping)
+    for (const bill of order.bills) {
+      if (bill.items.some((i: any) => i.id === item.id)) {
+        DebugUtils.debug(MODULE_NAME, 'Item already exists in order (skipping add)', {
+          itemId: item.id,
+          itemName: item.menu_item_name
+        })
+        return
+      }
+    }
+
+    const appItem = fromOrderItemRow(item)
+
+    // Find matching bill or fallback to first bill
+    let targetBill = order.bills.find((b: any) => b.id === item.bill_id)
+    if (!targetBill && order.bills.length > 0) {
+      targetBill = order.bills[0]
+      DebugUtils.warn(MODULE_NAME, 'Bill not found for item, using fallback bill', {
+        itemId: item.id,
+        itemName: item.menu_item_name,
+        expectedBillId: item.bill_id,
+        fallbackBillId: targetBill.id,
+        orderNumber: order.orderNumber
+      })
+    }
+
+    if (targetBill) {
+      targetBill.items.push(appItem)
+      DebugUtils.info(MODULE_NAME, '➕ Item added to order', {
+        orderNumber: order.orderNumber,
+        itemName: item.menu_item_name,
+        status: item.status,
+        billId: targetBill.id,
+        usedFallback: targetBill.id !== item.bill_id
+      })
+    } else {
+      DebugUtils.error(MODULE_NAME, 'Cannot add item - order has no bills', {
+        orderId: order.id,
+        itemId: item.id,
+        itemName: item.menu_item_name
+      })
     }
   }
 
@@ -442,6 +569,10 @@ export const useKitchenStore = defineStore('kitchen', () => {
   function cleanup() {
     unsubscribe()
     stopScheduledOrdersService()
+    recentItemUpdates.clear()
+    fetchingOrders.clear()
+    pendingItemEvents.clear()
+    fetchedOrderItems.clear()
     initialized.value = false
     realtimeConnected.value = false
     DebugUtils.info(MODULE_NAME, 'Kitchen store cleaned up')

@@ -128,7 +128,12 @@ export function useRecommendations() {
       })
 
       // Convert to schedule items
-      const scheduleData = recommendationsToScheduleData(active, department, date)
+      const scheduleData = recommendationsToScheduleData(
+        active,
+        department,
+        date,
+        recipesStore.preparations
+      )
 
       // Create schedule items (upsert)
       await kpiStore.createScheduleItems(scheduleData as CreateScheduleItemData[])

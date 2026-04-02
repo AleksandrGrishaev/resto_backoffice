@@ -81,6 +81,7 @@
             @apply-discount="handleApplyDiscount"
             @open-loyalty="handleOpenBillLoyalty"
             @detach-loyalty="handleDetachBillLoyalty"
+            @edit-guest-count="handleEditBillGuestCount"
             @send-to-kitchen="handleSendToKitchen"
             @move-items="handleMoveItems"
             @checkout="handleCheckout"
@@ -260,6 +261,9 @@
       @cancel="showCancelOrderDialog = false"
     />
 
+    <!-- Guest Count Edit Dialog -->
+    <GuestCountDialog v-model="showGuestCountEdit" @confirm="handleGuestCountUpdate" />
+
     <!-- Print Receipt Dialog (after payment) -->
     <PrintReceiptDialog
       v-model="showPrintReceiptDialog"
@@ -319,6 +323,7 @@ import MoveItemsDialog from './dialogs/MoveItemsDialog.vue'
 import CancelOrderDialog from './dialogs/CancelOrderDialog.vue'
 import OrderTypeDialog from './dialogs/OrderTypeDialog.vue'
 import TableSelectionDialog from './dialogs/TableSelectionDialog.vue'
+import GuestCountDialog from './dialogs/GuestCountDialog.vue'
 import CancellationRequestBanner from './components/CancellationRequestBanner.vue'
 
 const MODULE_NAME = 'OrderSection'
@@ -401,7 +406,10 @@ const paymentBillCustomerId = computed(() => {
     const cids = [...new Set(bills.map(b => b!.customerId).filter(Boolean))]
     if (cids.length === 1) return cids[0]
   }
-  // Fallback to order-level customer (e.g. customer attached before bill creation)
+  // If a specific bill is being paid and it has no customer, don't inherit from order
+  // (other bills may have a customer but this one doesn't)
+  if (paymentBill.value && !paymentBill.value.customerId) return null
+  // Fallback to order-level customer only when no specific bill context
   return currentOrder.value?.customerId || null
 })
 
@@ -600,6 +608,10 @@ const showCancelOrderDialog = ref(false)
 
 // Table Selection Dialog State
 const showTableSelectionDialog = ref(false)
+
+// Guest Count Edit State
+const showGuestCountEdit = ref(false)
+const editGuestCountBillId = ref<string | null>(null)
 
 // Computed - Main Data
 const currentOrder = computed((): PosOrder | null => {
@@ -966,23 +978,26 @@ const handleSelectBill = (billId: string): void => {
 const handleAddBill = async (): Promise<void> => {
   if (!currentOrder.value) return
 
-  try {
-    loading.value.actions = true
-    loadingMessage.value = 'Adding new bill...'
-
-    const result = await ordersStore.addBillToOrder(currentOrder.value.id, 'New Bill')
-
-    if (result.success) {
-      showSuccess('New bill added successfully')
-      hasUnsavedChanges.value = true
-    } else {
-      throw new Error(result.error || 'Failed to add bill')
+  if (currentOrder.value.type === 'dine_in') {
+    guestCountMode.value = 'new-bill'
+    showGuestCountEdit.value = true
+  } else {
+    try {
+      loading.value.actions = true
+      loadingMessage.value = 'Adding new bill...'
+      const result = await ordersStore.addBillToOrder(currentOrder.value.id, 'New Bill')
+      if (result.success) {
+        showSuccess('New bill added successfully')
+        hasUnsavedChanges.value = true
+      } else {
+        throw new Error(result.error || 'Failed to add bill')
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to add bill'
+      showError(message)
+    } finally {
+      loading.value.actions = false
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to add bill'
-    showError(message)
-  } finally {
-    loading.value.actions = false
   }
 }
 
@@ -1547,10 +1562,13 @@ const handleCheckout = async (itemIds: string[], billId: string): Promise<void> 
     }
 
     // Собрать items по itemIds для отображения в dialog
+    // ✅ FIX: Deduplicate by item.id (realtime race condition can cause duplicates in bill.items)
     const itemsToShow: PosBillItem[] = []
+    const seenIds = new Set<string>()
     for (const bill of currentOrder.value.bills) {
       for (const item of bill.items) {
-        if (itemIds.includes(item.id) && item.status !== 'cancelled') {
+        if (itemIds.includes(item.id) && item.status !== 'cancelled' && !seenIds.has(item.id)) {
+          seenIds.add(item.id)
           itemsToShow.push(item)
         }
       }
@@ -1661,6 +1679,12 @@ const handleCheckout = async (itemIds: string[], billId: string): Promise<void> 
       }
     }
 
+    // Ensure fresh customer data for loyalty/cashback balance display
+    const checkoutCustomerId = paymentBillCustomerId.value
+    if (checkoutCustomerId) {
+      await customersStore.refreshCustomer(checkoutCustomerId).catch(() => {})
+    }
+
     showPaymentDialog.value = true
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to prepare checkout'
@@ -1744,6 +1768,19 @@ const handlePaymentConfirm = async (paymentData: {
       orderId: paymentDialogData.value.orderId
     })
 
+    // Resolve customer for payment record (denormalize from bill)
+    const checkoutBillIds = paymentDialogData.value.billIds
+    const checkoutBills = checkoutBillIds
+      .map(id => currentOrder.value?.bills.find(b => b.id === id))
+      .filter(Boolean) as import('@/stores/pos/types').PosBill[]
+    const paymentCustomerId =
+      checkoutBills.find(b => b.customerId)?.customerId ||
+      currentOrder.value?.customerId ||
+      undefined
+    const paymentCustomerName = paymentCustomerId
+      ? customersStore.getById(paymentCustomerId)?.name
+      : undefined
+
     // ✅ OPTIMISTIC UI: Update UI immediately (before payment completes)
     // User sees immediate feedback instead of waiting 6 seconds
     const billIds = paymentDialogData.value.billIds
@@ -1766,7 +1803,10 @@ const handlePaymentConfirm = async (paymentData: {
       paymentDialogData.value.itemIds,
       paymentData.method,
       paymentData.amount,
-      paymentData.receivedAmount
+      paymentData.receivedAmount,
+      paymentCustomerId
+        ? { customerId: paymentCustomerId, customerName: paymentCustomerName }
+        : undefined
     )
 
     if (result.success) {
@@ -1777,12 +1817,29 @@ const handlePaymentConfirm = async (paymentData: {
         }`
       )
 
+      // Build loyalty info for receipt
+      const customerForReceipt = paymentCustomerId
+        ? customersStore.getById(paymentCustomerId)
+        : null
+      const loyaltyInfoForReceipt =
+        paymentData.pointsRedeemed || customerForReceipt?.loyaltyBalance
+          ? {
+              customerName: paymentCustomerName,
+              pointsRedeemed: paymentData.pointsRedeemed,
+              pointsBalance:
+                customerForReceipt?.loyaltyBalance !== undefined
+                  ? customerForReceipt.loyaltyBalance - (paymentData.pointsRedeemed || 0)
+                  : undefined
+            }
+          : undefined
+
       // Show print receipt dialog
       const receiptData = buildPaymentReceiptData(
         paymentData.method,
         paymentData.amount,
         paymentData.receivedAmount || 0,
-        paymentData.change || 0
+        paymentData.change || 0,
+        loyaltyInfoForReceipt
       )
 
       printReceiptData.value = {
@@ -1796,14 +1853,11 @@ const handlePaymentConfirm = async (paymentData: {
       showPrintReceiptDialog.value = true
 
       // 🎯 Redeem loyalty points AFTER payment success (P2 fix: no orphan deductions)
-      if (
-        paymentData.pointsRedeemed &&
-        paymentData.pointsRedeemed > 0 &&
-        currentOrder.value?.customerId
-      ) {
+      // Use paymentCustomerId (resolved from bill) — order.customerId is often null
+      if (paymentData.pointsRedeemed && paymentData.pointsRedeemed > 0 && paymentCustomerId) {
         try {
           const redeemResult = await loyaltyStore.redeemPoints(
-            currentOrder.value.customerId,
+            paymentCustomerId,
             paymentDialogData.value.orderId,
             paymentData.pointsRedeemed
           )
@@ -1902,50 +1956,52 @@ async function processLoyaltyAfterPayment(
     .filter(Boolean) as import('@/stores/pos/types').PosBill[]
   const billCustomerId = paidBills.find(b => b.customerId)?.customerId || order.customerId || null
 
-  if (!billCustomerId) return // No customer — nothing to do
-
-  const customer = customersStore.getById(billCustomerId)
+  const customer = billCustomerId ? customersStore.getById(billCustomerId) : null
   const loyaltyDisabled = customer?.disableLoyaltyAccrual === true
 
-  // 1. ALWAYS update customer stats (regardless of loyalty settings)
-  try {
-    const statsResult = await customersService.updateStats(billCustomerId, orderId, paidAmount)
-    if (statsResult.success) {
-      console.log(
-        `📊 Customer stats updated: ${customer?.name} — visits: ${statsResult.totalVisits}, spent: ${formatIDR(statsResult.totalSpent || 0)}`
-      )
-      if (statsResult.tierChanged) {
-        showSuccess(`${customer?.name} upgraded to ${statsResult.tier?.toUpperCase()}!`)
-      }
-      await customersStore.refreshCustomer(billCustomerId)
-    }
-  } catch (err) {
-    console.error('📊 Customer stats update failed:', err)
-  }
-
-  // 2. Apply cashback for digital loyalty customer (only if loyalty enabled AND on cashback program)
-  const onCashbackProgram = customer?.loyaltyProgram === 'cashback'
-  if (!loyaltyDisabled && onCashbackProgram) {
+  // 1. Update customer stats + cashback (only if customer is attached)
+  if (billCustomerId) {
+    // 1a. ALWAYS update customer stats (regardless of loyalty settings)
     try {
-      const result = await loyaltyStore.applyCashback(billCustomerId, orderId, paidAmount)
-      if (result.success) {
+      const statsResult = await customersService.updateStats(billCustomerId, orderId, paidAmount)
+      if (statsResult.success) {
         console.log(
-          `🎯 Cashback applied: ${formatIDR(result.cashback)} (${result.cashbackPct}% ${result.tier})`
+          `📊 Customer stats updated: ${customer?.name} — visits: ${statsResult.totalVisits}, spent: ${formatIDR(statsResult.totalSpent || 0)}`
         )
-        showSuccess(
-          `Cashback +${formatIDR(result.cashback)} (${result.cashbackPct}%). Balance: ${formatIDR(result.newBalance)}`
-        )
+        if (statsResult.tierChanged) {
+          showSuccess(`${customer?.name} upgraded to ${statsResult.tier?.toUpperCase()}!`)
+        }
+        await customersStore.refreshCustomer(billCustomerId)
       }
     } catch (err) {
-      console.error('🎯 Cashback failed:', err)
+      console.error('📊 Customer stats update failed:', err)
     }
-  } else if (loyaltyDisabled) {
-    console.log('🎯 Cashback skipped: loyalty accrual disabled for', customer?.name)
-  } else if (!onCashbackProgram) {
-    console.log('🎯 Cashback skipped: customer on stamps program', customer?.name)
+
+    // 1b. Apply cashback for digital loyalty customer (only if loyalty enabled AND on cashback program)
+    const onCashbackProgram = customer?.loyaltyProgram === 'cashback'
+    if (!loyaltyDisabled && onCashbackProgram) {
+      try {
+        const result = await loyaltyStore.applyCashback(billCustomerId, orderId, paidAmount)
+        if (result.success) {
+          console.log(
+            `🎯 Cashback applied: ${formatIDR(result.cashback)} (${result.cashbackPct}% ${result.tier})`
+          )
+          showSuccess(
+            `Cashback +${formatIDR(result.cashback)} (${result.cashbackPct}%). Balance: ${formatIDR(result.newBalance)}`
+          )
+        }
+      } catch (err) {
+        console.error('🎯 Cashback failed:', err)
+      }
+    } else if (loyaltyDisabled) {
+      console.log('🎯 Cashback skipped: loyalty accrual disabled for', customer?.name)
+    } else if (!onCashbackProgram) {
+      console.log('🎯 Cashback skipped: customer on stamps program', customer?.name)
+    }
   }
 
-  // 3. Add stamps — resolve card: loyaltyCard ref → bill.stampCardId → customer's active card
+  // 2. Add stamps — works with OR without customer (anonymous stamp cards supported)
+  // Resolve card: loyaltyCard ref → bill.stampCardId → customer's active card
   let card = loyaltyCard.value
   if (!card) {
     // Try to load from bill's stampCardId
@@ -1957,8 +2013,8 @@ async function processLoyaltyAfterPayment(
         console.error('🎯 Failed to load stamp card from bill:', err)
       }
     }
-    // Fallback: find customer's active stamp card
-    if (!card) {
+    // Fallback: find customer's active stamp card (only if customer exists)
+    if (!card && billCustomerId) {
       try {
         card = await loyaltyStore.getActiveCardByCustomerId(billCustomerId)
       } catch (err) {
@@ -1967,7 +2023,7 @@ async function processLoyaltyAfterPayment(
     }
   }
 
-  const onStampsProgram = customer?.loyaltyProgram !== 'cashback'
+  const onStampsProgram = !customer || customer.loyaltyProgram !== 'cashback'
   if (card && card.status === 'active' && !loyaltyDisabled && onStampsProgram) {
     try {
       const result = await loyaltyStore.addStamps(card.cardNumber, orderId, paidAmount)
@@ -1980,8 +2036,10 @@ async function processLoyaltyAfterPayment(
         )
         if (result.newCycle) {
           showSuccess('Stamp cycle complete! New cycle started.')
-          await customersStore.refreshCustomer(billCustomerId)
-          console.log('🎯 Customer upgraded to cashback program after stamp cycle completion')
+          if (billCustomerId) {
+            await customersStore.refreshCustomer(billCustomerId)
+            console.log('🎯 Customer upgraded to cashback program after stamp cycle completion')
+          }
         }
       }
     } catch (err) {
@@ -2188,7 +2246,7 @@ const handleLoyaltyCustomer = async (customer: Customer | null): Promise<void> =
   }
 
   await ordersStore.updateOrder(currentOrder.value)
-  showLoyaltyDialog.value = false
+  // Don't close dialog — let operator continue working (attach card, etc.)
   console.log(
     '🎯 Bill loyalty customer updated:',
     customer?.name || 'detached',
@@ -2241,7 +2299,7 @@ const handleLoyaltyCard = async (card: StampCardInfo | null): Promise<void> => {
   }
 
   await ordersStore.updateOrder(currentOrder.value)
-  showLoyaltyDialog.value = false
+  // Don't close dialog — let operator continue working
   console.log(
     '🎯 Bill loyalty card updated:',
     card?.cardNumber || 'detached',
@@ -2396,7 +2454,8 @@ function buildPaymentReceiptData(
   paymentMethod: string,
   _amount: number, // Used for logging, actual amount comes from paymentDialogData
   receivedAmount: number,
-  change: number
+  change: number,
+  loyaltyInfo?: { pointsRedeemed?: number; customerName?: string; pointsBalance?: number }
 ): ReceiptData | null {
   if (!currentOrder.value) return null
 
@@ -2468,7 +2527,14 @@ function buildPaymentReceiptData(
     paymentMethod: paymentMethod as 'cash' | 'card' | 'qr',
     receivedAmount: paymentMethod === 'cash' ? receivedAmount : undefined,
     change: paymentMethod === 'cash' ? change : undefined,
-    cashierName: order.createdBy || 'Staff'
+    cashierName: order.createdBy || 'Staff',
+    loyalty: loyaltyInfo
+      ? {
+          customerName: loyaltyInfo.customerName,
+          pointsRedeemed: loyaltyInfo.pointsRedeemed,
+          pointsBalance: loyaltyInfo.pointsBalance
+        }
+      : undefined
   }
 }
 
@@ -2573,6 +2639,50 @@ const handleCompleteOrder = async (): Promise<void> => {
   } finally {
     loading.value.actions = false
     loadingMessage.value = ''
+  }
+}
+
+const guestCountMode = ref<'edit' | 'new-bill'>('edit')
+
+const handleEditBillGuestCount = (billId: string): void => {
+  editGuestCountBillId.value = billId
+  guestCountMode.value = 'edit'
+  showGuestCountEdit.value = true
+}
+
+const handleGuestCountUpdate = async (count: number): Promise<void> => {
+  if (!currentOrder.value) return
+
+  if (guestCountMode.value === 'new-bill') {
+    // Creating a new bill with guest count
+    try {
+      loading.value.actions = true
+      loadingMessage.value = 'Adding new bill...'
+      const result = await ordersStore.addBillToOrder(currentOrder.value.id, 'New Bill', count)
+      if (result.success) {
+        showSuccess('New bill added successfully')
+        hasUnsavedChanges.value = true
+      } else {
+        throw new Error(result.error || 'Failed to add bill')
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to add bill'
+      showError(message)
+    } finally {
+      loading.value.actions = false
+    }
+    return
+  }
+
+  // Edit mode — update specific bill's guest count
+  const billId = editGuestCountBillId.value
+  if (!billId) return
+  try {
+    await ordersStore.updateBillGuestCount(currentOrder.value.id, billId, count)
+    showSuccess(`Guest count updated to ${count}`)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to update guest count'
+    showError(message)
   }
 }
 

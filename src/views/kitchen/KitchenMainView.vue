@@ -64,7 +64,10 @@
             :selected-department="selectedDepartment"
           />
 
-          <!-- Preparation Screen (Stub) -->
+          <!-- Tasks Screen (Kanban + Rituals) -->
+          <TasksScreen v-else-if="currentScreen === 'tasks'" />
+
+          <!-- Preparation Screen (Stock List + History) -->
           <PreparationScreen
             v-else-if="currentScreen === 'preparation'"
             @navigate-to-orders="handleScreenSelect('orders')"
@@ -98,6 +101,9 @@
             @create-based="handleCreateBased"
             @pending-item-consumed="pendingCatalogItem = null"
           />
+
+          <!-- Ritual Settings Screen -->
+          <RitualSettingsScreen v-else-if="currentScreen === 'ritual-settings'" />
 
           <!-- Constructor Screen -->
           <ConstructorScreen
@@ -156,8 +162,10 @@ import InventoryScreen from './inventory/InventoryScreen.vue'
 import type { KitchenScreenName } from './types'
 
 // Async-loaded screens to reduce initial bundle
+const TasksScreen = defineAsyncComponent(() => import('./tasks/TasksScreen.vue'))
 const CatalogScreen = defineAsyncComponent(() => import('./catalog/CatalogScreen.vue'))
 const ConstructorScreen = defineAsyncComponent(() => import('./constructor/ConstructorScreen.vue'))
+const RitualSettingsScreen = defineAsyncComponent(() => import('./tasks/RitualSettingsScreen.vue'))
 
 const MODULE_NAME = 'KitchenMainView'
 
@@ -331,15 +339,21 @@ const refreshScreenData = async (screen: KitchenScreenName): Promise<void> => {
       DebugUtils.debug(MODULE_NAME, 'Orders refreshed', { count: orders.length })
       break
     }
+    case 'tasks': {
+      const { useKitchenKpiStore } = await import('@/stores/kitchenKpi')
+      const { usePreparationStore } = await import('@/stores/preparation')
+      const kpiStore = useKitchenKpiStore()
+      const preparationStore = usePreparationStore()
+      await Promise.all([
+        kpiStore.loadSchedule({ department: userDepartment.value }),
+        preparationStore.fetchBalances(userDepartment.value)
+      ])
+      break
+    }
     case 'preparation': {
       const { usePreparationStore } = await import('@/stores/preparation')
-      const { useKitchenKpiStore } = await import('@/stores/kitchenKpi')
       const preparationStore = usePreparationStore()
-      const kpiStore = useKitchenKpiStore()
-      await Promise.all([
-        preparationStore.fetchBalances(userDepartment.value),
-        kpiStore.loadSchedule({ department: userDepartment.value })
-      ])
+      await preparationStore.fetchBalances(userDepartment.value)
       break
     }
     case 'kpi': {
@@ -360,6 +374,12 @@ const refreshScreenData = async (screen: KitchenScreenName): Promise<void> => {
       const storageStore = useStorageStore()
       const preparationStore = usePreparationStore()
       await Promise.all([storageStore.fetchBalances(), preparationStore.fetchBalances()])
+      break
+    }
+    case 'ritual-settings': {
+      const { useKitchenKpiStore } = await import('@/stores/kitchenKpi')
+      const kpiStore = useKitchenKpiStore()
+      await kpiStore.loadAllCustomTasks()
       break
     }
     case 'calculator':

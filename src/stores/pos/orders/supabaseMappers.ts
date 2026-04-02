@@ -34,6 +34,8 @@ interface BillMetadata {
   paymentStatus: 'unpaid' | 'partial' | 'paid'
   paidAmount: number
   notes?: string
+  // Guest count
+  guestCount?: number
   // Loyalty
   customerId?: string
   customerName?: string
@@ -67,6 +69,7 @@ export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
     paymentStatus: bill.paymentStatus,
     paidAmount: bill.paidAmount,
     notes: bill.notes,
+    guestCount: bill.guestCount,
     customerId: bill.customerId,
     customerName: bill.customerName,
     stampCardId: bill.stampCardId,
@@ -90,7 +93,7 @@ export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
     customer_name: order.customerName || null,
     customer_id: order.customerId || null,
     stamp_card_id: order.stampCardId || null,
-    guest_count: order.guestCount || 1,
+    guest_count: order.guestCount ?? 1,
 
     // Bills metadata (without items)
     bills: billsMetadata as any,
@@ -152,13 +155,21 @@ export function toSupabaseInsert(order: PosOrder): SupabaseOrderInsert {
 
 /**
  * Convert PosOrder (app) to Supabase format for UPDATE
+ *
+ * IMPORTANT: customer_id/customer_name are excluded from updates.
+ * These fields may be set externally (e.g. by claim_invite RPC via website),
+ * and POS would overwrite them with stale null values from its local copy.
+ * Customer attachment is handled separately via dedicated endpoints.
  */
 export function toSupabaseUpdate(order: PosOrder): SupabaseOrderUpdate {
   const insert = toSupabaseInsert(order)
   return {
     ...insert,
     created_at: undefined,
-    updated_at: order.updatedAt
+    updated_at: order.updatedAt,
+    // Don't overwrite externally-set customer fields
+    customer_id: undefined,
+    customer_name: undefined
   }
 }
 
@@ -200,8 +211,9 @@ export function fromSupabase(supabaseOrder: SupabaseOrder, items?: PosBillItem[]
     paymentStatus: meta.paymentStatus,
     paidAmount: meta.paidAmount,
     notes: meta.notes,
-    customerId: meta.customerId,
-    customerName: meta.customerName,
+    guestCount: meta.guestCount,
+    customerId: meta.customerId || supabaseOrder.customer_id || undefined,
+    customerName: meta.customerName || supabaseOrder.customer_name || undefined,
     stampCardId: meta.stampCardId,
     createdAt: meta.createdAt,
     updatedAt: meta.updatedAt
@@ -421,7 +433,9 @@ export function fromOrderItemRow(row: SupabaseOrderItem): PosBillItem {
     totalPrice: row.total_price,
 
     // Modifiers (new system)
-    selectedModifiers: (row.selected_modifiers as any) || [],
+    // Expand modifiers with quantity > 1 into duplicates for POS compatibility
+    // Web-winter sends { optionId, optionName, quantity: 2 }, POS expects duplicate objects
+    selectedModifiers: expandModifierQuantities((row.selected_modifiers as any) || []),
     modifications: [], // Legacy, not used in new system
 
     // Discounts
@@ -465,6 +479,32 @@ export function fromOrderItemRow(row: SupabaseOrderItem): PosBillItem {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
+}
+
+// =====================================================
+// MODIFIER HELPERS
+// =====================================================
+
+/**
+ * Expand modifiers with quantity > 1 into duplicate objects.
+ * Web-winter sends: [{ optionId, optionName, quantity: 2, priceAdjustment: 10000 }]
+ * POS expects:      [{ optionId, optionName }, { optionId, optionName }]
+ *
+ * The priceAdjustment is per-unit, so each duplicate keeps the original priceAdjustment.
+ */
+function expandModifierQuantities(modifiers: any[]): any[] {
+  if (!modifiers || modifiers.length === 0) return []
+
+  const result: any[] = []
+  for (const mod of modifiers) {
+    const qty = mod.quantity && mod.quantity > 1 ? mod.quantity : 1
+    // Create copies without the quantity field so POS logic counts array length
+    const { quantity: _q, ...rest } = mod
+    for (let i = 0; i < qty; i++) {
+      result.push({ ...rest })
+    }
+  }
+  return result
 }
 
 // =====================================================

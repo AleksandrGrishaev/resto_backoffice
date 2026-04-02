@@ -17,6 +17,7 @@ DECLARE
   v_point RECORD;
   v_deduct NUMERIC;
   v_new_balance NUMERIC;
+  v_order_number TEXT;
 BEGIN
   -- 1. Find customer
   SELECT * INTO v_customer
@@ -74,7 +75,11 @@ BEGIN
   SET loyalty_balance = v_new_balance
   WHERE id = p_customer_id;
 
-  -- 5. Log transaction
+  -- 5. Log transaction (include order number for readability)
+  IF p_order_id IS NOT NULL THEN
+    SELECT order_number INTO v_order_number FROM orders WHERE id = p_order_id;
+  END IF;
+
   INSERT INTO loyalty_transactions (customer_id, type, amount, balance_after, order_id, description)
   VALUES (
     p_customer_id,
@@ -82,7 +87,7 @@ BEGIN
     -p_amount,
     v_new_balance,
     p_order_id,
-    'Points redeemed for order'
+    'Points redeemed for order ' || COALESCE(v_order_number, p_order_id::text)
   );
 
   RETURN jsonb_build_object(

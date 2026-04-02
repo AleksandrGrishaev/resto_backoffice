@@ -56,7 +56,14 @@ export interface StampCardListItem {
 export interface LoyaltyTransaction {
   id: string
   customerId: string
-  type: 'cashback' | 'redemption' | 'conversion' | 'adjustment' | 'expiration'
+  type:
+    | 'cashback'
+    | 'redemption'
+    | 'conversion'
+    | 'adjustment'
+    | 'expiration'
+    | 'reversal'
+    | 'stamp'
   amount: number
   balanceAfter: number
   orderId: string | null

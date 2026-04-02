@@ -374,6 +374,49 @@
             </v-radio-group>
           </div>
 
+          <!-- Category filter (only when scope is 'all') -->
+          <div
+            v-if="exportScope === 'all' && exportCategoryOptions.length > 1"
+            class="filter-group mt-3"
+          >
+            <div class="d-flex align-center justify-space-between">
+              <div class="filter-label mb-0">
+                Categories
+                <span class="text-caption text-medium-emphasis">
+                  ({{ exportSelectedCategoryCount }}/{{ exportCategoryOptions.length }})
+                </span>
+              </div>
+              <v-btn
+                variant="text"
+                density="compact"
+                size="x-small"
+                @click="toggleAllExportCategories"
+              >
+                {{ exportAllCategoriesSelected ? 'Deselect all' : 'Select all' }}
+              </v-btn>
+            </div>
+            <div class="export-category-list mt-1">
+              <v-checkbox
+                v-for="cat in exportCategoryOptions"
+                :key="cat.id"
+                :model-value="isExportCategorySelected(cat.id)"
+                density="compact"
+                hide-details
+                color="primary"
+                @update:model-value="toggleExportCategory(cat.id)"
+              >
+                <template #label>
+                  <div class="d-flex align-center justify-space-between flex-grow-1">
+                    <span class="text-body-2">{{ cat.name }}</span>
+                    <span class="text-caption text-medium-emphasis ml-2">
+                      {{ cat.count }}
+                    </span>
+                  </div>
+                </template>
+              </v-checkbox>
+            </div>
+          </div>
+
           <!-- Export mode for Menu -->
           <div v-if="activeSection === 'menu'" class="filter-group mt-3">
             <div class="filter-label">Detail level</div>
@@ -399,7 +442,19 @@
             </v-radio-group>
           </div>
 
-          <!-- Include instructions -->
+          <!-- Options -->
+          <div
+            v-if="activeSection === 'menu' && exportMode === 'detailed'"
+            class="filter-group mt-3"
+          >
+            <v-checkbox
+              v-model="exportIncludeCosts"
+              label="Include costs"
+              hide-details
+              density="compact"
+              color="primary"
+            />
+          </div>
           <v-checkbox
             v-if="activeSection === 'recipes' || activeSection === 'preps'"
             v-model="exportIncludeInstructions"
@@ -422,11 +477,86 @@
           <v-spacer />
           <v-btn variant="text" @click="showExportDialog = false">Cancel</v-btn>
           <v-btn
+            v-if="
+              activeSection === 'menu' &&
+              exportMode === 'detailed' &&
+              exportModifierItems.length > 0
+            "
+            color="primary"
+            variant="flat"
+            prepend-icon="mdi-tune"
+            :disabled="exportItemCount === 0"
+            @click="openModifierSelection"
+          >
+            Configure & Export
+          </v-btn>
+          <v-btn
+            v-else
             color="primary"
             variant="flat"
             prepend-icon="mdi-download"
             :loading="isExporting"
             :disabled="exportItemCount === 0"
+            @click="handleBulkExport"
+          >
+            Export PDF
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Step 2: Modifier selection dialog -->
+    <v-dialog v-model="showModifierSelectionDialog" max-width="520" scrollable>
+      <v-card>
+        <v-card-title class="d-flex align-center">
+          <v-icon start color="primary">mdi-tune-variant</v-icon>
+          Select Modifiers to Export
+        </v-card-title>
+        <v-card-subtitle class="px-4 pb-2">
+          Uncheck modifier groups you don't want in the PDF
+        </v-card-subtitle>
+        <v-divider />
+        <v-card-text class="pa-0" style="max-height: 60vh">
+          <v-list density="compact">
+            <template v-for="item in exportModifierItems" :key="item.id">
+              <v-list-subheader class="modifier-item-header">
+                {{ item.name }}
+              </v-list-subheader>
+              <v-list-item
+                v-for="mg in item.groups"
+                :key="mg.key"
+                class="pl-8"
+                @click="exportModifierFilter[mg.key] = !exportModifierFilter[mg.key]"
+              >
+                <template #prepend>
+                  <v-checkbox-btn
+                    :model-value="exportModifierFilter[mg.key] !== false"
+                    color="primary"
+                    density="compact"
+                    @update:model-value="exportModifierFilter[mg.key] = $event"
+                  />
+                </template>
+                <v-list-item-title class="text-body-2">
+                  {{ mg.name }}
+                  <span class="text-caption text-medium-emphasis ml-1">
+                    ({{ mg.type }}, {{ mg.optionCount }} options)
+                  </span>
+                </v-list-item-title>
+              </v-list-item>
+            </template>
+          </v-list>
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="pa-4">
+          <v-btn size="small" variant="text" @click="toggleAllModifiers(true)">Select All</v-btn>
+          <v-btn size="small" variant="text" @click="toggleAllModifiers(false)">Deselect All</v-btn>
+          <v-spacer />
+          <v-btn variant="text" @click="showModifierSelectionDialog = false">Cancel</v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            prepend-icon="mdi-download"
+            :loading="isExporting"
             @click="handleBulkExport"
           >
             Export PDF
@@ -474,8 +604,13 @@ import type {
   MenuCategoryExport,
   CatalogExportData,
   CatalogExportItem,
-  CatalogExportModifierGroup,
-  ExportTreeNode
+  ExportTreeNode,
+  RecipeExportData,
+  RecipeExport,
+  RecipeComponentExport,
+  RecipeCategoryExport,
+  RecipeModifierGroupExport,
+  PreparationExport
 } from '@/core/export'
 
 type SectionId = 'menu' | 'recipes' | 'preps' | 'products'
@@ -563,18 +698,105 @@ async function handleRecalculateCosts() {
 }
 
 // --- Export ---
-const { isExporting, exportMenu, exportCatalog } = useExport()
+const { isExporting, exportMenu, exportCatalog, exportRecipes } = useExport()
 const showExportDialog = ref(false)
 const exportScope = ref<'all' | 'category'>('all')
 const exportMode = ref<'summary' | 'detailed'>('detailed')
 const exportIncludeInstructions = ref(true)
+const exportIncludeCosts = ref(false)
+const exportExcludedCategoryIds = ref<string[]>([])
 
-const exportItemCount = computed(() => {
-  if (exportScope.value === 'category' && currentCategory.value) {
-    return categoryItems.value.length
-  }
-  return currentSectionItems.value.length
+// Categories available for export filtering (only when scope is 'all')
+const exportCategoryOptions = computed(() => {
+  return visibleCategories.value.filter(c => c.id !== '__uncategorized__')
 })
+function isExportCategorySelected(id: string) {
+  return !exportExcludedCategoryIds.value.includes(id)
+}
+function toggleExportCategory(id: string) {
+  const idx = exportExcludedCategoryIds.value.indexOf(id)
+  if (idx >= 0) exportExcludedCategoryIds.value.splice(idx, 1)
+  else exportExcludedCategoryIds.value.push(id)
+}
+function toggleAllExportCategories() {
+  if (exportExcludedCategoryIds.value.length === 0) {
+    exportExcludedCategoryIds.value = exportCategoryOptions.value.map(c => c.id)
+  } else {
+    exportExcludedCategoryIds.value = []
+  }
+}
+const exportAllCategoriesSelected = computed(() => exportExcludedCategoryIds.value.length === 0)
+const exportSelectedCategoryCount = computed(
+  () => exportCategoryOptions.value.length - exportExcludedCategoryIds.value.length
+)
+// key = "itemId:groupName" → boolean
+const exportModifierFilter = ref<Record<string, boolean>>({})
+const showModifierSelectionDialog = ref(false)
+
+// Items that will actually be exported (respects category exclusion)
+const exportFilteredItems = computed<CatalogItem[]>(() => {
+  if (exportScope.value === 'category' && currentCategory.value) {
+    return categoryItems.value
+  }
+  let items = currentSectionItems.value
+  if (exportExcludedCategoryIds.value.length > 0) {
+    items = items.filter(i => !exportExcludedCategoryIds.value.includes(i.categoryId || ''))
+  }
+  return items
+})
+
+const exportItemCount = computed(() => exportFilteredItems.value.length)
+
+interface ExportModifierItem {
+  id: string
+  name: string
+  groups: Array<{
+    key: string // "itemId:groupName"
+    name: string
+    type: string
+    optionCount: number
+  }>
+}
+
+/** Items with modifiers in export scope — for the selection dialog */
+const exportModifierItems = computed<ExportModifierItem[]>(() => {
+  if (activeSection.value !== 'menu' || exportMode.value !== 'detailed') return []
+  const items = exportFilteredItems.value
+  const result: ExportModifierItem[] = []
+  for (const ci of items) {
+    const mi = (menuStore.menuItems as MenuItem[]).find(m => m.id === ci.id)
+    if (!mi?.modifierGroups?.length) continue
+    const groups = mi.modifierGroups.map(g => ({
+      key: `${ci.id}:${g.name}`,
+      name: g.name,
+      type: g.type,
+      optionCount: g.options?.length || 0
+    }))
+    result.push({ id: ci.id, name: ci.name, groups })
+  }
+  return result
+})
+
+function openModifierSelection() {
+  // Initialize all modifier keys as checked (default: include all)
+  for (const item of exportModifierItems.value) {
+    for (const g of item.groups) {
+      if (!(g.key in exportModifierFilter.value)) {
+        exportModifierFilter.value[g.key] = true
+      }
+    }
+  }
+  showExportDialog.value = false
+  showModifierSelectionDialog.value = true
+}
+
+function toggleAllModifiers(value: boolean) {
+  for (const item of exportModifierItems.value) {
+    for (const g of item.groups) {
+      exportModifierFilter.value[g.key] = value
+    }
+  }
+}
 
 function getComponentName(type: string, id: string): string {
   if (type === 'product') return (productsStore.getProductById(id) as Product | null)?.name || id
@@ -648,11 +870,83 @@ function convertTreeNodes(
   })
 }
 
+/**
+ * Collect dependent preparations and recipes recursively (for menu PDF export).
+ * Deduplicates by ID.
+ */
+function collectMenuDeps(
+  components: Array<{ type: string; id: string }>,
+  collectedPreps: Map<string, PreparationExport>,
+  collectedRecipes: Map<string, RecipeExport>
+): void {
+  for (const comp of components) {
+    if (comp.type === 'preparation' && !collectedPreps.has(comp.id)) {
+      const prep = recipesStore.getPreparationById(comp.id) as Preparation | undefined
+      if (prep?.recipe?.length) {
+        const prepComponents = prep.recipe.map(ing => ({
+          name: getComponentName(ing.type, ing.id),
+          type: ing.type as 'product' | 'preparation',
+          quantity: ing.quantity,
+          unit: ing.unit,
+          cost: resolveComponentCost(ing.type, ing.id, ing.quantity)
+        }))
+        const prepTotalCost = prepComponents.reduce((sum, c) => sum + (c.cost || 0), 0)
+        const outputQty = prep.outputQuantity || 1
+        collectedPreps.set(prep.id, {
+          id: prep.id,
+          name: prep.name,
+          portionType: (prep.portionType || 'weight') as 'weight' | 'portion',
+          outputQuantity: outputQty,
+          outputUnit: prep.outputUnit || 'gram',
+          costPerUnit: prepTotalCost > 0 ? Math.round(prepTotalCost / outputQty) : 0,
+          totalCost: prepTotalCost,
+          components: prepComponents,
+          instructions: prep.instructions
+        })
+        collectMenuDeps(
+          prep.recipe.filter(r => r.type === 'preparation' || r.type === 'recipe'),
+          collectedPreps,
+          collectedRecipes
+        )
+      }
+    }
+    if (comp.type === 'recipe' && !collectedRecipes.has(comp.id)) {
+      const r = recipesStore.getRecipeById(comp.id) as Recipe | undefined
+      if (r?.components?.length) {
+        const recipeComponents: RecipeComponentExport[] = r.components.map(c => ({
+          name: getComponentName(c.componentType, c.componentId),
+          type: c.componentType as RecipeComponentExport['type'],
+          quantity: c.quantity,
+          unit: c.unit,
+          cost: resolveComponentCost(c.componentType, c.componentId, c.quantity)
+        }))
+        const recipeTotalCost = recipeComponents.reduce((sum, c) => sum + (c.cost || 0), 0)
+        const outputQty = r.outputQuantity || 1
+
+        collectedRecipes.set(r.id, {
+          id: r.id,
+          name: r.name,
+          category: r.category,
+          outputQuantity: outputQty,
+          outputUnit: r.outputUnit || 'portion',
+          costPerUnit: recipeTotalCost > 0 ? Math.round(recipeTotalCost / outputQty) : 0,
+          totalCost: recipeTotalCost,
+          components: recipeComponents,
+          instructions: r.instructions
+        })
+        // Recurse into recipe components
+        collectMenuDeps(
+          r.components.map(c => ({ type: c.componentType, id: c.componentId })),
+          collectedPreps,
+          collectedRecipes
+        )
+      }
+    }
+  }
+}
+
 async function handleBulkExport() {
-  const items =
-    exportScope.value === 'category' && currentCategory.value
-      ? categoryItems.value
-      : currentSectionItems.value
+  const items = exportFilteredItems.value
   if (items.length === 0) return
 
   const dateStr = new Date().toLocaleDateString('en-US', {
@@ -670,86 +964,154 @@ async function handleBulkExport() {
           : ''
 
       if (exportMode.value === 'detailed') {
-        // Detailed export — each item with composition tree + modifiers
-        const catalogItems: CatalogExportItem[] = items
-          .map(ci => {
-            const mi = (menuStore.menuItems as MenuItem[]).find(m => m.id === ci.id)
-            if (!mi) return null
-            const catName =
-              menuCategories.value.find(c => c.id === ci.categoryId)?.name || 'Uncategorized'
-            const variants = (mi.variants || []).filter(v => v.isActive)
-            const hasMultipleVariants = variants.length > 1
+        // Detailed export — kitchen-friendly: dishes with ingredients + modifiers, then unique preps/recipes
+        const allDepPreps = new Map<string, PreparationExport>()
+        const allDepRecipes = new Map<string, RecipeExport>()
+        const flattenedRecipeIds = new Set<string>() // Recipes already inlined into menu items
+        const catRecipes = new Map<string, RecipeExport[]>()
 
-            // Build modifier groups with trees
-            let modGroups: CatalogExportModifierGroup[] | undefined
-            if (mi.modifierGroups?.length) {
-              const displayGroups = buildModifierDisplayData(mi)
-              modGroups = displayGroups.map(g => ({
-                name: g.name,
-                type: g.type,
-                options: g.options.map(o => ({
-                  name: o.name,
-                  priceAdjustment: o.priceAdjustment,
-                  cost: o.compositionCost,
-                  isDefault: o.isDefault,
-                  tree: convertTreeNodes(o.compositionTree)
+        for (const ci of items) {
+          const mi = (menuStore.menuItems as MenuItem[]).find(m => m.id === ci.id)
+          if (!mi) continue
+          const catName =
+            menuCategories.value.find(c => c.id === ci.categoryId)?.name || 'Uncategorized'
+          const variant = (mi.variants || []).find(v => v.isActive) || mi.variants?.[0]
+          if (!variant) continue
+
+          const hasComposition = variant.composition && variant.composition.length > 0
+          const isOnlyModifiers = !hasComposition
+
+          let components: RecipeComponentExport[] = []
+          let instructions: string | undefined
+
+          if (hasComposition) {
+            // Flatten single-recipe composition
+            if (variant.composition.length === 1 && variant.composition[0].type === 'recipe') {
+              flattenedRecipeIds.add(variant.composition[0].id)
+              const r = recipesStore.getRecipeById(variant.composition[0].id) as Recipe | undefined
+              if (r?.components?.length) {
+                instructions = r.instructions
+                components = r.components.map(comp => ({
+                  name: getComponentName(comp.componentType, comp.componentId),
+                  type: comp.componentType as RecipeComponentExport['type'],
+                  quantity: comp.quantity,
+                  unit: comp.unit,
+                  cost: resolveComponentCost(comp.componentType, comp.componentId, comp.quantity)
                 }))
+              } else {
+                components = variant.composition.map(comp => ({
+                  name: getComponentName(comp.type, comp.id),
+                  type: comp.type as RecipeComponentExport['type'],
+                  quantity: comp.quantity,
+                  unit: comp.unit,
+                  cost: resolveComponentCost(comp.type, comp.id, comp.quantity)
+                }))
+              }
+            } else {
+              components = variant.composition.map(comp => ({
+                name: getComponentName(comp.type, comp.id),
+                type: comp.type as RecipeComponentExport['type'],
+                quantity: comp.quantity,
+                unit: comp.unit,
+                cost: resolveComponentCost(comp.type, comp.id, comp.quantity)
               }))
             }
+          }
 
-            if (hasMultipleVariants) {
-              return {
-                id: ci.id,
-                name: ci.name,
-                type: 'menu' as const,
-                categoryName: catName,
-                department: ci.department,
-                cost: ci.cost || 0,
-                tree: [],
-                variants: variants.map((v, idx) => {
-                  const tree = buildTree('menu', ci.id, undefined, idx)
-                  const cost = tree.reduce((sum, n) => sum + (n.cost ?? 0), 0)
-                  return {
-                    name: v.name,
-                    price: v.price,
-                    cost,
-                    foodCostPercent: v.price > 0 ? (cost / v.price) * 100 : 0,
-                    tree: convertTreeNodes(tree)
-                  }
-                }),
-                modifierGroups: modGroups
-              } as CatalogExportItem
-            } else {
-              const tree = buildTree('menu', ci.id)
-              const cost = tree.reduce((sum, n) => sum + (n.cost ?? 0), 0)
-              const price = variants[0]?.price || 0
-              return {
-                id: ci.id,
-                name: ci.name,
-                type: 'menu' as const,
-                categoryName: catName,
-                department: ci.department,
-                price,
-                cost,
-                foodCostPercent: price > 0 ? (cost / price) * 100 : 0,
-                tree: convertTreeNodes(tree),
-                modifierGroups: modGroups
-              } as CatalogExportItem
+          // Build modifier groups (filtered by user checkbox selection)
+          let modGroups: RecipeModifierGroupExport[] | undefined
+          if (mi.modifierGroups?.length) {
+            const displayGroups = buildModifierDisplayData(mi)
+            const filtered = displayGroups.filter(
+              g => exportModifierFilter.value[`${ci.id}:${g.name}`] !== false
+            )
+            if (filtered.length > 0) {
+              modGroups = filtered.map(g => ({
+                name: g.name,
+                type: g.type,
+                options: g.options
+                  .filter(o => o.isActive)
+                  .map(o => {
+                    // Flatten compositionTree into RecipeComponentExport[]
+                    const flatComps: RecipeComponentExport[] = []
+                    for (const node of o.compositionTree) {
+                      flatComps.push({
+                        name: node.name,
+                        type: (node.type === 'menu'
+                          ? 'recipe'
+                          : node.type) as RecipeComponentExport['type'],
+                        quantity: node.quantity || 0,
+                        unit: node.unit || '',
+                        cost: node.cost || 0
+                      })
+                    }
+                    // Collect dep preps/recipes from modifier compositions
+                    if (o.compositionTree.length > 0) {
+                      collectMenuDeps(
+                        o.compositionTree.map(n => ({ type: n.type, id: n.id })),
+                        allDepPreps,
+                        allDepRecipes
+                      )
+                    }
+                    return {
+                      name: o.name,
+                      isDefault: o.isDefault,
+                      priceAdjustment: o.priceAdjustment,
+                      components: flatComps,
+                      totalCost: o.compositionCost
+                    }
+                  })
+              }))
             }
-          })
-          .filter((x): x is CatalogExportItem => x !== null)
+          }
 
-        const data: CatalogExportData = {
-          title: `Menu (${deptLabel})${scopeLabel}`,
-          date: dateStr,
-          department: deptLabel,
-          items: catalogItems,
-          summary: {
-            totalItems: catalogItems.length,
-            totalCost: catalogItems.reduce((sum, i) => sum + i.cost, 0)
+          // Skip items with no content at all
+          if (components.length === 0 && !modGroups?.length) continue
+
+          const totalCost = components.reduce((sum, c) => sum + (c.cost || 0), 0)
+
+          if (!catRecipes.has(catName)) catRecipes.set(catName, [])
+          catRecipes.get(catName)!.push({
+            id: ci.id,
+            name: ci.name,
+            outputQuantity: 1,
+            outputUnit: 'portion',
+            costPerUnit: totalCost,
+            totalCost,
+            components,
+            modifierGroups: modGroups,
+            instructions
+          })
+
+          // Collect dependent preparations and recipes from base composition
+          if (hasComposition) {
+            collectMenuDeps(variant.composition, allDepPreps, allDepRecipes)
           }
         }
-        await exportCatalog(data, { avoidPageBreaks: true })
+
+        const categories: RecipeCategoryExport[] = []
+        for (const [catName, recipes] of catRecipes) {
+          categories.push({ name: catName, recipes })
+        }
+
+        const depPreps = [...allDepPreps.values()].filter(v => v != null)
+        // Exclude recipes that were already flattened/inlined into menu items
+        const depRecipes = [...allDepRecipes.values()].filter(
+          r => r != null && !flattenedRecipeIds.has(r.id)
+        )
+
+        const data: RecipeExportData = {
+          title: `Menu (${deptLabel})${scopeLabel}`,
+          date: dateStr,
+          categories,
+          dependentRecipes: depRecipes.length > 0 ? depRecipes : undefined,
+          dependentPreparations: depPreps.length > 0 ? depPreps : undefined
+        }
+        await exportRecipes(data, {
+          includeInstructions: true,
+          includeCosts: exportIncludeCosts.value,
+          avoidPageBreaks: true
+        })
       } else {
         // Summary export — table with cost/price/FC%
         const catMap = new Map<string, CatalogItem[]>()
@@ -877,6 +1239,7 @@ async function handleBulkExport() {
     }
 
     showExportDialog.value = false
+    showModifierSelectionDialog.value = false
   } catch (error) {
     console.error('[CatalogExport] Failed:', error)
   }
@@ -1398,6 +1761,11 @@ watch(activeDepartment, () => {
   navStack.value = []
 })
 
+// Reset category filter when export dialog opens
+watch(showExportDialog, open => {
+  if (open) exportExcludedCategoryIds.value = []
+})
+
 // Navigate to pending item from constructor
 function navigateToPendingItem() {
   const pending = props.pendingItem
@@ -1608,5 +1976,21 @@ watch(
   font-weight: 500;
   margin-bottom: 6px;
   color: rgba(255, 255, 255, 0.7);
+}
+
+.export-category-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 2px 8px;
+}
+
+.modifier-item-header {
+  font-weight: 600 !important;
+  font-size: 0.85rem !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  text-transform: none !important;
+  padding-top: 12px !important;
 }
 </style>

@@ -8,6 +8,7 @@ import {
   fromOrderItemRow,
   buildStatusUpdatePayload
 } from '@/stores/pos/orders/supabaseMappers'
+import { KITCHEN_ACTIVE_STATUSES } from '@/stores/pos/types'
 import type { PosOrder, ItemStatus, PosBillItem } from '@/stores/pos/types'
 import { DebugUtils, extractErrorDetails } from '@/utils'
 import { executeSupabaseMutation } from '@/utils/supabase'
@@ -39,7 +40,7 @@ export async function getActiveKitchenOrders(): Promise<PosOrder[]> {
     const { data: itemsData, error: itemsError } = await supabase
       .from('order_items')
       .select('*')
-      .in('status', ['scheduled', 'waiting', 'cooking', 'ready']) // Filter by item status
+      .in('status', KITCHEN_ACTIVE_STATUSES)
       .gte('created_at', startOfDay) // Only today's items
 
     if (itemsError) {
@@ -119,7 +120,7 @@ export async function getOrderById(orderId: string): Promise<PosOrder | null> {
       .from('order_items')
       .select('*')
       .eq('order_id', orderId)
-      .in('status', ['scheduled', 'waiting', 'cooking', 'ready'])
+      .in('status', KITCHEN_ACTIVE_STATUSES)
 
     if (itemsError) {
       DebugUtils.error(MODULE_NAME, 'Failed to load items for order', {

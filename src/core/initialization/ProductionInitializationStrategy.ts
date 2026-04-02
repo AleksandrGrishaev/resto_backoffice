@@ -391,8 +391,6 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
         return this.loadChannelsFromAPI()
       case 'gobiz':
         return this.loadGobizFromAPI()
-      case 'menuCollections':
-        return this.loadMenuCollectionsFromAPI()
       case 'customers':
         return this.loadCustomersFromAPI()
       case 'loyalty':
@@ -403,6 +401,8 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
         return this.loadWebsiteSettingsFromAPI()
       case 'websiteMenu':
         return this.loadWebsiteMenuFromAPI()
+      case 'staff':
+        return this.loadStaffFromAPI()
       default:
         DebugUtils.warn(MODULE_NAME, `Unknown store: ${storeName}`)
         return null
@@ -1225,31 +1225,31 @@ export class ProductionInitializationStrategy implements InitializationStrategy 
     }
   }
 
-  private async loadMenuCollectionsFromAPI(): Promise<StoreInitResult> {
+  private async loadStaffFromAPI(): Promise<StoreInitResult> {
     const start = Date.now()
 
     try {
-      const { useMenuCollectionsStore } = await import('@/stores/menuCollections')
-      const store = useMenuCollectionsStore()
+      const { useStaffStore } = await import('@/stores/staff')
+      const store = useStaffStore()
 
-      DebugUtils.store(MODULE_NAME, '[PROD] Loading menu collections from API...')
+      DebugUtils.store(MODULE_NAME, '[PROD] Loading staff from API...')
 
       if (!store.initialized) {
         await store.initialize()
       }
 
       return {
-        name: 'menuCollections',
+        name: 'staff',
         success: true,
-        count: store.collections.length,
+        count: store.members.length,
         duration: Date.now() - start
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to load menu collections'
-      DebugUtils.warn(MODULE_NAME, `[PROD] ${message} (non-critical)`, { error })
+      const message = error instanceof Error ? error.message : 'Failed to load staff'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [PROD] ${message} (non-critical)`, { error })
 
       return {
-        name: 'menuCollections',
+        name: 'staff',
         success: false,
         error: message,
         duration: Date.now() - start

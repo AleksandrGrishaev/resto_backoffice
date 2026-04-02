@@ -8,14 +8,67 @@ import { usePosOrdersStore } from './ordersStore'
 import { fromSupabase, fromOrderItemRow } from './supabaseMappers'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { DebugUtils } from '@/utils'
+import { useOnlineOrderAlerts } from './composables/useOnlineOrderAlerts'
 
 const MODULE_NAME = 'POSOrdersRealtime'
+
+// Online order sound — simple module-level Audio element (no AudioContext!)
+// AudioContext.resume() consumes the transient user activation, leaving nothing
+// for Audio.play(). So we skip AudioContext entirely and use Audio directly.
+const ONLINE_ORDER_SOUND_URL = '/sounds/online-order.mp3'
+let _audio: HTMLAudioElement | null = null
+let _audioUnlocked = false
+
+/**
+ * Unlock audio for browser autoplay policy.
+ * Must be called from a Vue @click handler (real user gesture).
+ * IMPORTANT: Fully synchronous — async functions lose user activation in some browsers.
+ */
+export function unlockOnlineOrderAudio(): void {
+  if (_audioUnlocked) return
+  if (!_audio) {
+    _audio = new Audio(ONLINE_ORDER_SOUND_URL)
+    _audio.volume = 0.8
+  }
+  // play() MUST be called synchronously in the user gesture call stack.
+  // Do NOT use async/await — Chrome loses user activation across microtask boundaries.
+  const p = _audio.play()
+  if (p) {
+    p.then(() => {
+      _audio!.pause()
+      _audio!.currentTime = 0
+      _audioUnlocked = true
+      DebugUtils.info(MODULE_NAME, 'Online order audio unlocked')
+    }).catch(err => {
+      DebugUtils.warn(MODULE_NAME, 'Could not unlock online order audio', { error: err })
+    })
+  }
+}
 
 // Cancellation request callback type
 type CancellationRequestCallback = (order: {
   orderId: string
   orderNumber: string
   reason?: string
+}) => void
+
+// Customer linked callback type (from invite QR claim)
+type CustomerLinkedCallback = (info: {
+  orderId: string
+  orderNumber: string
+  customerId: string
+  customerName?: string
+}) => void
+
+// Online order received callback type
+type OnlineOrderReceivedCallback = (order: {
+  orderId: string
+  orderNumber: string
+  type: string
+  itemCount: number
+  total: number
+  customerName?: string
+  fulfillmentMethod?: string
 }) => void
 
 /**
@@ -37,23 +90,75 @@ export function useOrdersRealtime() {
   const itemsConnected = ref(false)
   const isConnected = computed(() => ordersConnected.value && itemsConnected.value)
   const ordersStore = usePosOrdersStore()
+  const alerts = useOnlineOrderAlerts()
   let onCancellationRequest: CancellationRequestCallback | null = null
+  let onCustomerLinked: CustomerLinkedCallback | null = null
+  let onOnlineOrder: OnlineOrderReceivedCallback | null = null
+
+  // Register sound player for the alerts system (reuses existing audio element)
+  alerts.registerSoundPlayer(() => {
+    if (_audioUnlocked && _audio) {
+      _audio.currentTime = 0
+      _audio.play().catch(() => {})
+    }
+  })
+
+  // Reconnect state
+  let isUnsubscribing = false
+  let ordersRetryTimer: ReturnType<typeof setTimeout> | null = null
+  let itemsRetryTimer: ReturnType<typeof setTimeout> | null = null
+  let ordersRetryCount = 0
+  let itemsRetryCount = 0
+  const MAX_RETRY_DELAY_MS = 30_000 // 30s cap
+
+  // Visibility change catch-up: track when page was last active
+  let lastActiveTimestamp: string = new Date().toISOString()
+  let visibilityHandler: (() => void) | null = null
+
+  function getRetryDelay(attempt: number): number {
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s, 30s...
+    return Math.min(1000 * Math.pow(2, attempt), MAX_RETRY_DELAY_MS)
+  }
+
+  function scheduleOrdersReconnect() {
+    if (isUnsubscribing) return
+    if (ordersRetryTimer) clearTimeout(ordersRetryTimer)
+    const delay = getRetryDelay(ordersRetryCount)
+    ordersRetryCount++
+    DebugUtils.warn(
+      MODULE_NAME,
+      `Scheduling orders reconnect in ${delay}ms (attempt ${ordersRetryCount})`
+    )
+    ordersRetryTimer = setTimeout(() => {
+      ordersRetryTimer = null
+      if (!isUnsubscribing) subscribeOrders()
+    }, delay)
+  }
+
+  function scheduleItemsReconnect() {
+    if (isUnsubscribing) return
+    if (itemsRetryTimer) clearTimeout(itemsRetryTimer)
+    const delay = getRetryDelay(itemsRetryCount)
+    itemsRetryCount++
+    DebugUtils.warn(
+      MODULE_NAME,
+      `Scheduling order_items reconnect in ${delay}ms (attempt ${itemsRetryCount})`
+    )
+    itemsRetryTimer = setTimeout(() => {
+      itemsRetryTimer = null
+      if (!isUnsubscribing) subscribeItems()
+    }, delay)
+  }
 
   /**
-   * Subscribe to orders and order_items table changes
-   * POS listens for updates from Kitchen (item status changes)
+   * Subscribe to orders table (order-level updates)
    */
-  function subscribe() {
-    if (ordersChannel.value || itemsChannel.value) {
-      DebugUtils.debug(MODULE_NAME, 'Already subscribed, unsubscribing first')
-      unsubscribe()
+  function subscribeOrders() {
+    if (ordersChannel.value) {
+      supabase.removeChannel(ordersChannel.value)
+      ordersChannel.value = null
     }
 
-    DebugUtils.info(MODULE_NAME, 'Subscribing to POS orders + order_items...')
-
-    // =====================================================
-    // SUBSCRIBE TO orders TABLE (order-level updates)
-    // =====================================================
     ordersChannel.value = supabase
       .channel('pos-orders')
       .on(
@@ -82,21 +187,32 @@ export function useOrdersRealtime() {
         ordersConnected.value = status === 'SUBSCRIBED'
 
         if (status === 'SUBSCRIBED') {
+          ordersRetryCount = 0
           console.log('📡 [POSRealtime] orders channel SUBSCRIBED')
         } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ [POSRealtime] orders channel ERROR:', err?.message)
+          scheduleOrdersReconnect()
         } else if (status === 'TIMED_OUT') {
           console.error('⏰ [POSRealtime] orders channel TIMED_OUT')
+          scheduleOrdersReconnect()
         } else if (status === 'CLOSED') {
           console.warn('🔌 [POSRealtime] orders channel CLOSED')
+          if (!isUnsubscribing) scheduleOrdersReconnect()
         } else {
           console.log(`🔄 [POSRealtime] orders channel status: ${status}`)
         }
       })
+  }
 
-    // =====================================================
-    // SUBSCRIBE TO order_items TABLE (item-level updates)
-    // =====================================================
+  /**
+   * Subscribe to order_items table (item-level updates)
+   */
+  function subscribeItems() {
+    if (itemsChannel.value) {
+      supabase.removeChannel(itemsChannel.value)
+      itemsChannel.value = null
+    }
+
     itemsChannel.value = supabase
       .channel('pos-order-items')
       .on(
@@ -114,17 +230,152 @@ export function useOrdersRealtime() {
         itemsConnected.value = status === 'SUBSCRIBED'
 
         if (status === 'SUBSCRIBED') {
+          itemsRetryCount = 0
           console.log('📡 [POSRealtime] order_items channel SUBSCRIBED')
         } else if (status === 'CHANNEL_ERROR') {
           console.error('❌ [POSRealtime] order_items channel ERROR:', err?.message)
+          scheduleItemsReconnect()
         } else if (status === 'TIMED_OUT') {
           console.error('⏰ [POSRealtime] order_items channel TIMED_OUT')
+          scheduleItemsReconnect()
         } else if (status === 'CLOSED') {
           console.warn('🔌 [POSRealtime] order_items channel CLOSED')
+          if (!isUnsubscribing) scheduleItemsReconnect()
         } else {
           console.log(`🔄 [POSRealtime] order_items channel status: ${status}`)
         }
       })
+  }
+
+  /**
+   * Catch-up: fetch online orders that arrived while the page was hidden.
+   * Supabase Realtime does NOT replay missed events, so we query the DB directly.
+   */
+  async function catchUpMissedOrders() {
+    try {
+      DebugUtils.info(MODULE_NAME, '🔄 Catching up missed online orders since', {
+        since: lastActiveTimestamp
+      })
+
+      // Also filter by today to avoid loading stale orders from previous days/shifts
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+
+      const { data: newOrders, error: fetchError } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('source', 'website')
+        .gte('created_at', lastActiveTimestamp)
+        .gte('created_at', todayStart.toISOString())
+        .not('status', 'eq', 'cancelled')
+        .order('created_at', { ascending: true })
+
+      if (fetchError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to catch up missed orders', { error: fetchError })
+        return
+      }
+
+      if (!newOrders || newOrders.length === 0) {
+        DebugUtils.debug(MODULE_NAME, 'No missed online orders')
+        return
+      }
+
+      let addedCount = 0
+      for (const orderRow of newOrders) {
+        // Skip if already in store
+        if (ordersStore.orders.some(o => o.id === orderRow.id)) continue
+
+        // Load items
+        const { data: itemRows } = await supabase
+          .from('order_items')
+          .select('*')
+          .eq('order_id', orderRow.id)
+
+        const items = (itemRows || []).map(fromOrderItemRow)
+        const order = fromSupabase(orderRow, items)
+        ordersStore.orders.push(order)
+        addedCount++
+
+        // Mark as unacknowledged — triggers persistent sound + blinking
+        alerts.markOrderUnacknowledged(order.id)
+
+        // Play sound + notify for each missed order
+        if (_audioUnlocked && _audio) {
+          _audio.currentTime = 0
+          _audio.play().catch(() => {})
+        }
+        if (onOnlineOrder) {
+          onOnlineOrder({
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            type: order.type,
+            itemCount: items.length,
+            total: order.finalAmount,
+            customerName: order.customerName,
+            fulfillmentMethod: order.fulfillmentMethod
+          })
+        }
+      }
+
+      if (addedCount > 0) {
+        DebugUtils.info(MODULE_NAME, `✅ Caught up ${addedCount} missed online order(s)`)
+      }
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Error during catch-up', { err })
+    }
+  }
+
+  /**
+   * Handle page visibility change (tablet sleep/wake, tab switch).
+   * On return to foreground: catch up missed orders + re-subscribe if needed.
+   */
+  function handleVisibilityChange() {
+    if (document.hidden) {
+      // Going to background — record timestamp
+      lastActiveTimestamp = new Date().toISOString()
+      DebugUtils.debug(MODULE_NAME, 'Page hidden, recording timestamp', {
+        at: lastActiveTimestamp
+      })
+    } else {
+      // Returning to foreground — catch up missed orders
+      DebugUtils.info(MODULE_NAME, '👁️ Page visible again, checking for missed orders...')
+
+      // Re-subscribe channels if they disconnected while in background
+      if (!ordersConnected.value || !itemsConnected.value) {
+        DebugUtils.warn(MODULE_NAME, 'Channels disconnected while hidden, re-subscribing')
+        subscribeOrders()
+        subscribeItems()
+      }
+
+      catchUpMissedOrders()
+    }
+  }
+
+  /**
+   * Subscribe to orders and order_items table changes
+   * POS listens for updates from Kitchen (item status changes)
+   */
+  function subscribe() {
+    isUnsubscribing = false
+    ordersRetryCount = 0
+    itemsRetryCount = 0
+
+    if (ordersChannel.value || itemsChannel.value) {
+      DebugUtils.debug(MODULE_NAME, 'Already subscribed, unsubscribing first')
+      unsubscribe()
+      isUnsubscribing = false // Reset after cleanup
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Subscribing to POS orders + order_items...')
+    subscribeOrders()
+    subscribeItems()
+
+    // Register visibility change handler for catch-up on tablet wake
+    if (!visibilityHandler) {
+      visibilityHandler = handleVisibilityChange
+      document.addEventListener('visibilitychange', visibilityHandler)
+      DebugUtils.debug(MODULE_NAME, 'Registered visibilitychange handler for catch-up')
+    }
   }
 
   /**
@@ -196,12 +447,41 @@ export function useOrdersRealtime() {
       // Add to store
       ordersStore.orders.push(order)
 
+      // Mark as unacknowledged — triggers persistent sound loop + blinking
+      alerts.markOrderUnacknowledged(order.id)
+
       DebugUtils.info(MODULE_NAME, '✅ Online order added to POS', {
         orderNumber: order.orderNumber,
         type: order.type,
         itemCount: items.length,
         total: order.finalAmount
       })
+
+      // Play online order sound immediately (first alert)
+      if (_audioUnlocked && _audio) {
+        _audio.currentTime = 0
+        _audio.play().catch(err => {
+          DebugUtils.warn(MODULE_NAME, 'Failed to play online order sound', { error: err })
+        })
+      } else {
+        DebugUtils.debug(
+          MODULE_NAME,
+          'Audio not yet unlocked — sound skipped (will work after first click)'
+        )
+      }
+
+      // Notify POS view via callback
+      if (onOnlineOrder) {
+        onOnlineOrder({
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          type: order.type,
+          itemCount: items.length,
+          total: order.finalAmount,
+          customerName: order.customerName,
+          fulfillmentMethod: order.fulfillmentMethod
+        })
+      }
     } catch (err) {
       DebugUtils.error(MODULE_NAME, 'Error loading online order', { err, orderId: newOrder.id })
     }
@@ -245,8 +525,33 @@ export function useOrdersRealtime() {
       if (updatedOrder.customer_name !== undefined)
         existingOrder.customerName = updatedOrder.customer_name
       if (updatedOrder.customer_phone) existingOrder.customerPhone = updatedOrder.customer_phone
-      if (updatedOrder.customer_id !== undefined)
+      if (updatedOrder.customer_id !== undefined) {
+        const oldCustomerId = existingOrder.customerId
         existingOrder.customerId = updatedOrder.customer_id
+
+        // Propagate customer to first bill if bill has no customer yet
+        if (updatedOrder.customer_id && existingOrder.bills?.length) {
+          const firstBill = existingOrder.bills[0]
+          if (!firstBill.customerId) {
+            firstBill.customerId = updatedOrder.customer_id
+            firstBill.customerName = updatedOrder.customer_name || undefined
+          }
+        }
+
+        // Detect customer linked via invite QR (null → value)
+        if (!oldCustomerId && updatedOrder.customer_id && onCustomerLinked) {
+          DebugUtils.info(MODULE_NAME, '🔗 Customer linked to order via invite', {
+            orderNumber: existingOrder.orderNumber,
+            customerId: updatedOrder.customer_id
+          })
+          onCustomerLinked({
+            orderId: existingOrder.id,
+            orderNumber: existingOrder.orderNumber,
+            customerId: updatedOrder.customer_id,
+            customerName: updatedOrder.customer_name
+          })
+        }
+      }
       if (updatedOrder.comment) existingOrder.comment = updatedOrder.comment
 
       // Cancellation request fields
@@ -281,6 +586,25 @@ export function useOrdersRealtime() {
         orderNumber: existingOrder.orderNumber,
         status: existingOrder.status
       })
+
+      // Persist updated order to localStorage for offline resilience
+      try {
+        const stored = localStorage.getItem('pos_orders')
+        if (stored) {
+          const ordersList = JSON.parse(stored)
+          const idx = ordersList.findIndex((o: { id: string }) => o.id === existingOrder.id)
+          if (idx >= 0) {
+            Object.assign(ordersList[idx], {
+              customer_id: existingOrder.customerId,
+              customer_name: existingOrder.customerName,
+              status: existingOrder.status
+            })
+            localStorage.setItem('pos_orders', JSON.stringify(ordersList))
+          }
+        }
+      } catch {
+        // localStorage sync is best-effort
+      }
     } else {
       DebugUtils.debug(MODULE_NAME, 'Order not found in local state, ignoring', {
         orderId: updatedOrder?.id
@@ -371,18 +695,47 @@ export function useOrdersRealtime() {
           paidAmount: 0
         } as any)
       }
+      // If this is a website order and the item is draft on an active order,
+      // alert POS that there are new pending items to review
+      console.log('🔔 [POSRealtime] Checking pending item alert:', {
+        orderSource: order.source,
+        itemStatus: item.status,
+        orderStatus: order.status,
+        orderId: order.id,
+        willAlert: order.source === 'website' && item.status === 'draft' && order.status !== 'draft'
+      })
+      if (order.source === 'website' && item.status === 'draft' && order.status !== 'draft') {
+        alerts.markOrderHasPendingItems(order.id)
+        // Also play sound immediately for new pending items
+        if (_audioUnlocked && _audio) {
+          _audio.currentTime = 0
+          _audio.play().catch(() => {})
+        }
+      }
     } else if (eventType === 'UPDATE') {
       // Find item in any bill and update it
       for (const bill of order.bills) {
         const itemIndex = bill.items.findIndex(i => i.id === item.id)
         if (itemIndex !== -1) {
-          // Preserve kitchenNotes from local if not in Supabase
+          // Preserve local-only fields that may not be in Supabase row
           const localItem = bill.items[itemIndex]
           const updatedItem = fromOrderItemRow(item)
 
           // Merge: keep local kitchenNotes if Supabase doesn't have it
           if (localItem.kitchenNotes && !updatedItem.kitchenNotes) {
             updatedItem.kitchenNotes = localItem.kitchenNotes
+          }
+
+          // ✅ FIX: Preserve cancellation metadata set locally (race with cancelItem)
+          if (
+            localItem.status === 'cancelled' &&
+            !updatedItem.cancelledAt &&
+            localItem.cancelledAt
+          ) {
+            updatedItem.cancelledAt = localItem.cancelledAt
+            updatedItem.cancelledBy = localItem.cancelledBy
+            updatedItem.cancellationReason = localItem.cancellationReason
+            updatedItem.cancellationNotes = localItem.cancellationNotes
           }
 
           bill.items[itemIndex] = updatedItem
@@ -455,6 +808,15 @@ export function useOrdersRealtime() {
    * IMPORTANT: Must be called manually by the parent store (e.g., posStore.cleanup())
    */
   function unsubscribe() {
+    isUnsubscribing = true
+    if (ordersRetryTimer) {
+      clearTimeout(ordersRetryTimer)
+      ordersRetryTimer = null
+    }
+    if (itemsRetryTimer) {
+      clearTimeout(itemsRetryTimer)
+      itemsRetryTimer = null
+    }
     if (ordersChannel.value) {
       DebugUtils.info(MODULE_NAME, 'Unsubscribing from POS orders')
       supabase.removeChannel(ordersChannel.value)
@@ -467,6 +829,15 @@ export function useOrdersRealtime() {
     }
     ordersConnected.value = false
     itemsConnected.value = false
+
+    // Remove visibility handler
+    if (visibilityHandler) {
+      document.removeEventListener('visibilitychange', visibilityHandler)
+      visibilityHandler = null
+    }
+
+    // Cleanup alerts (stop sound loop)
+    alerts.destroy()
   }
 
   /**
@@ -476,10 +847,27 @@ export function useOrdersRealtime() {
     onCancellationRequest = callback
   }
 
+  /**
+   * Register callback for customer linked via invite QR
+   */
+  function onCustomerLinkedToOrder(callback: CustomerLinkedCallback) {
+    onCustomerLinked = callback
+  }
+
+  /**
+   * Register callback for online order received notifications
+   */
+  function onOnlineOrderReceived(callback: OnlineOrderReceivedCallback) {
+    onOnlineOrder = callback
+  }
+
   return {
     subscribe,
     unsubscribe,
     isConnected,
-    onCancellationRequested
+    onCancellationRequested,
+    onCustomerLinkedToOrder,
+    onOnlineOrderReceived,
+    alerts
   }
 }

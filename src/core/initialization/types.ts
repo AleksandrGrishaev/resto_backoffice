@@ -47,12 +47,12 @@ export type StoreName =
   | 'paymentSettings'
   | 'channels'
   | 'gobiz'
-  | 'menuCollections'
   | 'customers'
   | 'loyalty'
   | 'website'
   | 'websiteSettings'
   | 'websiteMenu'
+  | 'staff'
   | 'debug'
 
 /**

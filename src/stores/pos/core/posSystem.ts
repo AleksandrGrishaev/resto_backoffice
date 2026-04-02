@@ -62,6 +62,7 @@ export const POS_ACTIONS = {
   GOODS_RECEIPT: 'goods_receipt', // Sprint 6: POS Receipt
   FULL_RESET: 'full_reset', // Full POS cache clear + reload
   PRINTER_SETTINGS: 'printer_settings', // Printer settings dialog
+  WORK_HOURS: 'work_hours', // Daily staff work hours entry
   LOGOUT: 'logout'
 } as const
 

@@ -55,9 +55,6 @@ export const STORE_DEPENDENCIES: Record<StoreName, StoreName[]> = {
   // GoBiz integration (depends on channels for channel context)
   gobiz: ['channels'],
 
-  // Menu collections (depends on menu for item references)
-  menuCollections: ['menu'],
-
   // Loyalty program
   customers: [],
   loyalty: ['customers'],
@@ -66,6 +63,9 @@ export const STORE_DEPENDENCIES: Record<StoreName, StoreName[]> = {
   website: [],
   websiteSettings: [],
   websiteMenu: ['menu'],
+
+  // Staff & payroll
+  staff: [],
 
   // Debug system
   debug: []
@@ -156,9 +156,6 @@ export const STORE_CATEGORIES: Record<StoreName, StoreCategory> = {
   // GoBiz integration
   gobiz: 'backoffice',
 
-  // Menu collections (backoffice / admin)
-  menuCollections: 'backoffice',
-
   // Loyalty program (needed by both backoffice and POS)
   customers: 'backoffice',
   loyalty: 'backoffice',
@@ -167,6 +164,9 @@ export const STORE_CATEGORIES: Record<StoreName, StoreCategory> = {
   website: 'backoffice',
   websiteSettings: 'backoffice',
   websiteMenu: 'backoffice',
+
+  // Staff & payroll
+  staff: 'backoffice',
 
   // Опциональные
   debug: 'optional'

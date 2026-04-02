@@ -2,6 +2,7 @@
 
 export type KitchenScreenName =
   | 'orders'
+  | 'tasks'
   | 'preparation'
   | 'kpi'
   | 'requests'
@@ -9,3 +10,4 @@ export type KitchenScreenName =
   | 'inventory'
   | 'catalog'
   | 'constructor'
+  | 'ritual-settings'

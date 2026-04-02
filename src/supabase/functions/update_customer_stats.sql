@@ -60,11 +60,14 @@ BEGIN
   IF v_settings IS NOT NULL AND v_settings.tiers IS NOT NULL THEN
     v_tiers := v_settings.tiers;
 
-    -- Calculate spending in window (include current order amount since it may not be 'completed' yet)
-    SELECT COALESCE(SUM(final_amount), 0) + p_order_amount INTO v_spent_window
-    FROM orders
+    -- Calculate spending in window — sum completed payments for this customer
+    -- Note: current payment is already saved with customer_id before this RPC runs,
+    -- so no need to add p_order_amount separately
+    SELECT COALESCE(SUM(amount), 0) INTO v_spent_window
+    FROM payments
     WHERE customer_id = p_customer_id
-      AND status IN ('completed', 'collected')
+      AND status = 'completed'
+      AND amount > 0
       AND created_at >= now() - (v_settings.tier_window_days || ' days')::interval;
 
     -- Find target tier (highest qualifying)

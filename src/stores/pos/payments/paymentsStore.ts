@@ -107,7 +107,8 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
     itemIds: string[],
     method: PaymentMethod,
     amount: number,
-    receivedAmount?: number
+    receivedAmount?: number,
+    customerInfo?: { customerId?: string; customerName?: string }
   ): Promise<ServiceResponse<PosPayment>> {
     loading.value = true
 
@@ -192,7 +193,9 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         receivedAmount,
         processedBy: 'Current User', // TODO: Get from authStore
         shiftId: currentShift.id, // ✅ Now guaranteed to exist
-        order // ✅ SPRINT 8: Pass order for tax calculations
+        order, // ✅ SPRINT 8: Pass order for tax calculations
+        customerId: customerInfo?.customerId,
+        customerName: customerInfo?.customerName
       }
 
       const result = await paymentsService.processPayment(paymentData)
@@ -473,6 +476,34 @@ export const usePosPaymentsStore = defineStore('posPayments', () => {
         originalPaymentId,
         originalPayment.itemIds
       )
+
+      // Reverse loyalty cashback (non-blocking, fire-and-forget)
+      // Resolve customer: payment.customerId > bill.customerId > order.customerId
+      let refundCustomerId = originalPayment.customerId
+      if (!refundCustomerId) {
+        const ordersStore = usePosOrdersStore()
+        const order = ordersStore.orders.find(o => o.id === originalPayment.orderId)
+        if (order) {
+          refundCustomerId =
+            order.bills.find(b => originalPayment.billIds.includes(b.id) && b.customerId)
+              ?.customerId ||
+            order.customerId ||
+            undefined
+        }
+      }
+      if (refundCustomerId) {
+        const custId = refundCustomerId
+        import('@/stores/loyalty/loyaltyStore').then(({ useLoyaltyStore }) => {
+          useLoyaltyStore()
+            .reverseLoyaltyOnRefund(custId, originalPayment.orderId, Math.abs(refundPayment.amount))
+            .then(result => {
+              if (result.reversed > 0) {
+                console.log(`🔄 Loyalty reversed: ${result.reversed} points`)
+              }
+            })
+            .catch(err => console.error('🔄 Loyalty reversal failed (non-blocking):', err))
+        })
+      }
 
       console.log('💳 Refund processed:', refundPayment.paymentNumber, {
         shiftId: refundPayment.shiftId,

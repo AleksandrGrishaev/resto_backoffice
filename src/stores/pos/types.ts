@@ -52,6 +52,10 @@ export type ItemStatus =
   | 'ready'
   | 'served'
   | 'cancelled'
+
+/** Item statuses visible on the kitchen display (active preparation pipeline) */
+export const KITCHEN_ACTIVE_STATUSES: ItemStatus[] = ['scheduled', 'waiting', 'cooking', 'ready']
+
 export type ItemPaymentStatus = 'unpaid' | 'paid' | 'refunded'
 
 // Cancellation reasons for order items
@@ -259,6 +263,9 @@ export interface PosBill extends BaseEntity {
   paidAmount: number
   notes?: string
 
+  // Guest count for this bill (dine-in)
+  guestCount?: number
+
   // Per-bill loyalty (different customers per bill at same table)
   customerId?: string
   customerName?: string
@@ -382,6 +389,10 @@ export interface PosPayment extends BaseEntity {
   orderId: string // Which order
   billIds: string[] // Which bills
   itemIds: string[] // Which items (for partial payments)
+
+  // Customer linkage (denormalized from bill at payment time)
+  customerId?: string
+  customerName?: string
 
   // Refund data
   refundedAt?: string

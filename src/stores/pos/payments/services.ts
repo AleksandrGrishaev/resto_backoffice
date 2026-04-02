@@ -255,6 +255,8 @@ export class PaymentsService {
     processedBy: string
     shiftId?: string // 🆕 Add shiftId parameter
     order?: any // ✅ SPRINT 8: Pass order for tax calculations
+    customerId?: string
+    customerName?: string
   }): Promise<ServiceResponse<PosPayment>> {
     try {
       const paymentNumber = this.generatePaymentNumber()
@@ -291,6 +293,8 @@ export class PaymentsService {
         receiptPrinted: false,
         processedBy: paymentData.processedBy,
         shiftId: paymentData.shiftId, // 🆕 Add shiftId to payment
+        customerId: paymentData.customerId,
+        customerName: paymentData.customerName,
         details, // ✅ SPRINT 8: Add tax breakdown details
         processedAt: TimeUtils.getCurrentLocalISO(),
         createdAt: TimeUtils.getCurrentLocalISO(),
@@ -354,6 +358,8 @@ export class PaymentsService {
         billIds: originalPayment.billIds,
         itemIds: originalPayment.itemIds,
         method: originalPayment.method,
+        customerId: originalPayment.customerId,
+        customerName: originalPayment.customerName,
         status: 'refunded',
         amount: -refundAmount, // Negative!
         processedBy: originalPayment.processedBy,

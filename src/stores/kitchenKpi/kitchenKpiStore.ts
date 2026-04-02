@@ -29,8 +29,15 @@ import type {
   ScheduleSummary,
   CreateScheduleItemData,
   CompleteScheduleTaskData,
-  ScheduleCompletionKpiDetail
+  ScheduleCompletionKpiDetail,
+  RitualCustomTask,
+  RitualCompletion,
+  RitualType,
+  CreateRitualCustomTaskData,
+  RecordRitualCompletionData,
+  RitualSession
 } from './types'
+import { RITUAL_WINDOWS, RITUAL_SESSION_KEY } from './types'
 
 const MODULE_NAME = 'KitchenKpiStore'
 
@@ -69,6 +76,13 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
     status: 'all',
     date: TimeUtils.getCurrentLocalDate() // Use local timezone (Asia/Jakarta)
   })
+
+  // Ritual data
+  const customTasks = ref<RitualCustomTask[]>([])
+  const ritualCompletions = ref<RitualCompletion[]>([])
+  const morningRitualCompleted = ref(false)
+  const eveningRitualCompleted = ref(false)
+  const ritualStartedAt = ref<string | null>(null)
 
   // Store status
   const initialized = ref(false)
@@ -126,9 +140,7 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
     const items = scheduleItems.value
 
     const totalTasks = items.length
-    const pendingTasks = items.filter(
-      i => i.status === 'pending' || i.status === 'in_progress'
-    ).length
+    const pendingTasks = items.filter(i => i.status === 'pending').length
     const completedTasks = items.filter(i => i.status === 'completed').length
     const urgentTasks = items.filter(
       i => i.productionSlot === 'urgent' && i.status !== 'completed'
@@ -186,29 +198,99 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
     return items
   })
 
-  // Group schedule items by slot (excluding completed - they go to History tab)
+  // Group schedule items by slot (including completed for progress tracking)
+  // Pre-made items get their own "premade" group regardless of slot
   const scheduleBySlot = computed(() => {
     const grouped: Record<string, ProductionScheduleItem[]> = {
+      premade: [],
       urgent: [],
       morning: [],
       afternoon: [],
       evening: []
     }
 
-    // Only include pending and in_progress tasks
-    const pendingItems = filteredScheduleItems.value.filter(
-      item => item.status === 'pending' || item.status === 'in_progress'
-    )
+    // Include all non-cancelled tasks (pending + completed for checklist UX)
+    const activeItems = filteredScheduleItems.value.filter(item => item.status !== 'cancelled')
 
-    for (const item of pendingItems) {
-      const slot = item.productionSlot
-      if (grouped[slot]) {
-        grouped[slot].push(item)
+    for (const item of activeItems) {
+      // Pre-made items always go to premade group
+      if (item.isPremade) {
+        grouped.premade.push(item)
+      } else {
+        const slot = item.productionSlot
+        if (grouped[slot]) {
+          grouped[slot].push(item)
+        }
       }
     }
 
     return grouped
   })
+
+  // ===============================================
+  // Computed - Ritual
+  // ===============================================
+
+  /** Get current local time in minutes (Bali timezone via Intl) */
+  function getLocalMinutes(): number {
+    const now = new Date()
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Makassar',
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false
+    }).formatToParts(now)
+    const h = Number(parts.find(p => p.type === 'hour')?.value || 0)
+    const m = Number(parts.find(p => p.type === 'minute')?.value || 0)
+    return h * 60 + m
+  }
+
+  // Reactive time tick — drives all time-dependent computeds (updates every 60s)
+  const _timeTick = ref(getLocalMinutes())
+  setInterval(() => {
+    _timeTick.value = getLocalMinutes()
+  }, 60_000)
+
+  /** Current ritual type based on Bali time */
+  const currentRitualType = computed<RitualType>(() => {
+    const t = _timeTick.value
+    const eveningStart = RITUAL_WINDOWS.evening.start[0] * 60 + RITUAL_WINDOWS.evening.start[1]
+    return t >= eveningStart ? 'evening' : 'morning'
+  })
+
+  /** Whether we're currently inside a ritual time window (Bali time) */
+  const isInRitualWindow = computed(() => {
+    const t = _timeTick.value
+    const w = RITUAL_WINDOWS[currentRitualType.value]
+    const start = w.start[0] * 60 + w.start[1]
+    const end = w.end[0] * 60 + w.end[1]
+    return t >= start && t < end
+  })
+
+  /** Minutes remaining until ritual deadline */
+  const ritualMinutesRemaining = computed(() => {
+    const t = _timeTick.value
+    const w = RITUAL_WINDOWS[currentRitualType.value]
+    const end = w.end[0] * 60 + w.end[1]
+    return Math.max(0, end - t)
+  })
+
+  /** Whether the current ritual (morning or evening) is already completed today */
+  const currentRitualCompleted = computed(() => {
+    return currentRitualType.value === 'morning'
+      ? morningRitualCompleted.value
+      : eveningRitualCompleted.value
+  })
+
+  /** Custom tasks for current ritual type */
+  const currentRitualCustomTasks = computed(() =>
+    customTasks.value.filter(t => t.ritualType === currentRitualType.value && t.isActive)
+  )
+
+  /** Should auto-open ritual: in window + not completed + not yet started */
+  const shouldAutoOpenRitual = computed(
+    () => isInRitualWindow.value && !currentRitualCompleted.value
+  )
 
   // ===============================================
   // Actions - Initialization
@@ -539,9 +621,7 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
       const preparationStore = usePreparationStore()
 
       // Get pending tasks only
-      const pendingTasks = scheduleItems.value.filter(
-        item => item.status === 'pending' || item.status === 'in_progress'
-      )
+      const pendingTasks = scheduleItems.value.filter(item => item.status === 'pending')
 
       if (pendingTasks.length === 0) {
         DebugUtils.debug(MODULE_NAME, 'No pending tasks to check for auto-fulfillment')
@@ -704,6 +784,150 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
   }
 
   // ===============================================
+  // Actions - Ritual Operations
+  // ===============================================
+
+  /** Load custom tasks for rituals */
+  async function loadCustomTasks(department = 'kitchen'): Promise<void> {
+    try {
+      customTasks.value = await kitchenKpiService.getCustomTasks(undefined, department)
+      DebugUtils.info(MODULE_NAME, 'Custom tasks loaded', { count: customTasks.value.length })
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load custom tasks', { err })
+    }
+  }
+
+  /** Load all custom tasks including inactive (for settings screen) */
+  async function loadAllCustomTasks(department = 'kitchen'): Promise<void> {
+    try {
+      customTasks.value = await kitchenKpiService.getAllCustomTasks(department)
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load all custom tasks', { err })
+    }
+  }
+
+  /** Create a new custom task */
+  async function createCustomTask(data: CreateRitualCustomTaskData): Promise<RitualCustomTask> {
+    const task = await kitchenKpiService.createCustomTask(data)
+    customTasks.value.push(task)
+    return task
+  }
+
+  /** Update a custom task */
+  async function updateCustomTask(
+    taskId: string,
+    updates: Partial<{ name: string; ritualType: RitualType; sortOrder: number; isActive: boolean }>
+  ): Promise<void> {
+    const updated = await kitchenKpiService.updateCustomTask(taskId, updates)
+    const idx = customTasks.value.findIndex(t => t.id === taskId)
+    if (idx !== -1) customTasks.value[idx] = updated
+  }
+
+  /** Delete a custom task */
+  async function deleteCustomTask(taskId: string): Promise<void> {
+    await kitchenKpiService.deleteCustomTask(taskId)
+    customTasks.value = customTasks.value.filter(t => t.id !== taskId)
+  }
+
+  /** Check today's ritual completion status */
+  async function loadTodayRitualStatus(department = 'kitchen'): Promise<void> {
+    try {
+      const completions = await kitchenKpiService.getTodayRitualCompletions(department)
+      ritualCompletions.value = completions
+
+      morningRitualCompleted.value = completions.some(c => c.ritualType === 'morning')
+      eveningRitualCompleted.value = completions.some(c => c.ritualType === 'evening')
+
+      DebugUtils.info(MODULE_NAME, 'Today ritual status loaded', {
+        morning: morningRitualCompleted.value,
+        evening: eveningRitualCompleted.value
+      })
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load today ritual status', { err })
+    }
+  }
+
+  /** Mark ritual as started (records timestamp + persists to localStorage) */
+  function startRitual(): void {
+    ritualStartedAt.value = new Date().toISOString()
+    // Persist session for tablet restart recovery
+    const session: RitualSession = {
+      ritualType: currentRitualType.value,
+      startedAt: ritualStartedAt.value,
+      date: TimeUtils.getCurrentLocalDate()
+    }
+    localStorage.setItem(RITUAL_SESSION_KEY, JSON.stringify(session))
+    DebugUtils.info(MODULE_NAME, 'Ritual started', { type: currentRitualType.value })
+  }
+
+  /** Restore ritual session from localStorage (tablet restart recovery) */
+  function restoreRitualSession(): RitualSession | null {
+    try {
+      const raw = localStorage.getItem(RITUAL_SESSION_KEY)
+      if (!raw) return null
+      const session: RitualSession = JSON.parse(raw)
+      // Only restore if same day
+      if (session.date !== TimeUtils.getCurrentLocalDate()) {
+        localStorage.removeItem(RITUAL_SESSION_KEY)
+        return null
+      }
+      ritualStartedAt.value = session.startedAt
+      DebugUtils.info(MODULE_NAME, 'Ritual session restored', session)
+      return session
+    } catch {
+      localStorage.removeItem(RITUAL_SESSION_KEY)
+      return null
+    }
+  }
+
+  /** Clear persisted ritual session */
+  function clearRitualSession(): void {
+    localStorage.removeItem(RITUAL_SESSION_KEY)
+    ritualStartedAt.value = null
+  }
+
+  /** Record ritual completion to database */
+  async function finishRitual(data: RecordRitualCompletionData): Promise<RitualCompletion> {
+    try {
+      loading.value.submitting = true
+
+      const completion = await kitchenKpiService.recordRitualCompletion(data)
+
+      // Update local state
+      ritualCompletions.value.push(completion)
+      if (data.ritualType === 'morning') {
+        morningRitualCompleted.value = true
+      } else {
+        eveningRitualCompleted.value = true
+      }
+      clearRitualSession()
+
+      DebugUtils.info(MODULE_NAME, 'Ritual completed', {
+        type: data.ritualType,
+        duration: data.durationMinutes
+      })
+
+      return completion
+    } finally {
+      loading.value.submitting = false
+    }
+  }
+
+  /** Get ritual history for a date range */
+  async function loadRitualHistory(
+    dateFrom: string,
+    dateTo: string,
+    department = 'kitchen'
+  ): Promise<RitualCompletion[]> {
+    try {
+      return await kitchenKpiService.getRitualCompletions(dateFrom, dateTo, department)
+    } catch (err) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load ritual history', { err })
+      return []
+    }
+  }
+
+  // ===============================================
   // Actions - Filter Management
   // ===============================================
 
@@ -732,6 +956,11 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
     currentUserKpi.value = null
     scheduleItems.value = []
     recommendations.value = []
+    customTasks.value = []
+    ritualCompletions.value = []
+    morningRitualCompleted.value = false
+    eveningRitualCompleted.value = false
+    ritualStartedAt.value = null
     error.value = null
     initialized.value = false
     lastFetchedAt.value = null
@@ -754,12 +983,25 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
     initialized,
     lastFetchedAt,
 
+    // Ritual State
+    customTasks,
+    ritualCompletions,
+    morningRitualCompleted,
+    eveningRitualCompleted,
+    ritualStartedAt,
+
     // Computed
     kpiSummary,
     scheduleSummary,
     filteredKpiEntries,
     filteredScheduleItems,
     scheduleBySlot,
+    currentRitualType,
+    currentRitualCompleted,
+    currentRitualCustomTasks,
+    isInRitualWindow,
+    ritualMinutesRemaining,
+    shouldAutoOpenRitual,
 
     // Actions - Initialization
     initialize,
@@ -784,6 +1026,19 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
     // Actions - Recommendations
     loadRecommendations,
     clearRecommendations,
+
+    // Actions - Ritual
+    loadCustomTasks,
+    loadAllCustomTasks,
+    createCustomTask,
+    updateCustomTask,
+    deleteCustomTask,
+    loadTodayRitualStatus,
+    startRitual,
+    restoreRitualSession,
+    clearRitualSession,
+    finishRitual,
+    loadRitualHistory,
 
     // Actions - Filters
     setKpiFilters,

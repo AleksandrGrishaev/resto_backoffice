@@ -26,21 +26,27 @@
 
     <div class="spacer" />
 
-    <!-- Navigation to other sections -->
-    <div class="nav-section">
-      <v-btn variant="text" block height="48" to="/kitchen" class="nav-btn">
-        <v-icon start>mdi-chef-hat</v-icon>
-        Kitchen
-      </v-btn>
-      <v-btn variant="text" block height="48" to="/" class="nav-btn">
-        <v-icon start>mdi-view-dashboard</v-icon>
-        Desktop
-      </v-btn>
+    <!-- Action Menu (hamburger popup) -->
+    <div class="menu-section">
+      <ActionMenu :sections="menuSections" :loading="loading" @action="handleAction">
+        <template #header>
+          <div class="menu-header">
+            <div class="admin-info">
+              <div class="admin-name">{{ userName }}</div>
+              <div class="admin-role">{{ userRoleLabel }}</div>
+            </div>
+          </div>
+        </template>
+      </ActionMenu>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import ActionMenu from '@/components/molecules/navigation/ActionMenu.vue'
 import type { AdminScreenName } from '../types'
 
 defineProps<{
@@ -51,12 +57,87 @@ const emit = defineEmits<{
   'screen-select': [screen: AdminScreenName]
 }>()
 
+const router = useRouter()
+const authStore = useAuthStore()
+const loading = ref(false)
+
 const screens = [
-  { id: 'menu' as AdminScreenName, label: 'Menu', icon: 'mdi-book-open-variant' },
+  { id: 'dashboard' as AdminScreenName, label: 'Dashboard', icon: 'mdi-chart-box-outline' },
   { id: 'channels' as AdminScreenName, label: 'Channels', icon: 'mdi-store' },
   { id: 'loyalty' as AdminScreenName, label: 'Loyalty', icon: 'mdi-star-circle' },
-  { id: 'dashboard' as AdminScreenName, label: 'Dashboard', icon: 'mdi-chart-box-outline' }
+  { id: 'staff' as AdminScreenName, label: 'Staff', icon: 'mdi-account-group' },
+  { id: 'payroll' as AdminScreenName, label: 'Payroll', icon: 'mdi-cash-multiple' }
 ]
+
+const userName = computed(() => {
+  const user = authStore.currentUser
+  return user ? user.name : 'Admin'
+})
+
+const userRoleLabel = computed(() => {
+  const roles = authStore.userRoles
+  if (roles.includes('admin')) return 'Administrator'
+  if (roles.includes('manager')) return 'Manager'
+  return 'Staff'
+})
+
+const menuSections = computed(() => [
+  {
+    title: 'NAVIGATE',
+    actions: [
+      {
+        id: 'nav_kitchen',
+        icon: 'mdi-chef-hat',
+        label: 'Kitchen',
+        disabled: loading.value
+      },
+      {
+        id: 'nav_desktop',
+        icon: 'mdi-view-dashboard',
+        label: 'Desktop',
+        disabled: loading.value
+      }
+    ]
+  },
+  {
+    title: 'SYSTEM',
+    actions: [
+      {
+        id: 'logout',
+        icon: 'mdi-logout',
+        label: 'Logout',
+        disabled: loading.value,
+        color: 'error' as const
+      }
+    ]
+  }
+])
+
+const handleAction = async (actionId: string) => {
+  switch (actionId) {
+    case 'nav_kitchen':
+      router.push('/kitchen')
+      break
+    case 'nav_desktop':
+      router.push('/')
+      break
+    case 'logout':
+      await handleLogout()
+      break
+  }
+}
+
+const handleLogout = async () => {
+  loading.value = true
+  try {
+    await authStore.logout()
+    await router.push('/auth/login')
+  } catch (error) {
+    console.error('Logout failed:', error)
+  } finally {
+    loading.value = false
+  }
+}
 </script>
 
 <style scoped lang="scss">
@@ -124,19 +205,41 @@ const screens = [
   flex: 1;
 }
 
-.nav-section {
-  padding: 8px;
+.menu-section {
+  padding: 0 var(--spacing-sm);
+  padding-bottom: var(--spacing-md);
+  padding-top: var(--spacing-sm);
   border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.nav-btn {
-  text-transform: none;
-  font-size: 0.8rem;
-  opacity: 0.6;
-  justify-content: flex-start;
+.menu-section :deep(.menu-button) {
+  width: 100%;
+  justify-content: center;
+  margin: 0;
+}
 
-  &:hover {
-    opacity: 1;
-  }
+.menu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+}
+
+.admin-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 2px;
+}
+
+.admin-role {
+  font-size: var(--text-xs);
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.2;
 }
 </style>

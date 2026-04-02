@@ -107,10 +107,11 @@ export class OrdersService {
         let query = supabase.from('orders').select('*')
 
         if (!options?.all) {
-          // Cap unpaid order loading to 48h — prevents ancient unpaid orders from re-occupying tables
+          // Load: today's orders + active table-bound orders (any age) + unpaid orders (48h cap)
+          // Active table-bound orders MUST always load — they block the unique index and must be visible
           const cutoff48h = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
           query = query.or(
-            `and(payment_status.neq.paid,created_at.gte.${cutoff48h}),created_at.gte.${dateFilter}`
+            `and(table_id.not.is.null,status.not.in.("cancelled","served","collected","delivered")),and(payment_status.neq.paid,created_at.gte.${cutoff48h}),created_at.gte.${dateFilter}`
           )
         }
 
@@ -203,6 +204,7 @@ export class OrdersService {
     waiterName?: string
     channelId?: string
     channelCode?: string
+    guestCount?: number
   }): Promise<ServiceResponse<PosOrder>>
   async createOrder(
     typeOrData:
@@ -214,6 +216,7 @@ export class OrdersService {
           waiterName?: string
           channelId?: string
           channelCode?: string
+          guestCount?: number
         },
     tableId?: string,
     customerName?: string
@@ -238,6 +241,7 @@ export class OrdersService {
         waiterName: orderData.waiterName,
         channelId: orderData.channelId,
         channelCode: orderData.channelCode,
+        guestCount: orderData.guestCount,
         bills: [],
         totalAmount: 0,
         discountAmount: 0,
@@ -255,43 +259,58 @@ export class OrdersService {
         orderNumber: newOrder.orderNumber
       })
 
-      // Create first bill automatically
-      const firstBill = await this.createBillForOrder(newOrder.id, 'Bill 1')
+      // Create first bill automatically (with guest count for dine-in)
+      const firstBill = await this.createBillForOrder(newOrder.id, 'Bill 1', orderData.guestCount)
       if (firstBill.success && firstBill.data) {
         newOrder.bills = [firstBill.data]
       }
 
       // Try Supabase first (if online) with retry logic
       if (this.isSupabaseAvailable()) {
-        const supabaseRow = toSupabaseInsert(newOrder)
+        let supabaseRow = toSupabaseInsert(newOrder)
+        let saved = false
 
-        try {
-          await withRetry(
-            async () => {
-              await executeSupabaseMutation(async () => {
-                const { error } = await supabase.from('orders').insert(supabaseRow)
-                if (error) throw error
-              }, 'OrdersService.createOrder')
-            },
-            'createOrder',
-            { maxRetries: 3, baseDelay: 1000 }
-          )
+        // Retry with new order number on order_number collision (up to 3 attempts)
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            await withRetry(
+              async () => {
+                await executeSupabaseMutation(async () => {
+                  const { error } = await supabase.from('orders').insert(supabaseRow)
+                  if (error) throw error
+                }, 'OrdersService.createOrder')
+              },
+              'createOrder',
+              { maxRetries: 3, baseDelay: 1000 }
+            )
+            saved = true
+            console.log('✅ Order saved to Supabase:', newOrder.orderNumber)
+            break
+          } catch (error: any) {
+            const isOrderNumberCollision =
+              error?.code === '23505' && error?.message?.includes('orders_order_number_key')
 
-          // Note: No items to insert yet (order is empty)
-          console.log('✅ Order saved to Supabase:', newOrder.orderNumber)
-        } catch (error: any) {
-          const errorDetails = extractErrorDetails(error)
-          console.error('❌ Supabase save failed after retries:', errorDetails)
+            if (isOrderNumberCollision && attempt < 2) {
+              // Regenerate order number and retry
+              newOrder.orderNumber = this.generateOrderNumber()
+              supabaseRow = toSupabaseInsert(newOrder)
+              console.warn(`⚠️ Order number collision, retrying with: ${newOrder.orderNumber}`)
+              continue
+            }
 
-          // Propagate DB error code (e.g. 23505 unique violation) so caller can handle
-          const dbCode = error?.code || error?.cause?.code || ''
-          const errorMsg = dbCode
-            ? `[${dbCode}] ${error?.message || 'Failed to save order'}`
-            : 'Failed to save order to server. Please check your connection and try again.'
+            const errorDetails = extractErrorDetails(error)
+            console.error('❌ Supabase save failed after retries:', errorDetails)
 
-          return {
-            success: false,
-            error: errorMsg
+            // Propagate DB error code (e.g. 23505 unique violation) so caller can handle
+            const dbCode = error?.code || error?.cause?.code || ''
+            const errorMsg = dbCode
+              ? `[${dbCode}] ${error?.message || 'Failed to save order'}`
+              : 'Failed to save order to server. Please check your connection and try again.'
+
+            return {
+              success: false,
+              error: errorMsg
+            }
           }
         }
       }
@@ -1276,9 +1295,13 @@ export class OrdersService {
     }
   }
 
-  async addBillToOrder(orderId: string, billName: string): Promise<ServiceResponse<PosBill>> {
+  async addBillToOrder(
+    orderId: string,
+    billName: string,
+    guestCount?: number
+  ): Promise<ServiceResponse<PosBill>> {
     try {
-      return await this.createBillForOrder(orderId, billName)
+      return await this.createBillForOrder(orderId, billName, guestCount)
     } catch (error) {
       return {
         success: false,
@@ -1436,7 +1459,8 @@ export class OrdersService {
 
   private async createBillForOrder(
     orderId: string,
-    billName: string
+    billName: string,
+    guestCount?: number
   ): Promise<ServiceResponse<PosBill>> {
     const newBill: PosBill = {
       id: generateId(),
@@ -1451,6 +1475,7 @@ export class OrdersService {
       total: 0,
       paymentStatus: 'unpaid',
       paidAmount: 0,
+      guestCount,
       createdAt: TimeUtils.getCurrentLocalISO(),
       updatedAt: TimeUtils.getCurrentLocalISO()
     }
@@ -1498,8 +1523,12 @@ export class OrdersService {
   private generateOrderNumber(): string {
     const date = new Date()
     const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '')
+    // 4 digits from timestamp + 2 random digits = 6 chars, collision-resistant
     const timeStr = date.getTime().toString().slice(-4)
-    return `ORD-${dateStr}-${timeStr}`
+    const rand = Math.floor(Math.random() * 100)
+      .toString()
+      .padStart(2, '0')
+    return `ORD-${dateStr}-${timeStr}${rand}`
   }
 
   private generateBillNumber(): string {

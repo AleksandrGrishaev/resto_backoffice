@@ -137,33 +137,119 @@ export class LoyaltyService {
     return mapStampCardInfoFromRpc(result)
   }
 
-  async issueNewCard(): Promise<string> {
-    // Get next card number
-    const { data, error } = await supabase
-      .from('stamp_cards')
-      .select('card_number')
-      .order('card_number', { ascending: false })
-      .limit(1)
+  async getNextCardNumber(): Promise<string> {
+    // Fetch all card numbers and find max numeric value
+    // (can't rely on text sort — "SC-ALEX-001" sorts after "004")
+    const { data, error } = await supabase.from('stamp_cards').select('card_number')
 
     if (error) {
-      DebugUtils.error(MODULE_NAME, 'Failed to get last card number', { error })
+      DebugUtils.error(MODULE_NAME, 'Failed to get card numbers', { error })
       throw error
     }
 
-    const lastNumber = data && data.length > 0 ? parseInt(data[0].card_number, 10) : 0
-    const newNumber = String(lastNumber + 1).padStart(3, '0')
+    let maxNumber = 0
+    if (data) {
+      for (const row of data) {
+        const parsed = parseInt(row.card_number, 10)
+        if (!isNaN(parsed) && parsed > maxNumber) {
+          maxNumber = parsed
+        }
+      }
+    }
+    return String(maxNumber + 1).padStart(3, '0')
+  }
 
-    const { error: insertError } = await supabase
-      .from('stamp_cards')
-      .insert({ card_number: newNumber })
+  async issueNewCard(options?: {
+    cardNumber?: string
+    stamps?: number
+    customerName?: string
+    customerPhone?: string
+  }): Promise<string> {
+    const newNumber = options?.cardNumber || (await this.getNextCardNumber())
+
+    // Create the card, optionally with a linked customer
+    let customerId: string | undefined
+    if (options?.customerName?.trim()) {
+      // Create customer inline
+      const { data: customerData, error: customerError } = await supabase
+        .from('customers')
+        .insert({
+          name: options.customerName.trim(),
+          phone: options.customerPhone?.trim() || null,
+          loyalty_program: 'stamps'
+        })
+        .select('id')
+        .single()
+
+      if (customerError) {
+        DebugUtils.error(MODULE_NAME, 'Failed to create customer for card', {
+          error: customerError
+        })
+        throw customerError
+      }
+      customerId = customerData.id
+    }
+
+    const { error: insertError } = await supabase.from('stamp_cards').insert({
+      card_number: newNumber,
+      customer_id: customerId || null
+    })
 
     if (insertError) {
       DebugUtils.error(MODULE_NAME, 'Failed to create stamp card', { error: insertError })
       throw insertError
     }
 
-    DebugUtils.info(MODULE_NAME, 'New stamp card issued', { cardNumber: newNumber })
+    // If initial stamps specified, add them
+    if (options?.stamps && options.stamps > 0) {
+      // Get the new card id
+      const { data: cardData } = await supabase
+        .from('stamp_cards')
+        .select('id, cycle')
+        .eq('card_number', newNumber)
+        .single()
+
+      if (cardData) {
+        await this.setCardStamps(cardData.id, options.stamps, cardData.cycle)
+      }
+    }
+
+    DebugUtils.info(MODULE_NAME, 'New stamp card issued', {
+      cardNumber: newNumber,
+      stamps: options?.stamps || 0,
+      customerId
+    })
     return newNumber
+  }
+
+  async searchCards(query: string): Promise<StampCardListItem[]> {
+    const trimmed = query.trim()
+    if (!trimmed) return []
+
+    const { data, error } = await supabase
+      .from('stamp_cards')
+      .select('id, card_number, status, cycle, customer_id, created_at, customers(name)')
+      .ilike('card_number', `%${trimmed}%`)
+      .eq('status', 'active')
+      .order('card_number', { ascending: true })
+      .limit(10)
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to search cards', { error })
+      return []
+    }
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      cardNumber: row.card_number,
+      status: row.status || 'active',
+      stamps: 0, // Not available in simple query
+      cycle: row.cycle || 1,
+      customerId: row.customer_id,
+      customerName: row.customers?.name || null,
+      createdAt: row.created_at,
+      lastStampAt: null
+    }))
   }
 
   async listCards(): Promise<StampCardListItem[]> {
@@ -336,6 +422,16 @@ export class LoyaltyService {
       throw error
     }
 
+    // Switch customer to stamps program when a stamp card is linked
+    const { error: custError } = await supabase
+      .from('customers')
+      .update({ loyalty_program: 'stamps' })
+      .eq('id', customerId)
+
+    if (custError) {
+      DebugUtils.error(MODULE_NAME, 'Failed to switch customer to stamps program', { custError })
+    }
+
     DebugUtils.info(MODULE_NAME, 'Card linked to customer', { cardNumber, customerId })
   }
 
@@ -477,6 +573,108 @@ export class LoyaltyService {
     }
 
     return (data || []).map(mapTransactionFromDb)
+  }
+
+  /** Get all transactions across all customers (for audit/history) */
+  async getAllTransactions(
+    limit = 500
+  ): Promise<(LoyaltyTransaction & { customerName?: string; performedBy?: string })[]> {
+    // Fetch loyalty_transactions and stamp_entries in parallel
+    const [txResult, stampResult] = await Promise.all([
+      supabase
+        .from('loyalty_transactions')
+        .select('*, customers(name)')
+        .order('created_at', { ascending: false })
+        .limit(limit),
+      supabase
+        .from('stamp_entries')
+        .select('*, stamp_cards(card_number, customer_id, customers(name))')
+        .order('created_at', { ascending: false })
+        .limit(limit)
+    ])
+
+    if (txResult.error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to load all transactions', { error: txResult.error })
+      throw txResult.error
+    }
+
+    const loyaltyRows = (txResult.data || []).map(row => ({
+      ...mapTransactionFromDb(row),
+      customerName: (row as any).customers?.name || '',
+      performedBy: row.performed_by || null
+    }))
+
+    // Map stamp_entries into the same shape as loyalty transactions
+    const stampRows = (stampResult.data || []).map((row: any) => ({
+      id: row.id,
+      customerId: row.stamp_cards?.customer_id || '',
+      type: 'stamp' as any,
+      amount: row.stamps,
+      balanceAfter: 0,
+      orderId: row.order_id || null,
+      description: `+${row.stamps} stamp(s) on card ${row.stamp_cards?.card_number || '?'} (order ${row.order_amount ? 'Rp ' + Number(row.order_amount).toLocaleString('id-ID') : 'manual'})`,
+      createdAt: row.created_at,
+      customerName:
+        row.stamp_cards?.customers?.name || `Card ${row.stamp_cards?.card_number || '?'}`,
+      performedBy: null
+    }))
+
+    // Merge and sort by date descending
+    return [...loyaltyRows, ...stampRows]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, limit)
+  }
+
+  /** Atomic balance adjustment via RPC (transaction + balance update in one call) */
+  async adjustBalance(customerId: string, amount: number, description: string): Promise<number> {
+    const { data, error } = await supabase.rpc('adjust_loyalty_balance', {
+      p_customer_id: customerId,
+      p_amount: amount,
+      p_description: description
+    })
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to adjust balance', { error })
+      throw error
+    }
+
+    const result = data as any
+    if (!result.success) throw new Error(result.error)
+
+    DebugUtils.info(MODULE_NAME, 'Balance adjusted', {
+      customerId,
+      amount,
+      newBalance: result.new_balance
+    })
+    return result.new_balance
+  }
+
+  /** Reverse loyalty cashback on payment refund */
+  async reverseLoyaltyOnRefund(
+    customerId: string,
+    orderId: string,
+    refundAmount: number
+  ): Promise<{ success: boolean; reversed: number; newBalance?: number }> {
+    const { data, error } = await supabase.rpc('reverse_loyalty_on_refund', {
+      p_customer_id: customerId,
+      p_order_id: orderId,
+      p_refund_amount: refundAmount
+    })
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to reverse loyalty on refund', { error })
+      throw error
+    }
+
+    const result = data as any
+    if (!result.success) throw new Error(result.error)
+
+    DebugUtils.info(MODULE_NAME, 'Loyalty reversed on refund', {
+      customerId,
+      reversed: result.reversed,
+      newBalance: result.new_balance
+    })
+    return { success: true, reversed: result.reversed, newBalance: result.new_balance }
   }
 }
 

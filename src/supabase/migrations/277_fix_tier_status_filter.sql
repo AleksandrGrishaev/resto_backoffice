@@ -1,0 +1,13 @@
+-- Migration: 277_fix_tier_status_filter
+-- Description: Fix tier calculation to count all non-cancelled orders (not just completed/collected)
+-- Date: 2026-03-31
+--
+-- CONTEXT: Order statuses in PROD are primarily 'served' (dine-in) and 'collected' (takeaway),
+-- NOT 'completed'. The tier calculation was filtering by IN ('completed', 'collected'),
+-- missing 2100+ served orders. Changed to NOT IN ('cancelled') to include all paid orders.
+--
+-- Also:
+-- - recalculate_tiers: process all cashback customers (not just telegram_id IS NOT NULL)
+-- - Remove hardcoded customers_tier_check constraint (tiers are dynamic from loyalty_settings)
+--
+-- See src/supabase/functions/update_customer_stats.sql and recalculate_tiers.sql

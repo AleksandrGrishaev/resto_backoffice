@@ -12,6 +12,7 @@ export class CustomersService {
     const { data, error } = await supabase
       .from('customers')
       .select('*')
+      .is('merged_into', null)
       .order('last_visit_at', { ascending: false, nullsFirst: false })
 
     if (error) {
@@ -38,6 +39,7 @@ export class CustomersService {
       .from('customers')
       .select('*')
       .eq('status', 'active')
+      .is('merged_into', null)
       .or(`name.ilike.%${query}%,telegram_username.ilike.%${query}%,phone.ilike.%${query}%`)
       .order('last_visit_at', { ascending: false, nullsFirst: false })
       .limit(20)
@@ -167,6 +169,47 @@ export class CustomersService {
     }
 
     return mapCustomerFromDb(data)
+  }
+
+  /** Merge source customer into target. Transfers all data, marks source as merged. */
+  async mergeCustomers(
+    sourceId: string,
+    targetId: string,
+    fieldOverrides?: Record<string, any>
+  ): Promise<{
+    success: boolean
+    error?: string
+    transferred?: {
+      orders: number
+      transactions: number
+      points: number
+      stamp_cards: number
+      identities: number
+      invites: number
+    }
+    mergedBalance?: number
+  }> {
+    const { data, error } = await supabase.rpc('merge_customers', {
+      p_source_id: sourceId,
+      p_target_id: targetId,
+      p_field_overrides: fieldOverrides ?? {}
+    })
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to merge customers', { error })
+      return { success: false, error: error.message }
+    }
+
+    const result = data as any
+    if (!result.success) {
+      return { success: false, error: result.error }
+    }
+
+    return {
+      success: true,
+      transferred: result.transferred,
+      mergedBalance: result.merged_balance
+    }
   }
 }
 

@@ -49,11 +49,25 @@ export class ReceiptBuilder {
     // Taxes
     this.buildTaxes(cmd, data)
 
-    // Total
+    // Total + loyalty points deduction
     cmd.hr()
-    cmd.setBold(true)
-    cmd.leftRight('TOTAL:', cmd.formatIDR(data.totalAmount))
-    cmd.setBold(false)
+    const pointsUsed = data.loyalty?.pointsRedeemed || 0
+    if (pointsUsed > 0) {
+      // Show total before points, then deduction, then final amount
+      cmd.leftRight('TOTAL:', cmd.formatIDR(data.totalAmount + pointsUsed))
+      this.buildLoyalty(cmd, data)
+      cmd.hr()
+      cmd.setBold(true)
+      cmd.setTextSize('double-width')
+      cmd.leftRight('TO PAY:', cmd.formatIDR(data.totalAmount))
+      cmd.setTextSize('normal')
+      cmd.setBold(false)
+    } else {
+      cmd.setBold(true)
+      cmd.leftRight('TOTAL:', cmd.formatIDR(data.totalAmount))
+      cmd.setBold(false)
+      this.buildLoyalty(cmd, data)
+    }
     cmd.hr()
 
     // Pre-bill notice
@@ -63,6 +77,24 @@ export class ReceiptBuilder {
     cmd.textLine('*** PRE-BILL - NOT PAID ***')
     cmd.setBold(false)
     cmd.setAlign('left')
+
+    // Invite QR code (for orders without customer)
+    if (data.inviteQR) {
+      cmd.emptyLine()
+      cmd.dash()
+      cmd.setAlign('center')
+      cmd.setBold(true)
+      cmd.textLine(data.inviteQR.message || 'Scan to collect stamps!')
+      cmd.setBold(false)
+      cmd.emptyLine()
+      cmd.qrCode(data.inviteQR.url, 6)
+      cmd.emptyLine()
+      // Show short URL below QR
+      const shortUrl = data.inviteQR.url.replace('https://', '')
+      cmd.textLine(shortUrl)
+      cmd.setAlign('left')
+      cmd.dash()
+    }
 
     // Footer
     cmd.emptyLine()
@@ -109,13 +141,27 @@ export class ReceiptBuilder {
     // Taxes
     this.buildTaxes(cmd, data)
 
-    // Total
+    // Total + loyalty points deduction
     cmd.hr()
-    cmd.setBold(true)
-    cmd.setTextSize('double-width')
-    cmd.leftRight('TOTAL:', cmd.formatIDR(data.totalAmount))
-    cmd.setTextSize('normal')
-    cmd.setBold(false)
+    const pointsUsed = data.loyalty?.pointsRedeemed || 0
+    if (pointsUsed > 0) {
+      // Show total before points, then deduction, then final amount
+      cmd.leftRight('TOTAL:', cmd.formatIDR(data.totalAmount + pointsUsed))
+      this.buildLoyalty(cmd, data)
+      cmd.hr()
+      cmd.setBold(true)
+      cmd.setTextSize('double-width')
+      cmd.leftRight('TO PAY:', cmd.formatIDR(data.totalAmount))
+      cmd.setTextSize('normal')
+      cmd.setBold(false)
+    } else {
+      cmd.setBold(true)
+      cmd.setTextSize('double-width')
+      cmd.leftRight('TOTAL:', cmd.formatIDR(data.totalAmount))
+      cmd.setTextSize('normal')
+      cmd.setBold(false)
+      this.buildLoyalty(cmd, data)
+    }
     cmd.hr()
 
     // Payment info
@@ -153,6 +199,38 @@ export class ReceiptBuilder {
     cmd.hr()
 
     // Cut paper
+    cmd.cut()
+
+    return cmd.build()
+  }
+
+  /**
+   * Build standalone invite QR receipt (mini-print for customer invite)
+   */
+  buildInviteQR(url: string, customerName: string, restaurantName: string): Uint8Array {
+    const cmd = new EscPosCommandBuilder(this.charsPerLine)
+
+    cmd.init()
+    cmd.hr()
+    cmd.setAlign('center')
+    cmd.setBold(true)
+    cmd.textLine(restaurantName)
+    cmd.setBold(false)
+    cmd.hr()
+    cmd.emptyLine()
+    cmd.setBold(true)
+    cmd.textLine(`Welcome, ${customerName}!`)
+    cmd.setBold(false)
+    cmd.emptyLine()
+    cmd.textLine('Scan to collect stamps')
+    cmd.textLine('and earn rewards')
+    cmd.emptyLine()
+    cmd.qrCode(url, 8)
+    cmd.emptyLine()
+    cmd.textLine(url.replace('https://', ''))
+    cmd.setAlign('left')
+    cmd.emptyLine()
+    cmd.hr()
     cmd.cut()
 
     return cmd.build()
@@ -300,6 +378,21 @@ export class ReceiptBuilder {
       data.subtotalAfterDiscounts !== data.subtotal
     ) {
       cmd.leftRight('After Disc:', cmd.formatIDR(data.subtotalAfterDiscounts))
+    }
+  }
+
+  private buildLoyalty(cmd: EscPosCommandBuilder, data: ReceiptData): void {
+    if (!data.loyalty) return
+    const { customerName, pointsRedeemed, pointsBalance } = data.loyalty
+
+    if (customerName) {
+      cmd.leftRight('Customer:', customerName)
+    }
+    if (pointsRedeemed && pointsRedeemed > 0) {
+      cmd.leftRight('Points Used:', `-${cmd.formatIDR(pointsRedeemed)}`)
+    }
+    if (pointsBalance !== undefined) {
+      cmd.leftRight('Pts Balance:', cmd.formatIDR(pointsBalance))
     }
   }
 

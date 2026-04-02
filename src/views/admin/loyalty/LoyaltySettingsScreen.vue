@@ -47,6 +47,10 @@
             class="ml-1"
           />
         </v-tab>
+        <v-tab value="history">
+          <v-icon start size="18">mdi-history</v-icon>
+          History
+        </v-tab>
       </v-tabs>
     </div>
 
@@ -554,14 +558,14 @@
               style="max-width: 280px"
             />
             <v-select
-              v-model="customerTierFilter"
-              :items="tierOptions"
-              label="Tier"
+              v-model="customerLevelFilter"
+              :items="levelFilterOptions"
+              label="Level"
               density="compact"
               variant="outlined"
               hide-details
               clearable
-              style="max-width: 140px"
+              style="max-width: 160px"
             />
             <v-select
               v-model="customerStatusFilter"
@@ -595,8 +599,27 @@
               hover
               @click:row="(_: Event, row: any) => openCustomerDetail(row.item)"
             >
-              <template #[`item.tier`]="{ item }">
+              <template #[`item.level`]="{ item }">
                 <v-chip
+                  v-if="item.personalDiscount > 0"
+                  size="small"
+                  color="orange"
+                  variant="flat"
+                  class="text-white"
+                >
+                  {{ item.personalDiscount }}%
+                </v-chip>
+                <v-chip
+                  v-else-if="item.loyaltyProgram === 'stamps'"
+                  size="small"
+                  color="amber-darken-1"
+                  variant="flat"
+                  class="text-white"
+                >
+                  STAMPS
+                </v-chip>
+                <v-chip
+                  v-else
                   size="small"
                   :color="getTierColor(item.tier)"
                   variant="flat"
@@ -606,7 +629,12 @@
                 </v-chip>
               </template>
               <template #[`item.loyaltyBalance`]="{ item }">
-                {{ formatIDR(item.loyaltyBalance) }}
+                <template v-if="item.personalDiscount > 0">-</template>
+                <template v-else-if="item.loyaltyProgram === 'stamps'">
+                  {{ customerStampsMap[item.id] ?? 0 }} /
+                  {{ loyaltyStore.settings?.stampsPerCycle ?? 15 }}
+                </template>
+                <template v-else>{{ formatIDR(item.loyaltyBalance) }}</template>
               </template>
               <template #[`item.totalSpent`]="{ item }">
                 {{ formatIDR(item.totalSpent) }}
@@ -614,16 +642,8 @@
               <template #[`item.averageCheck`]="{ item }">
                 {{ item.averageCheck ? formatIDR(item.averageCheck) : '-' }}
               </template>
-              <template #[`item.personalDiscount`]="{ item }">
-                <v-chip
-                  v-if="item.personalDiscount > 0"
-                  size="x-small"
-                  color="orange"
-                  variant="tonal"
-                >
-                  {{ item.personalDiscount }}%
-                </v-chip>
-                <span v-else class="text-medium-emphasis">-</span>
+              <template #[`item.createdAt`]="{ item }">
+                {{ item.createdAt ? formatDate(item.createdAt) : '-' }}
               </template>
               <template #[`item.lastVisitAt`]="{ item }">
                 {{ item.lastVisitAt ? formatRelative(item.lastVisitAt) : 'Never' }}
@@ -836,6 +856,52 @@
                   />
 
                   <v-divider class="my-3" />
+                  <div class="text-subtitle-2 mb-2">Loyalty</div>
+                  <v-row dense class="mb-2">
+                    <v-col cols="4">
+                      <v-select
+                        v-model="custForm.loyaltyProgram"
+                        :items="['stamps', 'cashback']"
+                        label="Program"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                      />
+                    </v-col>
+                    <v-col cols="4">
+                      <v-text-field
+                        v-model.number="custForm.loyaltyBalance"
+                        type="number"
+                        label="Cashback Balance"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                        prefix="Rp"
+                      />
+                    </v-col>
+                    <v-col cols="4">
+                      <v-text-field
+                        v-model.number="custForm.stamps"
+                        type="number"
+                        label="Stamps"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                        :min="0"
+                      />
+                    </v-col>
+                  </v-row>
+                  <v-text-field
+                    v-model="custForm.balanceAdjustReason"
+                    label="Adjustment reason (required if balance changed)"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="mb-3"
+                    :rules="balanceChanged ? [v => !!v?.trim() || 'Reason required'] : []"
+                  />
+
+                  <v-divider class="my-3" />
                   <div class="text-subtitle-2 mb-2">Personal Discount</div>
                   <v-row dense class="mb-2">
                     <v-col cols="4">
@@ -893,6 +959,16 @@
                   >
                     {{ selectedCustomer.status === 'active' ? 'Deactivate' : 'Activate' }}
                   </v-btn>
+                  <v-btn
+                    variant="tonal"
+                    color="warning"
+                    size="small"
+                    prepend-icon="mdi-merge"
+                    class="ml-2"
+                    @click="openMergeDialog"
+                  >
+                    Merge Into...
+                  </v-btn>
                   <v-spacer />
                   <v-btn variant="outlined" prepend-icon="mdi-pencil" @click="startCustomerEdit">
                     Edit
@@ -912,6 +988,176 @@
                     Save
                   </v-btn>
                 </template>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
+
+          <!-- ===== Merge Customer Dialog ===== -->
+          <v-dialog v-model="showMergeDialog" max-width="700">
+            <v-card>
+              <v-card-title class="bg-warning">
+                Merge Customer
+                <span v-if="mergeStep === 'resolve'" class="text-body-2 ml-2">
+                  — Resolve Conflicts
+                </span>
+              </v-card-title>
+              <v-card-text class="pt-4">
+                <!-- Step 1: Select target -->
+                <template v-if="mergeStep === 'select'">
+                  <v-alert type="info" variant="tonal" density="compact" class="mb-4">
+                    All orders, transactions, loyalty points, and identities will be transferred to
+                    the target. This action cannot be undone.
+                  </v-alert>
+
+                  <div class="text-body-2 mb-2">
+                    Source:
+                    <strong>{{ mergeSource?.name }}</strong>
+                  </div>
+
+                  <v-autocomplete
+                    v-model="mergeTargetId"
+                    :items="mergeTargetOptions"
+                    item-title="label"
+                    item-value="id"
+                    label="Merge into (target customer)..."
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="mb-3"
+                  />
+
+                  <div
+                    v-if="mergeTargetCustomer"
+                    class="pa-3 rounded bg-grey-darken-3 text-body-2 mb-3"
+                  >
+                    <div>
+                      Balance:
+                      <strong>{{ formatIDR(mergeTargetCustomer.loyaltyBalance) }}</strong>
+                    </div>
+                    <div>
+                      Visits:
+                      <strong>{{ mergeTargetCustomer.totalVisits }}</strong>
+                    </div>
+                    <div>
+                      Total Spent:
+                      <strong>{{ formatIDR(mergeTargetCustomer.totalSpent) }}</strong>
+                    </div>
+                  </div>
+                </template>
+
+                <!-- Step 2: Resolve conflicts -->
+                <template v-if="mergeStep === 'resolve'">
+                  <v-alert type="info" variant="tonal" density="compact" class="mb-4">
+                    Both customers have different values for these fields. Choose which to keep.
+                  </v-alert>
+
+                  <v-table density="compact" class="merge-conflicts-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 130px">Field</th>
+                        <th>
+                          <v-icon size="14" class="mr-1">mdi-arrow-right-bold</v-icon>
+                          {{ mergeSource?.name }}
+                          <span class="text-caption text-medium-emphasis ml-1">(source)</span>
+                        </th>
+                        <th>
+                          <v-icon size="14" class="mr-1">mdi-bullseye-arrow</v-icon>
+                          {{ mergeTargetCustomer?.name }}
+                          <span class="text-caption text-medium-emphasis ml-1">(target)</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="c in mergeConflicts" :key="c.field.key">
+                        <td class="text-body-2 font-weight-medium">{{ c.field.label }}</td>
+                        <td
+                          class="merge-cell"
+                          :class="{
+                            'merge-cell--selected': mergeChoices[c.field.key] === 'source'
+                          }"
+                          style="cursor: pointer"
+                          @click="mergeChoices[c.field.key] = 'source'"
+                        >
+                          <div class="d-flex align-center gap-1">
+                            <v-icon
+                              size="18"
+                              :color="mergeChoices[c.field.key] === 'source' ? 'warning' : 'grey'"
+                            >
+                              {{
+                                mergeChoices[c.field.key] === 'source'
+                                  ? 'mdi-radiobox-marked'
+                                  : 'mdi-radiobox-blank'
+                              }}
+                            </v-icon>
+                            <span class="text-body-2">
+                              {{ c.field.format ? c.field.format(c.sourceValue) : c.sourceValue }}
+                            </span>
+                          </div>
+                        </td>
+                        <td
+                          class="merge-cell"
+                          :class="{
+                            'merge-cell--selected': mergeChoices[c.field.key] === 'target'
+                          }"
+                          style="cursor: pointer"
+                          @click="mergeChoices[c.field.key] = 'target'"
+                        >
+                          <div class="d-flex align-center gap-1">
+                            <v-icon
+                              size="18"
+                              :color="mergeChoices[c.field.key] === 'target' ? 'warning' : 'grey'"
+                            >
+                              {{
+                                mergeChoices[c.field.key] === 'target'
+                                  ? 'mdi-radiobox-marked'
+                                  : 'mdi-radiobox-blank'
+                              }}
+                            </v-icon>
+                            <span class="text-body-2">
+                              {{ c.field.format ? c.field.format(c.targetValue) : c.targetValue }}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </v-table>
+                </template>
+
+                <v-alert
+                  v-if="mergeError"
+                  type="error"
+                  variant="tonal"
+                  density="compact"
+                  class="mt-3"
+                >
+                  {{ mergeError }}
+                </v-alert>
+              </v-card-text>
+              <v-card-actions class="px-4 pb-4">
+                <v-btn v-if="mergeStep === 'resolve'" variant="text" @click="mergeStep = 'select'">
+                  Back
+                </v-btn>
+                <v-spacer />
+                <v-btn variant="text" @click="showMergeDialog = false">Cancel</v-btn>
+                <v-btn
+                  v-if="mergeStep === 'select'"
+                  color="warning"
+                  variant="flat"
+                  :disabled="!mergeTargetId"
+                  @click="proceedToResolve"
+                >
+                  Next
+                </v-btn>
+                <v-btn
+                  v-if="mergeStep === 'resolve'"
+                  color="warning"
+                  variant="flat"
+                  prepend-icon="mdi-merge"
+                  :loading="merging"
+                  @click="executeMerge"
+                >
+                  Merge
+                </v-btn>
               </v-card-actions>
             </v-card>
           </v-dialog>
@@ -1027,6 +1273,73 @@
             </v-card>
           </v-dialog>
         </div>
+
+        <!-- ===================== HISTORY TAB ===================== -->
+        <div v-show="activeTab === 'history'">
+          <div class="d-flex gap-2 mb-3">
+            <v-text-field
+              v-model="historySearch"
+              placeholder="Search customer name..."
+              density="compact"
+              variant="outlined"
+              hide-details
+              prepend-inner-icon="mdi-magnify"
+              clearable
+              style="max-width: 250px"
+            />
+            <v-select
+              v-model="historyTypeFilter"
+              :items="transactionTypes"
+              label="Type"
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+              style="max-width: 160px"
+            />
+            <v-spacer />
+            <v-btn
+              variant="outlined"
+              prepend-icon="mdi-refresh"
+              size="small"
+              :loading="loadingHistory"
+              @click="loadHistory"
+            >
+              Refresh
+            </v-btn>
+          </div>
+
+          <v-card variant="outlined">
+            <v-data-table
+              :headers="historyHeaders"
+              :items="filteredHistory"
+              :loading="loadingHistory"
+              :items-per-page="50"
+              density="compact"
+              hover
+            >
+              <template #[`item.type`]="{ item }">
+                <v-chip size="x-small" :color="txTypeColor(item.type)" variant="tonal">
+                  {{ item.type }}
+                </v-chip>
+              </template>
+              <template #[`item.amount`]="{ item }">
+                <span v-if="item.type === 'stamp'" class="text-success">
+                  +{{ item.amount }} stamp{{ item.amount > 1 ? 's' : '' }}
+                </span>
+                <span v-else :class="item.amount >= 0 ? 'text-success' : 'text-error'">
+                  {{ item.amount >= 0 ? '+' : '' }}{{ formatIDR(item.amount) }}
+                </span>
+              </template>
+              <template #[`item.balanceAfter`]="{ item }">
+                {{ item.type === 'stamp' ? '-' : formatIDR(item.balanceAfter) }}
+              </template>
+              <template #[`item.createdAt`]="{ item }">
+                {{ formatDateTime(item.createdAt) }}
+              </template>
+            </v-data-table>
+          </v-card>
+        </div>
       </template>
     </div>
 
@@ -1039,6 +1352,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { useLoyaltyStore } from '@/stores/loyalty'
+import { loyaltyService } from '@/stores/loyalty/loyaltyService'
 import { useCustomersStore } from '@/stores/customers'
 import { useMenuStore } from '@/stores/menu'
 import type {
@@ -1048,6 +1362,12 @@ import type {
   LoyaltyTransaction
 } from '@/stores/loyalty'
 import type { Customer } from '@/stores/customers'
+import {
+  detectConflicts,
+  buildOverrides,
+  type ConflictItem
+} from '@/stores/customers/mergeConflicts'
+import { supabase } from '@/supabase/client'
 import { formatIDR, TimeUtils } from '@/utils'
 import { usePhoneCodes, buildFullPhone } from '@/composables/usePhoneCodes'
 
@@ -1065,15 +1385,19 @@ const menuCategoryItems = computed(() =>
 // SHARED STATE
 // =============================================
 
-const activeTab = ref<'settings' | 'cards' | 'customers'>('settings')
+const activeTab = ref<'settings' | 'cards' | 'customers' | 'history'>('settings')
 const loading = ref(true)
 const saving = ref(false)
 const snackbar = reactive({ show: false, message: '', color: 'success' })
 
 // Reload fresh data when switching tabs
-watch(activeTab, tab => {
-  if (tab === 'customers') customersStore.reload()
+watch(activeTab, async tab => {
+  if (tab === 'customers') {
+    await customersStore.reload()
+    loadCustomerStamps()
+  }
   if (tab === 'cards') loadCards()
+  if (tab === 'history' && !historyLoaded.value) loadHistory()
 })
 
 // =============================================
@@ -1248,9 +1572,11 @@ async function loadCards() {
 // =============================================
 
 const loadingCustomers = ref(false)
+const customerStampsMap = ref<Record<string, number>>({})
 const customerSearch = ref('')
-const customerTierFilter = ref<string | null>(null)
+const customerLevelFilter = ref<string | null>(null)
 const customerStatusFilter = ref<string | null>(null)
+const levelFilterOptions = ['stamps', 'member', 'regular', 'vip', 'discount']
 const showCustomerDetail = ref(false)
 const showCreateCustomerDialog = ref(false)
 const selectedCustomer = ref<Customer | null>(null)
@@ -1271,22 +1597,63 @@ const custForm = ref({
   telegramUsername: '',
   notes: '',
   tier: 'member' as string,
+  loyaltyProgram: 'stamps' as string,
+  loyaltyBalance: 0,
+  originalBalance: 0,
+  stamps: 0,
+  originalStamps: 0,
+  activeCardId: null as string | null,
+  balanceAdjustReason: '',
   personalDiscount: 0,
   discountNote: '',
   disableLoyaltyAccrual: false
 })
 
+const balanceChanged = computed(
+  () => custForm.value.loyaltyBalance !== custForm.value.originalBalance
+)
+
 const customerHeaders = [
   { title: 'Name', key: 'name', sortable: true },
-  { title: 'Tier', key: 'tier', sortable: true },
+  { title: 'Level', key: 'level', sortable: true },
   { title: 'Balance', key: 'loyaltyBalance', sortable: true },
   { title: 'Total Spent', key: 'totalSpent', sortable: true },
   { title: 'Visits', key: 'totalVisits', sortable: true },
   { title: 'Avg Check', key: 'averageCheck', sortable: true },
-  { title: 'Discount', key: 'personalDiscount', sortable: true },
+  { title: 'Registered', key: 'createdAt', sortable: true },
   { title: 'Last Visit', key: 'lastVisitAt', sortable: true },
   { title: 'Status', key: 'status', sortable: true }
 ]
+
+async function loadCustomerStamps() {
+  try {
+    const { data } = await supabase
+      .from('stamp_cards')
+      .select('customer_id, stamp_entries(stamps)')
+      .eq('status', 'active')
+      .not('customer_id', 'is', null)
+    if (data) {
+      const map: Record<string, number> = {}
+      for (const card of data) {
+        if (card.customer_id) {
+          map[card.customer_id] = ((card as any).stamp_entries || []).reduce(
+            (sum: number, e: any) => sum + (e.stamps || 0),
+            0
+          )
+        }
+      }
+      customerStampsMap.value = map
+    }
+  } catch {
+    // Non-critical
+  }
+}
+
+function getLevel(c: Customer): string {
+  if (c.personalDiscount > 0) return `discount_${c.personalDiscount}`
+  if (c.loyaltyProgram === 'stamps') return 'stamps'
+  return c.tier
+}
 
 const filteredCustomers = computed(() => {
   let list = customersStore.customers
@@ -1299,13 +1666,20 @@ const filteredCustomers = computed(() => {
         (c.phone && c.phone.includes(q))
     )
   }
-  if (customerTierFilter.value) {
-    list = list.filter(c => c.tier === customerTierFilter.value)
+  if (customerLevelFilter.value) {
+    const f = customerLevelFilter.value
+    if (f === 'stamps')
+      list = list.filter(c => c.loyaltyProgram === 'stamps' && !c.personalDiscount)
+    else if (f === 'discount') list = list.filter(c => c.personalDiscount > 0)
+    else
+      list = list.filter(
+        c => c.tier === f && c.loyaltyProgram === 'cashback' && !c.personalDiscount
+      )
   }
   if (customerStatusFilter.value) {
     list = list.filter(c => c.status === customerStatusFilter.value)
   }
-  return list
+  return list.map(c => ({ ...c, level: getLevel(c) }))
 })
 
 const customerStats = computed(() => {
@@ -1343,6 +1717,13 @@ function resetCustForm() {
     telegramUsername: '',
     notes: '',
     tier: 'member',
+    loyaltyProgram: 'stamps',
+    loyaltyBalance: 0,
+    originalBalance: 0,
+    stamps: 0,
+    originalStamps: 0,
+    activeCardId: null,
+    balanceAdjustReason: '',
     personalDiscount: 0,
     discountNote: '',
     disableLoyaltyAccrual: false
@@ -1375,10 +1756,24 @@ async function openCustomerDetail(customer: Customer) {
 }
 
 // ---- Edit mode ----
-function startCustomerEdit() {
+async function startCustomerEdit() {
   if (!selectedCustomer.value) return
   const c = selectedCustomer.value
   const parsed = parsePhone(c.phone)
+
+  // Get current stamps from active card via service
+  let currentStamps = 0
+  let activeCardId: string | null = null
+  try {
+    const cardInfo = await loyaltyStore.getActiveCardByCustomerId(c.id)
+    if (cardInfo) {
+      currentStamps = cardInfo.stamps
+      activeCardId = cardInfo.cardId
+    }
+  } catch {
+    // No active card
+  }
+
   custForm.value = {
     name: c.name,
     phoneCode: parsed.code,
@@ -1386,6 +1781,13 @@ function startCustomerEdit() {
     telegramUsername: c.telegramUsername || '',
     notes: c.notes || '',
     tier: c.tier,
+    loyaltyProgram: c.loyaltyProgram || 'stamps',
+    loyaltyBalance: c.loyaltyBalance || 0,
+    originalBalance: c.loyaltyBalance || 0,
+    stamps: currentStamps,
+    originalStamps: currentStamps,
+    activeCardId,
+    balanceAdjustReason: '',
     personalDiscount: c.personalDiscount || 0,
     discountNote: c.discountNote || '',
     disableLoyaltyAccrual: c.disableLoyaltyAccrual || false
@@ -1396,6 +1798,14 @@ function startCustomerEdit() {
 
 async function saveCustomerEdit() {
   if (!selectedCustomer.value || !custForm.value.name.trim()) return
+
+  // Validate: balance change requires reason
+  const balanceDiff = custForm.value.loyaltyBalance - custForm.value.originalBalance
+  if (balanceDiff !== 0 && !custForm.value.balanceAdjustReason.trim()) {
+    custSaveError.value = 'Adjustment reason is required when changing balance'
+    return
+  }
+
   custSaving.value = true
   custSaveError.value = ''
 
@@ -1407,11 +1817,31 @@ async function saveCustomerEdit() {
       telegramUsername: custForm.value.telegramUsername.trim() || null,
       notes: custForm.value.notes.trim() || null,
       tier: custForm.value.tier,
+      loyaltyProgram: custForm.value.loyaltyProgram,
       personalDiscount: Math.max(0, Math.min(100, custForm.value.personalDiscount || 0)),
       discountNote: custForm.value.discountNote.trim() || null,
       disableLoyaltyAccrual: custForm.value.disableLoyaltyAccrual
     } as Partial<Customer>)
+
+    // Handle balance adjustment (creates audit trail via loyalty_transactions)
+    if (balanceDiff !== 0) {
+      await loyaltyService.adjustBalance(
+        selectedCustomer.value.id,
+        balanceDiff,
+        custForm.value.balanceAdjustReason.trim()
+      )
+    }
+
+    // Handle stamps change (use cached card ID from startCustomerEdit)
+    const stampsDiff = custForm.value.stamps - custForm.value.originalStamps
+    if (stampsDiff !== 0 && custForm.value.activeCardId) {
+      await loyaltyStore.updateCard(custForm.value.activeCardId, { stamps: custForm.value.stamps })
+    }
+
     selectedCustomer.value = updated
+    // Refresh to get updated balance
+    await customersStore.refreshCustomer(selectedCustomer.value.id)
+    selectedCustomer.value = customersStore.getById(selectedCustomer.value.id) || updated
     customerEditing.value = false
     snackbar.message = 'Customer updated'
     snackbar.color = 'success'
@@ -1477,6 +1907,152 @@ async function createNewCustomer() {
 }
 
 // =============================================
+// MERGE CUSTOMER
+// =============================================
+
+const showMergeDialog = ref(false)
+const mergeStep = ref<'select' | 'resolve'>('select')
+const mergeSource = ref<Customer | null>(null)
+const mergeTargetId = ref<string | null>(null)
+const merging = ref(false)
+const mergeError = ref('')
+const mergeConflicts = ref<ConflictItem[]>([])
+const mergeChoices = ref<Record<string, 'source' | 'target'>>({})
+
+const mergeTargetOptions = computed(() => {
+  if (!mergeSource.value) return []
+  return customersStore.customers
+    .filter(c => c.id !== mergeSource.value!.id && c.status === 'active')
+    .map(c => ({
+      id: c.id,
+      label: `${c.name}${c.phone ? ' · ' + c.phone : ''}${c.telegramUsername ? ' · @' + c.telegramUsername : ''}`
+    }))
+})
+
+const mergeTargetCustomer = computed(() => {
+  if (!mergeTargetId.value) return null
+  return customersStore.getById(mergeTargetId.value)
+})
+
+function openMergeDialog() {
+  mergeSource.value = selectedCustomer.value
+  mergeTargetId.value = null
+  mergeError.value = ''
+  mergeStep.value = 'select'
+  mergeConflicts.value = []
+  mergeChoices.value = {}
+  showMergeDialog.value = true
+}
+
+function proceedToResolve() {
+  if (!mergeSource.value || !mergeTargetCustomer.value) return
+  const conflicts = detectConflicts(mergeSource.value, mergeTargetCustomer.value)
+  if (conflicts.length === 0) {
+    executeMerge()
+    return
+  }
+  mergeConflicts.value = conflicts
+  // Default all choices to 'target'
+  mergeChoices.value = Object.fromEntries(conflicts.map(c => [c.field.key, 'target' as const]))
+  mergeStep.value = 'resolve'
+}
+
+async function executeMerge() {
+  if (!mergeSource.value || !mergeTargetId.value) return
+  merging.value = true
+  mergeError.value = ''
+
+  try {
+    const overrides = buildOverrides(mergeChoices.value, mergeSource.value)
+    await customersStore.mergeCustomers(mergeSource.value.id, mergeTargetId.value, overrides)
+    showMergeDialog.value = false
+    showCustomerDetail.value = false
+    snackbar.message = 'Customer merged successfully'
+    snackbar.color = 'success'
+    snackbar.show = true
+  } catch (err) {
+    mergeError.value = err instanceof Error ? err.message : 'Merge failed'
+  } finally {
+    merging.value = false
+  }
+}
+
+// =============================================
+// HISTORY TAB
+// =============================================
+
+type HistoryTransaction = LoyaltyTransaction & { customerName?: string; performedBy?: string }
+
+const historyTransactions = ref<HistoryTransaction[]>([])
+const historyLoaded = ref(false)
+const loadingHistory = ref(false)
+const historySearch = ref('')
+const historyTypeFilter = ref<string | null>(null)
+const transactionTypes = [
+  'cashback',
+  'redemption',
+  'conversion',
+  'adjustment',
+  'expiration',
+  'reversal',
+  'stamp'
+]
+
+const historyHeaders = [
+  { title: 'Date', key: 'createdAt', sortable: true },
+  { title: 'Customer', key: 'customerName', sortable: true },
+  { title: 'Type', key: 'type', sortable: true },
+  { title: 'Amount', key: 'amount', sortable: true },
+  { title: 'Balance After', key: 'balanceAfter', sortable: true },
+  { title: 'Description', key: 'description', sortable: false }
+]
+
+const filteredHistory = computed(() => {
+  let list = historyTransactions.value
+  if (historySearch.value) {
+    const q = historySearch.value.toLowerCase()
+    list = list.filter(t => t.customerName?.toLowerCase().includes(q))
+  }
+  if (historyTypeFilter.value) {
+    list = list.filter(t => t.type === historyTypeFilter.value)
+  }
+  return list
+})
+
+async function loadHistory() {
+  loadingHistory.value = true
+  try {
+    historyTransactions.value = await loyaltyService.getAllTransactions(500)
+    historyLoaded.value = true
+  } catch (err) {
+    console.error('Failed to load history:', err)
+  } finally {
+    loadingHistory.value = false
+  }
+}
+
+function txTypeColor(type: string): string {
+  switch (type) {
+    case 'cashback':
+      return 'success'
+    case 'redemption':
+      return 'error'
+    case 'conversion':
+      return 'purple'
+    case 'adjustment':
+      return 'warning'
+    case 'expiration':
+      return 'grey'
+    default:
+      return 'grey'
+  }
+}
+
+function formatDateTime(date: string): string {
+  return TimeUtils.formatDateTimeForDisplay(date)
+}
+
+// =============================================
 // SHARED HELPERS
 // =============================================
 
@@ -1533,8 +2109,8 @@ onMounted(async () => {
       original.value = JSON.stringify(form.value)
     }
 
-    // Load stamp cards
-    await loadCards()
+    // Load stamp cards + customer stamps in parallel
+    await Promise.all([loadCards(), loadCustomerStamps()])
   } catch (err) {
     snackbar.message = 'Failed to load loyalty data'
     snackbar.color = 'error'
@@ -1564,5 +2140,14 @@ onMounted(async () => {
 .transaction-list {
   max-height: 250px;
   overflow-y: auto;
+}
+
+.merge-cell {
+  transition: background-color 0.15s;
+  border-radius: 4px;
+}
+
+.merge-cell--selected {
+  background-color: rgba(255, 152, 0, 0.12);
 }
 </style>

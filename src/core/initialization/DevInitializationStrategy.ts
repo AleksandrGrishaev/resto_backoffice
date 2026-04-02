@@ -314,8 +314,6 @@ export class DevInitializationStrategy implements InitializationStrategy {
         return this.loadChannels()
       case 'gobiz':
         return this.loadGobiz()
-      case 'menuCollections':
-        return this.loadMenuCollections()
       case 'customers':
         return this.loadCustomers()
       case 'loyalty':
@@ -326,6 +324,8 @@ export class DevInitializationStrategy implements InitializationStrategy {
         return this.loadWebsiteSettings()
       case 'websiteMenu':
         return this.loadWebsiteMenu()
+      case 'staff':
+        return this.loadStaff()
       default:
         DebugUtils.warn(MODULE_NAME, `Unknown store: ${storeName}`)
         return null
@@ -837,38 +837,6 @@ export class DevInitializationStrategy implements InitializationStrategy {
     }
   }
 
-  private async loadMenuCollections(): Promise<StoreInitResult> {
-    const start = Date.now()
-
-    try {
-      const { useMenuCollectionsStore } = await import('@/stores/menuCollections')
-      const store = useMenuCollectionsStore()
-
-      DebugUtils.store(MODULE_NAME, '[DEV] Loading menu collections...')
-
-      if (!store.initialized) {
-        await store.initialize()
-      }
-
-      return {
-        name: 'menuCollections',
-        success: true,
-        count: store.collections.length,
-        duration: Date.now() - start
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to load menu collections'
-      DebugUtils.warn(MODULE_NAME, `[DEV] ${message} (non-critical)`, { error })
-
-      return {
-        name: 'menuCollections',
-        success: false,
-        error: message,
-        duration: Date.now() - start
-      }
-    }
-  }
-
   private async loadAccounts(): Promise<StoreInitResult> {
     const start = Date.now()
 
@@ -1174,6 +1142,38 @@ export class DevInitializationStrategy implements InitializationStrategy {
 
       return {
         name: 'websiteMenu',
+        success: false,
+        error: message,
+        duration: Date.now() - start
+      }
+    }
+  }
+
+  private async loadStaff(): Promise<StoreInitResult> {
+    const start = Date.now()
+
+    try {
+      const { useStaffStore } = await import('@/stores/staff')
+      const store = useStaffStore()
+
+      DebugUtils.store(MODULE_NAME, '[DEV] Loading staff...')
+
+      if (!store.initialized) {
+        await store.initialize()
+      }
+
+      return {
+        name: 'staff',
+        success: true,
+        count: store.members.length,
+        duration: Date.now() - start
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load staff'
+      DebugUtils.warn(MODULE_NAME, `⚠️ [DEV] ${message} (non-critical)`, { error })
+
+      return {
+        name: 'staff',
         success: false,
         error: message,
         duration: Date.now() - start

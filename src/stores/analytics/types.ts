@@ -134,6 +134,38 @@ export interface PLReport {
     margin: number // Percentage
   }
 
+  // Cross-period transactions summary (payments in this period for other periods, or vice versa)
+  crossPeriodSummary?: {
+    // Expenses paid in this period but accrued to previous periods
+    paidForPriorPeriods: {
+      count: number
+      total: number
+      items: Array<{
+        id: string
+        amount: number
+        description: string
+        accrualDate: string
+        paymentDate: string
+        counteragentName?: string
+        category?: string
+      }>
+    }
+    // Expenses accrued in this period but paid in other (future/past) periods
+    accruedNotYetPaid: {
+      count: number
+      total: number
+      items: Array<{
+        id: string
+        amount: number
+        description: string
+        accrualDate: string
+        paymentDate: string
+        counteragentName?: string
+        category?: string
+      }>
+    }
+  }
+
   // Metadata
   generatedAt: string
   generatedBy?: string

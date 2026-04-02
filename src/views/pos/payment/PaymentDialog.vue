@@ -32,11 +32,23 @@
               <PaymentItemsList v-if="items.length > 0" :items="items" />
             </div>
 
-            <!-- Customer/Loyalty (pinned at bottom of left column) -->
+            <!-- Customer/Loyalty + Guest Count (pinned at bottom of left column) -->
             <div
-              v-if="customerId || stampCardInfo"
-              class="loyalty-section d-flex align-center flex-wrap gap-2 px-4 py-3"
+              v-if="customerId || stampCardInfo || totalGuestCount > 0"
+              class="loyalty-section d-flex align-center flex-wrap gap-3 px-4 py-3"
             >
+              <!-- Guest Count Chip (sum of all bills being paid) -->
+              <v-chip
+                v-if="totalGuestCount > 0"
+                color="light-blue"
+                variant="flat"
+                size="small"
+                class="mr-1"
+                @click="showGuestCountEdit = true"
+              >
+                <v-icon start size="14">mdi-account-group</v-icon>
+                {{ totalGuestCount }} guest{{ totalGuestCount > 1 ? 's' : '' }}
+              </v-chip>
               <v-chip
                 v-if="customerName"
                 color="blue"
@@ -82,11 +94,11 @@
             </div>
           </v-col>
 
-          <!-- RIGHT COLUMN: Summary + Payment -->
-          <v-col cols="12" md="7" class="right-column pa-4">
+          <!-- RIGHT COLUMN: Summary + Payment (scrollable) -->
+          <v-col cols="12" md="7" class="right-column" style="padding: 20px 16px 24px">
             <!-- Order Summary (Compact) -->
-            <div class="order-summary-compact mb-4">
-              <h3 class="text-subtitle-2 font-weight-bold mb-2">Order Summary</h3>
+            <div class="order-summary-compact mb-3">
+              <h3 class="text-subtitle-2 font-weight-bold mb-1">Order Summary</h3>
 
               <div class="summary-row-compact">
                 <span class="text-body-2">Subtotal:</span>
@@ -147,10 +159,27 @@
                   {{ formatPrice(totalAmount) }}
                 </span>
               </div>
+
+              <!-- Stamps earned info -->
+              <div v-if="stampCardInfo && stampsEarned > 0" class="stamps-earned-row mt-2">
+                <div class="d-flex align-center justify-space-between">
+                  <span class="text-body-2 d-flex align-center">
+                    <v-icon size="16" color="amber-darken-2" class="mr-1">mdi-stamper</v-icon>
+                    Stamps earned:
+                  </span>
+                  <span class="text-body-2 font-weight-bold text-amber-darken-2">
+                    +{{ stampsEarned }}
+                    <span class="text-medium-emphasis font-weight-regular">
+                      ({{ stampCardInfo.stamps }} + {{ stampsEarned }} =
+                      {{ stampCardInfo.stamps + stampsEarned }}/{{ stampCardInfo.stampsPerCycle }})
+                    </span>
+                  </span>
+                </div>
+              </div>
             </div>
 
             <!-- Use Points Section -->
-            <div v-if="customerId && customerBalance > 0" class="use-points mb-4">
+            <div v-if="customerId && customerBalance > 0" class="use-points mb-3">
               <div class="d-flex align-center justify-space-between">
                 <div class="d-flex align-center gap-2">
                   <v-icon size="18" color="deep-purple">mdi-wallet</v-icon>
@@ -374,6 +403,9 @@
       </v-card-actions>
     </v-card>
 
+    <!-- Guest Count Edit Dialog -->
+    <GuestCountDialog v-model="showGuestCountEdit" @confirm="handleGuestCountUpdate" />
+
     <!-- Bill Discount Dialog (preview mode - don't save to order) -->
     <BillDiscountDialog
       v-model="showBillDiscountDialog"
@@ -392,15 +424,18 @@ import type { PosBillItem, PosBill, PreBillSnapshot } from '@/stores/pos/types'
 import type { StampCardInfo } from '@/stores/loyalty'
 import type { ReceiptData, ReceiptItem } from '@/core/printing/types'
 import { usePosOrdersStore } from '@/stores/pos/orders/ordersStore'
+import { useLoyaltyStore } from '@/stores/loyalty'
 import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import { useChannelsStore } from '@/stores/channels'
 import { DISCOUNT_REASON_LABELS } from '@/stores/discounts/constants'
 import { DebugUtils, TimeUtils } from '@/utils'
 import { usePrinter } from '@/core/printing'
+import { supabase } from '@/supabase/client'
 import { createPreBillSnapshot } from '@/stores/pos/utils/preBillTracking'
 import PaymentItemsList from './widgets/PaymentItemsList.vue'
 import PrinterStatus from './widgets/PrinterStatus.vue'
 import BillDiscountDialog from '../order/dialogs/BillDiscountDialog.vue'
+import GuestCountDialog from '../order/dialogs/GuestCountDialog.vue'
 import type { Customer } from '@/stores/customers'
 
 interface Props {
@@ -441,6 +476,7 @@ const props = withDefaults(defineProps<Props>(), {
 const ordersStore = usePosOrdersStore()
 const paymentSettingsStore = usePaymentSettingsStore()
 const channelsStore = useChannelsStore()
+const loyaltyStore = useLoyaltyStore()
 
 // Printer
 const { isConnected: isPrinterConnected, settings: printerSettings, printPreBill } = usePrinter()
@@ -489,6 +525,7 @@ const processing = ref(false)
 const localDiscount = ref<number>(0) // Temporary bill discount (not saved to order)
 const localDiscountReason = ref<string>('') // Reason for bill discount
 const showBillDiscountDialog = ref(false)
+const showGuestCountEdit = ref(false)
 const preBillPrinted = ref(false) // Track if pre-bill was printed in this session
 const usePoints = ref(false) // Whether to apply loyalty points
 const pointsToRedeem = ref<number>(0) // Amount of points to redeem
@@ -560,6 +597,16 @@ const currentBill = computed((): PosBill | null => {
     ...originalBill,
     items: props.items.filter(item => item.paymentStatus !== 'paid' && item.status !== 'cancelled')
   }
+})
+
+// Total guest count across all bills being paid
+const totalGuestCount = computed((): number => {
+  const order = ordersStore.currentOrder
+  if (!order || !props.billIds?.length) return 0
+  return props.billIds.reduce((sum, id) => {
+    const bill = order.bills.find(b => b.id === id)
+    return sum + (bill?.guestCount || 0)
+  }, 0)
 })
 
 // Calculate total item discounts from items
@@ -635,8 +682,33 @@ const effectivePointsRedeem = computed(() => {
 
 const hasPersonalDiscount = computed(() => (props.customerPersonalDiscount || 0) > 0)
 
-const totalAmount = computed(() => {
+// Whether any discount is applied (bill, item, or points)
+const hasAnyDiscount = computed(
+  () => localDiscount.value > 0 || itemDiscounts.value > 0 || effectivePointsRedeem.value > 0
+)
+
+const rawTotalAmount = computed(() => {
   return amountAfterDiscount.value + totalTaxAmount.value - effectivePointsRedeem.value
+})
+
+// Round to nearest 1000 when discount is applied; difference absorbed into discount
+const totalAmount = computed(() => {
+  if (hasAnyDiscount.value) {
+    return Math.round(rawTotalAmount.value / 1000) * 1000
+  }
+  return rawTotalAmount.value
+})
+
+// Positive = rounded down (discount increases), negative = rounded up (discount decreases)
+const discountRoundingAdjustment = computed(() => {
+  return rawTotalAmount.value - totalAmount.value
+})
+
+// Stamps earned calculation: floor(total / threshold)
+const stampsEarned = computed(() => {
+  const threshold = loyaltyStore.stampThreshold
+  if (threshold <= 0 || totalAmount.value <= 0) return 0
+  return Math.floor(totalAmount.value / threshold)
 })
 
 const change = computed(() => {
@@ -688,13 +760,14 @@ const handleConfirm = () => {
     paymentData.change = change.value
   }
 
-  // Include bill discount if applied
-  if (localDiscount.value > 0) {
+  // Include bill discount if applied (with rounding adjustment absorbed into discount)
+  const adjustedDiscount = localDiscount.value + discountRoundingAdjustment.value
+  if (adjustedDiscount > 0) {
     paymentData.billDiscount = {
-      amount: localDiscount.value,
-      reason: localDiscountReason.value,
+      amount: adjustedDiscount,
+      reason: localDiscountReason.value || (discountRoundingAdjustment.value ? 'rounding' : ''),
       type: 'bill',
-      value: localDiscount.value
+      value: adjustedDiscount
     }
 
     // Include stamp card reward metadata for post-payment consumption
@@ -702,7 +775,11 @@ const handleConfirm = () => {
       paymentData.billDiscount.stampCardReward = { ...localStampCardReward.value }
     }
 
-    console.log('💰 Bill discount included in payment:', paymentData.billDiscount)
+    console.log('💰 Bill discount included in payment:', {
+      original: localDiscount.value,
+      rounding: discountRoundingAdjustment.value,
+      adjusted: adjustedDiscount
+    })
   }
 
   // Include points redemption if used
@@ -804,6 +881,16 @@ const handleDiscountCancel = () => {
   showBillDiscountDialog.value = false
 }
 
+const handleGuestCountUpdate = async (count: number) => {
+  const bill = currentBill.value
+  if (!bill || !props.orderId) return
+  try {
+    await ordersStore.updateBillGuestCount(props.orderId, bill.id, count)
+  } catch (err) {
+    DebugUtils.error('PaymentDialog', 'Failed to update guest count', { error: err })
+  }
+}
+
 const getMethodColor = (code: string): string => {
   const colorMap: Record<string, string> = {
     cash: 'success',
@@ -859,13 +946,25 @@ const buildReceiptData = (): ReceiptData => {
     items,
     subtotal: props.amount,
     itemDiscounts: itemDiscounts.value,
-    billDiscount: localDiscount.value,
+    billDiscount: localDiscount.value + discountRoundingAdjustment.value,
     billDiscountReason: localDiscountReason.value,
     subtotalAfterDiscounts: amountAfterDiscount.value,
     taxes: taxBreakdown.value,
     taxInclusive: taxMode.value === 'inclusive',
     totalAmount: totalAmount.value,
-    footerMessage: printerSettings.value.footerMessage
+    footerMessage: printerSettings.value.footerMessage,
+    loyalty:
+      effectivePointsRedeem.value > 0 || (props.customerBalance && props.customerBalance > 0)
+        ? {
+            customerName: props.customerName || undefined,
+            pointsRedeemed:
+              effectivePointsRedeem.value > 0 ? effectivePointsRedeem.value : undefined,
+            pointsBalance:
+              props.customerBalance > 0
+                ? props.customerBalance - effectivePointsRedeem.value
+                : undefined
+          }
+        : undefined
   }
 }
 
@@ -880,6 +979,24 @@ const handlePrintPreBill = async (): Promise<void> => {
   isPrintingPreBill.value = true
   try {
     const receiptData = buildReceiptData()
+
+    // Auto-generate invite QR for orders without customer
+    if (!props.customerId && ordersStore.currentOrder?.id) {
+      try {
+        const { data } = await supabase.rpc('create_order_invite', {
+          p_order_id: ordersStore.currentOrder.id
+        })
+        if (data?.success && data?.url) {
+          receiptData.inviteQR = {
+            url: data.url,
+            message: 'Scan to collect stamps!'
+          }
+        }
+      } catch (e) {
+        DebugUtils.error('PaymentDialog', 'Failed to create order invite', { error: e })
+      }
+    }
+
     const result = await printPreBill(receiptData)
 
     if (result.success) {
@@ -957,6 +1074,13 @@ watch(
   }
 )
 
+// Auto-fill cashReceived when switching to cash method
+watch(selectedMethod, newMethod => {
+  if (newMethod === 'cash' && cashReceived.value === 0) {
+    cashReceived.value = totalAmount.value
+  }
+})
+
 // Watchers
 watch(
   () => props.modelValue,
@@ -991,22 +1115,21 @@ watch(
   display: flex;
   flex-direction: column;
   max-height: 90vh;
+  max-height: 90dvh;
 }
 
 .dialog-content {
   flex: 1 1 auto;
-  overflow: hidden;
+  overflow-y: auto;
   min-height: 0;
-}
-
-.dialog-content :deep(.v-row) {
-  height: 100%;
 }
 
 /* Left column: items list + loyalty at bottom */
 .left-column {
   border-right: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .items-scroll {
@@ -1020,9 +1143,8 @@ watch(
   flex-shrink: 0;
 }
 
-/* Right column: scrollable if content overflows */
+/* Right column */
 .right-column {
-  overflow-y: auto;
   min-height: 0;
 }
 
@@ -1068,7 +1190,6 @@ watch(
   .left-column {
     border-right: none;
     border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-    max-height: 40vh;
   }
 }
 </style>
@@ -1076,7 +1197,8 @@ watch(
 <!-- Global style for dialog wrapper -->
 <style>
 .payment-dialog-wrapper {
-  max-height: 95vh !important;
+  max-height: calc(100vh - 32px) !important;
+  max-height: calc(100dvh - 32px) !important;
   margin: 16px !important;
 }
 </style>

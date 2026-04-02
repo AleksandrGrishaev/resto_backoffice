@@ -53,6 +53,7 @@ import SupplierPaymentContextWidget from './transaction-detail/SupplierPaymentCo
 import CorrectTransactionDialog from './CorrectTransactionDialog.vue'
 import { usePermissions } from '@/stores/auth/composables'
 import { supabase } from '@/supabase'
+import { usePaymentSettingsStore } from '@/stores/catalog/payment-settings.store'
 import type { Transaction } from '@/stores/account'
 
 interface Props {
@@ -68,6 +69,7 @@ const emit = defineEmits<{
 }>()
 
 const { hasAnyRole } = usePermissions()
+const paymentSettingsStore = usePaymentSettingsStore()
 const showCorrectDialog = ref(false)
 const belongsToActiveShift = ref(false)
 
@@ -77,12 +79,18 @@ const isOpen = computed({
   set: value => emit('update:modelValue', value)
 })
 
-// Check if this transaction belongs to an active shift (created after shift start)
+// Check if this transaction belongs to an active shift
+// Only block editing for the POS cash register account (from payment settings)
 watch(
   [isOpen, () => props.transaction],
   async ([open, tx]) => {
     belongsToActiveShift.value = false
     if (!open || !tx) return
+
+    // Only the POS cash register account should be blocked during active shifts
+    const posCashAccountId = paymentSettingsStore.posCashAccountId
+    if (!posCashAccountId || tx.accountId !== posCashAccountId) return
+
     try {
       const { data: activeShift } = await supabase
         .from('shifts')

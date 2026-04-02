@@ -3,7 +3,7 @@ import type { PosTable, ServiceResponse, TableStatus } from '../types'
 import { TimeUtils } from '@/utils'
 import { ENV } from '@/config/environment'
 import { supabase } from '@/supabase/client'
-import { toSupabaseInsert, toSupabaseUpdate, fromSupabase } from './supabaseMappers'
+import { fromSupabase, mapStatusToSupabase } from './supabaseMappers'
 
 export class TablesService {
   private readonly STORAGE_KEY = 'pos_tables'
@@ -104,8 +104,9 @@ export class TablesService {
 
   /**
    * Обновить статус стола
-   * @param expectedOrderId — conditional guard: free/occupy only if current_order_id matches
-   *   (prevents stale orders from hijacking tables occupied by newer orders)
+   * Supabase = source of truth. localStorage = offline fallback cache.
+   *
+   * @param expectedOrderId — conditional guard: free only if current_order_id matches
    */
   async updateTableStatus(
     tableId: string,
@@ -114,7 +115,51 @@ export class TablesService {
     expectedOrderId?: string
   ): Promise<ServiceResponse<PosTable>> {
     try {
-      // ✅ EGRESS FIX: Read from localStorage instead of calling getAllTables()
+      if (this.isSupabaseAvailable()) {
+        const { data: rpcData, error: rpcError } = await supabase!.rpc('update_table_status', {
+          p_table_id: tableId,
+          p_status: mapStatusToSupabase(status),
+          p_order_id: orderId || null,
+          p_expected_order_id: expectedOrderId || null
+        })
+
+        if (rpcError) {
+          // Only fall through to offline on network/connection errors
+          const isNetworkError =
+            rpcError.message?.includes('fetch') ||
+            rpcError.message?.includes('network') ||
+            rpcError.message?.includes('Failed to fetch') ||
+            rpcError.code === 'PGRST301'
+          console.error('❌ RPC update_table_status failed:', rpcError.message)
+          if (!isNetworkError) {
+            return { success: false, error: rpcError.message || 'Table update failed' }
+          }
+        } else if (rpcData) {
+          const result = rpcData as { success: boolean; data?: any; error?: string; noop?: boolean }
+
+          if (!result.success) {
+            console.log('⏭️ Table update rejected by DB:', result.error)
+            return { success: false, error: result.error || 'Update rejected by database' }
+          }
+
+          const freshTable = fromSupabase(result.data)
+
+          if (result.noop) {
+            console.log(`✅ Table ${freshTable.number} status already correct (noop)`)
+          } else {
+            this.updateLocalStorageCache(tableId, freshTable)
+            console.log(`✅ Table ${freshTable.number} status updated in Supabase: ${status}`)
+          }
+
+          return {
+            success: true,
+            data: freshTable,
+            metadata: { timestamp: TimeUtils.getCurrentLocalISO(), source: 'api' }
+          }
+        }
+      }
+
+      // Offline fallback: localStorage-only when Supabase is unreachable
       const cachedData = localStorage.getItem(this.STORAGE_KEY)
       if (!cachedData) {
         throw new Error('Tables not loaded - localStorage cache empty')
@@ -126,101 +171,55 @@ export class TablesService {
         throw new Error('Table not found')
       }
 
-      // Conditional guard: skip if table is owned by a different order
+      // Offline conditional guard
       if (expectedOrderId) {
         const currentTable = tables[tableIndex]
         if (currentTable.currentOrderId && currentTable.currentOrderId !== expectedOrderId) {
-          console.log('⏭️ Table ownership mismatch, skipping update:', {
-            tableNumber: currentTable.number,
-            expectedOrderId,
-            actualOrderId: currentTable.currentOrderId,
-            requestedStatus: status
-          })
-          return {
-            success: true,
-            data: currentTable
-          }
+          console.log('⏭️ [offline] Table ownership mismatch, skipping update')
+          return { success: true, data: currentTable }
         }
       }
 
       const updatedTable: PosTable = {
         ...tables[tableIndex],
         status,
-        currentOrderId: orderId,
+        currentOrderId: status === 'free' ? undefined : orderId,
+        reservedUntil: status === 'free' ? undefined : tables[tableIndex].reservedUntil,
         updatedAt: TimeUtils.getCurrentLocalISO()
       }
 
-      // Очистить резервацию если стол освобождается
-      if (status === 'free') {
-        updatedTable.reservedUntil = undefined
-        updatedTable.currentOrderId = undefined
-      }
-
-      // Dual-write: Supabase + localStorage
-      // 1. Update in Supabase (if online)
-      if (this.isSupabaseAvailable()) {
-        const supabaseUpdate = toSupabaseUpdate(updatedTable)
-        let query = supabase!.from('tables').update(supabaseUpdate).eq('id', tableId)
-
-        // Optimistic lock: only occupy if table is still available (prevents race condition)
-        if (status === 'occupied') {
-          query = query.in('status', ['available'])
-        }
-
-        // Conditional guard in DB: only free/update if current_order_id matches
-        if (expectedOrderId && status === 'free') {
-          query = query.eq('current_order_id', expectedOrderId)
-        }
-
-        const { error: sbError, data } = await query.select('id').maybeSingle()
-
-        if (sbError) {
-          console.error('❌ Supabase table status update failed:', sbError.message)
-          if (status === 'occupied') {
-            // Table not available — do NOT write rejected state to localStorage
-            return {
-              success: false,
-              error: 'Table is already occupied by another device'
-            }
-          }
-          // For non-occupy errors, fall through to localStorage (offline resilience)
-        } else if (!data) {
-          // No row returned — conditional guard prevented the update
-          if (status === 'occupied') {
-            // Optimistic lock failed: table was not available
-            console.log('⏭️ Supabase: table not available for occupy, skipping localStorage')
-            return {
-              success: false,
-              error: 'Table is already occupied by another device'
-            }
-          }
-          if (expectedOrderId) {
-            // Ownership mismatch on free — table owned by different order
-            console.log('⏭️ Supabase: table ownership mismatch, update skipped')
-            return {
-              success: true,
-              data: tables[tableIndex]
-            }
-          }
-        } else {
-          console.log(`✅ Table ${updatedTable.number} status updated in Supabase: ${status}`)
-        }
-      }
-
-      // 2. Update localStorage (offline resilience — only reached when Supabase succeeded or offline)
       tables[tableIndex] = updatedTable
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(tables))
-      console.log(`💾 Table ${updatedTable.number} status saved to localStorage (backup)`)
+      console.log(`💾 [offline] Table ${updatedTable.number} status: ${status}`)
 
       return {
         success: true,
-        data: updatedTable
+        data: updatedTable,
+        metadata: { timestamp: TimeUtils.getCurrentLocalISO(), source: 'local' }
       }
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to update table status'
       }
+    }
+  }
+
+  /**
+   * Update a single table in the localStorage cache (write-behind)
+   */
+  private updateLocalStorageCache(tableId: string, freshTable: PosTable): void {
+    try {
+      const cached = localStorage.getItem(this.STORAGE_KEY)
+      if (!cached) return
+      const tables: PosTable[] = JSON.parse(cached)
+      const idx = tables.findIndex(t => t.id === tableId)
+      if (idx !== -1) {
+        tables[idx] = freshTable
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(tables))
+      }
+    } catch {
+      // localStorage write failed — non-critical, in-memory state is still correct
     }
   }
 

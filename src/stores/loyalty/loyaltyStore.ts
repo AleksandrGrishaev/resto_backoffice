@@ -81,8 +81,21 @@ export const useLoyaltyStore = defineStore('loyalty', () => {
     return loyaltyService.getActiveCardByCustomerId(customerId)
   }
 
-  async function issueNewCard(): Promise<string> {
-    return loyaltyService.issueNewCard()
+  async function getNextCardNumber(): Promise<string> {
+    return loyaltyService.getNextCardNumber()
+  }
+
+  async function issueNewCard(options?: {
+    cardNumber?: string
+    stamps?: number
+    customerName?: string
+    customerPhone?: string
+  }): Promise<string> {
+    return loyaltyService.issueNewCard(options)
+  }
+
+  async function searchCards(query: string): Promise<StampCardListItem[]> {
+    return loyaltyService.searchCards(query)
   }
 
   async function linkCardToCustomer(cardNumber: string, customerId: string): Promise<void> {
@@ -138,6 +151,11 @@ export const useLoyaltyStore = defineStore('loyalty', () => {
     return loyaltyService.getTransactions(customerId, limit)
   }
 
+  // Refund reversal
+  async function reverseLoyaltyOnRefund(customerId: string, orderId: string, refundAmount: number) {
+    return loyaltyService.reverseLoyaltyOnRefund(customerId, orderId, refundAmount)
+  }
+
   return {
     // State
     settings,
@@ -156,7 +174,9 @@ export const useLoyaltyStore = defineStore('loyalty', () => {
     getCardInfo,
     getCardById,
     getActiveCardByCustomerId,
+    getNextCardNumber,
     issueNewCard,
+    searchCards,
     linkCardToCustomer,
     listCards,
     updateCard,
@@ -165,6 +185,7 @@ export const useLoyaltyStore = defineStore('loyalty', () => {
     redeemPoints,
     convertCard,
     createRedemption,
-    getTransactions
+    getTransactions,
+    reverseLoyaltyOnRefund
   }
 })

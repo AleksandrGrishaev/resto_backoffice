@@ -32,13 +32,20 @@ import { useAuthStore } from '@/stores/auth'
 import { useKitchenOrders } from '@/stores/kitchen/composables'
 import { useNotifications } from '@/core/pwa'
 
+import type { KitchenScreenName } from '../types'
+
+const emit = defineEmits<{
+  'navigate-screen': [screen: KitchenScreenName]
+}>()
+
 const MODULE_NAME = 'KitchenNavigationMenu'
 
 // Kitchen action IDs
 const KITCHEN_ACTIONS = {
   LOGOUT: 'logout',
   REFRESH: 'refresh',
-  ACTIVATE_SOUND: 'activate_sound'
+  ACTIVATE_SOUND: 'activate_sound',
+  RITUAL_SETTINGS: 'ritual_settings'
 } as const
 
 // =============================================
@@ -111,6 +118,19 @@ const menuSections = computed(() => [
     ]
   },
 
+  // Settings Section
+  {
+    title: 'SETTINGS',
+    actions: [
+      {
+        id: KITCHEN_ACTIONS.RITUAL_SETTINGS,
+        icon: 'mdi-calendar-check',
+        label: 'Ritual Tasks',
+        disabled: loading.value
+      }
+    ]
+  },
+
   // System Section
   {
     title: 'SYSTEM',
@@ -151,6 +171,10 @@ const handleAction = async (actionId: string) => {
 
       case KITCHEN_ACTIONS.LOGOUT:
         await handleLogout()
+        break
+
+      case KITCHEN_ACTIONS.RITUAL_SETTINGS:
+        emit('navigate-screen', 'ritual-settings')
         break
 
       case 'help':

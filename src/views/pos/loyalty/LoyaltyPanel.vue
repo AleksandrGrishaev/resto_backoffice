@@ -32,6 +32,41 @@
         <span class="text-body-2 font-weight-medium">
           {{ formatIDR(attachedCustomer.loyaltyBalance) }}
         </span>
+        <v-btn
+          v-if="isPrinterConnected"
+          icon
+          size="x-small"
+          variant="text"
+          color="amber-darken-2"
+          :loading="printingInvite"
+          @click="handlePrintInviteQR"
+        >
+          <v-icon size="16">mdi-qrcode</v-icon>
+          <v-tooltip activator="parent" location="top">Print Invite QR</v-tooltip>
+        </v-btn>
+        <v-btn
+          v-if="!customerHasAuth && !checkingAuth"
+          icon
+          size="x-small"
+          variant="text"
+          color="info"
+          :loading="showingInviteQR"
+          @click="handleShowInviteQR"
+        >
+          <v-icon size="16">mdi-eye</v-icon>
+          <v-tooltip activator="parent" location="top">Show QR on screen</v-tooltip>
+        </v-btn>
+        <v-alert
+          v-if="inviteError"
+          type="error"
+          variant="tonal"
+          density="compact"
+          closable
+          class="mt-1"
+          @click:close="inviteError = null"
+        >
+          {{ inviteError }}
+        </v-alert>
         <v-btn icon size="x-small" variant="text" @click="expanded = true">
           <v-icon size="16">mdi-pencil</v-icon>
         </v-btn>
@@ -186,6 +221,7 @@
             inputmode="numeric"
             class="flex-grow-1"
             @keyup.enter="findCard"
+            @input="debouncedCardSearch"
           />
           <v-btn
             color="primary"
@@ -196,10 +232,39 @@
           >
             Find
           </v-btn>
-          <v-btn variant="outlined" density="compact" :loading="issuingCard" @click="issueCard">
+          <v-btn
+            variant="outlined"
+            density="compact"
+            :loading="issuingCard"
+            @click="openNewCardForm"
+          >
             New
           </v-btn>
         </div>
+
+        <!-- Card search results -->
+        <v-list
+          v-if="cardSearchResults.length > 0 && !attachedCard"
+          density="compact"
+          class="search-results mb-2"
+        >
+          <v-list-item v-for="c in cardSearchResults" :key="c.id" @click="selectCardFromSearch(c)">
+            <template #prepend>
+              <v-icon size="18" color="amber" class="mr-2">mdi-stamper</v-icon>
+            </template>
+            <v-list-item-title class="text-body-2">
+              #{{ c.cardNumber }}
+              <span v-if="c.customerName" class="text-medium-emphasis ml-2">
+                {{ c.customerName }}
+              </span>
+            </v-list-item-title>
+            <template #append>
+              <v-chip size="x-small" :color="c.status === 'active' ? 'success' : 'grey'">
+                {{ c.status }}
+              </v-chip>
+            </template>
+          </v-list-item>
+        </v-list>
 
         <!-- Card not found error -->
         <v-alert
@@ -213,6 +278,83 @@
         >
           {{ cardError }}
         </v-alert>
+
+        <!-- New card form -->
+        <div v-if="showNewCard" class="new-customer pa-2 rounded loyalty-surface mb-2">
+          <div class="text-body-2 font-weight-medium mb-2">New Stamp Card</div>
+          <v-text-field
+            :model-value="newCardNumber"
+            label="Card number"
+            density="compact"
+            variant="outlined"
+            hide-details
+            readonly
+            class="mb-2"
+          />
+          <NumericInputField
+            v-model="newCardStamps"
+            label="Initial stamps (for existing cards)"
+            density="compact"
+            variant="outlined"
+            hide-details
+            :min="0"
+            :max="100"
+            class="mb-2"
+          />
+          <v-text-field
+            v-model="newCardOwnerName"
+            placeholder="Owner name (optional)"
+            density="compact"
+            variant="outlined"
+            hide-details
+            class="mb-2"
+          />
+          <div class="d-flex gap-2 mb-2">
+            <v-select
+              :model-value="newCardPhone.selectedCountry.value.code"
+              :items="newCardPhone.countries"
+              item-value="code"
+              density="compact"
+              variant="outlined"
+              hide-details
+              style="max-width: 120px; flex-shrink: 0"
+              @update:model-value="newCardPhone.setCountry($event)"
+            >
+              <template #selection="{ item }">{{ item.raw.flag }} {{ item.raw.dial }}</template>
+              <template #item="{ item, props: itemProps }">
+                <v-list-item
+                  v-bind="itemProps"
+                  :title="`${item.raw.flag} ${item.raw.name}`"
+                  :subtitle="item.raw.dial"
+                />
+              </template>
+            </v-select>
+            <v-text-field
+              v-model="newCardPhone.localNumber.value"
+              :placeholder="newCardPhone.selectedCountry.value.format || 'Phone number'"
+              density="compact"
+              variant="outlined"
+              hide-details
+              inputmode="tel"
+              class="flex-grow-1"
+            />
+          </div>
+          <v-alert v-if="newCardError" type="error" variant="tonal" density="compact" class="mb-2">
+            {{ newCardError }}
+          </v-alert>
+          <div class="d-flex gap-2">
+            <v-btn
+              size="small"
+              variant="flat"
+              color="primary"
+              :loading="issuingCard"
+              @click="createNewCard"
+            >
+              Create Card
+            </v-btn>
+            <v-btn size="small" variant="text" @click="showNewCard = false">Cancel</v-btn>
+          </div>
+        </div>
 
         <!-- Card info -->
         <div v-if="attachedCard" class="card-info pa-2 rounded loyalty-surface">
@@ -346,6 +488,46 @@
               No accrual
             </v-chip>
           </div>
+
+          <!-- Invite QR: show when customer has no linked auth account -->
+          <div v-if="!customerHasAuth && !checkingAuth" class="mt-2">
+            <div class="d-flex gap-2">
+              <v-btn
+                size="small"
+                variant="tonal"
+                color="amber-darken-2"
+                prepend-icon="mdi-qrcode"
+                :loading="printingInvite"
+                @click="handlePrintInviteQR"
+              >
+                Print Invite QR
+              </v-btn>
+              <v-btn
+                size="small"
+                variant="tonal"
+                color="info"
+                prepend-icon="mdi-qrcode-scan"
+                :loading="showingInviteQR"
+                @click="handleShowInviteQR"
+              >
+                Show QR
+              </v-btn>
+            </div>
+            <div class="text-caption text-medium-emphasis mt-1">
+              Customer has no linked account. Print or show QR so they can register online.
+            </div>
+            <v-alert
+              v-if="inviteError"
+              type="error"
+              variant="tonal"
+              density="compact"
+              closable
+              class="mt-1"
+              @click:close="inviteError = null"
+            >
+              {{ inviteError }}
+            </v-alert>
+          </div>
         </div>
 
         <!-- Conversion result toast -->
@@ -372,24 +554,35 @@
         <div v-if="showNewCustomer" class="new-customer pa-2 rounded loyalty-surface mt-2">
           <v-text-field
             v-model="newCustomerName"
-            placeholder="Customer name *"
+            placeholder="Customer name (Latin only) *"
             density="compact"
             variant="outlined"
-            hide-details
+            :rules="[(v: string) => /^[a-zA-Z0-9\s\u00C0-\u024F\-'.]*$/.test(v) || 'Latin only']"
             class="mb-2"
           />
           <div class="d-flex gap-2 mb-2">
             <v-select
-              v-model="newCustomerPhoneCode"
-              :items="phoneCodes"
+              :model-value="newCustomerPhone.selectedCountry.value.code"
+              :items="newCustomerPhone.countries"
+              item-value="code"
               density="compact"
               variant="outlined"
               hide-details
-              style="max-width: 110px; flex-shrink: 0"
-            />
+              style="max-width: 120px; flex-shrink: 0"
+              @update:model-value="newCustomerPhone.setCountry($event)"
+            >
+              <template #selection="{ item }">{{ item.raw.flag }} {{ item.raw.dial }}</template>
+              <template #item="{ item, props: itemProps }">
+                <v-list-item
+                  v-bind="itemProps"
+                  :title="`${item.raw.flag} ${item.raw.name}`"
+                  :subtitle="item.raw.dial"
+                />
+              </template>
+            </v-select>
             <v-text-field
-              v-model="newCustomerPhone"
-              placeholder="Phone number"
+              v-model="newCustomerPhone.localNumber.value"
+              :placeholder="newCustomerPhone.selectedCountry.value.format || 'Phone number'"
               density="compact"
               variant="outlined"
               hide-details
@@ -405,7 +598,21 @@
             hide-details
             class="mb-2"
           />
+          <div class="mb-2">
+            <div class="text-caption text-medium-emphasis mb-1">Loyalty program</div>
+            <v-btn-toggle
+              v-model="newCustomerLoyaltyProgram"
+              mandatory
+              density="compact"
+              color="primary"
+              class="w-100"
+            >
+              <v-btn value="stamps" size="small" class="flex-grow-1">Stamps</v-btn>
+              <v-btn value="cashback" size="small" class="flex-grow-1">Cashback</v-btn>
+            </v-btn-toggle>
+          </div>
           <v-text-field
+            v-if="newCustomerLoyaltyProgram === 'stamps'"
             v-model="newCustomerCardNumber"
             placeholder="Stamp card number (optional)"
             density="compact"
@@ -429,7 +636,10 @@
               variant="flat"
               color="primary"
               :loading="creatingCustomer"
-              :disabled="!newCustomerName.trim()"
+              :disabled="
+                !newCustomerName.trim() ||
+                !/^[a-zA-Z0-9\s\u00C0-\u024F\-'.]+$/.test(newCustomerName.trim())
+              "
               @click="createNewCustomer"
             >
               Create
@@ -439,19 +649,26 @@
         </div>
       </div>
     </div>
+
+    <!-- Show QR Dialog (for testing without printer) -->
+    <ShowQrDialog v-model="showQrDialog" :url="showQrUrl" title="Invite QR Code" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { Customer } from '@/stores/customers'
-import type { StampCardInfo, ConvertResult } from '@/stores/loyalty'
+import type { StampCardInfo, StampCardListItem, ConvertResult } from '@/stores/loyalty'
 import { useCustomersStore } from '@/stores/customers'
 import { useLoyaltyStore } from '@/stores/loyalty'
 import { formatIDR, DebugUtils } from '@/utils'
 import { TimeUtils } from '@/utils'
-import { usePhoneCodes, buildFullPhone } from '@/composables/usePhoneCodes'
+import { usePhoneInput } from '@/composables/usePhoneInput'
+import { NumericInputField } from '@/components/input'
+import { supabase } from '@/supabase/client'
+import { usePrinter } from '@/core/printing'
 import QrScanner from './QrScanner.vue'
+import ShowQrDialog from '@/components/common/ShowQrDialog.vue'
 
 const props = defineProps<{
   orderId?: string
@@ -469,7 +686,77 @@ const emit = defineEmits<{
 
 const customersStore = useCustomersStore()
 const loyaltyStore = useLoyaltyStore()
-const { phoneCodes, defaultPhoneCode } = usePhoneCodes()
+const { isConnected: isPrinterConnected, printInviteQR } = usePrinter()
+
+// Invite QR state
+const printingInvite = ref(false)
+const showingInviteQR = ref(false)
+const showQrDialog = ref(false)
+const showQrUrl = ref('')
+const inviteError = ref<string | null>(null)
+const customerHasAuth = ref(false)
+const checkingAuth = ref(false)
+
+// Check if customer has any linked auth identities
+async function checkCustomerAuth(customerId: string) {
+  checkingAuth.value = true
+  try {
+    const { count } = await supabase
+      .from('customer_identities')
+      .select('id', { count: 'exact', head: true })
+      .eq('customer_id', customerId)
+    customerHasAuth.value = (count ?? 0) > 0
+  } catch {
+    customerHasAuth.value = false
+  } finally {
+    checkingAuth.value = false
+  }
+}
+
+async function createInviteUrl(): Promise<{ url: string; customerName: string } | null> {
+  if (!attachedCustomer.value) return null
+  inviteError.value = null
+  const { data } = await supabase.rpc('create_customer_invite', {
+    p_customer_id: attachedCustomer.value.id
+  })
+  if (data?.success && data?.url) {
+    return { url: data.url, customerName: data.customerName || attachedCustomer.value.name }
+  }
+  DebugUtils.error('LoyaltyPanel', 'Failed to create invite', { data })
+  inviteError.value = data?.error || 'Failed to create invite'
+  return null
+}
+
+async function handleShowInviteQR() {
+  if (!attachedCustomer.value || showingInviteQR.value) return
+  showingInviteQR.value = true
+  try {
+    const result = await createInviteUrl()
+    if (result) {
+      showQrUrl.value = result.url
+      showQrDialog.value = true
+    }
+  } catch {
+    inviteError.value = 'Failed to generate invite QR'
+  } finally {
+    showingInviteQR.value = false
+  }
+}
+
+async function handlePrintInviteQR() {
+  if (!attachedCustomer.value || printingInvite.value) return
+  printingInvite.value = true
+  try {
+    const result = await createInviteUrl()
+    if (result) {
+      await printInviteQR(result.url, result.customerName)
+    }
+  } catch {
+    inviteError.value = 'Failed to print invite QR'
+  } finally {
+    printingInvite.value = false
+  }
+}
 
 // State
 const expanded = ref(props.dialogMode || false)
@@ -537,6 +824,15 @@ const creatingCustomer = ref(false)
 const cardNumber = ref('')
 const cardError = ref('')
 const attachedCard = ref<StampCardInfo | null>(null)
+const cardSearchResults = ref<StampCardListItem[]>([])
+
+// New card form state
+const showNewCard = ref(false)
+const newCardNumber = ref('')
+const newCardStamps = ref(0)
+const newCardOwnerName = ref('')
+const newCardError = ref('')
+const newCardPhone = usePhoneInput()
 
 // Customer state
 const customerQuery = ref('')
@@ -544,10 +840,10 @@ const searchResults = ref<Customer[]>([])
 const attachedCustomer = ref<Customer | null>(null)
 const showNewCustomer = ref(false)
 const newCustomerName = ref('')
-const newCustomerPhone = ref('')
-const newCustomerPhoneCode = ref(defaultPhoneCode)
+const newCustomerPhone = usePhoneInput()
 const newCustomerTelegram = ref('')
 const newCustomerCardNumber = ref('')
+const newCustomerLoyaltyProgram = ref<'stamps' | 'cashback'>('stamps')
 const createCustomerError = ref('')
 const conversionResult = ref<ConvertResult | null>(null)
 
@@ -627,6 +923,7 @@ watch(
       }
       if (c) {
         attachedCustomer.value = c
+        checkCustomerAuth(c.id)
         // Auto-switch to customer tab if in dialog mode
         if (props.dialogMode) activeTab.value = 'customer'
       }
@@ -665,12 +962,13 @@ async function findCard() {
   if (!cardNumber.value.trim()) return
   loading.value = true
   cardError.value = ''
+  cardSearchResults.value = []
 
   try {
     const info = await loyaltyStore.getCardInfo(cardNumber.value.trim())
     attachedCard.value = info
     emit('update:card', info)
-    if (!props.dialogMode) expanded.value = false
+    // Don't collapse — let the user see the card info and decide
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     // Show user-friendly error
@@ -686,14 +984,55 @@ async function findCard() {
   }
 }
 
-async function issueCard() {
-  issuingCard.value = true
+// Card search (debounced)
+let cardSearchTimeout: ReturnType<typeof setTimeout> | null = null
+function debouncedCardSearch() {
+  if (cardSearchTimeout) clearTimeout(cardSearchTimeout)
+  cardSearchTimeout = setTimeout(async () => {
+    const q = cardNumber.value.trim()
+    if (q.length < 1) {
+      cardSearchResults.value = []
+      return
+    }
+    cardSearchResults.value = await loyaltyStore.searchCards(q)
+  }, 300)
+}
+
+async function selectCardFromSearch(card: StampCardListItem) {
+  cardNumber.value = card.cardNumber
+  cardSearchResults.value = []
+  await findCard()
+}
+
+async function openNewCardForm() {
+  showNewCard.value = true
+  newCardStamps.value = 0
+  newCardOwnerName.value = ''
+  newCardPhone.localNumber.value = ''
+  newCardError.value = ''
   try {
-    const newNumber = await loyaltyStore.issueNewCard()
-    cardNumber.value = newNumber
+    newCardNumber.value = await loyaltyStore.getNextCardNumber()
+  } catch {
+    newCardNumber.value = '???'
+  }
+}
+
+async function createNewCard() {
+  issuingCard.value = true
+  newCardError.value = ''
+  try {
+    const stamps = newCardStamps.value > 0 ? newCardStamps.value : undefined
+    const createdNumber = await loyaltyStore.issueNewCard({
+      cardNumber: newCardNumber.value,
+      stamps: stamps && !isNaN(stamps) ? stamps : undefined,
+      customerName: newCardOwnerName.value || undefined,
+      customerPhone: newCardPhone.fullPhone.value || undefined
+    })
+    cardNumber.value = createdNumber
+    showNewCard.value = false
     await findCard()
   } catch (err) {
-    cardError.value = err instanceof Error ? err.message : 'Failed to issue card'
+    newCardError.value = err instanceof Error ? err.message : 'Failed to create card'
   } finally {
     issuingCard.value = false
   }
@@ -723,11 +1062,14 @@ function selectCustomer(customer: Customer) {
   searchResults.value = []
   customerQuery.value = ''
   emit('update:customer', customer)
-  if (!props.dialogMode) expanded.value = false
+  // Check if customer has linked auth
+  checkCustomerAuth(customer.id)
+  // Don't collapse — let operator continue (e.g. attach card too)
 }
 
 function detachCustomer() {
   attachedCustomer.value = null
+  customerHasAuth.value = false
   emit('update:customer', null)
 }
 
@@ -737,40 +1079,30 @@ async function createNewCustomer() {
   createCustomerError.value = ''
 
   try {
-    // Build phone with country code
-    const fullPhone = buildFullPhone(newCustomerPhoneCode.value, newCustomerPhone.value)
-
-    let customer = await customersStore.createCustomer({
+    const customer = await customersStore.createCustomer({
       name: newCustomerName.value.trim(),
-      phone: fullPhone,
-      telegramUsername: newCustomerTelegram.value.trim() || undefined
+      phone: newCustomerPhone.fullPhone.value || undefined,
+      telegramUsername: newCustomerTelegram.value.trim() || undefined,
+      loyaltyProgram: newCustomerLoyaltyProgram.value
     } as any)
 
-    // If stamp card number provided, link it and auto-convert stamps to points
+    // If stamp card number provided, link it to customer (no conversion — stamps keep accruing)
     const cardNum = newCustomerCardNumber.value.trim()
     if (cardNum) {
       try {
         await loyaltyStore.linkCardToCustomer(cardNum, customer.id)
-        // Auto-convert: stamps → loyalty points + 10% bonus
-        const result = await loyaltyStore.convertCard(cardNum, customer.id)
-        if (result.success && result.stamps > 0) {
-          conversionResult.value = result
-          // Refresh customer to get updated loyalty_balance from DB
-          await customersStore.refreshCustomer(customer.id)
-          const updated = customersStore.getById(customer.id)
-          if (updated) customer = updated
-        }
       } catch {
-        // Card linking/conversion is optional — don't block customer creation
+        // Card linking is optional — don't block customer creation
       }
     }
 
     selectCustomer(customer)
     showNewCustomer.value = false
     newCustomerName.value = ''
-    newCustomerPhone.value = ''
+    newCustomerPhone.localNumber.value = ''
     newCustomerTelegram.value = ''
     newCustomerCardNumber.value = ''
+    newCustomerLoyaltyProgram.value = 'stamps'
   } catch (err) {
     createCustomerError.value = err instanceof Error ? err.message : 'Failed to create customer'
   } finally {

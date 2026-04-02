@@ -438,6 +438,7 @@ export class AccountSupabaseService {
           break
       }
 
+      const now = new Date().toISOString()
       const transaction: Transaction = {
         id: generateId(),
         accountId: data.accountId,
@@ -447,8 +448,10 @@ export class AccountSupabaseService {
         performedBy: data.performedBy,
         balanceAfter: newBalance,
         status: 'completed',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: now,
+        updatedAt: now,
+        // Accrual date: к какому периоду относится расход (если не указано — дата оплаты)
+        accrualDate: data.accrualDate || now,
         // Optional fields
         expenseCategory: data.expenseCategory,
         counteragentId: data.counteragentId,

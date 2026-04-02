@@ -1,8 +1,8 @@
--- Migration: 228_add_scheduled_item_status
--- Description: Add 'scheduled' status for order items with future pickup times.
---              Online orders with pickup_time != 'asap' will use 'scheduled' status
---              instead of 'waiting', so kitchen doesn't see them until it's time to cook.
--- Date: 2026-03-17
+-- Migration: 283_online_order_draft_status
+-- Description: Online orders now arrive as 'draft' instead of 'waiting'.
+--   POS must review and confirm before items appear on kitchen display.
+--   Scheduled orders also start as 'draft' (POS confirms → scheduled/waiting).
+-- Date: 2026-04-01
 
 -- ============================================================
 -- 1. Update create_online_order RPC
@@ -49,11 +49,13 @@ DECLARE
   v_now_time TIME;
   v_open_time TIME;
   v_close_time TIME;
-  -- NEW: scheduled order support
+  -- Quantity splitting (POS expects quantity=1 per row)
+  v_item_quantity INTEGER;
+  v_single_item_total NUMERIC;
+  v_q INTEGER;
+  -- Scheduled order support
   v_pickup_time TEXT;
   v_is_scheduled BOOLEAN := false;
-  v_item_status TEXT;
-  v_sent_to_kitchen TIMESTAMPTZ;
   v_estimated_ready TIMESTAMPTZ;
 BEGIN
   -- ============================================================
@@ -92,22 +94,15 @@ BEGIN
     END IF;
   END IF;
 
-  -- ============================================================
-  -- 1b. Determine if this is a scheduled order
-  -- ============================================================
+  -- 1b. Determine if this is a scheduled order (for display only, items still start as draft)
   v_is_scheduled := (v_pickup_time IS NOT NULL AND v_pickup_time != 'asap' AND v_pickup_time ~ '^\d{1,2}:\d{2}$');
 
   IF v_is_scheduled THEN
-    v_item_status := 'scheduled';
-    v_sent_to_kitchen := NULL;
-    -- Calculate estimated_ready_time from pickup_time (today, Jakarta timezone)
     v_estimated_ready := (
       (now() AT TIME ZONE 'Asia/Jakarta')::date
       + v_pickup_time::time
     ) AT TIME ZONE 'Asia/Jakarta';
   ELSE
-    v_item_status := 'waiting';
-    v_sent_to_kitchen := now();
     v_estimated_ready := NULL;
   END IF;
 
@@ -211,7 +206,7 @@ BEGIN
     estimated_ready_time,
     bills, created_by
   ) VALUES (
-    v_order_id, v_order_number, v_type, 'waiting', 'unpaid',
+    v_order_id, v_order_number, v_type, 'draft', 'unpaid',
     v_customer_id, v_customer_name, v_customer_phone,
     p_data->>'tableNumber', v_pickup_time, p_data->>'comment',
     'website', v_fulfillment,
@@ -322,55 +317,59 @@ BEGIN
       END LOOP;
     END IF;
 
-    -- Calculate item total
-    v_item_total := (v_unit_price + v_modifiers_total) * COALESCE((v_item->>'quantity')::integer, 1);
+    -- Calculate item total (split into N rows with quantity=1 for POS)
+    v_item_quantity := COALESCE((v_item->>'quantity')::integer, 1);
+    v_single_item_total := v_unit_price + v_modifiers_total;
+    v_item_total := v_single_item_total * v_item_quantity;
     v_order_subtotal := v_order_subtotal + v_item_total;
 
-    -- Insert order_item
-    v_item_id := gen_random_uuid();
+    -- Insert N separate order_items (POS expects quantity=1 per row for grouping)
+    FOR v_q IN 1..v_item_quantity LOOP
+      v_item_id := gen_random_uuid();
 
-    INSERT INTO order_items (
-      id, order_id, bill_id, bill_number,
-      menu_item_id, menu_item_name,
-      variant_id, variant_name,
-      quantity, unit_price, modifiers_total, total_price,
-      selected_modifiers,
-      status, department,
-      kitchen_notes,
-      draft_at, sent_to_kitchen_at, created_at, updated_at
-    ) VALUES (
-      v_item_id, v_order_id, v_bill_id, '1',
-      v_menu_item.id, v_menu_item.name,
-      v_item->>'variantId', COALESCE(v_variant->>'name', NULL),
-      COALESCE((v_item->>'quantity')::integer, 1), v_unit_price, v_modifiers_total, v_item_total,
-      CASE WHEN jsonb_array_length(v_selected_modifiers) > 0 THEN v_selected_modifiers ELSE NULL END,
-      v_item_status, v_menu_item.department,
-      v_item->>'kitchenNotes',
-      now(), v_sent_to_kitchen, now(), now()
-    );
+      INSERT INTO order_items (
+        id, order_id, bill_id, bill_number,
+        menu_item_id, menu_item_name,
+        variant_id, variant_name,
+        quantity, unit_price, modifiers_total, total_price,
+        selected_modifiers,
+        status, department,
+        kitchen_notes,
+        draft_at, sent_to_kitchen_at, created_at, updated_at
+      ) VALUES (
+        v_item_id, v_order_id, v_bill_id, '1',
+        v_menu_item.id, v_menu_item.name,
+        v_item->>'variantId', COALESCE(v_variant->>'name', NULL),
+        1, v_unit_price, v_modifiers_total, v_single_item_total,
+        CASE WHEN jsonb_array_length(v_selected_modifiers) > 0 THEN v_selected_modifiers ELSE NULL END,
+        'draft', v_menu_item.department,
+        v_item->>'kitchenNotes',
+        now(), NULL, now(), now()
+      );
 
-    -- Collect for bill and result
-    v_bill_items := v_bill_items || jsonb_build_array(jsonb_build_object(
-      'id', v_item_id,
-      'menuItemId', v_menu_item.id,
-      'menuItemName', v_menu_item.name,
-      'variantId', v_item->>'variantId',
-      'variantName', COALESCE(v_variant->>'name', NULL),
-      'quantity', COALESCE((v_item->>'quantity')::integer, 1),
-      'unitPrice', v_unit_price,
-      'modifiersTotal', v_modifiers_total,
-      'totalPrice', v_item_total
-    ));
+      -- Collect for bill and result
+      v_bill_items := v_bill_items || jsonb_build_array(jsonb_build_object(
+        'id', v_item_id,
+        'menuItemId', v_menu_item.id,
+        'menuItemName', v_menu_item.name,
+        'variantId', v_item->>'variantId',
+        'variantName', COALESCE(v_variant->>'name', NULL),
+        'quantity', 1,
+        'unitPrice', v_unit_price,
+        'modifiersTotal', v_modifiers_total,
+        'totalPrice', v_single_item_total
+      ));
 
-    v_result_items := v_result_items || jsonb_build_array(jsonb_build_object(
-      'id', v_item_id,
-      'menuItemId', v_menu_item.id,
-      'menuItemName', v_menu_item.name,
-      'quantity', COALESCE((v_item->>'quantity')::integer, 1),
-      'unitPrice', v_unit_price,
-      'totalPrice', v_item_total,
-      'imageUrl', v_menu_item.image_url
-    ));
+      v_result_items := v_result_items || jsonb_build_array(jsonb_build_object(
+        'id', v_item_id,
+        'menuItemId', v_menu_item.id,
+        'menuItemName', v_menu_item.name,
+        'quantity', 1,
+        'unitPrice', v_unit_price,
+        'totalPrice', v_single_item_total,
+        'imageUrl', v_menu_item.image_url
+      ));
+    END LOOP;
   END LOOP;
 
   -- ============================================================

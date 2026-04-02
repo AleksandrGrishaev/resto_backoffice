@@ -42,6 +42,22 @@
 
     <!-- Schedule Content -->
     <div v-else class="schedule-content">
+      <!-- Daily Progress Summary -->
+      <div v-if="totalTasks > 0" class="daily-progress">
+        <div class="progress-header">
+          <span class="progress-label">Today's Progress</span>
+          <span class="progress-count" :class="{ 'text-success': allDone }">
+            {{ completedTasks }}/{{ totalTasks }} tasks
+          </span>
+        </div>
+        <v-progress-linear
+          :model-value="completionPercent"
+          :color="allDone ? 'success' : 'primary'"
+          height="6"
+          rounded
+        />
+      </div>
+
       <!-- Recommendations Panel (collapsed when schedule has items) -->
       <div v-if="hasRecommendations" class="recommendations-panel">
         <v-expansion-panels variant="accordion">
@@ -67,52 +83,64 @@
           </v-expansion-panel>
         </v-expansion-panels>
       </div>
+      <!-- Morning Prep Section (pre-made items) -->
+      <ScheduleSection
+        v-if="scheduleItems.premade?.length"
+        title="Morning Prep"
+        subtitle="Pre-made items to prepare before opening"
+        color="teal"
+        icon="mdi-chef-hat"
+        :items="scheduleItems.premade"
+        @quick-complete="handleQuickComplete"
+        @edit-complete="handleEditComplete"
+      />
+
       <!-- Urgent Section -->
       <ScheduleSection
-        v-if="scheduleItems.urgent.length > 0"
+        v-if="scheduleItems.urgent?.length"
         title="Urgent"
         subtitle="Out of stock or expiring today"
         color="error"
         icon="mdi-alert-circle"
         :items="scheduleItems.urgent"
-        @complete="handleComplete"
-        @start="handleStart"
+        @quick-complete="handleQuickComplete"
+        @edit-complete="handleEditComplete"
       />
 
       <!-- Morning Section -->
       <ScheduleSection
-        v-if="scheduleItems.morning.length > 0"
+        v-if="scheduleItems.morning?.length"
         title="Morning"
         subtitle="6:00 - 12:00"
         color="info"
         icon="mdi-weather-sunny"
         :items="scheduleItems.morning"
-        @complete="handleComplete"
-        @start="handleStart"
+        @quick-complete="handleQuickComplete"
+        @edit-complete="handleEditComplete"
       />
 
       <!-- Afternoon Section -->
       <ScheduleSection
-        v-if="scheduleItems.afternoon.length > 0"
+        v-if="scheduleItems.afternoon?.length"
         title="Afternoon"
         subtitle="12:00 - 18:00"
         color="warning"
         icon="mdi-weather-partly-cloudy"
         :items="scheduleItems.afternoon"
-        @complete="handleComplete"
-        @start="handleStart"
+        @quick-complete="handleQuickComplete"
+        @edit-complete="handleEditComplete"
       />
 
       <!-- Evening Section -->
       <ScheduleSection
-        v-if="scheduleItems.evening.length > 0"
+        v-if="scheduleItems.evening?.length"
         title="Evening"
         subtitle="18:00 - 22:00"
         color="purple"
         icon="mdi-weather-night"
         :items="scheduleItems.evening"
-        @complete="handleComplete"
-        @start="handleStart"
+        @quick-complete="handleQuickComplete"
+        @edit-complete="handleEditComplete"
       />
     </div>
   </div>
@@ -147,8 +175,8 @@ const props = withDefaults(defineProps<Props>(), {
 // =============================================
 
 const emit = defineEmits<{
-  'complete-task': [task: ProductionScheduleItem]
-  'start-task': [task: ProductionScheduleItem]
+  'quick-complete-task': [task: ProductionScheduleItem]
+  'edit-complete-task': [task: ProductionScheduleItem]
   'generate-recommendations': []
   'apply-recommendation': [recommendation: ProductionRecommendation]
   'apply-all-recommendations': []
@@ -165,6 +193,7 @@ const emit = defineEmits<{
 const isEmpty = computed(() => {
   const items = props.scheduleItems
   return (
+    (!items.premade || items.premade.length === 0) &&
     (!items.urgent || items.urgent.length === 0) &&
     (!items.morning || items.morning.length === 0) &&
     (!items.afternoon || items.afternoon.length === 0) &&
@@ -177,16 +206,52 @@ const isEmpty = computed(() => {
  */
 const hasRecommendations = computed(() => props.recommendations.length > 0)
 
+/** Total tasks across all slots */
+const totalTasks = computed(() => {
+  const items = props.scheduleItems
+  return (
+    (items.premade?.length || 0) +
+    (items.urgent?.length || 0) +
+    (items.morning?.length || 0) +
+    (items.afternoon?.length || 0) +
+    (items.evening?.length || 0)
+  )
+})
+
+/** Completed tasks count */
+const completedTasks = computed(() => {
+  const items = props.scheduleItems
+  const all = [
+    ...(items.premade || []),
+    ...(items.urgent || []),
+    ...(items.morning || []),
+    ...(items.afternoon || []),
+    ...(items.evening || [])
+  ]
+  return all.filter(t => t.status === 'completed').length
+})
+
+/** Completion percentage */
+const completionPercent = computed(() => {
+  if (totalTasks.value === 0) return 0
+  return (completedTasks.value / totalTasks.value) * 100
+})
+
+/** All tasks done */
+const allDone = computed(() => {
+  return totalTasks.value > 0 && completedTasks.value === totalTasks.value
+})
+
 // =============================================
 // METHODS
 // =============================================
 
-function handleComplete(task: ProductionScheduleItem): void {
-  emit('complete-task', task)
+function handleQuickComplete(task: ProductionScheduleItem): void {
+  emit('quick-complete-task', task)
 }
 
-function handleStart(task: ProductionScheduleItem): void {
-  emit('start-task', task)
+function handleEditComplete(task: ProductionScheduleItem): void {
+  emit('edit-complete-task', task)
 }
 
 function handleApplyRecommendation(recommendation: ProductionRecommendation): void {
@@ -238,7 +303,31 @@ function handleDismissRecommendation(id: string): void {
 .schedule-content {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
+}
+
+.daily-progress {
+  background-color: var(--v-theme-surface);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.progress-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.progress-count {
+  font-weight: 500;
+  font-size: 14px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
 .recommendations-panel {

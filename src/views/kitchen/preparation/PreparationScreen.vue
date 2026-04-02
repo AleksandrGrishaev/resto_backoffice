@@ -21,27 +21,27 @@
           Refresh
         </v-btn>
 
+        <v-btn variant="outlined" color="primary" class="action-btn" @click="openProductionDialog">
+          <v-icon start>mdi-plus</v-icon>
+          Production
+        </v-btn>
+
         <v-btn
           variant="outlined"
+          color="warning"
           class="action-btn"
-          :loading="kpiStore.loading.recommendations"
-          @click="handleRegenerateSchedule"
+          @click="openPrepWriteOffDialog"
         >
-          <v-icon start>mdi-lightbulb-outline</v-icon>
-          Generate Schedule
-        </v-btn>
-
-        <v-btn color="primary" variant="flat" class="action-btn" @click="openProductionDialog">
-          <v-icon start>mdi-plus</v-icon>
-          New Production
-        </v-btn>
-
-        <v-btn color="warning" variant="flat" class="action-btn" @click="openPrepWriteOffDialog">
           <v-icon start>mdi-package-variant-remove</v-icon>
           Write-off Prep
         </v-btn>
 
-        <v-btn color="error" variant="flat" class="action-btn" @click="openProductWriteOffDialog">
+        <v-btn
+          variant="outlined"
+          color="error"
+          class="action-btn"
+          @click="openProductWriteOffDialog"
+        >
           <v-icon start>mdi-delete-outline</v-icon>
           Write-off Product
         </v-btn>
@@ -50,17 +50,6 @@
 
     <!-- Tabs Navigation -->
     <v-tabs v-model="activeTab" color="primary" class="preparation-tabs">
-      <v-tab value="schedule">
-        <v-icon start>mdi-clipboard-list-outline</v-icon>
-        Production Schedule
-        <v-badge
-          v-if="pendingTasksCount > 0"
-          :content="pendingTasksCount"
-          color="error"
-          inline
-          class="ml-2"
-        />
-      </v-tab>
       <v-tab value="stock">
         <v-icon start>mdi-package-variant</v-icon>
         Stock List
@@ -105,22 +94,6 @@
 
       <!-- Tab Windows -->
       <v-window v-else v-model="activeTab" class="tab-window">
-        <!-- Schedule Tab -->
-        <v-window-item value="schedule">
-          <ProductionScheduleTab
-            :schedule-items="scheduleBySlot"
-            :recommendations="activeRecommendations"
-            :loading="kpiStore.loading.schedule"
-            :recommendations-loading="kpiStore.loading.recommendations"
-            @complete-task="handleCompleteTask"
-            @start-task="handleStartTask"
-            @generate-recommendations="handleGenerateRecommendations"
-            @apply-recommendation="handleApplyRecommendation"
-            @apply-all-recommendations="handleApplyAllRecommendations"
-            @dismiss-recommendation="handleDismissRecommendation"
-          />
-        </v-window-item>
-
         <!-- Stock Tab -->
         <v-window-item value="stock">
           <StockListTab
@@ -167,14 +140,6 @@
       @error="handleError"
     />
 
-    <ScheduleConfirmDialog
-      v-model="showScheduleConfirmDialog"
-      :task="selectedTask"
-      @confirmed="handleTaskConfirmed"
-      @completed="handleBackgroundTaskCompleted"
-      @cancelled="handleTaskCancelled"
-    />
-
     <!-- Single Item Write-off Dialog (from Stock List trash icon) -->
     <PreparationQuantityDialog
       v-model="showSingleWriteOffDialog"
@@ -208,23 +173,15 @@ import { usePreparationStore } from '@/stores/preparation'
 import { useKitchenKpiStore } from '@/stores/kitchenKpi'
 import { useAuthStore } from '@/stores/auth'
 import { DebugUtils } from '@/utils'
-import { useRecommendations } from '@/stores/kitchenKpi/composables/useRecommendations'
 import { useSyncStatus } from '@/stores/kitchenKpi/composables/useSyncStatus'
-import ProductionScheduleTab from './components/ProductionScheduleTab.vue'
 import StockListTab from './components/StockListTab.vue'
 import HistoryTab from './components/HistoryTab.vue'
 import SyncStatusIndicator from './components/SyncStatusIndicator.vue'
-import {
-  SimpleProductionDialog,
-  PrepWriteOffDialog,
-  ProductWriteOffDialog,
-  ScheduleConfirmDialog
-} from './dialogs'
+import { SimpleProductionDialog, PrepWriteOffDialog, ProductWriteOffDialog } from './dialogs'
 import PreparationQuantityDialog from '@/views/Preparation/components/writeoff/PreparationQuantityDialog.vue'
 import PrepItemDetailsDialog from './dialogs/PrepItemDetailsDialog.vue'
 import { useBackgroundTasks } from '@/core/background'
-import type { PreparationBalance, ProductionRecommendation } from '@/stores/preparation/types'
-import type { ProductionScheduleItem } from '@/stores/kitchenKpi'
+import type { PreparationBalance } from '@/stores/preparation/types'
 import type { ComponentPublicInstance } from 'vue'
 
 const MODULE_NAME = 'PreparationScreen'
@@ -247,21 +204,6 @@ const authStore = useAuthStore()
 const { addPrepWriteOffTask } = useBackgroundTasks()
 
 // =============================================
-// RECOMMENDATIONS COMPOSABLE
-// =============================================
-
-const {
-  recommendations,
-  loading: recommendationsLoading,
-  activeRecommendations,
-  hasRecommendations,
-  generateRecommendations,
-  applyAllToSchedule,
-  applySingleToSchedule,
-  dismissRecommendation
-} = useRecommendations()
-
-// =============================================
 // SYNC STATUS (Sprint 7)
 // =============================================
 
@@ -271,7 +213,7 @@ const { isOnline, hasPendingSync, triggerSync } = useSyncStatus()
 // STATE
 // =============================================
 
-const activeTab = ref<'schedule' | 'stock' | 'history'>('schedule')
+const activeTab = ref<'stock' | 'history'>('stock')
 const isLoading = ref(false)
 const isRefreshing = ref(false)
 const error = ref<string | null>(null)
@@ -280,12 +222,10 @@ const error = ref<string | null>(null)
 const showProductionDialog = ref(false)
 const showPrepWriteOffDialog = ref(false)
 const showProductWriteOffDialog = ref(false)
-const showScheduleConfirmDialog = ref(false)
 const showSingleWriteOffDialog = ref(false)
 const showItemDetailsDialog = ref(false)
 const selectedPreparationId = ref<string | null>(null)
 const selectedPreparation = ref<{ id: string; name: string; unit: string } | null>(null)
-const selectedTask = ref<ProductionScheduleItem | null>(null)
 const selectedBalanceForDetails = ref<PreparationBalance | null>(null)
 
 // Template refs
@@ -316,19 +256,6 @@ const userDepartment = computed<'kitchen' | 'bar'>(() => {
     return 'bar'
   }
   return 'kitchen'
-})
-
-/**
- * Schedule items grouped by slot
- */
-const scheduleBySlot = computed(() => kpiStore.scheduleBySlot)
-
-/**
- * Pending tasks count for badge
- */
-const pendingTasksCount = computed(() => {
-  const summary = kpiStore.scheduleSummary
-  return summary?.pendingTasks || 0
 })
 
 /**
@@ -490,102 +417,6 @@ function handleViewDetails(balance: PreparationBalance): void {
   })
 }
 
-/**
- * Handle schedule task completion - opens confirm dialog
- */
-async function handleCompleteTask(task: ProductionScheduleItem): Promise<void> {
-  selectedTask.value = task
-  showScheduleConfirmDialog.value = true
-  DebugUtils.debug(MODULE_NAME, 'Opening schedule confirm dialog', { taskId: task.id })
-}
-
-/**
- * Handle starting a task (mark as in_progress)
- */
-async function handleStartTask(task: ProductionScheduleItem): Promise<void> {
-  try {
-    await kpiStore.updateTaskStatus(task.id, 'in_progress')
-    DebugUtils.debug(MODULE_NAME, 'Task started', { taskId: task.id })
-    showSnackbar('Task started', 'info')
-  } catch (err) {
-    DebugUtils.error(MODULE_NAME, 'Failed to start task', { error: err })
-    showSnackbar('Failed to start task', 'error')
-  }
-}
-
-// =============================================
-// RECOMMENDATIONS HANDLERS
-// =============================================
-
-/**
- * Generate recommendations
- */
-async function handleGenerateRecommendations(): Promise<void> {
-  try {
-    await generateRecommendations(userDepartment.value)
-    DebugUtils.info(MODULE_NAME, 'Recommendations generated', {
-      count: activeRecommendations.value.length
-    })
-  } catch (err) {
-    DebugUtils.error(MODULE_NAME, 'Failed to generate recommendations', { error: err })
-    showSnackbar('Failed to generate recommendations', 'error')
-  }
-}
-
-/**
- * Regenerate schedule (button handler)
- */
-async function handleRegenerateSchedule(): Promise<void> {
-  try {
-    await generateRecommendations(userDepartment.value)
-    if (activeRecommendations.value.length > 0) {
-      showSnackbar(`${activeRecommendations.value.length} recommendations generated`, 'info')
-    } else {
-      showSnackbar('All preparations are well-stocked', 'success')
-    }
-  } catch (err) {
-    DebugUtils.error(MODULE_NAME, 'Failed to regenerate schedule', { error: err })
-    showSnackbar('Failed to generate recommendations', 'error')
-  }
-}
-
-/**
- * Apply single recommendation to schedule
- */
-async function handleApplyRecommendation(recommendation: ProductionRecommendation): Promise<void> {
-  try {
-    await applySingleToSchedule(recommendation, userDepartment.value)
-    await loadData() // Refresh schedule
-    showSnackbar(`${recommendation.preparationName} added to schedule`, 'success')
-  } catch (err) {
-    DebugUtils.error(MODULE_NAME, 'Failed to apply recommendation', { error: err })
-    showSnackbar('Failed to add to schedule', 'error')
-  }
-}
-
-/**
- * Apply all recommendations to schedule
- */
-async function handleApplyAllRecommendations(): Promise<void> {
-  try {
-    const count = activeRecommendations.value.length
-    await applyAllToSchedule(userDepartment.value)
-    await loadData() // Refresh schedule
-    showSnackbar(`${count} items added to schedule`, 'success')
-  } catch (err) {
-    DebugUtils.error(MODULE_NAME, 'Failed to apply recommendations', { error: err })
-    showSnackbar('Failed to add to schedule', 'error')
-  }
-}
-
-/**
- * Dismiss a recommendation
- */
-function handleDismissRecommendation(id: string): void {
-  dismissRecommendation(id)
-  DebugUtils.debug(MODULE_NAME, 'Recommendation dismissed', { id })
-}
-
 // =============================================
 // DIALOG EVENT HANDLERS
 // =============================================
@@ -639,23 +470,6 @@ function handleError(errorMessage: string): void {
 }
 
 /**
- * Handle task confirmation from schedule (dialog closed, task queued)
- * Note: Don't reload data here - wait for @completed event when background task finishes
- */
-function handleTaskConfirmed(data: { taskId: string; quantity: number; notes: string }): void {
-  showSnackbar('Processing task completion...', 'info')
-  selectedTask.value = null
-  DebugUtils.info(MODULE_NAME, 'Task confirmed, waiting for background completion', data)
-}
-
-/**
- * Handle task cancellation
- */
-function handleTaskCancelled(): void {
-  selectedTask.value = null
-}
-
-/**
  * Handle single preparation write-off confirmation (from Stock List trash icon)
  */
 function handleSingleWriteOffConfirm(
@@ -683,7 +497,7 @@ function handleSingleWriteOffConfirm(
       ],
       department: userDepartment.value,
       responsiblePerson: authStore.userName,
-      reason: 'expiration', // Default reason for single item write-off
+      reason: 'expired', // Default reason for single item write-off
       notes: notes || 'Write-off from Stock List',
       kpiData: {
         userId: authStore.userId || 'unknown',
@@ -753,12 +567,6 @@ onMounted(async () => {
   window.addEventListener('offline', handleOnlineStatus)
 
   await loadData()
-
-  // Auto-generate recommendations if schedule is empty
-  if (kpiStore.scheduleItems.length === 0) {
-    DebugUtils.info(MODULE_NAME, 'Schedule empty, auto-generating recommendations...')
-    await handleGenerateRecommendations()
-  }
 })
 
 onUnmounted(() => {
@@ -778,17 +586,18 @@ watch(userDepartment, () => {
   display: flex;
   flex-direction: column;
   background-color: var(--v-theme-background);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .preparation-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
-  background-color: var(--v-theme-surface);
-  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  padding: 12px 16px;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .header-title {
@@ -813,10 +622,8 @@ watch(userDepartment, () => {
 
 .preparation-content {
   flex: 1;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: 0; /* Important for flex scroll containers */
 }
 
 .content-loading,
@@ -831,23 +638,9 @@ watch(userDepartment, () => {
 
 .tab-window {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-:deep(.v-window__container) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
 }
 
 :deep(.v-window-item) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
   height: auto !important;
 }
 

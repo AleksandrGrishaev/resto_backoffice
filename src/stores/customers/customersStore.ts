@@ -123,6 +123,26 @@ export const useCustomersStore = defineStore('customers', () => {
     }
   }
 
+  async function mergeCustomers(
+    sourceId: string,
+    targetId: string,
+    fieldOverrides?: Record<string, any>
+  ) {
+    const result = await customersService.mergeCustomers(sourceId, targetId, fieldOverrides)
+    if (result.success) {
+      // Remove source from local state
+      customers.value = customers.value.filter(c => c.id !== sourceId)
+      // Refresh target to get updated stats
+      await refreshCustomer(targetId)
+      DebugUtils.info(MODULE_NAME, 'Customers merged', {
+        sourceId,
+        targetId,
+        ...result.transferred
+      })
+    }
+    return result
+  }
+
   return {
     // State
     customers,
@@ -144,6 +164,7 @@ export const useCustomersStore = defineStore('customers', () => {
     searchCustomers,
     createCustomer,
     updateCustomer,
-    refreshCustomer
+    refreshCustomer,
+    mergeCustomers
   }
 })

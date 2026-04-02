@@ -87,6 +87,27 @@
         @update:model-value="onSupplierChange"
       />
 
+      <!-- Accrual Date: к какому периоду относится расход -->
+      <v-text-field
+        v-if="type === 'expense'"
+        v-model="formData.accrualDate"
+        label="Expense Period Date"
+        type="date"
+        density="compact"
+        class="mb-2"
+      />
+      <v-alert
+        v-if="type === 'expense' && isAccrualDateDifferent"
+        type="warning"
+        variant="tonal"
+        density="compact"
+        class="mb-3"
+      >
+        This expense will be attributed to
+        <strong>{{ formData.accrualDate }}</strong>
+        instead of today. It will appear in that period's P&L (accrual basis).
+      </v-alert>
+
       <v-text-field
         v-model="formData.description"
         label="Description (optional)"
@@ -158,6 +179,13 @@ const categoryItems = computed(() => {
 // Check if supplier category is selected
 const isSupplierCategory = computed(() => formData.value.expenseCategory?.category === 'supplier')
 
+// Check if accrual date differs from today
+const isAccrualDateDifferent = computed(() => {
+  if (!formData.value.accrualDate) return false
+  const today = new Date().toISOString().split('T')[0]
+  return formData.value.accrualDate !== today
+})
+
 // Get active suppliers for dropdown
 const supplierItems = computed(() => {
   return counteragentsStore.supplierCounterAgents || []
@@ -171,6 +199,7 @@ const initialData = computed(() => ({
   description: '',
   counteragentId: '',
   counteragentName: '',
+  accrualDate: new Date().toISOString().split('T')[0], // default today
   expenseCategory:
     props.type === 'expense' || props.type === 'income'
       ? ({
@@ -189,6 +218,10 @@ const { form, loading, formState, formData, isFormValid, handleSubmit } = useDia
         ...data,
         counteragentId: data.counteragentId || undefined,
         counteragentName: data.counteragentName || undefined,
+        // Convert date string to ISO if provided, otherwise undefined (will use now())
+        accrualDate: data.accrualDate
+          ? new Date(data.accrualDate + 'T12:00:00').toISOString()
+          : undefined,
         performedBy: {
           type: 'user' as const,
           id: authStore.userId,

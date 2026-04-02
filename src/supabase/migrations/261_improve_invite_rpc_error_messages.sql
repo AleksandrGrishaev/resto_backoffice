@@ -1,0 +1,11 @@
+-- Migration: 261_improve_invite_rpc_error_messages
+-- Description: Fix claim_invite + improve error messages
+-- Date: 2026-03-28
+--
+-- FIXES:
+-- 1. claim_invite: clear email/telegram_id on trigger-created customer before DELETE
+--    to avoid unique constraint violation (customers_email_active_idx)
+-- 2. All invite RPCs: include SQLERRM in error messages for debugging
+-- 3. claim_invite: sync with latest version (bills JSONB propagation)
+--
+-- See src/supabase/functions/*.sql for full source code

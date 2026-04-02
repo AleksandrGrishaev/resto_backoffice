@@ -63,6 +63,18 @@
                 <v-icon size="14" color="warning">mdi-clock-fast</v-icon>
               </v-badge>
 
+              <!-- Guest Count -->
+              <v-chip
+                v-if="bill.guestCount && bill.guestCount > 0"
+                size="x-small"
+                variant="tonal"
+                color="blue-grey"
+                class="guest-chip"
+              >
+                <v-icon start size="10">mdi-account-group</v-icon>
+                {{ bill.guestCount }}
+              </v-chip>
+
               <!-- Payment Status -->
               <v-icon
                 v-if="hasItemsInBill(bill)"
@@ -275,6 +287,7 @@ const emit = defineEmits<{
   'toggle-bill-selection': [billId: string]
   'open-loyalty': [billId: string, tab: 'card' | 'customer']
   'detach-loyalty': [billId: string, what: 'card' | 'customer']
+  'edit-guest-count': [billId: string]
 }>()
 
 // Computed

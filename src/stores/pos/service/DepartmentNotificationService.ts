@@ -148,13 +148,10 @@ export class DepartmentNotificationService {
 
     for (const item of items) {
       // Находим menu item для определения department
-      const menuItem = menuStore.menuItems.find(item => item.id === item.menuItemId)
+      const menuItem = menuStore.menuItems.find((mi: MenuItem) => mi.id === item.menuItemId)
 
-      // Note: Menu item may not be found if using POS menu items instead of backoffice menu
-      // Default to kitchen department in this case
-
-      // Определяем department (по умолчанию kitchen если не найдено)
-      const department: Department = menuItem?.department || 'kitchen'
+      // Определяем department: из item (set by POS), из menu store, или default kitchen
+      const department: Department = item.department || menuItem?.department || 'kitchen'
 
       // Конвертируем в DepartmentItem
       const departmentItem: DepartmentItem = {

@@ -2044,6 +2044,8 @@ export type Database = {
           bill_ids: string[] | null
           change_amount: number | null
           created_at: string
+          customer_id: string | null
+          customer_name: string | null
           details: Json
           id: string
           item_ids: string[] | null
@@ -2073,6 +2075,8 @@ export type Database = {
           bill_ids?: string[] | null
           change_amount?: number | null
           created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
           details?: Json
           id?: string
           item_ids?: string[] | null
@@ -2102,6 +2106,8 @@ export type Database = {
           bill_ids?: string[] | null
           change_amount?: number | null
           created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
           details?: Json
           id?: string
           item_ids?: string[] | null
@@ -4460,6 +4466,7 @@ export type Database = {
       transactions: {
         Row: {
           account_id: string
+          accrual_date: string
           amount: number
           balance_after: number
           counteragent_id: string | null
@@ -4479,6 +4486,7 @@ export type Database = {
         }
         Insert: {
           account_id: string
+          accrual_date?: string
           amount: number
           balance_after: number
           counteragent_id?: string | null
@@ -4498,6 +4506,7 @@ export type Database = {
         }
         Update: {
           account_id?: string
+          accrual_date?: string
           amount?: number
           balance_after?: number
           counteragent_id?: string | null

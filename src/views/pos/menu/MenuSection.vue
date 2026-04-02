@@ -419,8 +419,12 @@ const handleAddAndReturn = (item: MenuItem, variant: MenuItemVariant): void => {
 
 /**
  * КЛЮЧЕВАЯ ФУНКЦИЯ: Добавление товара в заказ
+ * Guard against double-tap on tablets (touch + click events)
  */
+const addingItem = ref(false)
+
 const handleAddItem = (item: MenuItem, variant: MenuItemVariant): void => {
+  if (addingItem.value) return
   try {
     // Проверяем доступность товара и варианта
     if (!item.isActive) {
@@ -441,6 +445,7 @@ const handleAddItem = (item: MenuItem, variant: MenuItemVariant): void => {
     }
 
     // No modifiers - add directly
+    addingItem.value = true
     emit('add-item', item, variant)
 
     // Возвращаемся в главное меню после добавления из variants view
@@ -450,7 +455,12 @@ const handleAddItem = (item: MenuItem, variant: MenuItemVariant): void => {
       selectedSubcategoryId.value = null
       selectedItem.value = null
     }
+
+    setTimeout(() => {
+      addingItem.value = false
+    }, 500)
   } catch (error) {
+    addingItem.value = false
     const message = error instanceof Error ? error.message : 'Failed to add item'
     console.error('Failed to add item:', message)
   }

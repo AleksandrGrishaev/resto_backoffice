@@ -20,7 +20,18 @@
           :key="operation.id"
           :class="{ 'correction-row': operation.isCorrection }"
         >
-          <td>{{ formatTransactionDateTime(operation.createdAt) }}</td>
+          <td>
+            {{ formatTransactionDateTime(operation.createdAt) }}
+            <v-chip
+              v-if="isCrossPeriod(operation)"
+              size="x-small"
+              color="info"
+              variant="outlined"
+              class="ml-1"
+            >
+              {{ getCrossPeriodLabel(operation) }}
+            </v-chip>
+          </td>
           <td>
             <v-icon
               :icon="getOperationTypeIcon(operation.type)"
@@ -166,6 +177,20 @@ function getAmountClass(operation: Transaction) {
 
 function canEditOperation(operation: Transaction): boolean {
   return canEdit.value && operation.performedBy.type === 'user' && !operation.isCorrection
+}
+
+function isCrossPeriod(operation: Transaction): boolean {
+  if (!operation.accrualDate || !operation.createdAt) return false
+  return operation.accrualDate.substring(0, 7) !== operation.createdAt.substring(0, 7)
+}
+
+function getCrossPeriodLabel(operation: Transaction): string {
+  if (!operation.accrualDate) return ''
+  const month = new Date(operation.accrualDate).toLocaleDateString('en', {
+    month: 'short',
+    year: '2-digit'
+  })
+  return `for ${month}`
 }
 </script>
 
