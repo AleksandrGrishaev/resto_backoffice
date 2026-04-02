@@ -16,28 +16,22 @@ const MODULE_NAME = 'RecommendationsService'
 export interface RecommendationConfig {
   /** Number of days to calculate average consumption (default: 3) */
   daysForAverage: number
-  /** Multiplier for safety stock (default: 1.5) */
-  safetyStockMultiplier: number
   /** Days threshold for urgent production (default: 1) */
   urgentThresholdDays: number
   /** Days threshold for morning slot (default: 2) */
   morningThresholdDays: number
   /** Days threshold for afternoon slot (default: 3) */
   afternoonThresholdDays: number
-  /** Minimum quantity to recommend (avoid tiny batches) */
+  /** Minimum quantity to recommend in grams (default: 50) */
   minRecommendedQuantity: number
-  /** How many days worth of production to recommend */
-  productionDaysAhead: number
 }
 
 const DEFAULT_CONFIG: RecommendationConfig = {
   daysForAverage: 3,
-  safetyStockMultiplier: 1.5,
   urgentThresholdDays: 1,
   morningThresholdDays: 2,
   afternoonThresholdDays: 3,
-  minRecommendedQuantity: 50, // grams
-  productionDaysAhead: 2
+  minRecommendedQuantity: 50
 }
 
 // =============================================
@@ -248,11 +242,16 @@ function calculateRecommendation(
     return null
   }
 
-  // Calculate recommended quantity
-  const recommendedQuantity = calculateRecommendedQuantity(avgDailyConsumption, preparation, config)
+  // Calculate target stock level, then subtract current stock
+  // If dailyTargetQuantity is set (fixed mode), use it as target; otherwise auto-calculate
+  const targetStock =
+    preparation.dailyTargetQuantity && preparation.dailyTargetQuantity > 0
+      ? preparation.dailyTargetQuantity
+      : calculateRecommendedQuantity(avgDailyConsumption, preparation, config)
+  const needToProduce = Math.max(0, targetStock - currentStock)
 
   // Skip if recommended quantity is too small
-  if (recommendedQuantity < config.minRecommendedQuantity) {
+  if (needToProduce < config.minRecommendedQuantity) {
     return null
   }
 
@@ -272,7 +271,7 @@ function calculateRecommendation(
     currentStock,
     avgDailyConsumption,
     daysUntilStockout: Math.round(daysUntilStockout * 10) / 10,
-    recommendedQuantity: Math.round(recommendedQuantity),
+    recommendedQuantity: Math.round(needToProduce),
     urgency,
     reason,
     storageLocation: preparation.storageLocation || 'fridge',
@@ -295,14 +294,14 @@ function calculatePremadeRecommendation(
   const currentStock = balance.totalQuantity
   const avgDailyConsumption = calculateAvgDailyConsumption(balance, config.daysForAverage)
 
-  // Use fixed daily target if set, otherwise calculate
-  let targetQuantity = preparation.dailyTargetQuantity || 0
-  if (targetQuantity <= 0) {
-    targetQuantity = calculateRecommendedQuantity(avgDailyConsumption, preparation, config)
+  // Use fixed daily target if set, otherwise calculate (shelf-life aware)
+  let targetStock = preparation.dailyTargetQuantity || 0
+  if (targetStock <= 0) {
+    targetStock = calculateRecommendedQuantity(avgDailyConsumption, preparation, config)
   }
 
   // How much still needs to be produced
-  const needToProduce = Math.max(0, targetQuantity - currentStock)
+  const needToProduce = Math.max(0, targetStock - currentStock)
 
   // Skip if we already have enough stock
   if (needToProduce < config.minRecommendedQuantity) {
@@ -313,8 +312,8 @@ function calculatePremadeRecommendation(
 
   const reason =
     currentStock <= 0
-      ? `Pre-made: needs daily prep (target: ${Math.round(targetQuantity)}${preparation.outputUnit})`
-      : `Pre-made: ${Math.round(currentStock)}${preparation.outputUnit} in stock, target: ${Math.round(targetQuantity)}${preparation.outputUnit}`
+      ? `Pre-made: needs daily prep (target: ${Math.round(targetStock)}${preparation.outputUnit})`
+      : `Pre-made: ${Math.round(currentStock)}${preparation.outputUnit} in stock, target: ${Math.round(targetStock)}${preparation.outputUnit}`
 
   return {
     id: generateId(),
@@ -343,12 +342,15 @@ function createZeroStockRecommendation(
 ): ProductionRecommendation | null {
   const isPremade = preparation.isPremade === true
 
-  // For pre-made, use daily target; for others, use batch size
+  // Use same target logic as regular/premade items: fixed override or shelf-life formula
+  // For zero stock, currentStock=0 so targetStock = recommendedQuantity
   let recommendedQuantity: number
-  if (isPremade && preparation.dailyTargetQuantity && preparation.dailyTargetQuantity > 0) {
+  if (preparation.dailyTargetQuantity && preparation.dailyTargetQuantity > 0) {
     recommendedQuantity = preparation.dailyTargetQuantity
   } else {
-    recommendedQuantity = Math.max(preparation.outputQuantity || 500, config.minRecommendedQuantity)
+    // avgDailyConsumption=0 here (no balance), so calculateRecommendedQuantity
+    // will fall back to outputQuantity — same as before but via unified path
+    recommendedQuantity = calculateRecommendedQuantity(0, preparation, config)
   }
 
   return {
@@ -452,30 +454,41 @@ function determineUrgency(
 }
 
 /**
- * Calculate recommended quantity to produce
+ * Calculate TARGET STOCK LEVEL based on shelf life and daily consumption.
+ * Smart defaults: shorter shelf life → less buffer, longer → more comfort.
+ * Caller subtracts currentStock to get actual production amount.
  */
 function calculateRecommendedQuantity(
   avgDailyConsumption: number,
   preparation: Preparation,
   config: RecommendationConfig
 ): number {
-  // Base recommendation: X days worth of consumption
-  let recommended = avgDailyConsumption * config.productionDaysAhead
+  const shelfLife = preparation.shelfLife && preparation.shelfLife > 0 ? preparation.shelfLife : 7
 
-  // If no consumption data, use standard batch size
+  // Target stock in days — scaled by shelf life, capped because we produce daily.
+  // For shelfLife=1 items, targetDays includes a 20% demand buffer (can't store for tomorrow).
+  // For shelfLife≥2, the extra days ARE the buffer — no additional multiplier needed.
+  //
+  // shelfLife=1 → 1.2 days (20% buffer for demand spikes within one day)
+  // shelfLife=2 → 1.5 days (0.5 day buffer)
+  // shelfLife=3 → 2.0 days (1 day buffer)
+  // shelfLife=4-6 → 2.5 days (buffer grows with shelf life)
+  // shelfLife≥7 → 3.0 days (max — we produce every morning anyway)
+  let targetDays: number
+  if (shelfLife <= 1) targetDays = 1.2
+  else if (shelfLife <= 2) targetDays = 1.5
+  else if (shelfLife <= 3) targetDays = 2.0
+  else if (shelfLife <= 6) targetDays = 2.5
+  else targetDays = 3.0
+
+  let recommended = avgDailyConsumption * targetDays
+
+  // If no consumption data, fallback to one recipe output
   if (recommended <= 0) {
     recommended = preparation.outputQuantity || 500
   }
 
-  // Round to recipe output quantity (batch size)
-  const batchSize = preparation.outputQuantity || 500
-  const batches = Math.ceil(recommended / batchSize)
-  recommended = batches * batchSize
-
-  // Apply safety stock multiplier
-  recommended = recommended * config.safetyStockMultiplier
-
-  // For portion-type preparations, round to whole portions
+  // For portion-type, round to whole portions
   if (preparation.portionType === 'portion' && preparation.portionSize) {
     const portions = Math.ceil(recommended / preparation.portionSize)
     recommended = portions * preparation.portionSize
