@@ -387,24 +387,31 @@ function buildFallbackSlots(hours: number): any[] {
 }
 
 /** Fetch food cost aggregation for a date range */
-async function fetchFoodCostAgg(range: DateRange): Promise<{ total: number; percent: number }> {
+async function fetchFoodCostAgg(
+  range: DateRange
+): Promise<{ total: number; percent: number; menuPercent: number }> {
   const { data, error } = await supabase
     .from('v_food_cost_report' as any)
-    .select('total_food_cost, total_revenue_net')
+    .select('total_food_cost, total_revenue_net, total_revenue_gross')
     .gte('sale_date', range.from)
     .lte('sale_date', range.to)
 
-  if (error || !data?.length) return { total: 0, percent: 0 }
+  if (error || !data?.length) return { total: 0, percent: 0, menuPercent: 0 }
 
   const totalCost = (data as any[]).reduce((sum, r) => sum + (Number(r.total_food_cost) || 0), 0)
-  const totalRevenue = (data as any[]).reduce(
+  const totalRevenueNet = (data as any[]).reduce(
     (sum, r) => sum + (Number(r.total_revenue_net) || 0),
+    0
+  )
+  const totalRevenueGross = (data as any[]).reduce(
+    (sum, r) => sum + (Number(r.total_revenue_gross) || 0),
     0
   )
 
   return {
     total: totalCost,
-    percent: totalRevenue > 0 ? Math.round((totalCost / totalRevenue) * 1000) / 10 : 0
+    percent: totalRevenueNet > 0 ? Math.round((totalCost / totalRevenueNet) * 1000) / 10 : 0,
+    menuPercent: totalRevenueGross > 0 ? Math.round((totalCost / totalRevenueGross) * 1000) / 10 : 0
   }
 }
 
@@ -452,8 +459,8 @@ function buildSummary(
   prev: DailySalesRow[],
   currentGuests: { totalGuests: number; avgCheckPerGuest: number },
   prevGuests: { totalGuests: number; avgCheckPerGuest: number },
-  currFoodCost: { total: number; percent: number },
-  prevFoodCost: { total: number; percent: number }
+  currFoodCost: { total: number; percent: number; menuPercent: number },
+  prevFoodCost: { total: number; percent: number; menuPercent: number }
 ): DaySummary {
   const sumRows = (rows: DailySalesRow[]) =>
     rows.reduce(
@@ -470,25 +477,34 @@ function buildSummary(
   const curr = sumRows(current)
   const previous = sumRows(prev)
 
+  // Gross Revenue includes tax (so that Net = Gross - Discounts)
+  const currGross = curr.grossRevenue + curr.totalTax
+  const prevGross = previous.grossRevenue + previous.totalTax
+
   const calcDelta = (c: number, p: number): number | null =>
     p > 0 ? Math.round(((c - p) / p) * 1000) / 10 : null
 
   return {
-    grossRevenue: curr.grossRevenue,
+    grossRevenue: currGross,
     netRevenue: curr.netRevenue,
     totalOrders: curr.totalOrders,
     totalGuests: currentGuests.totalGuests,
     avgCheckPerGuest: currentGuests.avgCheckPerGuest,
     foodCostPercent: currFoodCost.percent,
+    menuFoodCostPercent: currFoodCost.menuPercent,
     totalFoodCost: currFoodCost.total,
     totalDiscounts: curr.totalDiscounts,
     totalTax: curr.totalTax,
-    revenueDelta: calcDelta(curr.grossRevenue, previous.grossRevenue),
+    revenueDelta: calcDelta(currGross, prevGross),
     ordersDelta: calcDelta(curr.totalOrders, previous.totalOrders),
     avgCheckDelta: calcDelta(currentGuests.avgCheckPerGuest, prevGuests.avgCheckPerGuest),
     foodCostDelta:
       prevFoodCost.percent > 0
         ? Math.round((currFoodCost.percent - prevFoodCost.percent) * 10) / 10
+        : null,
+    menuFoodCostDelta:
+      prevFoodCost.menuPercent > 0
+        ? Math.round((currFoodCost.menuPercent - prevFoodCost.menuPercent) * 10) / 10
         : null
   }
 }
