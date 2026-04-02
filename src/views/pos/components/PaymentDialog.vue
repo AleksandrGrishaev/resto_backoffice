@@ -292,14 +292,16 @@ async function processPayment() {
 
     // 🆕 Collect all item IDs from bills being paid
     // ✅ FIX: Only include items that are NOT already paid (prevent double payment)
-    const itemIds: string[] = []
+    // ✅ FIX: Use Set to deduplicate item IDs (realtime race condition can cause duplicates in bill.items)
+    const itemIdSet = new Set<string>()
     for (const bill of billsToPay.value) {
       for (const item of bill.items) {
         if (item.status !== 'cancelled' && item.paymentStatus !== 'paid') {
-          itemIds.push(item.id)
+          itemIdSet.add(item.id)
         }
       }
     }
+    const itemIds = Array.from(itemIdSet)
 
     // ✅ SAFETY CHECK: Prevent payment if no unpaid items
     if (itemIds.length === 0) {

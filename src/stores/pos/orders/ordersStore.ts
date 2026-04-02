@@ -557,7 +557,13 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
         if (orderIndex !== -1) {
           const billIndex = orders.value[orderIndex].bills.findIndex(b => b.id === billId)
           if (billIndex !== -1) {
-            orders.value[orderIndex].bills[billIndex].items.push(response.data)
+            // ✅ FIX: Check if item already exists (realtime may have pushed it first)
+            const alreadyExists = orders.value[orderIndex].bills[billIndex].items.some(
+              i => i.id === response.data!.id
+            )
+            if (!alreadyExists) {
+              orders.value[orderIndex].bills[billIndex].items.push(response.data)
+            }
             // Пересчитать суммы заказа (автоматически обновит статус стола)
             await recalculateOrderTotals(orderId)
           }

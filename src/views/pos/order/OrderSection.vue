@@ -1562,10 +1562,13 @@ const handleCheckout = async (itemIds: string[], billId: string): Promise<void> 
     }
 
     // Собрать items по itemIds для отображения в dialog
+    // ✅ FIX: Deduplicate by item.id (realtime race condition can cause duplicates in bill.items)
     const itemsToShow: PosBillItem[] = []
+    const seenIds = new Set<string>()
     for (const bill of currentOrder.value.bills) {
       for (const item of bill.items) {
-        if (itemIds.includes(item.id) && item.status !== 'cancelled') {
+        if (itemIds.includes(item.id) && item.status !== 'cancelled' && !seenIds.has(item.id)) {
+          seenIds.add(item.id)
           itemsToShow.push(item)
         }
       }

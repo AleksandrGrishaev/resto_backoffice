@@ -414,8 +414,12 @@ export function recalculateOrderTotals(order: PosOrder): void {
     let billSubtotal = 0
     let billDiscountAmount = 0
 
+    // ✅ FIX: Deduplicate items by ID (realtime race condition can cause duplicates)
+    const seenItemIds = new Set<string>()
     bill.items.forEach(item => {
       if (item.status === 'cancelled') return
+      if (seenItemIds.has(item.id)) return
+      seenItemIds.add(item.id)
 
       // Subtotal позиции (цена * количество)
       const itemSubtotal = item.totalPrice
