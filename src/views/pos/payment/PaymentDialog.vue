@@ -926,7 +926,9 @@ const buildReceiptData = (): ReceiptData => {
     quantity: item.quantity,
     unitPrice: item.unitPrice,
     totalPrice: item.totalPrice,
-    modifiers: item.modifiers?.map(m => m.name) || [],
+    modifiers:
+      item.selectedModifiers?.map(m => ({ name: m.optionName, price: m.priceAdjustment || 0 })) ||
+      [],
     discount: item.discounts?.reduce(
       (sum, d) => sum + (d.type === 'percentage' ? (item.totalPrice * d.value) / 100 : d.value),
       0

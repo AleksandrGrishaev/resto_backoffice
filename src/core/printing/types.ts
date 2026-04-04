@@ -135,6 +135,14 @@ export interface ReceiptData {
 }
 
 /**
+ * Modifier line in receipt
+ */
+export interface ReceiptModifier {
+  name: string
+  price?: number // price adjustment (positive = surcharge, 0 or undefined = no extra charge)
+}
+
+/**
  * Single item in receipt
  */
 export interface ReceiptItem {
@@ -142,7 +150,7 @@ export interface ReceiptItem {
   quantity: number
   unitPrice: number
   totalPrice: number
-  modifiers?: string[] // e.g., ["No Ice", "Extra Sugar"]
+  modifiers?: ReceiptModifier[] // e.g., [{ name: "No Ice" }, { name: "Extra Cheese", price: 5000 }]
   discount?: number
   notes?: string
 }
