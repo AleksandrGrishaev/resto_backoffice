@@ -5,6 +5,7 @@ import { ref, computed } from 'vue'
 import { usePreparationStore } from '@/stores/preparation'
 import { useRecipesStore } from '@/stores/recipes'
 import { useKitchenKpiStore } from '@/stores/kitchenKpi'
+import { supabase } from '@/supabase/client'
 import { DebugUtils, TimeUtils } from '@/utils'
 import {
   generateRecommendations as generateRecs,
@@ -76,10 +77,20 @@ export function useRecommendations() {
 
       DebugUtils.info(MODULE_NAME, 'Generating recommendations', { department })
 
-      // Ensure we have fresh data
+      // Refresh consumption stats (RPC) before generating recommendations
+      try {
+        const { data } = await supabase.rpc('recalculate_consumption_stats')
+        DebugUtils.info(MODULE_NAME, 'Consumption stats refreshed', data)
+      } catch (rpcErr) {
+        DebugUtils.warn(MODULE_NAME, 'Failed to refresh consumption stats, using cached values', {
+          error: rpcErr
+        })
+      }
+
+      // Ensure we have fresh data (re-fetch preparations to pick up updated consumption stats)
       await Promise.all([
         preparationStore.fetchBalances(department),
-        recipesStore.initialized || recipesStore.initialize()
+        recipesStore.fetchPreparations()
       ])
 
       // Generate recommendations

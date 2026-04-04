@@ -307,6 +307,38 @@
         </div>
       </div>
 
+      <!-- Afternoon Tasks -->
+      <div class="task-group">
+        <div class="group-header">
+          <v-icon color="warning" size="20">mdi-weather-partly-cloudy</v-icon>
+          <h3 class="group-title">Afternoon Ritual</h3>
+          <v-badge :content="afternoonTasks.length || '0'" color="warning" inline />
+        </div>
+        <div v-if="afternoonTasks.length === 0" class="group-empty">
+          No afternoon tasks configured
+        </div>
+        <div v-for="task in afternoonTasks" :key="task.id" class="task-row">
+          <v-switch
+            :model-value="task.isActive"
+            density="compact"
+            hide-details
+            color="success"
+            class="task-switch"
+            @update:model-value="toggleActive(task)"
+          />
+          <span class="task-name" :class="{ 'text-medium-emphasis': !task.isActive }">
+            {{ task.name }}
+          </span>
+          <v-spacer />
+          <v-btn icon size="x-small" variant="text" @click="openEditDialog(task)">
+            <v-icon size="18">mdi-pencil</v-icon>
+          </v-btn>
+          <v-btn icon size="x-small" variant="text" color="error" @click="confirmDelete(task)">
+            <v-icon size="18">mdi-delete</v-icon>
+          </v-btn>
+        </div>
+      </div>
+
       <!-- Evening Tasks -->
       <div class="task-group">
         <div class="group-header">
@@ -355,6 +387,7 @@
             v-model="form.ritualType"
             :items="[
               { title: 'Morning', value: 'morning' },
+              { title: 'Afternoon', value: 'afternoon' },
               { title: 'Evening', value: 'evening' }
             ]"
             label="Ritual Type"
@@ -560,6 +593,10 @@ async function removePremade(prep: Preparation): Promise<void> {
 // =============================================
 
 const morningTasks = computed(() => kpiStore.customTasks.filter(t => t.ritualType === 'morning'))
+
+const afternoonTasks = computed(() =>
+  kpiStore.customTasks.filter(t => t.ritualType === 'afternoon')
+)
 
 const eveningTasks = computed(() => kpiStore.customTasks.filter(t => t.ritualType === 'evening'))
 

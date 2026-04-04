@@ -1,10 +1,14 @@
-# Production Recommendations System
+# Production Recommendations System (v2)
 
 How the system calculates what and how much the kitchen should produce each day.
 
 ## Overview
 
-The system generates daily production tasks (recommendations) for preparations (semi-finished products). Recommendations are shown in **morning/evening rituals** as a checklist for kitchen staff.
+The system generates production tasks (recommendations) for preparations (semi-finished products). Recommendations are shown in **3 rituals** as checklists for kitchen staff:
+
+- **Morning Ritual** (7:30-10:00): Short shelf-life items (<=1 day) — AM portion for breakfast+lunch
+- **Afternoon Ritual** (14:00-16:00): Short shelf-life items (<=1 day) — PM portion for dinner, adjusted by actual morning consumption
+- **Evening Ritual** (18:00-22:00): Long shelf-life items (>1 day) — full production for multiple days
 
 ```
 Data pipeline:
@@ -16,31 +20,44 @@ POS Sale → recipe_write_off (decomposed_items)
         → production_schedule tasks (UI checklist)
 ```
 
-## Core Formula
+## Core Formula (v2)
+
+### Short shelf-life items (shelf_life <= 1 day) — Split production
+
+These items are produced twice a day (morning + afternoon rituals):
 
 ```
-targetStock = avgDaily × targetDays(shelfLife)
+Morning ritual: need = max(0, am_max - currentStock)
+Afternoon ritual: need = max(0, pm_max - currentStock)
+```
+
+- **am_max** — max AM (7-16) consumption over last 3 active business days
+- **pm_max** — max PM (16-22) consumption over last 3 active business days
+
+Morning production covers everything until afternoon production is ready (~16:00).
+Afternoon ritual benefits from seeing actual remaining stock after morning+lunch service.
+
+### Long shelf-life items (shelf_life > 1 day) — Single production
+
+These items are produced once in the evening ritual:
+
+```
+targetStock = max_daily × targetDays(shelfLife)
 needToProduce = max(0, targetStock - currentStock)
 ```
 
-Two inputs:
+- **max_daily** — max total daily consumption over last 3 active business days
 
-- **avgDaily** — average daily consumption from `recipe_write_offs` (set by `recalculate_consumption_stats` RPC)
-- **shelfLife** — how many days the preparation can be stored (set on each preparation)
+### Target Days by Shelf Life (for shelf_life > 1)
 
-### Target Days by Shelf Life
+Uses `max_daily` as base, so multipliers are lower than v1 (which used avg).
 
-The system produces daily (morning ritual). More shelf life = more buffer days allowed.
-
-| shelfLife | targetDays | Buffer    | Reasoning                                                          |
-| --------- | ---------- | --------- | ------------------------------------------------------------------ |
-| 1 day     | 1.2        | +20%      | Cannot store for tomorrow. 20% covers demand spikes within one day |
-| 2 days    | 1.5        | +0.5 day  | Half day buffer before next production                             |
-| 3 days    | 2.0        | +1 day    | Full day buffer                                                    |
-| 4-6 days  | 2.5        | +1.5 days | Comfortable margin                                                 |
-| 7+ days   | 3.0        | +2 days   | Max — we produce every morning anyway                              |
-
-**Key principle**: `targetDays` never exceeds `shelfLife`. The extra days ARE the safety buffer — no separate multiplier.
+| shelfLife | targetDays | Reasoning                                   |
+| --------- | ---------- | ------------------------------------------- |
+| 2 days    | 1.2        | Slight buffer since max already covers peak |
+| 3 days    | 1.5        | 0.5 day buffer                              |
+| 4-6 days  | 2.0        | Comfortable margin                          |
+| 7+ days   | 2.5        | Max — we produce every evening anyway       |
 
 ### Fixed Override
 
@@ -88,19 +105,22 @@ Preparations with no batches at all get an urgent recommendation. Quantity = `da
 
 ## Data Sources
 
-### avg_daily_usage — What We Count and What We Don't
+### Consumption Stats — What We Count and What We Don't
 
-Calculated by the `recalculate_consumption_stats()` RPC function. Source: `recipe_write_offs.decomposed_items` JSONB.
+Calculated by the `recalculate_consumption_stats()` RPC function (v2). Source: `recipe_write_offs.decomposed_items` JSONB.
 
-```sql
-avg_daily_usage = total_consumed / active_business_days
-```
+**Default lookback: 3 active business days** (changed from 30 in v1).
 
-- Only counts days with actual write-offs (active business days)
-- Requires minimum 3 active days
-- Updates `preparations.avg_daily_usage` directly
+Fields updated on each preparation:
 
-**Important**: This RPC must be called periodically. If not called, `avg_daily_usage` becomes stale and recommendations will be based on old data.
+| Field             | Formula                                    | Purpose                    |
+| ----------------- | ------------------------------------------ | -------------------------- |
+| `avg_daily_usage` | avg(daily_total) over last 3 days          | Analytics, dashboards      |
+| `max_daily_usage` | max(daily_total) over last 3 days          | Target for long shelf-life |
+| `am_max_usage`    | max(AM consumption 7-16) over last 3 days  | Morning ritual target      |
+| `pm_max_usage`    | max(PM consumption 16-22) over last 3 days | Afternoon ritual target    |
+
+**Important**: This RPC must be called daily (ideally before morning ritual). If not called, recommendations will be based on stale data.
 
 ### What counts as consumption (recipe_write_offs)
 
@@ -164,13 +184,21 @@ Tasks included:
 
 - All **pre-made** items
 - **Urgent** tasks (stockout, expired)
-- **Morning** slot tasks (1-2 days of stock)
+- **Morning** slot tasks — shelf_life ≤ 1 items, AM target (breakfast+lunch)
+- Long shelf-life items critically low (< 2 days stock)
+
+### Afternoon Ritual (14:00-16:00)
+
+Tasks included:
+
+- **Afternoon** slot tasks — shelf_life ≤ 1 items, PM target (dinner)
+- Remaining **urgent** tasks not completed in morning
 
 ### Evening Ritual (18:00-22:00)
 
 Tasks included:
 
-- **Evening** slot tasks (3-5 days of stock, prep for tomorrow)
+- **Evening** slot tasks — shelf_life > 1 items (max_daily × targetDays)
 - **Write-off** tasks (expired items)
 
 ### Auto-Generation
@@ -217,18 +245,26 @@ Tasks included:
 | `src/views/kitchen/tasks/TasksScreen.vue`                  | Tasks UI with ritual integration      |
 | `src/views/kitchen/tasks/RitualSettingsScreen.vue`         | Admin: per-preparation settings       |
 
-## Examples (Real PROD Data, 2026-04)
+## Examples (Real PROD Data, 2026-04, v2)
 
-| Preparation         | shelfLife | avgDaily | targetStock  | Previous (v1) |
-| ------------------- | --------- | -------- | ------------ | ------------- |
-| MushPotato          | 1 day     | 605g     | 726g (×1.2)  | 1814g (×3)    |
-| Rice                | 1 day     | 361g     | 433g (×1.2)  | 1084g (×3)    |
-| Grated zukini       | 2 days    | 619g     | 929g (×1.5)  | 1858g (×3)    |
-| Salmon portion      | 2 days    | 196g     | 295g (×1.5)  | 589g (×3)     |
-| Chicken breast 200g | 3 days    | 471g     | 942g (×2.0)  | 1413g (×3)    |
-| Mushroom sauce      | 3 days    | 381g     | 762g (×2.0)  | 1144g (×3)    |
-| Cheese sauce        | 7 days    | 379g     | 1136g (×3.0) | 1136g (×3)    |
-| French fries        | 30 days   | 1029g    | 3087g (×3.0) | 3087g (×3)    |
+### Short shelf-life (<=1 day) — split AM/PM
+
+| Preparation | avg_3d | max_3d | am_max | pm_max | Morning target | Afternoon target |
+| ----------- | ------ | ------ | ------ | ------ | -------------- | ---------------- |
+| Avocado     | 1,117  | 1,470  | 1,410  | 420    | 1,410g         | 420g             |
+| Ciabatta    | 240    | 360    | 360    | 120    | 360g           | 120g             |
+| Rice        | 400    | 600    | 200    | 400    | 200g           | 400g             |
+| MushPotato  | 185    | 270    | 100    | 270    | 100g           | 270g             |
+| Draniki     | 527    | 800    | 600    | 270    | 600g           | 270g             |
+
+### Long shelf-life (>1 day) — evening ritual
+
+| Preparation    | shelfLife | max_3d | targetDays | targetStock |
+| -------------- | --------- | ------ | ---------- | ----------- |
+| Grated zukini  | 2 days    | 1,300  | ×1.2       | 1,560g      |
+| Salmon portion | 2 days    | 580    | ×1.2       | 696g        |
+| Patty beef     | 3 days    | 360    | ×1.5       | 540g        |
+| Cheese sauce   | 7 days    | 550    | ×2.5       | 1,375g      |
 
 ## Future: Mid-Day Dynamic Tasks
 

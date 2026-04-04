@@ -1,9 +1,9 @@
 // src/stores/kitchenKpi/services/recommendationsService.ts
 // Production Recommendations Service - Rule-based schedule generation
 
-import { DebugUtils, TimeUtils } from '@/utils'
+import { DebugUtils } from '@/utils'
 import { generateId } from '@/utils/id'
-import type { PreparationBalance, PreparationBatch } from '@/stores/preparation/types'
+import type { PreparationBalance } from '@/stores/preparation/types'
 import type { Preparation } from '@/stores/recipes/types'
 import type { ProductionRecommendation, ProductionScheduleSlot } from '@/stores/preparation/types'
 
@@ -216,7 +216,14 @@ export function generateRecommendations(
 // =============================================
 
 /**
- * Calculate recommendation for a single preparation based on balance
+ * Calculate recommendation(s) for a single preparation based on balance.
+ *
+ * v2 logic:
+ * - shelf_life <= 1: split into morning (AM target) + afternoon (PM target)
+ * - shelf_life > 1: single evening task with max_daily × targetDays
+ * - Pre-made: always morning
+ *
+ * Returns array because short shelf-life items produce TWO recommendations.
  */
 function calculateRecommendation(
   balance: PreparationBalance,
@@ -231,38 +238,81 @@ function calculateRecommendation(
     return calculatePremadeRecommendation(balance, preparation, config)
   }
 
-  // Calculate days until stockout
-  const daysUntilStockout = avgDailyConsumption > 0 ? currentStock / avgDailyConsumption : 999
+  const shelfLife = preparation.shelfLife && preparation.shelfLife > 0 ? preparation.shelfLife : 7
+  const maxDaily = preparation.maxDailyUsage || avgDailyConsumption
 
-  // Determine urgency
-  const urgency = determineUrgency(daysUntilStockout, balance, config)
-
-  // Skip if no urgency (plenty of stock)
-  if (!urgency) {
-    return null
+  // ===== shelf_life <= 1: morning + afternoon split =====
+  if (shelfLife <= 1) {
+    return calculateShortShelfLifeRecommendation(balance, preparation, config, maxDaily)
   }
 
-  // Calculate target stock level, then subtract current stock
-  // If dailyTargetQuantity is set (fixed mode), use it as target; otherwise auto-calculate
-  const targetStock =
-    preparation.dailyTargetQuantity && preparation.dailyTargetQuantity > 0
-      ? preparation.dailyTargetQuantity
-      : calculateRecommendedQuantity(avgDailyConsumption, preparation, config)
+  // ===== shelf_life > 1: evening ritual, full quantity =====
+  return calculateLongShelfLifeRecommendation(balance, preparation, config, maxDaily)
+}
+
+/**
+ * Short shelf-life (<=1 day): produce for half-day at a time.
+ * Morning ritual uses am_max, afternoon ritual uses pm_max.
+ * Which one to generate depends on current time of day.
+ */
+function calculateShortShelfLifeRecommendation(
+  balance: PreparationBalance,
+  preparation: Preparation,
+  config: RecommendationConfig,
+  maxDaily: number
+): ProductionRecommendation | null {
+  const currentStock = balance.totalQuantity
+  // AM = 7-16 (morning produces enough until afternoon is done)
+  // PM = 16-22 (afternoon produces for dinner service)
+  const amMax = preparation.amMaxUsage || Math.round(maxDaily * 0.65)
+  const pmMax = preparation.pmMaxUsage || Math.round(maxDaily * 0.35)
+
+  // Determine which slot based on current Bali time
+  const now = new Date()
+  const baliHour = Number(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Makassar',
+      hour: 'numeric',
+      hour12: false
+    }).format(now)
+  )
+
+  let targetStock: number
+  let slot: ProductionScheduleSlot
+  let reason: string
+
+  if (baliHour < 16) {
+    // Morning ritual: target = AM consumption (7-16, covers until afternoon production is ready)
+    targetStock = amMax
+    slot = 'morning'
+    reason = `AM target: ${Math.round(amMax)}${preparation.outputUnit} (max 3d), stock: ${Math.round(currentStock)}${preparation.outputUnit}`
+  } else {
+    // Afternoon ritual: target = PM consumption (16-22, dinner service)
+    targetStock = pmMax
+    slot = 'afternoon'
+    reason = `PM target: ${Math.round(pmMax)}${preparation.outputUnit} (max 3d), stock: ${Math.round(currentStock)}${preparation.outputUnit}`
+  }
+
+  // Fixed mode override: split proportionally
+  if (preparation.dailyTargetQuantity && preparation.dailyTargetQuantity > 0) {
+    const totalMax = amMax + pmMax
+    const ratio = totalMax > 0 ? (slot === 'morning' ? amMax / totalMax : pmMax / totalMax) : 0.5
+    targetStock = Math.round(preparation.dailyTargetQuantity * ratio)
+  }
+
   const needToProduce = Math.max(0, targetStock - currentStock)
 
-  // Skip if recommended quantity is too small
   if (needToProduce < config.minRecommendedQuantity) {
     return null
   }
 
-  // Generate reason string
-  const reason = generateReason(
-    currentStock,
-    avgDailyConsumption,
-    daysUntilStockout,
-    balance,
-    preparation.outputUnit
-  )
+  // Urgent override: if stock is 0 or below min
+  if (currentStock <= 0 || balance.belowMinStock) {
+    slot = 'urgent'
+  }
+
+  const avgDailyConsumption = calculateAvgDailyConsumption(balance, config.daysForAverage)
+  const daysUntilStockout = avgDailyConsumption > 0 ? currentStock / avgDailyConsumption : 999
 
   return {
     id: generateId(),
@@ -272,7 +322,78 @@ function calculateRecommendation(
     avgDailyConsumption,
     daysUntilStockout: Math.round(daysUntilStockout * 10) / 10,
     recommendedQuantity: Math.round(needToProduce),
-    urgency,
+    urgency: slot,
+    reason,
+    storageLocation: preparation.storageLocation || 'fridge',
+    portionType: preparation.portionType,
+    portionSize: preparation.portionSize,
+    isPremade: false,
+    isCompleted: false
+  }
+}
+
+/**
+ * Long shelf-life (>1 day): produce in evening ritual.
+ * Target = max_daily × targetDays (based on shelf life).
+ */
+function calculateLongShelfLifeRecommendation(
+  balance: PreparationBalance,
+  preparation: Preparation,
+  config: RecommendationConfig,
+  maxDaily: number
+): ProductionRecommendation | null {
+  const currentStock = balance.totalQuantity
+  const avgDailyConsumption = calculateAvgDailyConsumption(balance, config.daysForAverage)
+  const shelfLife = preparation.shelfLife || 7
+
+  // targetDays based on shelf life (reduced multipliers since using max not avg)
+  let targetDays: number
+  if (shelfLife <= 2) targetDays = 1.2
+  else if (shelfLife <= 3) targetDays = 1.5
+  else if (shelfLife <= 6) targetDays = 2.0
+  else targetDays = 2.5
+
+  // Fixed mode override
+  let targetStock: number
+  if (preparation.dailyTargetQuantity && preparation.dailyTargetQuantity > 0) {
+    targetStock = preparation.dailyTargetQuantity
+  } else {
+    targetStock = maxDaily * targetDays
+    // Fallback if no consumption data
+    if (targetStock <= 0) {
+      targetStock = preparation.outputQuantity || 500
+    }
+  }
+
+  const needToProduce = Math.max(0, targetStock - currentStock)
+
+  if (needToProduce < config.minRecommendedQuantity) {
+    return null
+  }
+
+  const daysUntilStockout = avgDailyConsumption > 0 ? currentStock / avgDailyConsumption : 999
+
+  // Determine slot: evening by default, urgent if critical
+  let slot: ProductionScheduleSlot = 'evening'
+  if (currentStock <= 0 || balance.belowMinStock || daysUntilStockout <= 1) {
+    slot = 'urgent'
+  } else if (balance.hasExpired) {
+    slot = 'urgent'
+  } else if (daysUntilStockout <= 2) {
+    slot = 'morning' // Needs attention sooner than evening
+  }
+
+  const reason = `Target: ${Math.round(targetStock)}${preparation.outputUnit} (${targetDays}d × max ${Math.round(maxDaily)}), stock: ${Math.round(currentStock)}${preparation.outputUnit}`
+
+  return {
+    id: generateId(),
+    preparationId: preparation.id,
+    preparationName: preparation.name,
+    currentStock,
+    avgDailyConsumption,
+    daysUntilStockout: Math.round(daysUntilStockout * 10) / 10,
+    recommendedQuantity: Math.round(needToProduce),
+    urgency: slot,
     reason,
     storageLocation: preparation.storageLocation || 'fridge',
     portionType: preparation.portionType,
@@ -341,16 +462,36 @@ function createZeroStockRecommendation(
   config: RecommendationConfig
 ): ProductionRecommendation | null {
   const isPremade = preparation.isPremade === true
+  const shelfLife = preparation.shelfLife && preparation.shelfLife > 0 ? preparation.shelfLife : 7
+  const maxDaily = preparation.maxDailyUsage || 0
 
-  // Use same target logic as regular/premade items: fixed override or shelf-life formula
-  // For zero stock, currentStock=0 so targetStock = recommendedQuantity
   let recommendedQuantity: number
-  if (preparation.dailyTargetQuantity && preparation.dailyTargetQuantity > 0) {
-    recommendedQuantity = preparation.dailyTargetQuantity
+  let slot: ProductionScheduleSlot
+
+  if (isPremade) {
+    slot = 'morning'
+    recommendedQuantity = preparation.dailyTargetQuantity || preparation.outputQuantity || 500
+  } else if (shelfLife <= 1) {
+    // Short shelf-life: use AM max for morning, urgent since zero stock
+    slot = 'urgent'
+    const amMax = preparation.amMaxUsage || Math.round(maxDaily * 0.6)
+    recommendedQuantity = amMax || preparation.outputQuantity || 500
   } else {
-    // avgDailyConsumption=0 here (no balance), so calculateRecommendedQuantity
-    // will fall back to outputQuantity — same as before but via unified path
-    recommendedQuantity = calculateRecommendedQuantity(0, preparation, config)
+    // Long shelf-life: evening slot, but urgent since zero stock
+    slot = 'urgent'
+    if (preparation.dailyTargetQuantity && preparation.dailyTargetQuantity > 0) {
+      recommendedQuantity = preparation.dailyTargetQuantity
+    } else if (maxDaily > 0) {
+      const targetDays = shelfLife <= 2 ? 1.2 : shelfLife <= 3 ? 1.5 : shelfLife <= 6 ? 2.0 : 2.5
+      recommendedQuantity = maxDaily * targetDays
+    } else {
+      recommendedQuantity = preparation.outputQuantity || 500
+    }
+  }
+
+  // Skip if no meaningful quantity
+  if (recommendedQuantity < config.minRecommendedQuantity) {
+    return null
   }
 
   return {
@@ -361,10 +502,10 @@ function createZeroStockRecommendation(
     avgDailyConsumption: 0,
     daysUntilStockout: 0,
     recommendedQuantity: Math.round(recommendedQuantity),
-    urgency: isPremade ? 'morning' : 'urgent',
+    urgency: slot,
     reason: isPremade
       ? `Pre-made: needs daily prep (target: ${Math.round(recommendedQuantity)}${preparation.outputUnit})`
-      : 'Out of stock - no inventory available',
+      : `Out of stock (max daily: ${Math.round(maxDaily)}${preparation.outputUnit})`,
     storageLocation: preparation.storageLocation || 'fridge',
     portionType: preparation.portionType,
     portionSize: preparation.portionSize,
@@ -412,48 +553,6 @@ function calculateAvgDailyConsumption(balance: PreparationBalance, daysBack: num
 }
 
 /**
- * Determine urgency based on days until stockout and other factors
- */
-function determineUrgency(
-  daysUntilStockout: number,
-  balance: PreparationBalance,
-  config: RecommendationConfig
-): ProductionScheduleSlot | null {
-  // Check for expired or near expiry items - urgent regardless of quantity
-  if (balance.hasExpired) {
-    return 'urgent'
-  }
-
-  if (balance.hasNearExpiry) {
-    return 'morning'
-  }
-
-  // Check stock levels
-  if (daysUntilStockout <= 0 || balance.belowMinStock) {
-    return 'urgent'
-  }
-
-  if (daysUntilStockout <= config.urgentThresholdDays) {
-    return 'urgent'
-  }
-
-  if (daysUntilStockout <= config.morningThresholdDays) {
-    return 'morning'
-  }
-
-  if (daysUntilStockout <= config.afternoonThresholdDays) {
-    return 'afternoon'
-  }
-
-  // More than 3 days of stock - low priority or skip
-  if (daysUntilStockout > 5) {
-    return null // Don't recommend if plenty of stock
-  }
-
-  return 'evening'
-}
-
-/**
  * Calculate TARGET STOCK LEVEL based on shelf life and daily consumption.
  * Smart defaults: shorter shelf life → less buffer, longer → more comfort.
  * Caller subtracts currentStock to get actual production amount.
@@ -495,46 +594,6 @@ function calculateRecommendedQuantity(
   }
 
   return Math.max(recommended, config.minRecommendedQuantity)
-}
-
-/**
- * Generate human-readable reason for recommendation
- */
-function generateReason(
-  currentStock: number,
-  avgDailyConsumption: number,
-  daysUntilStockout: number,
-  balance: PreparationBalance,
-  unit: string
-): string {
-  const stockStr = `${Math.round(currentStock)}${unit}`
-  const consumptionStr = `${Math.round(avgDailyConsumption)}${unit}/day`
-
-  if (currentStock <= 0) {
-    return 'Out of stock - no inventory available'
-  }
-
-  if (balance.hasExpired) {
-    return `Stock expired - ${stockStr} needs replacement`
-  }
-
-  if (balance.hasNearExpiry) {
-    return `Near expiry - produce fresh batch (${stockStr} expiring soon)`
-  }
-
-  if (balance.belowMinStock) {
-    return `Below minimum stock - only ${stockStr} remaining`
-  }
-
-  if (daysUntilStockout <= 1) {
-    return `Critical - only ${stockStr} left (~${Math.round(daysUntilStockout * 24)}h supply)`
-  }
-
-  if (avgDailyConsumption > 0) {
-    return `Based on ${consumptionStr} avg: ${stockStr} ≈ ${Math.round(daysUntilStockout)} day${daysUntilStockout !== 1 ? 's' : ''} supply`
-  }
-
-  return `Low stock - ${stockStr} remaining`
 }
 
 // =============================================
