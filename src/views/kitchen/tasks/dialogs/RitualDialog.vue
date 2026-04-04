@@ -416,7 +416,16 @@ const elapsedDisplay = computed(() => {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
 })
 
-const ritualColor = computed(() => (props.ritualType === 'morning' ? 'info' : 'purple'))
+const ritualColor = computed(() => {
+  switch (props.ritualType) {
+    case 'morning':
+      return 'info'
+    case 'afternoon':
+      return 'warning'
+    default:
+      return 'purple'
+  }
+})
 const ritualIcon = computed(() => {
   switch (props.ritualType) {
     case 'morning':

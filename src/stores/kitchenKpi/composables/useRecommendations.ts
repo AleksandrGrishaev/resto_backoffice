@@ -77,14 +77,20 @@ export function useRecommendations() {
 
       DebugUtils.info(MODULE_NAME, 'Generating recommendations', { department })
 
-      // Refresh consumption stats (RPC) before generating recommendations
-      try {
-        const { data } = await supabase.rpc('recalculate_consumption_stats')
-        DebugUtils.info(MODULE_NAME, 'Consumption stats refreshed', data)
-      } catch (rpcErr) {
-        DebugUtils.warn(MODULE_NAME, 'Failed to refresh consumption stats, using cached values', {
-          error: rpcErr
-        })
+      // Refresh consumption stats (RPC) — throttled to max once per 4 hours
+      const RPC_THROTTLE_MS = 4 * 60 * 60 * 1000
+      const rpcKey = 'consumption_stats_last_rpc'
+      const lastRpc = Number(localStorage.getItem(rpcKey) || 0)
+      if (Date.now() - lastRpc > RPC_THROTTLE_MS) {
+        try {
+          const { data } = await supabase.rpc('recalculate_consumption_stats')
+          localStorage.setItem(rpcKey, String(Date.now()))
+          DebugUtils.info(MODULE_NAME, 'Consumption stats refreshed', data)
+        } catch (rpcErr) {
+          DebugUtils.warn(MODULE_NAME, 'Failed to refresh consumption stats, using cached values', {
+            error: rpcErr
+          })
+        }
       }
 
       // Ensure we have fresh data (re-fetch preparations to pick up updated consumption stats)

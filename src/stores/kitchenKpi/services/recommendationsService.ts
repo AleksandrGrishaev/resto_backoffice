@@ -9,6 +9,30 @@ import type { ProductionRecommendation, ProductionScheduleSlot } from '@/stores/
 
 const MODULE_NAME = 'RecommendationsService'
 
+// Reusable Bali hour formatter (hoisted to module scope)
+const baliHourFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Makassar',
+  hour: 'numeric',
+  hour12: false
+})
+
+/** Default AM/PM split ratio when no consumption data exists */
+const DEFAULT_AM_RATIO = 0.65
+const DEFAULT_PM_RATIO = 0.35
+
+/** Get effective shelf life with default fallback */
+function getShelfLife(preparation: Preparation): number {
+  return preparation.shelfLife && preparation.shelfLife > 0 ? preparation.shelfLife : 7
+}
+
+/** Get targetDays multiplier for long shelf-life items (based on max, not avg) */
+function getTargetDays(shelfLife: number): number {
+  if (shelfLife <= 2) return 1.2
+  if (shelfLife <= 3) return 1.5
+  if (shelfLife <= 6) return 2.0
+  return 2.5
+}
+
 // =============================================
 // Configuration
 // =============================================
@@ -223,23 +247,20 @@ export function generateRecommendations(
  * - shelf_life > 1: single evening task with max_daily × targetDays
  * - Pre-made: always morning
  *
- * Returns array because short shelf-life items produce TWO recommendations.
  */
 function calculateRecommendation(
   balance: PreparationBalance,
   preparation: Preparation,
   config: RecommendationConfig
 ): ProductionRecommendation | null {
-  const currentStock = balance.totalQuantity
-  const avgDailyConsumption = calculateAvgDailyConsumption(balance, config.daysForAverage)
-
   // Pre-made items: use dailyTargetQuantity if set, always morning slot
   if (preparation.isPremade) {
     return calculatePremadeRecommendation(balance, preparation, config)
   }
 
-  const shelfLife = preparation.shelfLife && preparation.shelfLife > 0 ? preparation.shelfLife : 7
-  const maxDaily = preparation.maxDailyUsage || avgDailyConsumption
+  const shelfLife = getShelfLife(preparation)
+  const maxDaily =
+    preparation.maxDailyUsage || calculateAvgDailyConsumption(balance, config.daysForAverage)
 
   // ===== shelf_life <= 1: morning + afternoon split =====
   if (shelfLife <= 1) {
@@ -262,20 +283,11 @@ function calculateShortShelfLifeRecommendation(
   maxDaily: number
 ): ProductionRecommendation | null {
   const currentStock = balance.totalQuantity
-  // AM = 7-16 (morning produces enough until afternoon is done)
-  // PM = 16-22 (afternoon produces for dinner service)
-  const amMax = preparation.amMaxUsage || Math.round(maxDaily * 0.65)
-  const pmMax = preparation.pmMaxUsage || Math.round(maxDaily * 0.35)
+  const amMax = preparation.amMaxUsage || Math.round(maxDaily * DEFAULT_AM_RATIO)
+  const pmMax = preparation.pmMaxUsage || Math.round(maxDaily * DEFAULT_PM_RATIO)
 
   // Determine which slot based on current Bali time
-  const now = new Date()
-  const baliHour = Number(
-    new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Makassar',
-      hour: 'numeric',
-      hour12: false
-    }).format(now)
-  )
+  const baliHour = Number(baliHourFormatter.format(new Date()))
 
   let targetStock: number
   let slot: ProductionScheduleSlot
@@ -344,14 +356,8 @@ function calculateLongShelfLifeRecommendation(
 ): ProductionRecommendation | null {
   const currentStock = balance.totalQuantity
   const avgDailyConsumption = calculateAvgDailyConsumption(balance, config.daysForAverage)
-  const shelfLife = preparation.shelfLife || 7
-
-  // targetDays based on shelf life (reduced multipliers since using max not avg)
-  let targetDays: number
-  if (shelfLife <= 2) targetDays = 1.2
-  else if (shelfLife <= 3) targetDays = 1.5
-  else if (shelfLife <= 6) targetDays = 2.0
-  else targetDays = 2.5
+  const shelfLife = getShelfLife(preparation)
+  const targetDays = getTargetDays(shelfLife)
 
   // Fixed mode override
   let targetStock: number
@@ -462,7 +468,7 @@ function createZeroStockRecommendation(
   config: RecommendationConfig
 ): ProductionRecommendation | null {
   const isPremade = preparation.isPremade === true
-  const shelfLife = preparation.shelfLife && preparation.shelfLife > 0 ? preparation.shelfLife : 7
+  const shelfLife = getShelfLife(preparation)
   const maxDaily = preparation.maxDailyUsage || 0
 
   let recommendedQuantity: number
@@ -472,18 +478,15 @@ function createZeroStockRecommendation(
     slot = 'morning'
     recommendedQuantity = preparation.dailyTargetQuantity || preparation.outputQuantity || 500
   } else if (shelfLife <= 1) {
-    // Short shelf-life: use AM max for morning, urgent since zero stock
     slot = 'urgent'
-    const amMax = preparation.amMaxUsage || Math.round(maxDaily * 0.6)
+    const amMax = preparation.amMaxUsage || Math.round(maxDaily * DEFAULT_AM_RATIO)
     recommendedQuantity = amMax || preparation.outputQuantity || 500
   } else {
-    // Long shelf-life: evening slot, but urgent since zero stock
     slot = 'urgent'
     if (preparation.dailyTargetQuantity && preparation.dailyTargetQuantity > 0) {
       recommendedQuantity = preparation.dailyTargetQuantity
     } else if (maxDaily > 0) {
-      const targetDays = shelfLife <= 2 ? 1.2 : shelfLife <= 3 ? 1.5 : shelfLife <= 6 ? 2.0 : 2.5
-      recommendedQuantity = maxDaily * targetDays
+      recommendedQuantity = maxDaily * getTargetDays(shelfLife)
     } else {
       recommendedQuantity = preparation.outputQuantity || 500
     }
