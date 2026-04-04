@@ -337,14 +337,10 @@ export class ReceiptBuilder {
       // Main item line
       cmd.lineItem(item.quantity, item.name, cmd.formatIDR(item.totalPrice))
 
-      // Modifiers (indented, with price if any)
+      // Modifiers (indented, names only — prices already included in item total)
       if (item.modifiers && item.modifiers.length > 0) {
         for (const mod of item.modifiers) {
-          if (mod.price && mod.price > 0) {
-            cmd.leftRight(`  + ${mod.name}`, cmd.formatIDR(mod.price))
-          } else {
-            cmd.textLine(`  + ${mod.name}`)
-          }
+          cmd.textLine(`  + ${mod.name}`)
         }
       }
 
