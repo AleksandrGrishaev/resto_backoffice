@@ -141,7 +141,9 @@ onMounted(async () => {
       }
     } else if (props.type === 'supplier') {
       // Load supplier data to calculate alerts
-      await supplierStore.initialize()
+      if (supplierStore.initialize) {
+        await supplierStore.initialize()
+      }
     }
   } catch (error) {
     console.warn(`Failed to load ${props.type} alerts:`, error)

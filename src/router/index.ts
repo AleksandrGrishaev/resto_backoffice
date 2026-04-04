@@ -118,7 +118,7 @@ const lazyLoadAccounts = async () => {
 const lazyLoadSuppliers = async () => {
   const { useSupplierStore } = await import('@/stores/supplier_2')
   const store = useSupplierStore()
-  if (store.initialize && !store.state?.initialized) {
+  if (store.initialize && !store.integrationState?.isInitialized) {
     await store.initialize()
   }
 }
