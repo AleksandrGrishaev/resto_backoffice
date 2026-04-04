@@ -150,6 +150,9 @@ export function preparationFromSupabase(
       : undefined,
     // Consumption analytics
     avgDailyUsage: (row as any).avg_daily_usage ? Number((row as any).avg_daily_usage) : undefined,
+    maxDailyUsage: (row as any).max_daily_usage ? Number((row as any).max_daily_usage) : undefined,
+    amMaxUsage: (row as any).am_max_usage ? Number((row as any).am_max_usage) : undefined,
+    pmMaxUsage: (row as any).pm_max_usage ? Number((row as any).pm_max_usage) : undefined,
     // Pre-made flag
     isPremade: (row as any).is_premade === true,
     targetMode: ((row as any).target_mode as 'auto' | 'fixed') || 'auto',

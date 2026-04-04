@@ -265,7 +265,7 @@ interface Props {
   modelValue: boolean
   tasks: ProductionScheduleItem[]
   customTasks?: RitualCustomTask[]
-  ritualType: 'morning' | 'evening'
+  ritualType: 'morning' | 'afternoon' | 'evening'
   staffName?: string
 }
 
@@ -279,7 +279,7 @@ const emit = defineEmits<{
   complete: [task: ProductionScheduleItem, quantity: number]
   'write-off': [task: ProductionScheduleItem, quantity: number]
   'ritual-completed': [
-    ritualType: 'morning' | 'evening',
+    ritualType: 'morning' | 'afternoon' | 'evening',
     taskDetails: RitualTaskDetail[],
     durationMinutes: number
   ]
@@ -416,13 +416,36 @@ const elapsedDisplay = computed(() => {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
 })
 
-const ritualColor = computed(() => (props.ritualType === 'morning' ? 'info' : 'purple'))
-const ritualIcon = computed(() =>
-  props.ritualType === 'morning' ? 'mdi-weather-sunny' : 'mdi-weather-night'
-)
-const ritualLabel = computed(() =>
-  props.ritualType === 'morning' ? 'Morning Ritual' : 'Evening Ritual'
-)
+const ritualColor = computed(() => {
+  switch (props.ritualType) {
+    case 'morning':
+      return 'info'
+    case 'afternoon':
+      return 'warning'
+    default:
+      return 'purple'
+  }
+})
+const ritualIcon = computed(() => {
+  switch (props.ritualType) {
+    case 'morning':
+      return 'mdi-weather-sunny'
+    case 'afternoon':
+      return 'mdi-weather-partly-cloudy'
+    default:
+      return 'mdi-weather-night'
+  }
+})
+const ritualLabel = computed(() => {
+  switch (props.ritualType) {
+    case 'morning':
+      return 'Morning Ritual'
+    case 'afternoon':
+      return 'Afternoon Ritual'
+    default:
+      return 'Evening Ritual'
+  }
+})
 
 // Auto-finish when all tasks are completed
 watch(allDone, done => {

@@ -81,6 +81,7 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
   const customTasks = ref<RitualCustomTask[]>([])
   const ritualCompletions = ref<RitualCompletion[]>([])
   const morningRitualCompleted = ref(false)
+  const afternoonRitualCompleted = ref(false)
   const eveningRitualCompleted = ref(false)
   const ritualStartedAt = ref<string | null>(null)
 
@@ -255,7 +256,11 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
   const currentRitualType = computed<RitualType>(() => {
     const t = _timeTick.value
     const eveningStart = RITUAL_WINDOWS.evening.start[0] * 60 + RITUAL_WINDOWS.evening.start[1]
-    return t >= eveningStart ? 'evening' : 'morning'
+    const afternoonStart =
+      RITUAL_WINDOWS.afternoon.start[0] * 60 + RITUAL_WINDOWS.afternoon.start[1]
+    if (t >= eveningStart) return 'evening'
+    if (t >= afternoonStart) return 'afternoon'
+    return 'morning'
   })
 
   /** Whether we're currently inside a ritual time window (Bali time) */
@@ -275,11 +280,16 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
     return Math.max(0, end - t)
   })
 
-  /** Whether the current ritual (morning or evening) is already completed today */
+  /** Whether the current ritual is already completed today */
   const currentRitualCompleted = computed(() => {
-    return currentRitualType.value === 'morning'
-      ? morningRitualCompleted.value
-      : eveningRitualCompleted.value
+    switch (currentRitualType.value) {
+      case 'morning':
+        return morningRitualCompleted.value
+      case 'afternoon':
+        return afternoonRitualCompleted.value
+      default:
+        return eveningRitualCompleted.value
+    }
   })
 
   /** Custom tasks for current ritual type */
@@ -836,10 +846,12 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
       ritualCompletions.value = completions
 
       morningRitualCompleted.value = completions.some(c => c.ritualType === 'morning')
+      afternoonRitualCompleted.value = completions.some(c => c.ritualType === 'afternoon')
       eveningRitualCompleted.value = completions.some(c => c.ritualType === 'evening')
 
       DebugUtils.info(MODULE_NAME, 'Today ritual status loaded', {
         morning: morningRitualCompleted.value,
+        afternoon: afternoonRitualCompleted.value,
         evening: eveningRitualCompleted.value
       })
     } catch (err) {
@@ -897,6 +909,8 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
       ritualCompletions.value.push(completion)
       if (data.ritualType === 'morning') {
         morningRitualCompleted.value = true
+      } else if (data.ritualType === 'afternoon') {
+        afternoonRitualCompleted.value = true
       } else {
         eveningRitualCompleted.value = true
       }
@@ -959,6 +973,7 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
     customTasks.value = []
     ritualCompletions.value = []
     morningRitualCompleted.value = false
+    afternoonRitualCompleted.value = false
     eveningRitualCompleted.value = false
     ritualStartedAt.value = null
     error.value = null
@@ -987,6 +1002,7 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
     customTasks,
     ritualCompletions,
     morningRitualCompleted,
+    afternoonRitualCompleted,
     eveningRitualCompleted,
     ritualStartedAt,
 

@@ -50,6 +50,15 @@
         invert-delta
       />
       <MetricCard
+        label="Menu FC"
+        :value="summary.menuFoodCostPercent"
+        icon="mdi-food-variant"
+        color="error"
+        format="percent"
+        :delta="summary.menuFoodCostDelta"
+        invert-delta
+      />
+      <MetricCard
         label="Discounts"
         :value="summary.totalDiscounts"
         icon="mdi-tag-minus"

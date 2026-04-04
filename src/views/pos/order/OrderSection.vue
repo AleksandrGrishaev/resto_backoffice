@@ -2468,6 +2468,9 @@ function buildPaymentReceiptData(
     quantity: item.quantity,
     unitPrice: item.unitPrice,
     totalPrice: item.totalPrice,
+    modifiers:
+      item.selectedModifiers?.map(m => ({ name: m.optionName, price: m.priceAdjustment || 0 })) ||
+      [],
     discount: item.discountAmount,
     notes: item.kitchenNotes
   }))

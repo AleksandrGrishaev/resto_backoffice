@@ -44,7 +44,7 @@ import { computed } from 'vue'
 interface Props {
   total: number
   completed: number
-  ritualType: 'morning' | 'evening'
+  ritualType: 'morning' | 'afternoon' | 'evening'
   ritualCompleted?: boolean
 }
 
@@ -60,15 +60,38 @@ const percent = computed(() => (props.total > 0 ? (props.completed / props.total
 
 const allDone = computed(() => props.total > 0 && props.completed === props.total)
 
-const ritualColor = computed(() => (props.ritualType === 'morning' ? 'info' : 'purple'))
+const ritualColor = computed(() => {
+  switch (props.ritualType) {
+    case 'morning':
+      return 'info'
+    case 'afternoon':
+      return 'warning'
+    default:
+      return 'purple'
+  }
+})
 
-const ritualIcon = computed(() =>
-  props.ritualType === 'morning' ? 'mdi-weather-sunny' : 'mdi-weather-night'
-)
+const ritualIcon = computed(() => {
+  switch (props.ritualType) {
+    case 'morning':
+      return 'mdi-weather-sunny'
+    case 'afternoon':
+      return 'mdi-weather-partly-cloudy'
+    default:
+      return 'mdi-weather-night'
+  }
+})
 
-const ritualLabel = computed(() =>
-  props.ritualType === 'morning' ? 'Morning Ritual' : 'Evening Ritual'
-)
+const ritualLabel = computed(() => {
+  switch (props.ritualType) {
+    case 'morning':
+      return 'Morning Ritual'
+    case 'afternoon':
+      return 'Afternoon Ritual'
+    default:
+      return 'Evening Ritual'
+  }
+})
 </script>
 
 <style scoped lang="scss">

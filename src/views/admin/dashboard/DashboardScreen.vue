@@ -133,13 +133,15 @@ const emptyData: DashboardData = {
     totalGuests: 0,
     avgCheckPerGuest: 0,
     foodCostPercent: 0,
+    menuFoodCostPercent: 0,
     totalFoodCost: 0,
     totalDiscounts: 0,
     totalTax: 0,
     revenueDelta: null,
     ordersDelta: null,
     avgCheckDelta: null,
-    foodCostDelta: null
+    foodCostDelta: null,
+    menuFoodCostDelta: null
   },
   hourlySales: [],
   staffByHour: [],

@@ -232,14 +232,28 @@ const filteredTodoItems = computed(() => {
   })
 })
 
-/** Ritual tasks: morning = premade + urgent + morning; evening = evening + write-offs */
+/** Ritual tasks by type:
+ * morning = premade + urgent + morning slot (breakfast+lunch prep)
+ * afternoon = afternoon slot (dinner prep, based on actual remaining stock)
+ * evening = evening slot + write-offs (long shelf-life items for next days)
+ */
 const ritualTasks = computed(() => {
-  if (kpiStore.currentRitualType === 'morning') {
-    return allItems.value.filter(
-      i => i.isPremade || i.productionSlot === 'urgent' || i.productionSlot === 'morning'
-    )
+  switch (kpiStore.currentRitualType) {
+    case 'morning':
+      return allItems.value.filter(
+        i => i.isPremade || i.productionSlot === 'urgent' || i.productionSlot === 'morning'
+      )
+    case 'afternoon':
+      return allItems.value.filter(
+        i =>
+          i.productionSlot === 'afternoon' ||
+          (i.productionSlot === 'urgent' && i.status !== 'completed')
+      )
+    default:
+      return allItems.value.filter(
+        i => i.productionSlot === 'evening' || i.taskType === 'write_off'
+      )
   }
-  return allItems.value.filter(i => i.productionSlot === 'evening' || i.taskType === 'write_off')
 })
 
 const ritualCompletedCount = computed(
@@ -457,7 +471,7 @@ function handleWriteOff(task: ProductionScheduleItem, quantity: number): void {
  * Handle ritual completion — record to ritual_completions table via store
  */
 async function handleRitualCompleted(
-  ritualType: 'morning' | 'evening',
+  ritualType: 'morning' | 'afternoon' | 'evening',
   taskDetails: RitualTaskDetail[],
   durationMinutes: number
 ): Promise<void> {
@@ -488,7 +502,8 @@ async function handleRitualCompleted(
       taskDetails
     })
 
-    showSnackbar(`${ritualType === 'morning' ? 'Morning' : 'Evening'} Ritual recorded!`, 'success')
+    const ritualNames = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening' }
+    showSnackbar(`${ritualNames[ritualType]} Ritual recorded!`, 'success')
   } catch (err) {
     DebugUtils.error(MODULE_NAME, 'Failed to record ritual completion', { error: err })
     showSnackbar('Ritual completed but failed to save', 'warning')

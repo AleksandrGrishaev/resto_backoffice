@@ -30,6 +30,7 @@ export {
 /** Ritual time windows: { start: [hour, minute], end: [hour, minute] } */
 export const RITUAL_WINDOWS = {
   morning: { start: [7, 30], end: [10, 0] },
+  afternoon: { start: [14, 0], end: [16, 0] },
   evening: { start: [18, 0], end: [22, 0] }
 } as const
 
@@ -47,7 +48,7 @@ export interface RitualSession {
 // Ritual Types
 // ===============================================
 
-export type RitualType = 'morning' | 'evening'
+export type RitualType = 'morning' | 'afternoon' | 'evening'
 
 /**
  * Custom task defined by admin for morning/evening ritual

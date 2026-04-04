@@ -49,6 +49,7 @@ export interface DaySummary {
   totalGuests: number
   avgCheckPerGuest: number
   foodCostPercent: number
+  menuFoodCostPercent: number
   totalFoodCost: number
   totalDiscounts: number
   totalTax: number
@@ -57,6 +58,7 @@ export interface DaySummary {
   ordersDelta: number | null
   avgCheckDelta: number | null
   foodCostDelta: number | null
+  menuFoodCostDelta: number | null
 }
 
 export interface HourlySale {

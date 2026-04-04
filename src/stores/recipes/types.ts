@@ -126,6 +126,9 @@ export interface Preparation extends BaseEntity {
 
   // Consumption analytics (from recalculate_consumption_stats RPC)
   avgDailyUsage?: number
+  maxDailyUsage?: number // Max daily consumption over last 3 active days
+  amMaxUsage?: number // Max AM (7-14) consumption over last 3 active days
+  pmMaxUsage?: number // Max PM (14-22) consumption over last 3 active days
 
   // Pre-made: semi-cooked items prepared ahead (falafel, poached eggs, etc.)
   isPremade?: boolean
