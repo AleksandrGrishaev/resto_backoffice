@@ -859,6 +859,8 @@ function getTierColor(tier: string): string {
   switch (tier) {
     case 'vip':
       return 'deep-purple'
+    case 'family':
+      return 'amber-darken-2'
     case 'regular':
       return 'blue'
     default:

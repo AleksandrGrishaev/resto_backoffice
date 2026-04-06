@@ -1587,7 +1587,7 @@ const custSaving = ref(false)
 const custSaveError = ref('')
 const togglingStatus = ref(false)
 
-const tierOptions = ['member', 'regular', 'vip']
+const tierOptions = ['member', 'regular', 'family', 'vip']
 
 // Shared form for create & edit
 const custForm = ref({
@@ -2060,6 +2060,8 @@ function getTierColor(tier: string): string {
   switch (tier) {
     case 'vip':
       return 'deep-purple'
+    case 'family':
+      return 'amber-darken-2'
     case 'regular':
       return 'blue'
     default:
