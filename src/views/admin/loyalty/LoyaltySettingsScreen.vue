@@ -636,8 +636,8 @@
                 </template>
                 <template v-else>{{ formatIDR(item.loyaltyBalance) }}</template>
               </template>
-              <template #[`item.totalSpent`]="{ item }">
-                {{ formatIDR(item.totalSpent) }}
+              <template #[`item.spent90d`]="{ item }">
+                {{ formatIDR(item.spent90d) }}
               </template>
               <template #[`item.averageCheck`]="{ item }">
                 {{ item.averageCheck ? formatIDR(item.averageCheck) : '-' }}
@@ -691,6 +691,10 @@
                     <v-col cols="6">
                       <div class="text-caption text-medium-emphasis">Balance</div>
                       <div class="text-h6">{{ formatIDR(selectedCustomer.loyaltyBalance) }}</div>
+                    </v-col>
+                    <v-col cols="6">
+                      <div class="text-caption text-medium-emphasis">{{ tierWindowLabel }}</div>
+                      <div class="text-h6">{{ formatIDR(selectedCustomer.spent90d) }}</div>
                     </v-col>
                     <v-col cols="6">
                       <div class="text-caption text-medium-emphasis">Total Spent</div>
@@ -1613,17 +1617,19 @@ const balanceChanged = computed(
   () => custForm.value.loyaltyBalance !== custForm.value.originalBalance
 )
 
-const customerHeaders = [
+const tierWindowLabel = computed(() => `Spent ${loyaltyStore.settings?.tierWindowDays ?? 90}d`)
+
+const customerHeaders = computed(() => [
   { title: 'Name', key: 'name', sortable: true },
   { title: 'Level', key: 'level', sortable: true },
   { title: 'Balance', key: 'loyaltyBalance', sortable: true },
-  { title: 'Total Spent', key: 'totalSpent', sortable: true },
+  { title: tierWindowLabel.value, key: 'spent90d', sortable: true },
   { title: 'Visits', key: 'totalVisits', sortable: true },
   { title: 'Avg Check', key: 'averageCheck', sortable: true },
   { title: 'Registered', key: 'createdAt', sortable: true },
   { title: 'Last Visit', key: 'lastVisitAt', sortable: true },
   { title: 'Status', key: 'status', sortable: true }
-]
+])
 
 async function loadCustomerStamps() {
   try {
