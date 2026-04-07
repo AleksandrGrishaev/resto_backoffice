@@ -101,7 +101,7 @@ export function useRecommendations() {
 
       // Generate recommendations
       const balances = preparationStore.state.balances || []
-      const preparations = recipesStore.preparations || []
+      const preparations = recipesStore.activePreparations || []
 
       recommendations.value = generateRecs(department, balances, preparations)
       lastGenerated.value = TimeUtils.getCurrentLocalISO()

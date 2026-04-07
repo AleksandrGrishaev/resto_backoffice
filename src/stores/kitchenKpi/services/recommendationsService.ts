@@ -312,7 +312,16 @@ function calculateShortShelfLifeRecommendation(
     targetStock = Math.round(preparation.dailyTargetQuantity * ratio)
   }
 
-  const needToProduce = Math.max(0, targetStock - currentStock)
+  let needToProduce = Math.max(0, targetStock - currentStock)
+
+  // Round up to whole portions for portion-type items
+  if (
+    preparation.portionType === 'portion' &&
+    preparation.portionSize &&
+    preparation.portionSize > 0
+  ) {
+    needToProduce = Math.ceil(needToProduce / preparation.portionSize) * preparation.portionSize
+  }
 
   if (needToProduce < config.minRecommendedQuantity) {
     return null
@@ -371,7 +380,16 @@ function calculateLongShelfLifeRecommendation(
     }
   }
 
-  const needToProduce = Math.max(0, targetStock - currentStock)
+  let needToProduce = Math.max(0, targetStock - currentStock)
+
+  // Round up to whole portions for portion-type items
+  if (
+    preparation.portionType === 'portion' &&
+    preparation.portionSize &&
+    preparation.portionSize > 0
+  ) {
+    needToProduce = Math.ceil(needToProduce / preparation.portionSize) * preparation.portionSize
+  }
 
   if (needToProduce < config.minRecommendedQuantity) {
     return null
@@ -428,7 +446,16 @@ function calculatePremadeRecommendation(
   }
 
   // How much still needs to be produced
-  const needToProduce = Math.max(0, targetStock - currentStock)
+  let needToProduce = Math.max(0, targetStock - currentStock)
+
+  // Round up to whole portions for portion-type items
+  if (
+    preparation.portionType === 'portion' &&
+    preparation.portionSize &&
+    preparation.portionSize > 0
+  ) {
+    needToProduce = Math.ceil(needToProduce / preparation.portionSize) * preparation.portionSize
+  }
 
   // Skip if we already have enough stock
   if (needToProduce < config.minRecommendedQuantity) {
