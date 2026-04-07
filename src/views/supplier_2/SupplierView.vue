@@ -880,7 +880,7 @@ onMounted(async () => {
     ])
 
     // Check if supplier store is initialized, if not - load all data
-    if (!supplierStore.integrationState.isInitialized) {
+    if (!supplierStore.integrationState?.isInitialized) {
       await supplierStore.initialize()
       await recalculateBillStatuses()
     }

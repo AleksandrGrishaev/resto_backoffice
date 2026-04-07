@@ -110,7 +110,8 @@ function enrichScheduleItemsWithPortionType(
         portionSize: preparation.portionSize,
         isPremade: preparation.isPremade || false,
         targetUnit: displayUnit,
-        avgDailyConsumption: preparation.avgDailyUsage || 0
+        avgDailyConsumption: preparation.avgDailyUsage || 0,
+        maxDailyConsumption: preparation.maxDailyUsage || 0
       }
     }
     return item

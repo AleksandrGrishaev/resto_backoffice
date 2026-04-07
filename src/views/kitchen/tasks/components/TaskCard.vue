@@ -27,6 +27,9 @@
         <span v-if="task.avgDailyConsumption" class="meta-avg">
           avg {{ Math.round(task.avgDailyConsumption) }}{{ task.targetUnit }}/day
         </span>
+        <span v-if="task.maxDailyConsumption" class="meta-max">
+          max {{ Math.round(task.maxDailyConsumption) }}{{ task.targetUnit }}/day
+        </span>
         <span v-if="task.recommendationReason" class="meta-reason">
           {{ task.recommendationReason }}
         </span>
@@ -199,6 +202,10 @@ function formatTime(isoDate: string): string {
 }
 
 .meta-avg {
+  color: rgba(var(--v-theme-on-surface), 0.45);
+}
+
+.meta-max {
   color: rgba(var(--v-theme-on-surface), 0.45);
 }
 

@@ -663,6 +663,8 @@ async function createOrderFromBasket(basket: SupplierBasket) {
 }
 
 async function saveAllDrafts() {
+  if (isLoading.value || isSending.value) return
+
   const readyBaskets = supplierBaskets.value.filter(basket => basket.items.length > 0)
 
   if (readyBaskets.length === 0) {
@@ -677,7 +679,11 @@ async function saveAllDrafts() {
     for (const basket of readyBaskets) {
       const order = await createOrderFromBasketAction(basket)
       createdOrderIds.push(order.id)
+      // Clear basket immediately after successful creation to prevent duplicates
+      basket.items = []
     }
+
+    updateBasketTotals()
 
     const unassignedCount = unassignedBasket.value?.items.length || 0
     let message = `${createdOrderIds.length} draft orders saved successfully`
@@ -703,6 +709,8 @@ async function saveAllDrafts() {
 }
 
 async function sendAllOrders() {
+  if (isLoading.value || isSending.value) return
+
   const readyBaskets = supplierBaskets.value.filter(basket => basket.items.length > 0)
 
   if (readyBaskets.length === 0) {
@@ -721,7 +729,11 @@ async function sendAllOrders() {
       // Then send it to supplier
       await sendOrder(order.id)
       createdOrderIds.push(order.id)
+      // Clear basket immediately after successful creation to prevent duplicates
+      basket.items = []
     }
+
+    updateBasketTotals()
 
     const unassignedCount = unassignedBasket.value?.items.length || 0
     let message = `${createdOrderIds.length} orders sent to suppliers`

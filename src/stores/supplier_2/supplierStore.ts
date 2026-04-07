@@ -90,8 +90,19 @@ export const useSupplierStore = defineStore('supplier', () => {
     }
   })
 
-  const storageStore = useStorageStore()
-  const productsStore = useProductsStore()
+  // Lazy store access to prevent setup failures when stores aren't ready
+  let _storageStore: ReturnType<typeof useStorageStore> | null = null
+  let _productsStore: ReturnType<typeof useProductsStore> | null = null
+
+  function getStorageStore() {
+    if (!_storageStore) _storageStore = useStorageStore()
+    return _storageStore
+  }
+
+  function getProductsStore() {
+    if (!_productsStore) _productsStore = useProductsStore()
+    return _productsStore
+  }
 
   // =============================================
   // COMPUTED PROPERTIES
@@ -417,19 +428,19 @@ export const useSupplierStore = defineStore('supplier', () => {
 
   async function ensureDependentStoresReady(): Promise<void> {
     try {
-      if (storageStore.state.balances.length === 0) {
+      if (getStorageStore().state.balances.length === 0) {
         DebugUtils.info(MODULE_NAME, 'Initializing Storage Store...')
-        await storageStore.initialize()
+        await getStorageStore().initialize()
       }
 
-      if (productsStore.products.length === 0) {
+      if (getProductsStore().products.length === 0) {
         DebugUtils.info(MODULE_NAME, 'Initializing Products Store...')
-        await productsStore.loadProducts()
+        await getProductsStore().loadProducts()
       }
 
       DebugUtils.info(MODULE_NAME, 'Dependent stores ready', {
-        storageBalances: storageStore.state.balances.length,
-        products: productsStore.products.length
+        storageBalances: getStorageStore().state.balances.length,
+        products: getProductsStore().products.length
       })
     } catch (error) {
       throw new Error(`Failed to initialize dependent stores: ${error}`)
@@ -1090,7 +1101,7 @@ export const useSupplierStore = defineStore('supplier', () => {
         }
 
         // Получаем цену из product.lastKnownCost или baseCostPerUnit
-        const product = productsStore.products.find(p => p.id === item.itemId)
+        const product = getProductsStore().products.find(p => p.id === item.itemId)
         if (!product) {
           return item
         }
@@ -1141,10 +1152,10 @@ export const useSupplierStore = defineStore('supplier', () => {
     try {
       if (department) {
         // ✅ ИСПРАВЛЕНИЕ: departmentBalances это computed функция в Pinia
-        const balances = storageStore.departmentBalances(department)
+        const balances = getStorageStore().departmentBalances(department)
         return balances.find(b => b.itemId === itemId)
       } else {
-        return storageStore.getBalance(itemId, 'kitchen') // Дефолтный департамент
+        return getStorageStore().getBalance(itemId, 'kitchen') // Дефолтный департамент
       }
     } catch (error) {
       DebugUtils.warn(MODULE_NAME, 'Failed to get item balance', { itemId, department, error })
@@ -1155,7 +1166,7 @@ export const useSupplierStore = defineStore('supplier', () => {
   function getItemInfo(itemId: string, department?: Department) {
     try {
       const balance = getItemBalance(itemId, department)
-      const product = productsStore.products.find(p => p.id === itemId)
+      const product = getProductsStore().products.find(p => p.id === itemId)
       const suggestion = state.value.orderSuggestions.find(s => s.itemId === itemId)
 
       return {
@@ -1201,8 +1212,8 @@ export const useSupplierStore = defineStore('supplier', () => {
       hasErrors: integrationState.value.integrationErrors.length > 0,
       errors: [...integrationState.value.integrationErrors],
 
-      storageConnected: storageStore.state.balances.length > 0,
-      productsConnected: productsStore.products.length > 0,
+      storageConnected: getStorageStore().state.balances.length > 0,
+      productsConnected: getProductsStore().products.length > 0,
 
       lastSuggestionsUpdate: integrationState.value.lastSuggestionsUpdate,
       lastStorageSync: integrationState.value.lastStorageSync,
@@ -1228,10 +1239,10 @@ export const useSupplierStore = defineStore('supplier', () => {
 
       integrationState.value.integrationErrors = []
 
-      await storageStore.fetchBalances()
+      await getStorageStore().fetchBalances()
       integrationState.value.lastStorageSync = TimeUtils.getCurrentLocalISO()
 
-      await productsStore.loadProducts()
+      await getProductsStore().loadProducts()
       integrationState.value.lastProductsSync = TimeUtils.getCurrentLocalISO()
 
       await refreshSuggestions()
@@ -1258,8 +1269,8 @@ export const useSupplierStore = defineStore('supplier', () => {
 
   function validateIntegrationHealth(): void {
     const errors = integrationState.value.integrationErrors.length
-    const hasStorageData = storageStore.state.balances.length > 0
-    const hasProductsData = productsStore.products.length > 0
+    const hasStorageData = getStorageStore().state.balances.length > 0
+    const hasProductsData = getProductsStore().products.length > 0
     const hasSuggestions = state.value.orderSuggestions.length > 0
 
     let health: 'excellent' | 'good' | 'poor' | 'critical' = 'excellent'

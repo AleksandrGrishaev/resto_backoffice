@@ -408,6 +408,7 @@ export interface ProductionScheduleItem {
   portionSize?: number // Size of one portion in grams (only for portionType='portion')
   isPremade?: boolean // Pre-made item flag (enriched from preparation)
   avgDailyConsumption?: number // Average daily usage (enriched from preparation)
+  maxDailyConsumption?: number // Max daily usage (enriched from preparation)
 
   // Completion details
   completedAt?: string
