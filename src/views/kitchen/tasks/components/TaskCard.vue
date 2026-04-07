@@ -22,16 +22,16 @@
         </v-chip>
       </div>
 
-      <!-- Meta: avg consumption + reason -->
+      <!-- Meta: stock + avg + max -->
       <div v-if="!isCompleted" class="task-meta">
+        <span v-if="task.currentStockAtGeneration != null" class="meta-stock">
+          stock {{ Math.round(task.currentStockAtGeneration) }}{{ task.targetUnit }}
+        </span>
         <span v-if="task.avgDailyConsumption" class="meta-avg">
           avg {{ Math.round(task.avgDailyConsumption) }}{{ task.targetUnit }}/day
         </span>
         <span v-if="task.maxDailyConsumption" class="meta-max">
           max {{ Math.round(task.maxDailyConsumption) }}{{ task.targetUnit }}/day
-        </span>
-        <span v-if="task.recommendationReason" class="meta-reason">
-          {{ task.recommendationReason }}
         </span>
       </div>
 
@@ -205,15 +205,13 @@ function formatTime(isoDate: string): string {
   color: rgba(var(--v-theme-on-surface), 0.45);
 }
 
-.meta-max {
-  color: rgba(var(--v-theme-on-surface), 0.45);
+.meta-stock {
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-weight: 500;
 }
 
-.meta-reason {
-  color: rgba(var(--v-theme-on-surface), 0.5);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.meta-max {
+  color: rgba(var(--v-theme-on-surface), 0.45);
 }
 
 .task-completed-info {

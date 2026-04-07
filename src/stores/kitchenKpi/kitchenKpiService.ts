@@ -161,6 +161,7 @@ function scheduleToSupabase(item: CreateScheduleItemData): Partial<ProductionSch
     target_unit: item.targetUnit,
     priority: item.priority || 0,
     recommendation_reason: item.recommendationReason || null,
+    current_stock_at_generation: item.currentStockAtGeneration ?? null,
     task_type: item.taskType || 'production',
     status: 'pending',
     sync_status: 'pending'

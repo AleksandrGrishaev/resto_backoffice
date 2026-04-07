@@ -301,6 +301,7 @@ export interface CreateScheduleItemData {
   targetUnit: string
   priority?: number
   recommendationReason?: string
+  currentStockAtGeneration?: number
   taskType?: 'production' | 'write_off'
 }
 

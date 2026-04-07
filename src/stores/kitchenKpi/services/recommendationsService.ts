@@ -717,6 +717,7 @@ export function recommendationsToScheduleData(
   targetUnit: string
   priority: number
   recommendationReason: string
+  currentStockAtGeneration: number
   taskType: 'production' | 'write_off'
 }> {
   return recommendations.map(rec => ({
@@ -729,6 +730,7 @@ export function recommendationsToScheduleData(
     targetUnit: getDisplayUnit(rec, preparations),
     priority: URGENCY_PRIORITY[rec.urgency] || 50,
     recommendationReason: rec.reason,
+    currentStockAtGeneration: rec.currentStock,
     taskType: rec.isWriteOff ? ('write_off' as const) : ('production' as const)
   }))
 }

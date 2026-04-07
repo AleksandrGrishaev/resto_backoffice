@@ -66,6 +66,9 @@
                 </div>
                 <div class="item-meta">
                   <span class="meta-target">{{ task.targetQuantity }}{{ task.targetUnit }}</span>
+                  <span v-if="task.currentStockAtGeneration != null" class="meta-stock">
+                    stock {{ Math.round(task.currentStockAtGeneration) }}{{ task.targetUnit }}
+                  </span>
                   <span v-if="task.avgDailyConsumption" class="meta-avg">
                     avg {{ Math.round(task.avgDailyConsumption) }}{{ task.targetUnit }}/day
                   </span>
@@ -761,6 +764,11 @@ function formatTime(isoDate: string): string {
 .meta-target {
   font-weight: 600;
   color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
+.meta-stock {
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-weight: 500;
 }
 
 .meta-avg {
