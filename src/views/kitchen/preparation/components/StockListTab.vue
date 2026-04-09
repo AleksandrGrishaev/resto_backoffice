@@ -72,16 +72,36 @@
       </p>
     </div>
 
-    <!-- Stock List -->
+    <!-- Stock List grouped by category -->
     <div v-else class="stock-list">
-      <StockItemCard
-        v-for="balance in filteredBalances"
-        :key="balance.preparationId"
-        :balance="balance"
-        @produce="handleProduce"
-        @write-off="handleWriteOff"
-        @view-details="handleViewDetails"
-      />
+      <template v-for="group in groupedBalances" :key="group.categoryId">
+        <div class="category-section">
+          <div class="category-header" @click="toggleCategory(group.categoryId)">
+            <v-icon size="14" :class="{ rotated: collapsedCategories.has(group.categoryId) }">
+              mdi-chevron-down
+            </v-icon>
+            <span class="category-emoji">{{ group.categoryEmoji }}</span>
+            <span class="category-name">{{ group.categoryName }}</span>
+            <span class="category-count text-medium-emphasis">({{ group.items.length }})</span>
+            <span class="category-summary">
+              <span v-if="group.expiredCount" class="text-error">
+                {{ group.expiredCount }} expired
+              </span>
+              <span v-if="group.lowCount" class="text-warning">{{ group.lowCount }} low</span>
+            </span>
+          </div>
+          <template v-if="!collapsedCategories.has(group.categoryId)">
+            <StockItemCard
+              v-for="balance in group.items"
+              :key="balance.preparationId"
+              :balance="balance"
+              @produce="handleProduce"
+              @write-off="handleWriteOff"
+              @view-details="handleViewDetails"
+            />
+          </template>
+        </div>
+      </template>
     </div>
 
     <!-- Summary Footer -->
@@ -100,8 +120,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import StockItemCard from './StockItemCard.vue'
+import { useRecipesStore } from '@/stores/recipes'
 import type { PreparationBalance } from '@/stores/preparation/types'
 
 // =============================================
@@ -205,6 +226,63 @@ const expiringCount = computed(() => {
 })
 
 // =============================================
+// CATEGORY GROUPING
+// =============================================
+
+const recipesStore = useRecipesStore()
+const collapsedCategories = reactive(new Set<string>())
+
+interface BalanceGroup {
+  categoryId: string
+  categoryName: string
+  categoryEmoji: string
+  items: PreparationBalance[]
+  expiredCount: number
+  lowCount: number
+}
+
+const groupedBalances = computed<BalanceGroup[]>(() => {
+  const groups = new Map<string, BalanceGroup>()
+
+  for (const balance of filteredBalances.value) {
+    const preparation = recipesStore.preparations.find(p => p.id === balance.preparationId)
+    const categoryId = preparation?.type || '__uncategorized__'
+
+    if (!groups.has(categoryId)) {
+      groups.set(categoryId, {
+        categoryId,
+        categoryName: recipesStore.getPreparationCategoryName(categoryId),
+        categoryEmoji: recipesStore.getPreparationCategoryEmoji(categoryId),
+        items: [],
+        expiredCount: 0,
+        lowCount: 0
+      })
+    }
+
+    const group = groups.get(categoryId)!
+    group.items.push(balance)
+    if (balance.hasExpired) group.expiredCount++
+    if (balance.belowMinStock || balance.totalQuantity === 0) group.lowCount++
+  }
+
+  return Array.from(groups.values()).sort((a, b) => {
+    // Groups with problems first
+    const aProblems = a.expiredCount + a.lowCount
+    const bProblems = b.expiredCount + b.lowCount
+    if (aProblems !== bProblems) return bProblems - aProblems
+    return a.categoryName.localeCompare(b.categoryName)
+  })
+})
+
+function toggleCategory(categoryId: string): void {
+  if (collapsedCategories.has(categoryId)) {
+    collapsedCategories.delete(categoryId)
+  } else {
+    collapsedCategories.add(categoryId)
+  }
+}
+
+// =============================================
 // METHODS
 // =============================================
 
@@ -278,6 +356,55 @@ function handleViewDetails(balance: PreparationBalance): void {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.category-section {
+  margin-bottom: 4px;
+}
+
+.category-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background-color: rgba(var(--v-theme-on-surface), 0.06);
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 6px;
+
+  &:active {
+    background-color: rgba(var(--v-theme-on-surface), 0.1);
+  }
+
+  .v-icon {
+    transition: transform 0.2s;
+
+    &.rotated {
+      transform: rotate(-90deg);
+    }
+  }
+}
+
+.category-emoji {
+  font-size: 16px;
+}
+
+.category-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.category-count {
+  font-size: 12px;
+}
+
+.category-summary {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .stock-footer {

@@ -83,7 +83,15 @@ function scheduleFromSupabase(row: ProductionScheduleRow): ProductionScheduleIte
     syncedAt: row.synced_at || undefined,
     syncError: row.sync_error || undefined,
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    // Production Control fields
+    staffMemberId: row.staff_member_id || undefined,
+    staffMemberName: row.staff_member_name || undefined,
+    photoUrl: row.photo_url || undefined,
+    photoUploadedAt: row.photo_uploaded_at || undefined,
+    startedAt: row.started_at || undefined,
+    actualDurationMinutes: row.actual_duration_minutes ?? undefined,
+    isQuickCompletion: row.is_quick_completion ?? undefined
   }
 }
 
@@ -518,6 +526,28 @@ class KitchenKpiService {
       })
 
       if (error) throw error
+
+      // Update production control fields if provided (separate update to avoid RPC change)
+      if (data.staffMemberId || data.photoUrl || data.startedAt) {
+        const controlFields: Record<string, unknown> = {}
+        if (data.staffMemberId) {
+          controlFields.staff_member_id = data.staffMemberId
+          controlFields.staff_member_name = data.staffMemberName || null
+        }
+        if (data.photoUrl) {
+          controlFields.photo_url = data.photoUrl
+          controlFields.photo_uploaded_at = new Date().toISOString()
+        }
+        if (data.startedAt) {
+          controlFields.started_at = data.startedAt
+          const startMs = new Date(data.startedAt).getTime()
+          const durationMin = Math.round((Date.now() - startMs) / 60000)
+          controlFields.actual_duration_minutes = durationMin
+          controlFields.is_quick_completion = durationMin < 2
+        }
+
+        await supabase.from('production_schedule').update(controlFields).eq('id', data.taskId)
+      }
 
       const item = scheduleFromSupabase(result as ProductionScheduleRow)
 

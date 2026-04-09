@@ -315,6 +315,11 @@ export interface CompleteScheduleTaskData {
   completedByName: string
   preparationBatchId?: string
   notes?: string
+  // Production Control (Phase 1)
+  staffMemberId?: string
+  staffMemberName?: string
+  photoUrl?: string
+  startedAt?: string
 }
 
 /**
@@ -391,6 +396,14 @@ export interface ProductionScheduleRow {
   sync_error: string | null
   created_at: string
   updated_at: string
+  // Production Control fields (migration 290)
+  staff_member_id: string | null
+  staff_member_name: string | null
+  photo_url: string | null
+  photo_uploaded_at: string | null
+  started_at: string | null
+  actual_duration_minutes: number | null
+  is_quick_completion: boolean | null
 }
 
 // ===============================================

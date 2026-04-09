@@ -72,14 +72,22 @@
             <p class="text-medium-emphasis mt-2">All done!</p>
           </div>
 
-          <!-- Task Cards -->
-          <TaskCard
-            v-for="task in filteredTodoItems"
-            :key="task.id"
-            :task="task"
-            @complete="handleComplete"
-            @write-off="handleWriteOff"
-          />
+          <!-- Task Cards grouped by category -->
+          <template v-for="group in groupedTodoItems" :key="group.categoryId">
+            <CategoryGroup
+              :category-name="group.categoryName"
+              :category-emoji="group.categoryEmoji"
+              :task-count="group.tasks.length"
+            >
+              <TaskCard
+                v-for="task in group.tasks"
+                :key="task.id"
+                :task="task"
+                @complete="handleComplete"
+                @write-off="handleWriteOff"
+              />
+            </CategoryGroup>
+          </template>
         </div>
       </div>
 
@@ -150,6 +158,7 @@ import { useRecommendations } from '@/stores/kitchenKpi/composables/useRecommend
 import { useBackgroundTasks } from '@/core/background'
 import { DebugUtils } from '@/utils'
 import TaskCard from './components/TaskCard.vue'
+import CategoryGroup from './components/CategoryGroup.vue'
 import RitualBanner from './components/RitualBanner.vue'
 import RitualDialog from './dialogs/RitualDialog.vue'
 import type { ProductionScheduleItem } from '@/stores/kitchenKpi'
@@ -229,6 +238,57 @@ const filteredTodoItems = computed(() => {
       default:
         return true
     }
+  })
+})
+
+/** Group filtered todo items by preparation category */
+interface TaskGroup {
+  categoryId: string
+  categoryName: string
+  categoryEmoji: string
+  tasks: ProductionScheduleItem[]
+}
+
+const groupedTodoItems = computed<TaskGroup[]>(() => {
+  const items = filteredTodoItems.value
+  const groups = new Map<string, TaskGroup>()
+
+  // Special group for write-off tasks
+  const WRITEOFF_KEY = '__write_off__'
+
+  for (const item of items) {
+    if (item.taskType === 'write_off') {
+      if (!groups.has(WRITEOFF_KEY)) {
+        groups.set(WRITEOFF_KEY, {
+          categoryId: WRITEOFF_KEY,
+          categoryName: 'Write-offs',
+          categoryEmoji: '🗑️',
+          tasks: []
+        })
+      }
+      groups.get(WRITEOFF_KEY)!.tasks.push(item)
+      continue
+    }
+
+    // Find preparation to get category
+    const preparation = recipesStore.preparations.find(p => p.id === item.preparationId)
+    const categoryId = preparation?.type || '__uncategorized__'
+    if (!groups.has(categoryId)) {
+      groups.set(categoryId, {
+        categoryId,
+        categoryName: recipesStore.getPreparationCategoryName(categoryId),
+        categoryEmoji: recipesStore.getPreparationCategoryEmoji(categoryId),
+        tasks: []
+      })
+    }
+    groups.get(categoryId)!.tasks.push(item)
+  }
+
+  // Sort: write-offs last, then by number of tasks (largest first)
+  return Array.from(groups.values()).sort((a, b) => {
+    if (a.categoryId === WRITEOFF_KEY) return 1
+    if (b.categoryId === WRITEOFF_KEY) return -1
+    return b.tasks.length - a.tasks.length
   })
 })
 
