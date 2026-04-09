@@ -27,6 +27,8 @@ declare
   v_provider_uid text;
   v_telegram_id text;
   v_telegram_username text;
+  v_is_new_customer boolean := false;
+  v_card_number text;
 begin
   -- Skip anonymous sign-ups (no customer needed until they register)
   IF new.is_anonymous = true THEN
@@ -89,6 +91,7 @@ begin
 
   -- No match: create new customer
   if v_customer_id is null then
+    v_is_new_customer := true;
     if v_provider = 'telegram' then
       insert into public.customers (name, telegram_id, telegram_username, created_by)
       values (v_name, v_telegram_id, v_telegram_username, 'auth')
@@ -113,6 +116,16 @@ begin
   -- Create identity link
   insert into public.customer_identities (customer_id, auth_user_id, provider, provider_email, provider_uid)
   values (v_customer_id, new.id, v_provider, v_email, v_provider_uid);
+
+  -- Auto-create stamp card for new customers (default loyalty_program is 'stamps')
+  if v_is_new_customer then
+    select lpad((coalesce(max(nullif(regexp_replace(card_number, '[^0-9]', '', 'g'), '')::int), 0) + 1)::text, 3, '0')
+    into v_card_number
+    from public.stamp_cards;
+
+    insert into public.stamp_cards (card_number, customer_id)
+    values (v_card_number, v_customer_id);
+  end if;
 
   return new;
 end;

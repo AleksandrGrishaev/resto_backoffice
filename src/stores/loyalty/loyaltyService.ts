@@ -159,6 +159,27 @@ export class LoyaltyService {
     return String(maxNumber + 1).padStart(3, '0')
   }
 
+  /** Auto-create a stamp card linked to an existing customer */
+  async issueCardForCustomer(customerId: string): Promise<string> {
+    const cardNumber = await this.getNextCardNumber()
+
+    const { error } = await supabase.from('stamp_cards').insert({
+      card_number: cardNumber,
+      customer_id: customerId
+    })
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to auto-create stamp card', { error })
+      throw error
+    }
+
+    DebugUtils.info(MODULE_NAME, 'Auto-created stamp card for customer', {
+      cardNumber,
+      customerId
+    })
+    return cardNumber
+  }
+
   async issueNewCard(options?: {
     cardNumber?: string
     stamps?: number
