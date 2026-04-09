@@ -102,7 +102,7 @@ export class LoyaltyService {
       .from('stamp_cards')
       .select('card_number')
       .eq('id', cardId)
-      .single()
+      .maybeSingle()
 
     if (error || !data) return null
     return this.getCardInfo((data as any).card_number)
@@ -115,7 +115,7 @@ export class LoyaltyService {
       .eq('customer_id', customerId)
       .eq('status', 'active')
       .limit(1)
-      .single()
+      .maybeSingle()
 
     if (error || !data) return null
     return this.getCardInfo((data as any).card_number)
