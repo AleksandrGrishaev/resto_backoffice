@@ -1,15 +1,26 @@
 <!-- src/views/kitchen/tasks/components/TaskCard.vue -->
-<!-- Kanban task card with color-coded border, quantity input, Done/Write-off button -->
+<!-- Kanban task card — tap to expand into full ProductionCard -->
 <template>
+  <!-- Expanded: show ProductionCard -->
+  <ProductionCard
+    v-if="expanded && !isCompleted"
+    :task="task"
+    @complete="handleProductionComplete"
+    @write-off="handleProductionWriteOff"
+    @close="expanded = false"
+  />
+
+  <!-- Collapsed: compact row -->
   <div
+    v-else
     class="task-card"
     :class="{
       'task-completed': isCompleted,
-      [`task-${taskColor}`]: !isCompleted
+      [`task-${taskColor}`]: !isCompleted,
+      'task-tappable': !isCompleted
     }"
+    @click="handleTap"
   >
-    <!-- Left color border is handled by CSS class -->
-
     <!-- Main content -->
     <div class="task-body">
       <!-- Header: name + type chip -->
@@ -22,20 +33,21 @@
         </v-chip>
       </div>
 
-      <!-- Meta: stock + avg + max -->
+      <!-- Meta: stock + target -->
       <div v-if="!isCompleted" class="task-meta">
         <span v-if="task.currentStockAtGeneration != null" class="meta-stock">
           stock {{ Math.round(task.currentStockAtGeneration) }}{{ task.targetUnit }}
         </span>
-        <span v-if="task.avgDailyConsumption" class="meta-avg">
-          avg {{ Math.round(task.avgDailyConsumption) }}{{ task.targetUnit }}/day
+        <span class="meta-target">
+          <v-icon size="10">mdi-arrow-right</v-icon>
+          {{ task.targetQuantity }}{{ task.targetUnit }}
         </span>
-        <span v-if="task.maxDailyConsumption" class="meta-max">
-          max {{ Math.round(task.maxDailyConsumption) }}{{ task.targetUnit }}/day
+        <span v-if="!isCompleted" class="meta-expand">
+          <v-icon size="14" color="primary">mdi-chevron-down</v-icon>
         </span>
       </div>
 
-      <!-- Completion info: recommended → actual -->
+      <!-- Completion info: recommended → actual + staff -->
       <div v-if="isCompleted" class="task-completed-info">
         <v-icon size="14" color="success">mdi-check</v-icon>
         <span class="done-recommended">{{ task.targetQuantity }}{{ task.targetUnit }}</span>
@@ -43,42 +55,19 @@
         <span class="done-actual" :class="doneQtyClass">
           {{ task.completedQuantity || task.targetQuantity }}{{ task.targetUnit }}
         </span>
+        <span v-if="task.staffMemberName" class="done-staff">
+          <v-icon size="10">mdi-account</v-icon>
+          {{ task.staffMemberName }}
+        </span>
         <span v-if="task.completedAt" class="done-time">{{ formatTime(task.completedAt) }}</span>
       </div>
-    </div>
-
-    <!-- Right: quantity + action -->
-    <div v-if="!isCompleted" class="task-action">
-      <!-- Quantity input -->
-      <div class="quantity-field">
-        <input
-          v-model.number="quantity"
-          type="number"
-          inputmode="numeric"
-          pattern="[0-9]*"
-          class="qty-input"
-          :min="1"
-          @focus="($event.target as HTMLInputElement).select()"
-        />
-        <span class="qty-unit">{{ task.targetUnit }}</span>
-      </div>
-
-      <!-- Action button -->
-      <v-btn
-        :color="isWriteOff ? 'error' : 'success'"
-        variant="flat"
-        class="action-btn"
-        :loading="processing"
-        @click="handleAction"
-      >
-        <v-icon size="20">{{ isWriteOff ? 'mdi-delete' : 'mdi-check' }}</v-icon>
-      </v-btn>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
+import ProductionCard from './ProductionCard.vue'
 import type { ProductionScheduleItem } from '@/stores/kitchenKpi'
 
 interface Props {
@@ -91,20 +80,22 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  complete: [task: ProductionScheduleItem, quantity: number]
-  'write-off': [task: ProductionScheduleItem, quantity: number]
+  complete: [
+    task: ProductionScheduleItem,
+    quantity: number,
+    staffMemberId?: string,
+    staffMemberName?: string,
+    startedAt?: string
+  ]
+  'write-off': [
+    task: ProductionScheduleItem,
+    quantity: number,
+    staffMemberId?: string,
+    staffMemberName?: string
+  ]
 }>()
 
-// Pre-fill with target quantity
-const quantity = ref(props.task.targetQuantity)
-
-watch(
-  () => props.task.targetQuantity,
-  val => {
-    quantity.value = val
-  },
-  { immediate: true }
-)
+const expanded = ref(false)
 
 const isCompleted = computed(() => props.task.status === 'completed')
 const isWriteOff = computed(() => props.task.taskType === 'write_off')
@@ -122,13 +113,31 @@ const taskColor = computed(() => {
   return 'production'
 })
 
-function handleAction(): void {
-  const qty = Math.max(1, quantity.value || props.task.targetQuantity)
-  if (isWriteOff.value) {
-    emit('write-off', props.task, qty)
-  } else {
-    emit('complete', props.task, qty)
+function handleTap(): void {
+  if (!isCompleted.value) {
+    expanded.value = true
   }
+}
+
+function handleProductionComplete(
+  task: ProductionScheduleItem,
+  qty: number,
+  staffMemberId?: string,
+  staffMemberName?: string,
+  startedAt?: string
+): void {
+  expanded.value = false
+  emit('complete', task, qty, staffMemberId, staffMemberName, startedAt)
+}
+
+function handleProductionWriteOff(
+  task: ProductionScheduleItem,
+  qty: number,
+  staffMemberId?: string,
+  staffMemberName?: string
+): void {
+  expanded.value = false
+  emit('write-off', task, qty, staffMemberId, staffMemberName)
 }
 
 function formatTime(isoDate: string): string {
@@ -173,6 +182,14 @@ function formatTime(isoDate: string): string {
     opacity: 0.5;
     border-left-color: rgb(var(--v-theme-success));
   }
+
+  &.task-tappable {
+    cursor: pointer;
+
+    &:active {
+      background-color: rgba(var(--v-theme-primary), 0.04);
+    }
+  }
 }
 
 .task-body {
@@ -196,13 +213,10 @@ function formatTime(isoDate: string): string {
 
 .task-meta {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-top: 2px;
   font-size: 12px;
-}
-
-.meta-avg {
-  color: rgba(var(--v-theme-on-surface), 0.45);
 }
 
 .meta-stock {
@@ -210,8 +224,16 @@ function formatTime(isoDate: string): string {
   font-weight: 500;
 }
 
-.meta-max {
-  color: rgba(var(--v-theme-on-surface), 0.45);
+.meta-target {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
+.meta-expand {
+  margin-left: auto;
 }
 
 .task-completed-info {
@@ -230,60 +252,16 @@ function formatTime(isoDate: string): string {
   font-weight: 600;
 }
 
-.done-time {
-  color: rgba(var(--v-theme-on-surface), 0.4);
+.done-staff {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: rgba(var(--v-theme-on-surface), 0.5);
   margin-left: 4px;
 }
 
-.task-action {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.quantity-field {
-  display: flex;
-  align-items: center;
-  background-color: rgba(var(--v-theme-on-surface), 0.06);
-  border-radius: 6px;
-  padding: 4px 8px;
-  gap: 2px;
-}
-
-.qty-input {
-  width: 56px;
-  text-align: right;
-  font-size: 15px;
-  font-weight: 600;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: inherit;
-  -moz-appearance: textfield;
-
-  &::-webkit-outer-spin-button,
-  &::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-
-  &:focus {
-    background-color: rgba(var(--v-theme-primary), 0.08);
-    border-radius: 4px;
-  }
-}
-
-.qty-unit {
-  font-size: 12px;
-  color: rgba(var(--v-theme-on-surface), 0.5);
-  min-width: 12px;
-}
-
-.action-btn {
-  width: 48px !important;
-  height: 48px !important;
-  min-width: 48px !important;
-  border-radius: 8px;
+.done-time {
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  margin-left: 4px;
 }
 </style>

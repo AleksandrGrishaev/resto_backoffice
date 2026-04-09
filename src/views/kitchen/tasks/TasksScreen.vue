@@ -383,7 +383,13 @@ async function handleRefresh(): Promise<void> {
   }
 }
 
-function handleComplete(task: ProductionScheduleItem, quantity: number): void {
+function handleComplete(
+  task: ProductionScheduleItem,
+  quantity: number,
+  staffMemberId?: string,
+  staffMemberName?: string,
+  startedAt?: string
+): void {
   const preparation = recipesStore.preparations.find(p => p.id === task.preparationId)
   if (!preparation) {
     showSnackbar('Preparation not found', 'error')
@@ -397,7 +403,8 @@ function handleComplete(task: ProductionScheduleItem, quantity: number): void {
       ...kpiStore.scheduleItems[idx],
       status: 'completed',
       completedAt: new Date().toISOString(),
-      completedByName: authStore.userName,
+      completedByName: staffMemberName || authStore.userName,
+      staffMemberName: staffMemberName,
       completedQuantity: quantity
     }
   }
@@ -449,7 +456,11 @@ function handleComplete(task: ProductionScheduleItem, quantity: number): void {
         userId: authStore.userId || 'unknown',
         userName: authStore.userName,
         isOnTime
-      }
+      },
+      // Production Control fields
+      staffMemberId,
+      staffMemberName,
+      startedAt
     },
     {
       onSuccess: () => {
@@ -473,7 +484,12 @@ function handleComplete(task: ProductionScheduleItem, quantity: number): void {
   )
 }
 
-function handleWriteOff(task: ProductionScheduleItem, quantity: number): void {
+function handleWriteOff(
+  task: ProductionScheduleItem,
+  quantity: number,
+  staffMemberId?: string,
+  staffMemberName?: string
+): void {
   // Optimistic update
   const idx = kpiStore.scheduleItems.findIndex(i => i.id === task.id)
   if (idx !== -1) {
