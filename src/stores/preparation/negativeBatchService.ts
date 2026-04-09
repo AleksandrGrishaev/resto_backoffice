@@ -177,6 +177,7 @@ class NegativeBatchService {
       sourceOperationType: params.sourceOperationType,
       affectedRecipeIds: params.affectedRecipeIds || [],
       reconciledAt: undefined,
+      storageLocation: lastBatch?.storageLocation || 'fridge',
       createdAt: now,
       updatedAt: now
     }

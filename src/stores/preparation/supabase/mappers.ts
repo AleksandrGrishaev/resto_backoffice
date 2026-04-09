@@ -41,6 +41,9 @@ export function batchToSupabase(batch: PreparationBatch): Record<string, any> {
     portion_type: batch.portionType || 'weight',
     portion_size: batch.portionSize || null,
     portion_quantity: batch.portionQuantity || null,
+    // 🧊 Storage transfer fields
+    storage_location: batch.storageLocation || 'fridge',
+    parent_batch_id: batch.parentBatchId || null,
     created_at: batch.createdAt,
     updated_at: batch.updatedAt
   }
@@ -77,6 +80,9 @@ export function batchToSupabaseUpdate(batch: PreparationBatch): Record<string, a
     portion_type: batch.portionType || 'weight',
     portion_size: batch.portionSize || null,
     portion_quantity: batch.portionQuantity || null,
+    // 🧊 Storage transfer fields
+    storage_location: batch.storageLocation || 'fridge',
+    parent_batch_id: batch.parentBatchId || null,
     updated_at: batch.updatedAt
   }
 }
@@ -113,6 +119,9 @@ export function batchFromSupabase(row: any): PreparationBatch {
     portionType: row.portion_type || 'weight',
     portionSize: row.portion_size ? Number(row.portion_size) : undefined,
     portionQuantity: row.portion_quantity ? Number(row.portion_quantity) : undefined,
+    // 🧊 Storage transfer fields
+    storageLocation: row.storage_location || 'fridge',
+    parentBatchId: row.parent_batch_id || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -139,6 +148,7 @@ export function operationToSupabase(operation: PreparationOperation): Record<str
     consumption_details: operation.consumptionDetails || null,
     correction_details: operation.correctionDetails || null,
     write_off_details: operation.writeOffDetails || null,
+    transfer_details: operation.transferDetails || null,
 
     total_value: operation.totalValue,
     status: operation.status,
@@ -167,6 +177,7 @@ export function operationFromSupabase(row: any): PreparationOperation {
     consumptionDetails: row.consumption_details,
     correctionDetails: row.correction_details,
     writeOffDetails: row.write_off_details,
+    transferDetails: row.transfer_details,
 
     totalValue: Number(row.total_value),
     status: row.status,

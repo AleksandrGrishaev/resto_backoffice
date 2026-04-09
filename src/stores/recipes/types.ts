@@ -108,7 +108,9 @@ export interface Preparation extends BaseEntity {
   instructions: string
   isActive: boolean
   costPerPortion?: number // Себестоимость за грамм/мл
-  shelfLife?: number // Срок хранения в днях
+  shelfLife?: number // Срок хранения в днях (fridge)
+  shelfLifeFrozen?: number // Срок хранения в морозилке (дни)
+  shelfLifeThawed?: number // Срок хранения после разморозки (дни)
 
   // ✨ NEW: Negative inventory config (Sprint 1)
   allowNegativeInventory?: boolean

@@ -27,10 +27,12 @@ import type {
   CreatePreparationWriteOffData,
   CreateCorrectionData,
   CorrectionItem,
+  CreateBatchTransferData,
   PreparationInventoryDocument,
   PreparationInventoryItem,
   PreparationWriteOffStatistics,
-  BatchAllocation
+  BatchAllocation,
+  StorageLocation
 } from './types'
 
 // ✅ UPDATED: Import write-off helper function
@@ -116,6 +118,9 @@ export class PreparationService {
           outputUnit: 'gram',
           costPerPortion: 0,
           shelfLife: 2,
+          shelfLifeFrozen: 30,
+          shelfLifeThawed: 1,
+          storageLocation: 'fridge' as const,
           // ⭐ PHASE 2: Portion type defaults
           portionType: 'weight' as const,
           portionSize: undefined as number | undefined
@@ -138,6 +143,9 @@ export class PreparationService {
           costPerPortion: 0,
           lastKnownCost: 0,
           shelfLife: 2, // days
+          shelfLifeFrozen: 30,
+          shelfLifeThawed: 1,
+          storageLocation: 'fridge' as const,
           // ⭐ PHASE 2: Portion type defaults
           portionType: 'weight' as const,
           portionSize: undefined as number | undefined
@@ -152,6 +160,9 @@ export class PreparationService {
         costPerPortion: preparation.costPerPortion || 0,
         lastKnownCost: preparation.lastKnownCost || 0,
         shelfLife: preparation.shelfLife || 2, // preparations expire faster
+        shelfLifeFrozen: preparation.shelfLifeFrozen || 30,
+        shelfLifeThawed: preparation.shelfLifeThawed || 1,
+        storageLocation: preparation.storageLocation || 'fridge',
         // ⭐ PHASE 2: Portion type support
         portionType: preparation.portionType || 'weight',
         portionSize: preparation.portionSize,
@@ -167,6 +178,9 @@ export class PreparationService {
         costPerPortion: 0,
         lastKnownCost: 0,
         shelfLife: 2,
+        shelfLifeFrozen: 30,
+        shelfLifeThawed: 1,
+        storageLocation: 'fridge' as const,
         // ⭐ PHASE 2: Portion type defaults
         portionType: 'weight' as const,
         portionSize: undefined as number | undefined
@@ -725,7 +739,8 @@ export class PreparationService {
           b.preparationId === preparationId &&
           b.department === department &&
           b.status === 'active' &&
-          b.currentQuantity > 0
+          b.currentQuantity > 0 &&
+          b.storageLocation !== 'freezer' // Frozen batches must be thawed before use
       )
 
       return this.calculateFifoAllocationHelper(batches, quantity)
@@ -1044,6 +1059,7 @@ export class PreparationService {
             notes: `Inventory correction: ${data.correctionDetails.reason}`,
             status: 'active',
             isActive: true,
+            storageLocation: preparationInfo.storageLocation || 'fridge',
             createdAt: TimeUtils.getCurrentLocalISO(),
             updatedAt: TimeUtils.getCurrentLocalISO()
           }
@@ -1495,6 +1511,8 @@ export class PreparationService {
           portionType: preparationInfo.portionType,
           portionSize: preparationInfo.portionSize,
           portionQuantity,
+          // 🧊 Storage location from preparation default
+          storageLocation: preparationInfo.storageLocation || 'fridge',
           createdAt: now,
           updatedAt: now
         }
@@ -2354,6 +2372,303 @@ export class PreparationService {
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to recalculate preparation balances', { error })
       throw error
+    }
+  }
+
+  // =====================================================
+  // 🧊 STORAGE TRANSFER (Freeze / Thaw / Move)
+  // =====================================================
+
+  /**
+   * Calculate the new expiry date when transferring a batch to a different storage location.
+   * - To freezer: now + shelfLifeFrozen
+   * - From freezer (thaw): now + shelfLifeThawed
+   * - Between fridge/shelf: keep original expiry
+   */
+  calculateTransferExpiry(
+    fromLocation: StorageLocation,
+    toLocation: StorageLocation,
+    preparationId: string,
+    currentExpiryDate?: string
+  ): string | undefined {
+    const prepInfo = this.getPreparationInfo(preparationId)
+
+    if (toLocation === 'freezer' && fromLocation !== 'freezer') {
+      // Freezing: new expiry = now + shelfLifeFrozen
+      const expiry = new Date()
+      expiry.setDate(expiry.getDate() + (prepInfo.shelfLifeFrozen || 30))
+      expiry.setHours(20, 0, 0, 0)
+      return expiry.toISOString()
+    }
+
+    if (fromLocation === 'freezer' && toLocation !== 'freezer') {
+      // Thawing: new expiry = now + shelfLifeThawed
+      const expiry = new Date()
+      expiry.setDate(expiry.getDate() + (prepInfo.shelfLifeThawed || 1))
+      expiry.setHours(20, 0, 0, 0)
+      return expiry.toISOString()
+    }
+
+    // Moving between fridge/shelf — keep original expiry
+    return currentExpiryDate
+  }
+
+  /**
+   * Transfer a batch (or part of it) to a different storage location.
+   *
+   * If quantity < source batch quantity → splits the batch:
+   *   - Source batch: reduced by transfer quantity
+   *   - New child batch: created with new storage_location and expiry
+   *
+   * If quantity == source batch quantity → updates in place:
+   *   - Source batch: storage_location and expiry updated directly
+   */
+  async transferBatch(data: CreateBatchTransferData): Promise<{
+    success: boolean
+    sourceBatch?: PreparationBatch
+    newBatch?: PreparationBatch
+    error?: string
+  }> {
+    const now = TimeUtils.getCurrentLocalISO()
+
+    try {
+      DebugUtils.info(MODULE_NAME, '🧊 Starting batch storage transfer', {
+        sourceBatchId: data.sourceBatchId,
+        from: data.fromLocation,
+        to: data.toLocation,
+        quantity: data.quantity
+      })
+
+      // 1. Find source batch
+      const sourceBatch = this.batches.find(b => b.id === data.sourceBatchId)
+      if (!sourceBatch) {
+        return { success: false, error: `Source batch not found: ${data.sourceBatchId}` }
+      }
+
+      if (sourceBatch.currentQuantity < data.quantity) {
+        return {
+          success: false,
+          error: `Insufficient quantity: have ${sourceBatch.currentQuantity}, need ${data.quantity}`
+        }
+      }
+
+      if (data.fromLocation === data.toLocation) {
+        return { success: false, error: 'Source and destination storage locations are the same' }
+      }
+
+      const prepInfo = this.getPreparationInfo(data.preparationId)
+      const newExpiryDate = this.calculateTransferExpiry(
+        data.fromLocation,
+        data.toLocation,
+        data.preparationId,
+        sourceBatch.expiryDate
+      )
+
+      // Determine source type: freeze/thaw only when freezer is involved, otherwise keep original
+      const sourceType =
+        data.toLocation === 'freezer'
+          ? ('freeze' as const)
+          : data.fromLocation === 'freezer'
+            ? ('thaw' as const)
+            : sourceBatch.sourceType // fridge↔shelf: keep original source type
+      const isFullTransfer = Math.abs(sourceBatch.currentQuantity - data.quantity) < 0.001
+
+      let newBatch: PreparationBatch | undefined
+
+      if (isFullTransfer) {
+        // Full transfer: update source batch in place
+        // NOTE: Do NOT overwrite sourceType — it represents creation provenance.
+        // The transfer is recorded in the operation record.
+        sourceBatch.storageLocation = data.toLocation
+        sourceBatch.expiryDate = newExpiryDate
+        sourceBatch.updatedAt = now
+        sourceBatch.notes = data.notes
+          ? `${sourceBatch.notes ? sourceBatch.notes + '; ' : ''}${data.notes}`
+          : sourceBatch.notes
+
+        const { error: updateError } = await supabase
+          .from('preparation_batches')
+          .update({
+            storage_location: data.toLocation,
+            expiry_date: newExpiryDate || null,
+            notes: sourceBatch.notes || null,
+            updated_at: now
+          })
+          .eq('id', sourceBatch.id)
+
+        if (updateError) {
+          DebugUtils.error(MODULE_NAME, 'Failed to update batch for full transfer', { updateError })
+          throw updateError
+        }
+
+        DebugUtils.info(MODULE_NAME, '✅ Full batch transfer (in-place update)', {
+          batchId: sourceBatch.id,
+          from: data.fromLocation,
+          to: data.toLocation,
+          newExpiry: newExpiryDate
+        })
+      } else {
+        // Partial transfer: split the batch
+        // 2a. Reduce source batch
+        const previousQuantity = sourceBatch.currentQuantity
+        sourceBatch.currentQuantity -= data.quantity
+        sourceBatch.totalValue =
+          Math.round(sourceBatch.currentQuantity * sourceBatch.costPerUnit * 100) / 100
+        sourceBatch.updatedAt = now
+
+        // Update portion quantity if applicable
+        if (sourceBatch.portionType === 'portion' && sourceBatch.portionSize) {
+          sourceBatch.portionQuantity =
+            Math.round((sourceBatch.currentQuantity / sourceBatch.portionSize) * 100) / 100
+        }
+
+        const { error: srcError } = await supabase
+          .from('preparation_batches')
+          .update({
+            current_quantity: sourceBatch.currentQuantity,
+            total_value: sourceBatch.totalValue,
+            portion_quantity: sourceBatch.portionQuantity || null,
+            updated_at: now
+          })
+          .eq('id', sourceBatch.id)
+
+        if (srcError) {
+          // Rollback local state
+          sourceBatch.currentQuantity = previousQuantity
+          sourceBatch.totalValue =
+            Math.round(previousQuantity * sourceBatch.costPerUnit * 100) / 100
+          if (sourceBatch.portionType === 'portion' && sourceBatch.portionSize) {
+            sourceBatch.portionQuantity =
+              Math.round((previousQuantity / sourceBatch.portionSize) * 100) / 100
+          }
+          DebugUtils.error(MODULE_NAME, 'Failed to reduce source batch', { srcError })
+          throw srcError
+        }
+
+        // 2b. Create new child batch
+        const portionQuantity =
+          sourceBatch.portionType === 'portion' && sourceBatch.portionSize
+            ? Math.round((data.quantity / sourceBatch.portionSize) * 100) / 100
+            : undefined
+
+        newBatch = {
+          id: crypto.randomUUID(),
+          batchNumber: `${sourceBatch.batchNumber}-${data.toLocation === 'freezer' ? 'F' : 'T'}${Date.now().toString().slice(-2)}`,
+          preparationId: data.preparationId,
+          department: data.department,
+          initialQuantity: data.quantity,
+          currentQuantity: data.quantity,
+          unit: sourceBatch.unit,
+          costPerUnit: sourceBatch.costPerUnit,
+          totalValue: Math.round(data.quantity * sourceBatch.costPerUnit * 100) / 100,
+          productionDate: sourceBatch.productionDate, // Keep original production date
+          expiryDate: newExpiryDate,
+          sourceType,
+          notes: data.notes || `Split from ${sourceBatch.batchNumber}`,
+          status: 'active',
+          isActive: true,
+          portionType: sourceBatch.portionType,
+          portionSize: sourceBatch.portionSize,
+          portionQuantity,
+          storageLocation: data.toLocation,
+          parentBatchId: sourceBatch.id,
+          createdAt: now,
+          updatedAt: now
+        }
+
+        const { error: newError } = await supabase
+          .from('preparation_batches')
+          .insert(batchToSupabase(newBatch))
+
+        if (newError) {
+          // Rollback source batch
+          sourceBatch.currentQuantity = previousQuantity
+          sourceBatch.totalValue =
+            Math.round(previousQuantity * sourceBatch.costPerUnit * 100) / 100
+          await supabase
+            .from('preparation_batches')
+            .update({
+              current_quantity: previousQuantity,
+              total_value: sourceBatch.totalValue,
+              updated_at: now
+            })
+            .eq('id', sourceBatch.id)
+
+          DebugUtils.error(MODULE_NAME, 'Failed to insert child batch', { newError })
+          throw newError
+        }
+
+        this.batches.push(newBatch)
+
+        DebugUtils.info(MODULE_NAME, '✅ Partial batch transfer (split)', {
+          sourceBatchId: sourceBatch.id,
+          newBatchId: newBatch.id,
+          transferred: data.quantity,
+          remaining: sourceBatch.currentQuantity,
+          from: data.fromLocation,
+          to: data.toLocation,
+          newExpiry: newExpiryDate
+        })
+      }
+
+      // 3. Create transfer operation record
+      const operation: PreparationOperation = {
+        id: crypto.randomUUID(),
+        operationType: 'transfer',
+        documentNumber: `TRF-${Date.now().toString().slice(-6)}`,
+        operationDate: now,
+        department: data.department,
+        responsiblePerson: data.responsiblePerson,
+        items: [
+          {
+            id: crypto.randomUUID(),
+            preparationId: data.preparationId,
+            preparationName: prepInfo.name,
+            quantity: data.quantity,
+            unit: sourceBatch.unit
+          }
+        ],
+        transferDetails: {
+          fromLocation: data.fromLocation,
+          toLocation: data.toLocation,
+          sourceBatchId: sourceBatch.id,
+          newBatchId: newBatch?.id || sourceBatch.id,
+          newExpiryDate
+        },
+        totalValue: Math.round(data.quantity * sourceBatch.costPerUnit * 100) / 100,
+        status: 'confirmed',
+        notes: data.notes || `${data.fromLocation} → ${data.toLocation}`,
+        createdAt: now,
+        updatedAt: now
+      }
+
+      const { error: opError } = await supabase
+        .from('preparation_operations')
+        .insert(operationToSupabase(operation))
+
+      if (opError) {
+        DebugUtils.warn(MODULE_NAME, '⚠️ Transfer succeeded but failed to save operation', {
+          opError
+        })
+        // Don't throw — the transfer itself succeeded
+      }
+
+      this.operations.unshift(operation)
+
+      // 4. Recalculate balances
+      await this.recalculateBalances(data.department)
+
+      return {
+        success: true,
+        sourceBatch,
+        newBatch: newBatch || sourceBatch
+      }
+    } catch (error) {
+      DebugUtils.error(MODULE_NAME, '❌ Batch transfer failed', { error, data })
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error during transfer'
+      }
     }
   }
 }

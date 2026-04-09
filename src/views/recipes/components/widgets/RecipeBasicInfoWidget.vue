@@ -245,6 +245,32 @@
             </v-col>
 
             <v-col cols="12" md="4">
+              <NumericInputField
+                :model-value="formData.shelfLifeFrozen"
+                label="Frozen Shelf Life (days)"
+                :min="1"
+                :rules="[rules.positiveNumber]"
+                variant="outlined"
+                density="comfortable"
+                @update:model-value="updateField('shelfLifeFrozen', $event)"
+              />
+            </v-col>
+
+            <v-col cols="12" md="4">
+              <NumericInputField
+                :model-value="formData.shelfLifeThawed"
+                label="Thawed Shelf Life (days)"
+                :min="1"
+                :rules="[rules.positiveNumber]"
+                variant="outlined"
+                density="comfortable"
+                @update:model-value="updateField('shelfLifeThawed', $event)"
+              />
+            </v-col>
+          </v-row>
+
+          <v-row>
+            <v-col cols="12" md="4">
               <v-select
                 :model-value="formData.storageLocation || 'fridge'"
                 :items="storageLocationItems"
@@ -392,7 +418,9 @@ interface FormData {
   difficulty: string
   tags: string[]
   instructions: string
-  shelfLife?: number // ✅ NEW: Shelf life in days for preparations
+  shelfLife?: number // Shelf life in days (fridge)
+  shelfLifeFrozen?: number // Shelf life in days when frozen
+  shelfLifeThawed?: number // Shelf life in days after thawing
   // ⭐ PHASE 2: Portion type support
   portionType?: 'weight' | 'portion'
   // 🆕 Kitchen Preparation: Storage & Production Settings

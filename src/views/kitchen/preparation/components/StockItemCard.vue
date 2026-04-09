@@ -69,6 +69,44 @@
         </div>
       </div>
 
+      <!-- Storage Location Icons -->
+      <div class="storage-icons">
+        <v-tooltip v-if="storageBreakdown['fridge']" text="Fridge" location="top">
+          <template #activator="{ props: tp }">
+            <div
+              v-bind="tp"
+              class="storage-icon-item"
+              :class="{ 'storage-single': !hasMultipleLocations }"
+            >
+              <v-icon size="16" color="teal">mdi-fridge</v-icon>
+              <span v-if="hasMultipleLocations" class="storage-qty">
+                {{ formatQty(storageBreakdown['fridge']) }}
+              </span>
+            </div>
+          </template>
+        </v-tooltip>
+        <v-tooltip v-if="storageBreakdown['freezer']" text="Freezer" location="top">
+          <template #activator="{ props: tp }">
+            <div v-bind="tp" class="storage-icon-item">
+              <v-icon size="16" color="blue">mdi-snowflake</v-icon>
+              <span v-if="hasMultipleLocations" class="storage-qty">
+                {{ formatQty(storageBreakdown['freezer']) }}
+              </span>
+            </div>
+          </template>
+        </v-tooltip>
+        <v-tooltip v-if="storageBreakdown['shelf']" text="Shelf" location="top">
+          <template #activator="{ props: tp }">
+            <div v-bind="tp" class="storage-icon-item">
+              <v-icon size="16" color="brown">mdi-archive</v-icon>
+              <span v-if="hasMultipleLocations" class="storage-qty">
+                {{ formatQty(storageBreakdown['shelf']) }}
+              </span>
+            </div>
+          </template>
+        </v-tooltip>
+      </div>
+
       <!-- Status Badges -->
       <div class="stock-badges">
         <v-chip v-if="isOutOfStock" color="error" size="small" variant="flat">OUT</v-chip>
@@ -185,6 +223,22 @@ const batchQuantities = computed(() => {
 
   return { active, expiring, expired }
 })
+
+/**
+ * Storage location breakdown (fridge, freezer, shelf)
+ */
+const storageBreakdown = computed(() => {
+  const batches = props.balance.batches || []
+  const result: Record<string, number> = {}
+  for (const batch of batches) {
+    if (batch.currentQuantity <= 0) continue
+    const loc = batch.storageLocation || 'fridge'
+    result[loc] = (result[loc] || 0) + batch.currentQuantity
+  }
+  return result
+})
+
+const hasMultipleLocations = computed(() => Object.keys(storageBreakdown.value).length > 1)
 
 const expiryIconColor = computed(() => {
   if (isExpired.value) return 'error'
@@ -446,6 +500,28 @@ function formatQty(value: number): string {
   &.batch-expired {
     background-color: rgba(var(--v-theme-error), 0.2);
     color: rgb(var(--v-theme-error));
+  }
+}
+
+// Storage location icons
+.storage-icons {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.storage-icon-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background-color: rgba(var(--v-theme-on-surface), 0.05);
+
+  .storage-qty {
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.8;
   }
 }
 

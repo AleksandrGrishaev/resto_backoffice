@@ -151,12 +151,14 @@ const filteredBalances = computed<PreparationBalance[]>(() => {
     result = result.filter(b => b.preparationName.toLowerCase().includes(query))
   }
 
-  // Storage location filter (if we had storage location data)
-  // Note: This would need storage location field in PreparationBalance
-  // For now, we skip this filter if not 'all'
-  // if (storageFilter.value !== 'all') {
-  //   result = result.filter(b => b.storageLocation === storageFilter.value)
-  // }
+  // Storage location filter: show only preparations that have stock in the selected location
+  if (storageFilter.value !== 'all') {
+    result = result.filter(b =>
+      b.batches?.some(
+        batch => batch.currentQuantity > 0 && batch.storageLocation === storageFilter.value
+      )
+    )
+  }
 
   // Status filter
   if (statusFilter.value === 'low') {

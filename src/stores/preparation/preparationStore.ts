@@ -16,6 +16,7 @@ import type {
   CreatePreparationReceiptData,
   CreatePreparationInventoryData,
   CreatePreparationWriteOffData,
+  CreateBatchTransferData,
   PreparationWriteOffReason
 } from './types'
 
@@ -348,6 +349,59 @@ export const usePreparationStore = defineStore('preparation', () => {
    */
   function getWriteOffStatistics(department?: any, dateFrom?: any, dateTo?: any) {
     return preparationService.getWriteOffStatistics(department, dateFrom, dateTo)
+  }
+
+  // ===========================
+  // 🧊 STORAGE TRANSFER (Freeze / Thaw / Move)
+  // ===========================
+
+  async function transferBatch(data: CreateBatchTransferData) {
+    try {
+      state.value.loading.production = true
+      state.value.error = null
+
+      const result = await preparationService.transferBatch(data)
+
+      if (!result.success) {
+        state.value.error = result.error || 'Transfer failed'
+        return result
+      }
+
+      // Refresh balances to reflect changes
+      await fetchBalances(data.department)
+
+      DebugUtils.info(MODULE_NAME, '✅ Batch transfer completed', {
+        from: data.fromLocation,
+        to: data.toLocation,
+        quantity: data.quantity
+      })
+
+      return result
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to transfer batch'
+      state.value.error = message
+      DebugUtils.error(MODULE_NAME, message, { error })
+      return { success: false, error: message }
+    } finally {
+      state.value.loading.production = false
+    }
+  }
+
+  /**
+   * Calculate the new expiry date for a storage transfer (for UI preview)
+   */
+  function calculateTransferExpiry(
+    fromLocation: Parameters<typeof preparationService.calculateTransferExpiry>[0],
+    toLocation: Parameters<typeof preparationService.calculateTransferExpiry>[1],
+    preparationId: string,
+    currentExpiryDate?: string
+  ) {
+    return preparationService.calculateTransferExpiry(
+      fromLocation,
+      toLocation,
+      preparationId,
+      currentExpiryDate
+    )
   }
 
   // ===========================
@@ -797,6 +851,10 @@ export const usePreparationStore = defineStore('preparation', () => {
     // ✅ Write-off support (with batch sync)
     createWriteOff,
     getWriteOffStatistics,
+
+    // 🧊 Storage transfer
+    transferBatch,
+    calculateTransferExpiry,
 
     // Inventory
     startInventory,

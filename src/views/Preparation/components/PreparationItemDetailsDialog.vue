@@ -166,6 +166,36 @@
                     </span>
                   </div>
 
+                  <!-- Storage location badge -->
+                  <div v-if="batch.storageLocation" class="mb-2">
+                    <v-chip
+                      size="x-small"
+                      :color="
+                        batch.storageLocation === 'freezer'
+                          ? 'blue'
+                          : batch.storageLocation === 'shelf'
+                            ? 'brown'
+                            : 'teal'
+                      "
+                      variant="tonal"
+                      :prepend-icon="
+                        batch.storageLocation === 'freezer'
+                          ? 'mdi-snowflake'
+                          : batch.storageLocation === 'shelf'
+                            ? 'mdi-archive'
+                            : 'mdi-fridge'
+                      "
+                    >
+                      {{
+                        batch.storageLocation === 'freezer'
+                          ? 'Freezer'
+                          : batch.storageLocation === 'shelf'
+                            ? 'Shelf'
+                            : 'Fridge'
+                      }}
+                    </v-chip>
+                  </div>
+
                   <!-- Expiry warning -->
                   <div v-if="batch.expiryDate">
                     <v-alert
@@ -454,7 +484,9 @@ function formatSource(sourceType: string): string {
     opening_balance: 'Opening Balance',
     inventory_adjustment: 'Inventory Adjustment', // Legacy support
     negative_correction: 'Deficit Coverage (Production)',
-    auto_production: 'On-the-fly production (auto)'
+    auto_production: 'On-the-fly production (auto)',
+    freeze: 'Frozen',
+    thaw: 'Thawed'
   }
   return sources[sourceType] || sourceType
 }
