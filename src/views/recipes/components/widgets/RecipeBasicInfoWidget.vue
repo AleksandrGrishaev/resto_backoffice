@@ -235,7 +235,7 @@
             <v-col cols="12" md="4">
               <NumericInputField
                 :model-value="formData.shelfLife"
-                label="Shelf Life (days)"
+                label="Shelf / Fridge Life (days)"
                 :min="1"
                 :rules="[rules.positiveNumber]"
                 variant="outlined"
@@ -259,7 +259,7 @@
             <v-col cols="12" md="4">
               <NumericInputField
                 :model-value="formData.shelfLifeThawed"
-                label="Thawed Shelf Life (days)"
+                label="Unfrozen Life (days)"
                 :min="1"
                 :rules="[rules.positiveNumber]"
                 variant="outlined"

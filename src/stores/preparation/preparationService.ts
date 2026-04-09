@@ -119,7 +119,7 @@ export class PreparationService {
           costPerPortion: 0,
           shelfLife: 2,
           shelfLifeFrozen: 30,
-          shelfLifeThawed: 1,
+          shelfLifeThawed: 2,
           storageLocation: 'fridge' as const,
           // ⭐ PHASE 2: Portion type defaults
           portionType: 'weight' as const,
@@ -144,7 +144,7 @@ export class PreparationService {
           lastKnownCost: 0,
           shelfLife: 2, // days
           shelfLifeFrozen: 30,
-          shelfLifeThawed: 1,
+          shelfLifeThawed: 2,
           storageLocation: 'fridge' as const,
           // ⭐ PHASE 2: Portion type defaults
           portionType: 'weight' as const,
@@ -161,7 +161,7 @@ export class PreparationService {
         lastKnownCost: preparation.lastKnownCost || 0,
         shelfLife: preparation.shelfLife || 2, // preparations expire faster
         shelfLifeFrozen: preparation.shelfLifeFrozen || 30,
-        shelfLifeThawed: preparation.shelfLifeThawed || 1,
+        shelfLifeThawed: preparation.shelfLifeThawed || preparation.shelfLife || 2,
         storageLocation: preparation.storageLocation || 'fridge',
         // ⭐ PHASE 2: Portion type support
         portionType: preparation.portionType || 'weight',
@@ -179,7 +179,7 @@ export class PreparationService {
         lastKnownCost: 0,
         shelfLife: 2,
         shelfLifeFrozen: 30,
-        shelfLifeThawed: 1,
+        shelfLifeThawed: 2,
         storageLocation: 'fridge' as const,
         // ⭐ PHASE 2: Portion type defaults
         portionType: 'weight' as const,
@@ -2404,7 +2404,7 @@ export class PreparationService {
     if (fromLocation === 'freezer' && toLocation !== 'freezer') {
       // Thawing: new expiry = now + shelfLifeThawed
       const expiry = new Date()
-      expiry.setDate(expiry.getDate() + (prepInfo.shelfLifeThawed || 1))
+      expiry.setDate(expiry.getDate() + (prepInfo.shelfLifeThawed || prepInfo.shelfLife || 2))
       expiry.setHours(20, 0, 0, 0)
       return expiry.toISOString()
     }
