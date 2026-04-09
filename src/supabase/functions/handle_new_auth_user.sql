@@ -118,13 +118,25 @@ begin
   values (v_customer_id, new.id, v_provider, v_email, v_provider_uid);
 
   -- Auto-create stamp card for new customers (default loyalty_program is 'stamps')
+  -- Wrapped in BEGIN..EXCEPTION so card creation failure never blocks auth sign-up
   if v_is_new_customer then
-    select lpad((coalesce(max(nullif(regexp_replace(card_number, '[^0-9]', '', 'g'), '')::int), 0) + 1)::text, 3, '0')
-    into v_card_number
-    from public.stamp_cards;
+    begin
+      for i in 1..3 loop
+        select lpad((coalesce(max(nullif(regexp_replace(card_number, '[^0-9]', '', 'g'), '')::int), 0) + 1)::text, 3, '0')
+        into v_card_number
+        from public.stamp_cards;
 
-    insert into public.stamp_cards (card_number, customer_id)
-    values (v_card_number, v_customer_id);
+        begin
+          insert into public.stamp_cards (card_number, customer_id)
+          values (v_card_number, v_customer_id);
+          exit; -- success, break loop
+        exception when unique_violation then
+          if i = 3 then raise notice 'stamp card creation failed after 3 retries for customer %', v_customer_id; end if;
+        end;
+      end loop;
+    exception when others then
+      raise notice 'stamp card auto-creation failed for customer %: %', v_customer_id, sqlerrm;
+    end;
   end if;
 
   return new;
