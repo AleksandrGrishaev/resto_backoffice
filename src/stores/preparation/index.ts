@@ -33,7 +33,10 @@ export type {
   PREPARATION_WRITE_OFF_CLASSIFICATION,
   doesPreparationWriteOffAffectKPI,
   getPreparationWriteOffReasonInfo,
-  PREPARATION_WRITE_OFF_REASON_OPTIONS
+  PREPARATION_WRITE_OFF_REASON_OPTIONS,
+  // 🧊 Storage transfer types
+  StorageLocation,
+  CreateBatchTransferData
 } from './types'
 
 // Export service

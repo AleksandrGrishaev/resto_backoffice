@@ -561,14 +561,16 @@ const operationTypeOptions = computed(() => [
   { title: 'Production', value: 'production' },
   { title: 'Consumption', value: 'consumption' },
   { title: 'Inventory', value: 'inventory' },
-  { title: 'Correction', value: 'correction' }
+  { title: 'Correction', value: 'correction' },
+  { title: 'Transfer', value: 'transfer' }
 ])
 
 const quickFilters = computed(() => [
   { title: 'Production', value: 'production', icon: 'mdi-chef-hat' },
   { title: 'Consumption', value: 'consumption', icon: 'mdi-minus-circle' },
   { title: 'Inventory', value: 'inventory', icon: 'mdi-clipboard-list' },
-  { title: 'Correction', value: 'correction', icon: 'mdi-pencil' }
+  { title: 'Correction', value: 'correction', icon: 'mdi-pencil' },
+  { title: 'Transfer', value: 'transfer', icon: 'mdi-swap-horizontal' }
 ])
 
 const sortBy = computed(() => [{ key: 'operationDate', order: sortOrder.value }])
@@ -648,6 +650,8 @@ function getOperationIcon(type: PreparationOperationType): string {
       return 'mdi-clipboard-list'
     case 'correction':
       return 'mdi-pencil'
+    case 'transfer':
+      return 'mdi-swap-horizontal'
     default:
       return 'mdi-file-document'
   }
@@ -663,6 +667,8 @@ function getOperationColor(type: PreparationOperationType): string {
       return 'info'
     case 'correction':
       return 'warning'
+    case 'transfer':
+      return 'blue'
     default:
       return 'default'
   }
@@ -678,6 +684,8 @@ function formatOperationType(type: PreparationOperationType): string {
       return 'Inventory'
     case 'correction':
       return 'Correction'
+    case 'transfer':
+      return 'Transfer'
     default:
       return type
   }

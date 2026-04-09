@@ -241,6 +241,8 @@ const formData = ref<any>({
   instructions: '', // Optional for preparations
   components: [],
   shelfLife: 2, // ✅ NEW: Default shelf life for preparations (days)
+  shelfLifeFrozen: 30,
+  shelfLifeThawed: 2,
   // ⭐ PHASE 2: Portion type support
   portionType: 'weight' as 'weight' | 'portion' // Default: weight-based
 })
@@ -341,7 +343,9 @@ async function handleSubmit() {
         outputUnit: formData.value.outputUnit,
         preparationTime: formData.value.preparationTime,
         instructions: formData.value.instructions || '', // ✅ Optional: send empty string if not provided
-        shelfLife: formData.value.shelfLife, // ✅ NEW: Include shelf life
+        shelfLife: formData.value.shelfLife,
+        shelfLifeFrozen: formData.value.shelfLifeFrozen,
+        shelfLifeThawed: formData.value.shelfLifeThawed,
         // ⭐ PHASE 2: Portion type support
         portionType: formData.value.portionType || 'weight',
         portionSize:
@@ -452,6 +456,8 @@ async function handleSaveDraft() {
         preparationTime: formData.value.preparationTime || 0,
         instructions: formData.value.instructions || '',
         shelfLife: formData.value.shelfLife,
+        shelfLifeFrozen: formData.value.shelfLifeFrozen,
+        shelfLifeThawed: formData.value.shelfLifeThawed,
         portionType: formData.value.portionType || 'weight',
         portionSize:
           formData.value.portionType === 'portion' ? formData.value.portionSize : undefined,
@@ -534,7 +540,9 @@ function resetForm() {
     tags: [],
     instructions: '', // Optional for preparations (nullable in DB)
     components: [],
-    shelfLife: 2, // ✅ NEW: Default shelf life for preparations (days)
+    shelfLife: 2,
+    shelfLifeFrozen: 30,
+    shelfLifeThawed: 2,
     // ⭐ PHASE 2: Portion type support
     portionType: 'weight' as 'weight' | 'portion' // Default: weight-based
   }
@@ -563,7 +571,9 @@ watch(dialogModel, async newVal => {
           outputUnit: prep.outputUnit,
           preparationTime: prep.preparationTime,
           instructions: prep.instructions,
-          shelfLife: prep.shelfLife || 2, // ✅ NEW: Include shelf life with default
+          shelfLife: prep.shelfLife || 2,
+          shelfLifeFrozen: prep.shelfLifeFrozen || 30,
+          shelfLifeThawed: prep.shelfLifeThawed || prep.shelfLife || 2,
           // ⭐ PHASE 2: Portion type support
           portionType: prep.portionType || 'weight',
           portionSize: prep.portionSize || 1,

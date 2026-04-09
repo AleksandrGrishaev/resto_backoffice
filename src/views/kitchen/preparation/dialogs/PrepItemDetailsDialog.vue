@@ -170,6 +170,38 @@
                     </span>
                   </div>
 
+                  <!-- Storage location badge -->
+                  <div v-if="batch.storageLocation" class="d-flex align-center mt-2 mb-1">
+                    <v-chip
+                      size="small"
+                      :color="
+                        batch.storageLocation === 'freezer'
+                          ? 'blue'
+                          : batch.storageLocation === 'shelf'
+                            ? 'brown'
+                            : 'teal'
+                      "
+                      variant="tonal"
+                      :prepend-icon="getStorageIcon(batch.storageLocation)"
+                    >
+                      {{ getStorageLabel(batch.storageLocation) }}
+                    </v-chip>
+                    <v-btn
+                      v-if="!batch.isNegative && batch.currentQuantity > 0"
+                      size="x-small"
+                      variant="text"
+                      :icon="
+                        batch.storageLocation === 'freezer'
+                          ? 'mdi-sun-thermometer'
+                          : 'mdi-snowflake'
+                      "
+                      :color="batch.storageLocation === 'freezer' ? 'orange' : 'blue'"
+                      class="ml-1"
+                      :title="batch.storageLocation === 'freezer' ? 'Thaw' : 'Freeze'"
+                      @click.stop="openTransferDialog(batch)"
+                    />
+                  </div>
+
                   <!-- Expiry warning -->
                   <div v-if="batch.expiryDate">
                     <v-alert
@@ -427,6 +459,16 @@
         </v-btn>
       </v-card-actions>
     </v-card>
+
+    <!-- Batch Transfer Dialog -->
+    <BatchTransferDialog
+      v-model="showTransferDialog"
+      :batch="selectedTransferBatch"
+      :preparation-name="item?.preparationName || ''"
+      :department="item?.department || 'kitchen'"
+      :responsible-person="'kitchen-staff'"
+      @transferred="handleTransferComplete"
+    />
   </v-dialog>
 </template>
 
@@ -440,9 +482,12 @@ import type {
   PreparationDepartment,
   PreparationWriteOffReason
 } from '@/stores/preparation'
+import { STORAGE_LOCATION_OPTIONS } from '@/stores/preparation/types'
+import type { StorageLocation } from '@/stores/preparation/types'
 import { usePreparationStore } from '@/stores/preparation'
 import { useRecipesStore } from '@/stores/recipes'
 import { DebugUtils } from '@/utils'
+import BatchTransferDialog from './BatchTransferDialog.vue'
 
 const MODULE_NAME = 'PrepItemDetailsDialog'
 
@@ -479,6 +524,10 @@ const recipesStore = useRecipesStore()
 const selectedTab = ref('batches')
 const writeOffOperations = ref<PreparationOperation[]>([])
 const showBatchDetails = ref<Record<string, boolean>>({})
+
+// Transfer dialog state
+const showTransferDialog = ref(false)
+const selectedTransferBatch = ref<PreparationBatch | null>(null)
 
 // =============================================
 // COMPUTED
@@ -550,6 +599,24 @@ const expiredBatchesCount = computed(() => {
 // =============================================
 // METHODS
 // =============================================
+
+function getStorageIcon(location: string) {
+  return STORAGE_LOCATION_OPTIONS.find(o => o.value === location)?.icon || 'mdi-help'
+}
+
+function getStorageLabel(location: string) {
+  return STORAGE_LOCATION_OPTIONS.find(o => o.value === location)?.label || location
+}
+
+function openTransferDialog(batch: PreparationBatch) {
+  selectedTransferBatch.value = batch
+  showTransferDialog.value = true
+}
+
+function handleTransferComplete() {
+  // Balances are already refreshed by the store action
+  DebugUtils.info(MODULE_NAME, '✅ Batch transfer completed from details dialog')
+}
 
 /**
  * Load write-off operations for this preparation
@@ -637,7 +704,9 @@ function formatSource(sourceType: string): string {
     correction: 'Adjustment',
     opening_balance: 'Opening',
     inventory_adjustment: 'Adjustment',
-    negative_correction: 'Deficit Coverage'
+    negative_correction: 'Deficit Coverage',
+    freeze: 'Frozen',
+    thaw: 'Thawed'
   }
   return sources[sourceType] || sourceType
 }

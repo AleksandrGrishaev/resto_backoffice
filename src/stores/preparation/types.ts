@@ -10,8 +10,13 @@ export type ProductionSlot = 'morning' | 'afternoon' | 'evening' | 'any'
 export type ProductionScheduleSlot = 'urgent' | 'morning' | 'afternoon' | 'evening'
 export type ProductionScheduleStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
 export type SyncStatus = 'pending' | 'synced' | 'failed'
-// ✅ SIMPLIFIED: Production, inventory, write_off, and correction operations
-export type PreparationOperationType = 'receipt' | 'inventory' | 'write_off' | 'correction'
+// ✅ SIMPLIFIED: Production, inventory, write_off, correction, and transfer operations
+export type PreparationOperationType =
+  | 'receipt'
+  | 'inventory'
+  | 'write_off'
+  | 'correction'
+  | 'transfer'
 // ✅ SIMPLIFIED: Only production and inventory_adjustment sources
 export type BatchSourceType =
   | 'production'
@@ -20,6 +25,8 @@ export type BatchSourceType =
   | 'inventory_adjustment'
   | 'negative_correction' // ✅ NEW: Correction for negative stock balance
   | 'auto_production' // Auto-reconciliation of on-the-fly kitchen production
+  | 'freeze' // Batch split: moved to freezer
+  | 'thaw' // Batch split: thawed from freezer
 export type BatchStatus = 'active' | 'expired' | 'depleted' | 'written_off'
 export type InventoryStatus = 'draft' | 'confirmed' | 'cancelled'
 
@@ -56,6 +63,10 @@ export interface PreparationBatch extends BaseEntity {
   portionType?: PortionType // 'weight' (default) or 'portion'
   portionSize?: number // Size of one portion in grams (only for portionType='portion')
   portionQuantity?: number // Number of portions (when portionType='portion')
+
+  // 🧊 Storage transfer support
+  storageLocation?: StorageLocation // Current storage: shelf, fridge, or freezer
+  parentBatchId?: string // Parent batch ID when batch was split (freeze/thaw)
 }
 
 export interface BatchAllocation {
@@ -101,6 +112,15 @@ export interface PreparationOperation extends BaseEntity {
     reason: 'inventory_adjustment' | 'negative_correction' | 'theft' | 'damage' | 'other'
     relatedInventoryId?: string
     relatedDocumentNumber?: string
+  }
+
+  // 🧊 Transfer Details (only for transfer operations)
+  transferDetails?: {
+    fromLocation: StorageLocation
+    toLocation: StorageLocation
+    sourceBatchId: string
+    newBatchId: string
+    newExpiryDate?: string
   }
 
   relatedInventoryId?: string
@@ -222,6 +242,18 @@ export interface CorrectionItem {
   preparationId: string
   quantity: number // Can be positive (surplus) or negative (shortage)
   unit: string
+  notes?: string
+}
+
+// 🧊 Storage Transfer DTOs
+export interface CreateBatchTransferData {
+  department: PreparationDepartment
+  responsiblePerson: string
+  sourceBatchId: string
+  preparationId: string
+  quantity: number // Quantity to transfer
+  fromLocation: StorageLocation
+  toLocation: StorageLocation
   notes?: string
 }
 
