@@ -70,14 +70,9 @@ import { ref, computed } from 'vue'
 import ProductionCard from './ProductionCard.vue'
 import type { ProductionScheduleItem } from '@/stores/kitchenKpi'
 
-interface Props {
+const props = defineProps<{
   task: ProductionScheduleItem
-  processing?: boolean
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  processing: false
-})
+}>()
 
 const emit = defineEmits<{
   complete: [

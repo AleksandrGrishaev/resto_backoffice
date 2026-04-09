@@ -546,10 +546,23 @@ class KitchenKpiService {
           controlFields.is_quick_completion = durationMin < 2
         }
 
-        await supabase.from('production_schedule').update(controlFields).eq('id', data.taskId)
+        const { error: updateError } = await supabase
+          .from('production_schedule')
+          .update(controlFields)
+          .eq('id', data.taskId)
+        if (updateError) {
+          DebugUtils.error(MODULE_NAME, 'Failed to save control fields (non-critical)', {
+            updateError
+          })
+        }
       }
 
+      // Map result and merge control fields (RPC returns data before our update)
       const item = scheduleFromSupabase(result as ProductionScheduleRow)
+      if (data.staffMemberId) item.staffMemberId = data.staffMemberId
+      if (data.staffMemberName) item.staffMemberName = data.staffMemberName
+      if (data.startedAt) item.startedAt = data.startedAt
+      if (data.photoUrl) item.photoUrl = data.photoUrl
 
       DebugUtils.info(MODULE_NAME, 'Task completed', { id: item.id, status: item.status })
 

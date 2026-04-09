@@ -497,7 +497,8 @@ function handleWriteOff(
       ...kpiStore.scheduleItems[idx],
       status: 'completed',
       completedAt: new Date().toISOString(),
-      completedByName: authStore.userName,
+      completedByName: staffMemberName || authStore.userName,
+      staffMemberName: staffMemberName,
       completedQuantity: quantity
     }
   }
@@ -513,7 +514,7 @@ function handleWriteOff(
         }
       ],
       department: userDepartment.value,
-      responsiblePerson: authStore.userName,
+      responsiblePerson: staffMemberName || authStore.userName,
       reason: 'expired',
       notes: 'Write-off from tasks board',
       kpiData: {
