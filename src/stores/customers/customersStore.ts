@@ -4,6 +4,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Customer, CustomerTier } from './types'
 import { customersService } from './customersService'
+import { useLoyaltyStore } from '@/stores/loyalty/loyaltyStore'
 import { DebugUtils } from '@/utils'
 
 const MODULE_NAME = 'CustomersStore'
@@ -91,6 +92,17 @@ export const useCustomersStore = defineStore('customers', () => {
   async function createCustomer(data: Partial<Customer>): Promise<Customer> {
     const newCustomer = await customersService.create(data)
     customers.value.push(newCustomer)
+
+    // Auto-create stamp card for stamps-program customers
+    if (newCustomer.loyaltyProgram === 'stamps') {
+      try {
+        const loyaltyStore = useLoyaltyStore()
+        await loyaltyStore.issueCardForCustomer(newCustomer.id)
+      } catch (err) {
+        DebugUtils.error(MODULE_NAME, 'Failed to auto-create stamp card', { error: err })
+      }
+    }
+
     return newCustomer
   }
 

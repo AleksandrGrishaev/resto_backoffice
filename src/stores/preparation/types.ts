@@ -449,6 +449,19 @@ export interface ProductionScheduleItem {
   completedQuantity?: number
   preparationBatchId?: string
 
+  // Staff accountability (Phase 1: Production Control)
+  staffMemberId?: string
+  staffMemberName?: string
+
+  // Photo verification
+  photoUrl?: string
+  photoUploadedAt?: string
+
+  // Time tracking
+  startedAt?: string
+  actualDurationMinutes?: number
+  isQuickCompletion?: boolean
+
   // Sync status for offline support
   syncStatus: SyncStatus
   syncedAt?: string

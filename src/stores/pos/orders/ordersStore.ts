@@ -1735,21 +1735,38 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
    * Copy website-specific metadata from source order to target order.
    * Called during merge to preserve the connection to the website order.
    */
-  function preserveWebsiteMetadata(source: PosOrder, target: PosOrder): void {
+  async function preserveWebsiteMetadata(source: PosOrder, target: PosOrder): Promise<void> {
     target.source = source.source
     target.externalOrderId = source.externalOrderId ?? target.externalOrderId
     target.externalStatus = source.externalStatus ?? target.externalStatus
     target.fulfillmentMethod = source.fulfillmentMethod ?? target.fulfillmentMethod
     target.customerPhone = source.customerPhone ?? target.customerPhone
     target.customerName = source.customerName ?? target.customerName
+    target.customerId = source.customerId ?? target.customerId
     target.comment = source.comment ?? target.comment
     target.pickupTime = source.pickupTime ?? target.pickupTime
     target.estimatedReadyTime = source.estimatedReadyTime ?? target.estimatedReadyTime
+
+    // Persist customer_id/customer_name to DB directly (toSupabaseUpdate excludes them)
+    if (source.customerId) {
+      try {
+        await supabase
+          .from('orders')
+          .update({
+            customer_id: source.customerId,
+            customer_name: source.customerName || target.customerName
+          })
+          .eq('id', target.id)
+      } catch (err) {
+        DebugUtils.error(MODULE_NAME, 'Failed to persist customer on merged order', { error: err })
+      }
+    }
 
     DebugUtils.info(MODULE_NAME, '🌐 Website metadata preserved on target order', {
       targetOrderId: target.id,
       source: target.source,
       externalOrderId: target.externalOrderId,
+      customerId: target.customerId,
       customerName: target.customerName,
       fulfillmentMethod: target.fulfillmentMethod
     })
@@ -1827,7 +1844,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
         // Preserve website metadata on target order if source is a website order
         if (orderToMove.source === 'website') {
-          preserveWebsiteMetadata(orderToMove, targetOrder)
+          await preserveWebsiteMetadata(orderToMove, targetOrder)
         }
 
         // Merge all bills from moving order into target order
@@ -2030,7 +2047,7 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
         // Preserve website metadata on target order if source is a website order
         if (orderToConvert.source === 'website') {
-          preserveWebsiteMetadata(orderToConvert, targetOrder)
+          await preserveWebsiteMetadata(orderToConvert, targetOrder)
         }
 
         // Reprice items if moving between different channels (e.g., GoJek → dine_in)

@@ -13,7 +13,9 @@ export interface ScaledIngredient {
   type: 'product' | 'preparation'
   originalQuantity: number
   originalUnit: MeasurementUnit
-  scaledQuantity: number
+  scaledQuantity: number // net quantity (what you need after yield loss)
+  purchaseQuantity?: number // gross quantity (what you need to buy/take, accounting for yield)
+  yieldPercentage?: number // yield % if applicable (e.g. 70 means 30% waste)
   displayUnit: string
 }
 
@@ -166,9 +168,25 @@ export function useRecipeScaling() {
     // Calculate scale factor
     const scaleFactor = calculateScaleFactor(preparation, targetQuantity, targetUnit)
 
-    // Scale each ingredient
+    // Scale each ingredient (with yield adjustment for products)
     const scaledIngredients: ScaledIngredient[] = preparation.recipe.map(ingredient => {
       const scaledQty = ingredient.quantity * scaleFactor
+
+      // Apply yield adjustment: if product has yield 70%, need to take more (scaledQty / 0.7)
+      let purchaseQty: number | undefined
+      let yieldPct: number | undefined
+
+      if (ingredient.type === 'product' && ingredient.useYieldPercentage) {
+        const product = productsStore.getProductById(ingredient.id)
+        if (
+          product?.yieldPercentage &&
+          product.yieldPercentage > 0 &&
+          product.yieldPercentage < 100
+        ) {
+          yieldPct = product.yieldPercentage
+          purchaseQty = formatQuantity(scaledQty / (product.yieldPercentage / 100))
+        }
+      }
 
       return {
         id: ingredient.id,
@@ -177,6 +195,8 @@ export function useRecipeScaling() {
         originalQuantity: ingredient.quantity,
         originalUnit: ingredient.unit,
         scaledQuantity: formatQuantity(scaledQty),
+        purchaseQuantity: purchaseQty,
+        yieldPercentage: yieldPct,
         displayUnit: formatDisplayUnit(ingredient.unit)
       }
     })

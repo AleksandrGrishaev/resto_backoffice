@@ -67,7 +67,13 @@ BEGIN
           AND oi.status != 'cancelled'
       ) AS items
     FROM public.orders o
-    WHERE o.customer_id = v_customer_id
+    WHERE (
+      o.customer_id = v_customer_id
+      OR EXISTS (
+        SELECT 1 FROM jsonb_array_elements(o.bills) AS b
+        WHERE (b->>'customerId')::uuid = v_customer_id
+      )
+    )
       AND o.status != 'draft'
     ORDER BY o.created_at DESC
     LIMIT 50

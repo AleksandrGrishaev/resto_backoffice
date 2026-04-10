@@ -102,7 +102,7 @@ export class LoyaltyService {
       .from('stamp_cards')
       .select('card_number')
       .eq('id', cardId)
-      .single()
+      .maybeSingle()
 
     if (error || !data) return null
     return this.getCardInfo((data as any).card_number)
@@ -115,7 +115,7 @@ export class LoyaltyService {
       .eq('customer_id', customerId)
       .eq('status', 'active')
       .limit(1)
-      .single()
+      .maybeSingle()
 
     if (error || !data) return null
     return this.getCardInfo((data as any).card_number)
@@ -157,6 +157,38 @@ export class LoyaltyService {
       }
     }
     return String(maxNumber + 1).padStart(3, '0')
+  }
+
+  /** Auto-create a stamp card linked to an existing customer (skip if already has one) */
+  async issueCardForCustomer(customerId: string): Promise<string> {
+    // Check if customer already has an active card
+    const existing = await this.getActiveCardByCustomerId(customerId)
+    if (existing) return existing.cardNumber
+
+    // Retry loop to handle card_number collisions (matches SQL trigger pattern)
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const cardNumber = await this.getNextCardNumber()
+      const { error } = await supabase.from('stamp_cards').insert({
+        card_number: cardNumber,
+        customer_id: customerId
+      })
+
+      if (!error) {
+        DebugUtils.info(MODULE_NAME, 'Auto-created stamp card for customer', {
+          cardNumber,
+          customerId
+        })
+        return cardNumber
+      }
+
+      // Retry on unique violation (code 23505), throw on other errors
+      if (error.code !== '23505' || attempt === 3) {
+        DebugUtils.error(MODULE_NAME, 'Failed to auto-create stamp card', { error, attempt })
+        throw error
+      }
+    }
+
+    throw new Error('Failed to create stamp card after 3 attempts')
   }
 
   async issueNewCard(options?: {

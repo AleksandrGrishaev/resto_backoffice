@@ -99,7 +99,9 @@
       "mcp__supabase_dev__generate_typescript_types",
       "Read(path:/Users/peaker/dev/kitchen-app/web-winter/**)",
       "Glob(path:/Users/peaker/dev/kitchen-app/web-winter/**)",
-      "Grep(path:/Users/peaker/dev/kitchen-app/web-winter/**)"
+      "Grep(path:/Users/peaker/dev/kitchen-app/web-winter/**)",
+      "Bash(npx eslint:*)",
+      "Bash(git stash:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

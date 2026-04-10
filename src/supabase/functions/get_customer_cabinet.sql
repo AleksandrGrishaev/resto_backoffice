@@ -66,7 +66,13 @@ BEGIN
   FROM (
     SELECT id, created_at, final_amount, type
     FROM orders
-    WHERE customer_id = v_customer.id AND status IN ('completed', 'collected')
+    WHERE (
+      customer_id = v_customer.id
+      OR EXISTS (
+        SELECT 1 FROM jsonb_array_elements(bills) AS b
+        WHERE (b->>'customerId')::uuid = v_customer.id
+      )
+    ) AND status IN ('completed', 'collected')
     ORDER BY created_at DESC
     LIMIT 20
   ) o;

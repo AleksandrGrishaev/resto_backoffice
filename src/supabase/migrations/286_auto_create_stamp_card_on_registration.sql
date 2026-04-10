@@ -1,14 +1,135 @@
--- Migration: 258_rpc_claim_invite
--- Description: Unified RPC to claim both customer and order invites
--- Date: 2026-03-26
+-- Migration: 286_auto_create_stamp_card_on_registration
+-- Description: Auto-create stamp card when customer registers (all flows)
+-- Date: 2026-04-09
 --
--- CONTEXT: Called from web-winter after customer authenticates via /join/[token].
--- Handles two flows:
--- 1. ORDER invite: links auth user's customer to the order + sets customer_name for realtime
--- 2. CUSTOMER invite: links auth user to existing POS customer, handles trigger conflict
--- Security: FOR UPDATE SKIP LOCKED prevents double-claim race condition.
--- Generic error messages prevent DB detail leakage.
+-- CONTEXT: Customers on stamps loyalty program were created without a stamp_cards record,
+-- so stamps were never accrued after payment. This migration updates handle_new_auth_user
+-- and claim_invite RPCs to auto-create a stamp card linked to the customer.
 
+-- =============================================
+-- 1. Update handle_new_auth_user trigger
+-- =============================================
+CREATE OR REPLACE FUNCTION public.handle_new_auth_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  v_email text;
+  v_name text;
+  v_provider text;
+  v_customer_id uuid;
+  v_provider_uid text;
+  v_telegram_id text;
+  v_telegram_username text;
+  v_is_new_customer boolean := false;
+  v_card_number text;
+begin
+  -- Skip anonymous sign-ups (no customer needed until they register)
+  IF new.is_anonymous = true THEN
+    RETURN new;
+  END IF;
+
+  -- Extract info from the new auth user
+  v_email := new.email;
+  v_provider := coalesce(
+    new.raw_user_meta_data ->> 'custom_provider',
+    new.raw_app_meta_data ->> 'provider',
+    'email'
+  );
+
+  -- Extract provider-specific UID
+  if v_provider = 'telegram' then
+    v_telegram_id := new.raw_user_meta_data ->> 'telegram_id';
+    v_telegram_username := new.raw_user_meta_data ->> 'telegram_username';
+    v_provider_uid := v_telegram_id;
+    v_name := coalesce(
+      new.raw_user_meta_data ->> 'full_name',
+      new.raw_user_meta_data ->> 'name',
+      v_telegram_username,
+      'Telegram User'
+    );
+  else
+    v_provider_uid := coalesce(
+      new.raw_user_meta_data ->> 'sub',  -- Google sub ID
+      v_email
+    );
+    v_name := coalesce(
+      new.raw_user_meta_data ->> 'full_name',
+      new.raw_user_meta_data ->> 'name',
+      split_part(v_email, '@', 1),
+      'Guest'
+    );
+  end if;
+
+  -- Transliterate Cyrillic to Latin (customers must have Latin names)
+  v_name := transliterate_to_latin(v_name);
+
+  -- Smart match: for Telegram, try to find customer by telegram_id first
+  if v_provider = 'telegram' and v_telegram_id is not null then
+    select id into v_customer_id
+    from public.customers
+    where telegram_id = v_telegram_id
+      and status = 'active'
+    limit 1;
+  end if;
+
+  -- Then try email match (for non-telegram or if telegram_id didn't match)
+  if v_customer_id is null and v_email is not null
+     and v_email not like '%@telegram.local' then
+    select id into v_customer_id
+    from public.customers
+    where email = v_email
+      and status = 'active'
+    limit 1;
+  end if;
+
+  -- No match: create new customer
+  if v_customer_id is null then
+    v_is_new_customer := true;
+    if v_provider = 'telegram' then
+      insert into public.customers (name, telegram_id, telegram_username, created_by)
+      values (v_name, v_telegram_id, v_telegram_username, 'auth')
+      returning id into v_customer_id;
+    else
+      insert into public.customers (name, email, created_by)
+      values (v_name, v_email, 'auth')
+      on conflict (email) where status = 'active' and email is not null
+      do update set updated_at = now()
+      returning id into v_customer_id;
+    end if;
+  else
+    -- Update existing customer with telegram info if not set
+    if v_provider = 'telegram' and v_telegram_id is not null then
+      update public.customers
+      set telegram_id = coalesce(telegram_id, v_telegram_id),
+          telegram_username = coalesce(telegram_username, v_telegram_username)
+      where id = v_customer_id;
+    end if;
+  end if;
+
+  -- Create identity link
+  insert into public.customer_identities (customer_id, auth_user_id, provider, provider_email, provider_uid)
+  values (v_customer_id, new.id, v_provider, v_email, v_provider_uid);
+
+  -- Auto-create stamp card for new customers (default loyalty_program is 'stamps')
+  if v_is_new_customer then
+    select lpad((coalesce(max(nullif(regexp_replace(card_number, '[^0-9]', '', 'g'), '')::int), 0) + 1)::text, 3, '0')
+    into v_card_number
+    from public.stamp_cards;
+
+    insert into public.stamp_cards (card_number, customer_id)
+    values (v_card_number, v_customer_id);
+  end if;
+
+  return new;
+end;
+$function$;
+
+-- =============================================
+-- 2. Update claim_invite RPC
+-- =============================================
 CREATE OR REPLACE FUNCTION public.claim_invite(p_token TEXT)
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -75,19 +196,10 @@ BEGIN
       INSERT INTO customer_identities (customer_id, auth_user_id, provider, provider_email, provider_uid)
       VALUES (v_customer_id, v_auth_uid, v_provider, v_email, v_provider_uid);
 
-      -- Auto-create stamp card for new customer (with retry on collision)
-      BEGIN
-        FOR i IN 1..3 LOOP
-          SELECT lpad((coalesce(max(nullif(regexp_replace(card_number, '[^0-9]', '', 'g'), '')::int), 0) + 1)::text, 3, '0')
-          INTO v_card_number FROM stamp_cards;
-          BEGIN
-            INSERT INTO stamp_cards (card_number, customer_id) VALUES (v_card_number, v_customer_id);
-            EXIT;
-          EXCEPTION WHEN unique_violation THEN NULL;
-          END;
-        END LOOP;
-      EXCEPTION WHEN OTHERS THEN NULL; -- don't block invite claim
-      END;
+      -- Auto-create stamp card for new customer
+      SELECT lpad((coalesce(max(nullif(regexp_replace(card_number, '[^0-9]', '', 'g'), '')::int), 0) + 1)::text, 3, '0')
+      INTO v_card_number FROM stamp_cards;
+      INSERT INTO stamp_cards (card_number, customer_id) VALUES (v_card_number, v_customer_id);
     END IF;
 
     -- Get customer name for order update
@@ -169,21 +281,12 @@ BEGIN
       loyalty_program = coalesce(loyalty_program, 'stamps')
     WHERE id = v_customer_id;
 
-    -- Auto-create stamp card if customer doesn't have one (with retry on collision)
+    -- Auto-create stamp card if customer doesn't have one
     SELECT EXISTS(SELECT 1 FROM stamp_cards WHERE customer_id = v_customer_id AND status = 'active') INTO v_has_card;
     IF NOT v_has_card THEN
-      BEGIN
-        FOR i IN 1..3 LOOP
-          SELECT lpad((coalesce(max(nullif(regexp_replace(card_number, '[^0-9]', '', 'g'), '')::int), 0) + 1)::text, 3, '0')
-          INTO v_card_number FROM stamp_cards;
-          BEGIN
-            INSERT INTO stamp_cards (card_number, customer_id) VALUES (v_card_number, v_customer_id);
-            EXIT;
-          EXCEPTION WHEN unique_violation THEN NULL;
-          END;
-        END LOOP;
-      EXCEPTION WHEN OTHERS THEN NULL; -- don't block invite claim
-      END;
+      SELECT lpad((coalesce(max(nullif(regexp_replace(card_number, '[^0-9]', '', 'g'), '')::int), 0) + 1)::text, 3, '0')
+      INTO v_card_number FROM stamp_cards;
+      INSERT INTO stamp_cards (card_number, customer_id) VALUES (v_card_number, v_customer_id);
     END IF;
 
     SELECT name INTO v_customer_name FROM customers WHERE id = v_customer_id;
@@ -218,5 +321,40 @@ BEGIN
 
 EXCEPTION WHEN OTHERS THEN
   RETURN jsonb_build_object('success', false, 'error', 'Failed to claim invite: ' || SQLERRM);
+END;
+$$;
+
+-- =============================================
+-- 3. Backfill: create stamp cards for existing stamps-program customers without one
+-- =============================================
+DO $$
+DECLARE
+  v_customer RECORD;
+  v_card_number TEXT;
+  v_max_num INT;
+BEGIN
+  -- Get current max card number
+  SELECT coalesce(max(nullif(regexp_replace(card_number, '[^0-9]', '', 'g'), '')::int), 0)
+  INTO v_max_num FROM stamp_cards;
+
+  FOR v_customer IN
+    SELECT c.id, c.name
+    FROM customers c
+    WHERE c.loyalty_program = 'stamps'
+      AND c.status = 'active'
+      AND NOT EXISTS (
+        SELECT 1 FROM stamp_cards sc
+        WHERE sc.customer_id = c.id AND sc.status = 'active'
+      )
+    ORDER BY c.created_at
+  LOOP
+    v_max_num := v_max_num + 1;
+    v_card_number := lpad(v_max_num::text, 3, '0');
+
+    INSERT INTO stamp_cards (card_number, customer_id)
+    VALUES (v_card_number, v_customer.id);
+
+    RAISE NOTICE 'Created stamp card % for customer % (%)', v_card_number, v_customer.name, v_customer.id;
+  END LOOP;
 END;
 $$;

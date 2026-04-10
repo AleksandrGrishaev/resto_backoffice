@@ -2021,6 +2021,16 @@ async function processLoyaltyAfterPayment(
         console.error('🎯 Failed to find customer stamp card:', err)
       }
     }
+    // Fallback: auto-create stamp card for legacy customers without one
+    if (!card && billCustomerId && customer?.loyaltyProgram === 'stamps') {
+      try {
+        const cardNumber = await loyaltyStore.issueCardForCustomer(billCustomerId)
+        card = await loyaltyStore.getCardInfo(cardNumber)
+        console.log('🎯 Auto-created stamp card for customer:', customer.name, cardNumber)
+      } catch (err) {
+        console.error('🎯 Failed to auto-create stamp card:', err)
+      }
+    }
   }
 
   const onStampsProgram = !customer || customer.loyaltyProgram !== 'cashback'
@@ -2226,7 +2236,13 @@ const handleLoyaltyCustomer = async (customer: Customer | null): Promise<void> =
     // Auto-attach stamp card only if customer is on stamps program
     if (!bill.stampCardId && !loyaltyCard.value && customer.loyaltyProgram === 'stamps') {
       try {
-        const card = await loyaltyStore.getActiveCardByCustomerId(customer.id)
+        let card = await loyaltyStore.getActiveCardByCustomerId(customer.id)
+        // Fallback: auto-create stamp card for legacy customers without one
+        if (!card) {
+          const cardNumber = await loyaltyStore.issueCardForCustomer(customer.id)
+          card = await loyaltyStore.getCardInfo(cardNumber)
+          console.log('🎯 Auto-created stamp card for customer:', customer.name, cardNumber)
+        }
         if (card) {
           loyaltyCard.value = card
           bill.stampCardId = card.cardId

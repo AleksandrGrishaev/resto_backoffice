@@ -122,7 +122,7 @@ export const CRITICAL_STORES = {
    * NOTE: kitchen/bar roles now load ALL critical stores (products, recipes, menu, storage)
    * plus preparations via role-based loading
    */
-  kitchenPreparation: ['preparations'] as StoreName[]
+  kitchenPreparation: ['preparations', 'staff'] as StoreName[]
 }
 
 /**
