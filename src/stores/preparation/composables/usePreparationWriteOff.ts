@@ -57,14 +57,19 @@ export function usePreparationWriteOff() {
         department
       })
 
-      // Pre-validate stock availability
+      // Pre-validate and clamp stock availability
       const stockCheck = checkStockAvailability(preparationId, quantity, department)
+      if (stockCheck.currentStock <= 0) {
+        const preparationName = preparationStore.getPreparationName(preparationId)
+        throw new Error(`No stock available for ${preparationName}`)
+      }
       if (!stockCheck.available) {
         const preparationName = preparationStore.getPreparationName(preparationId)
-        const unit = preparationStore.getPreparationUnit(preparationId)
-        throw new Error(
-          `Insufficient stock for ${preparationName}. Requested: ${quantity} ${unit}, Available: ${stockCheck.currentStock} ${unit}, Missing: ${stockCheck.shortage} ${unit}`
+        DebugUtils.warn(
+          MODULE_NAME,
+          `Clamping ${preparationName} write-off from ${quantity} to ${stockCheck.currentStock} (available stock)`
         )
+        quantity = Math.round(stockCheck.currentStock)
       }
 
       const writeOffData: CreatePreparationWriteOffData = {
@@ -118,25 +123,38 @@ export function usePreparationWriteOff() {
         department
       })
 
-      // Validate all items first
+      // Validate and clamp quantities to available stock
+      const validItems: typeof items = []
       for (const item of items) {
         const stockCheck = checkStockAvailability(
           item.preparationId,
           item.writeOffQuantity,
           department
         )
-        if (!stockCheck.available) {
-          throw new Error(
-            `Insufficient stock for ${item.preparationName}. Requested: ${item.writeOffQuantity} ${item.unit}, Available: ${stockCheck.currentStock} ${item.unit}, Missing: ${stockCheck.shortage} ${item.unit}`
-          )
+        if (stockCheck.currentStock <= 0) {
+          DebugUtils.warn(MODULE_NAME, `Skipping ${item.preparationName}: no stock available`)
+          continue
         }
+        if (!stockCheck.available) {
+          DebugUtils.warn(
+            MODULE_NAME,
+            `Clamping ${item.preparationName} write-off from ${item.writeOffQuantity} to ${stockCheck.currentStock} (available stock)`
+          )
+          validItems.push({ ...item, writeOffQuantity: Math.round(stockCheck.currentStock) })
+        } else {
+          validItems.push(item)
+        }
+      }
+
+      if (validItems.length === 0) {
+        throw new Error('No items with available stock to write off')
       }
 
       const writeOffData: CreatePreparationWriteOffData = {
         department,
         responsiblePerson,
         reason,
-        items: items.map(item => ({
+        items: validItems.map(item => ({
           preparationId: item.preparationId,
           quantity: item.writeOffQuantity,
           notes: item.notes

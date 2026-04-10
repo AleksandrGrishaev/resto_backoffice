@@ -72,6 +72,34 @@
             <p class="text-medium-emphasis mt-2">All done!</p>
           </div>
 
+          <!-- Custom Tasks (checklist) -->
+          <div
+            v-if="activeFilter === 'all' && currentCustomTasks.length > 0"
+            class="custom-tasks-section"
+          >
+            <div class="custom-tasks-header">
+              <v-icon size="16" color="secondary">mdi-checkbox-marked-outline</v-icon>
+              <span class="custom-tasks-title">Checklist</span>
+              <v-badge :content="currentCustomTasks.length" color="secondary" inline />
+            </div>
+            <div
+              v-for="ct in currentCustomTasks"
+              :key="ct.id"
+              class="custom-task-item"
+              @click="toggleCustomTaskDone(ct)"
+            >
+              <v-icon size="20" :color="customTaskDone[ct.id] ? 'success' : 'grey'">
+                {{ customTaskDone[ct.id] ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+              </v-icon>
+              <span
+                class="custom-task-name"
+                :class="{ 'text-decoration-line-through': customTaskDone[ct.id] }"
+              >
+                {{ ct.name }}
+              </span>
+            </div>
+          </div>
+
           <!-- Task Cards grouped by category -->
           <template v-for="group in groupedTodoItems" :key="group.categoryId">
             <CategoryGroup
@@ -136,6 +164,80 @@
       @ritual-completed="handleRitualCompleted"
     />
 
+    <!-- Rating Dialog (for requires_note custom tasks) -->
+    <v-dialog v-model="showRatingDialog" max-width="360" persistent>
+      <v-card v-if="ratingDialogTask" class="rating-dialog-card">
+        <v-card-title class="text-body-1 font-weight-bold">
+          <v-icon start size="20">mdi-clipboard-check-outline</v-icon>
+          {{ ratingDialogTask.name }}
+        </v-card-title>
+        <v-card-text class="pb-2">
+          <div class="rating-buttons">
+            <v-btn
+              :variant="ratingValue === 'bad' ? 'flat' : 'outlined'"
+              color="error"
+              class="rating-btn"
+              @click="ratingValue = 'bad'"
+            >
+              Bad
+            </v-btn>
+            <v-btn
+              :variant="ratingValue === 'good' ? 'flat' : 'outlined'"
+              color="warning"
+              class="rating-btn"
+              @click="ratingValue = 'good'"
+            >
+              Good
+            </v-btn>
+            <v-btn
+              :variant="ratingValue === 'excellent' ? 'flat' : 'outlined'"
+              color="success"
+              class="rating-btn"
+              @click="ratingValue = 'excellent'"
+            >
+              Excellent
+            </v-btn>
+          </div>
+          <!-- Comment: required for bad, optional for good, hidden for excellent -->
+          <v-textarea
+            v-if="ratingValue === 'bad' || ratingValue === 'good'"
+            v-model="ratingComment"
+            :label="ratingValue === 'bad' ? 'Comment (required)' : 'Comment (optional)'"
+            variant="outlined"
+            rows="2"
+            auto-grow
+            density="compact"
+            hide-details
+            class="mt-3"
+          />
+          <StaffPicker
+            v-model="ratingStaffId"
+            :department="userDepartment"
+            :required="true"
+            dense
+            label="Who did this?"
+            class="mt-3"
+            @update:staff-member="(s: any) => (ratingStaffName = s?.name)"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-btn variant="text" @click="cancelRatingDialog">Cancel</v-btn>
+          <v-spacer />
+          <v-btn
+            color="success"
+            variant="flat"
+            :disabled="
+              !ratingValue || !ratingStaffId || (ratingValue === 'bad' && !ratingComment.trim())
+            "
+            @click="confirmRatingDialog"
+          >
+            <v-icon start>mdi-check</v-icon>
+            Done
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Snackbar -->
     <v-snackbar
       v-model="snackbar.show"
@@ -161,8 +263,13 @@ import TaskCard from './components/TaskCard.vue'
 import CategoryGroup from './components/CategoryGroup.vue'
 import RitualBanner from './components/RitualBanner.vue'
 import RitualDialog from './dialogs/RitualDialog.vue'
+import StaffPicker from './components/StaffPicker.vue'
 import type { ProductionScheduleItem } from '@/stores/kitchenKpi'
-import type { RitualTaskDetail, CreateScheduleItemData } from '@/stores/kitchenKpi/types'
+import type {
+  RitualTaskDetail,
+  RitualCustomTask,
+  CreateScheduleItemData
+} from '@/stores/kitchenKpi/types'
 import { RITUAL_WINDOWS } from '@/stores/kitchenKpi/types'
 
 const MODULE_NAME = 'TasksScreen'
@@ -188,6 +295,13 @@ const isLoading = ref(false)
 const isRefreshing = ref(false)
 const showRitualDialog = ref(false)
 const snackbar = ref({ show: false, message: '', color: 'success' })
+const customTaskDone = ref<Record<string, boolean>>({})
+const showRatingDialog = ref(false)
+const ratingDialogTask = ref<RitualCustomTask | null>(null)
+const ratingValue = ref('')
+const ratingComment = ref('')
+const ratingStaffId = ref<string | undefined>()
+const ratingStaffName = ref<string | undefined>()
 
 // =============================================
 // COMPUTED
@@ -280,6 +394,34 @@ const groupedTodoItems = computed<TaskGroup[]>(() => {
   }
   return result.sort((a, b) => b.tasks.length - a.tasks.length)
 })
+
+/** Active custom tasks for current ritual */
+const currentCustomTasks = computed(() => kpiStore.currentRitualCustomTasks)
+
+function toggleCustomTaskDone(ct: RitualCustomTask): void {
+  if (customTaskDone.value[ct.id]) {
+    customTaskDone.value[ct.id] = false
+    return
+  }
+  ratingDialogTask.value = ct
+  ratingValue.value = ''
+  ratingComment.value = ''
+  ratingStaffId.value = undefined
+  ratingStaffName.value = undefined
+  showRatingDialog.value = true
+}
+
+function confirmRatingDialog(): void {
+  if (!ratingDialogTask.value) return
+  customTaskDone.value[ratingDialogTask.value.id] = true
+  showRatingDialog.value = false
+  ratingDialogTask.value = null
+}
+
+function cancelRatingDialog(): void {
+  showRatingDialog.value = false
+  ratingDialogTask.value = null
+}
 
 /** Ritual tasks by type:
  * morning = premade + urgent + morning slot (breakfast+lunch prep)
@@ -562,6 +704,24 @@ function handleWriteOff(
   staffMemberId?: string,
   staffMemberName?: string
 ): void {
+  // Clamp quantity to actual available stock to prevent insufficient stock errors
+  const balance = (preparationStore.state.balances || []).find(
+    b => b.preparationId === task.preparationId
+  )
+  const availableStock = balance ? Math.max(0, balance.totalQuantity) : quantity
+  const clampedQty = Math.min(quantity, availableStock)
+  if (clampedQty <= 0) {
+    showSnackbar(`${task.preparationName}: no stock to write off`, 'warning')
+    return
+  }
+  if (clampedQty < quantity) {
+    showSnackbar(
+      `${task.preparationName}: adjusted to ${clampedQty}${task.targetUnit} (available stock)`,
+      'info'
+    )
+  }
+  quantity = clampedQty
+
   // Optimistic update
   const idx = kpiStore.scheduleItems.findIndex(i => i.id === task.id)
   if (idx !== -1) {
@@ -912,5 +1072,65 @@ watch(userDepartment, () => loadData())
   padding: 32px 16px;
   text-align: center;
   opacity: 0.5;
+}
+
+/* Custom tasks checklist */
+.custom-tasks-section {
+  background-color: rgba(var(--v-theme-secondary), 0.05);
+  border-radius: 8px;
+  padding: 8px;
+  border: 1px solid rgba(var(--v-theme-secondary), 0.12);
+}
+
+.custom-tasks-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 6px;
+}
+
+.custom-tasks-title {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.custom-task-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+
+  &:active {
+    background-color: rgba(var(--v-theme-secondary), 0.08);
+  }
+}
+
+.custom-task-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Rating Dialog */
+.rating-dialog-card {
+  border-radius: 12px !important;
+}
+
+.rating-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.rating-btn {
+  flex: 1;
+  height: 44px !important;
+  min-width: 0 !important;
+  padding: 0 8px !important;
+  font-size: 12px !important;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 </style>

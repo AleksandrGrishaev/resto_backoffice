@@ -144,7 +144,9 @@ export interface RitualTaskDetail {
   // Staff accountability (Phase 4)
   staffMemberId?: string
   staffMemberName?: string
-  // Notes (for requires_note custom tasks)
+  // Rating (bad/good/excellent) for custom tasks
+  rating?: 'bad' | 'good' | 'excellent'
+  // Notes (comment for bad/good ratings)
   notes?: string
   // Per-task timing
   durationSeconds?: number

@@ -2,6 +2,7 @@
 // Production Card — fullscreen dialog with two tabs: Recipe + Complete
 import { ref, computed, onUnmounted, watch } from 'vue'
 import { useRecipesStore } from '@/stores/recipes'
+import { usePreparationStore } from '@/stores/preparation'
 import { useRecipeScaling } from '@/views/kitchen/calculator/composables/useRecipeScaling'
 import { useProductionPhoto } from '@/composables/useProductionPhoto'
 import { DebugUtils } from '@/utils'
@@ -38,6 +39,7 @@ const emit = defineEmits<{
 }>()
 
 const recipesStore = useRecipesStore()
+const preparationStore = usePreparationStore()
 const { scaleRecipe, formatQuantity } = useRecipeScaling()
 const productionPhoto = useProductionPhoto()
 
@@ -204,10 +206,25 @@ const targetInDisplayUnit = computed(() => {
 const isWriteOff = computed(() => props.task.taskType === 'write_off')
 const photoRequired = computed(() => !isWriteOff.value)
 const parsedQty = computed(() => parsedQtyInBaseUnit.value)
+
+// Available stock for write-off validation
+const availableStock = computed(() => {
+  if (!isWriteOff.value) return Infinity
+  const balance = (preparationStore.state.balances || []).find(
+    b => b.preparationId === props.task.preparationId
+  )
+  return Math.max(0, balance?.totalQuantity || 0)
+})
+
+const writeOffExceedsStock = computed(
+  () => isWriteOff.value && parsedQty.value > availableStock.value
+)
+
 const canComplete = computed(() => {
   if (parsedQty.value < 1) return false
   if (!staffMemberId.value) return false
   if (photoRequired.value && !photoUrl.value && !photoSkipped.value) return false
+  if (writeOffExceedsStock.value) return false
   return true
 })
 
@@ -485,6 +502,17 @@ function handleComplete() {
               <span class="qty-target">target: {{ targetInDisplayUnit }}</span>
             </div>
           </div>
+
+          <!-- Write-off stock warning -->
+          <v-alert
+            v-if="writeOffExceedsStock"
+            type="error"
+            variant="tonal"
+            density="compact"
+            class="mb-2"
+          >
+            Max available: {{ Math.round(availableStock) }}{{ task.targetUnit }}
+          </v-alert>
 
           <!-- Staff Picker -->
           <StaffPicker
