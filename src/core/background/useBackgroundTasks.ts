@@ -523,7 +523,12 @@ export function useBackgroundTasks() {
         completedByName: payload.responsiblePerson, // Display name
         completedQuantity: payload.completedQuantity,
         notes: payload.notes,
-        preparationBatchId: receipt?.id
+        preparationBatchId: receipt?.id,
+        // Production Control fields
+        staffMemberId: payload.staffMemberId,
+        staffMemberName: payload.staffMemberName,
+        photoUrl: payload.photoUrl,
+        startedAt: payload.startedAt
       })
 
       // Step 3: Record KPI (non-critical)

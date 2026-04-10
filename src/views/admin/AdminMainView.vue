@@ -28,6 +28,7 @@
           />
           <StaffScreen v-else-if="currentScreen === 'staff'" />
           <PayrollScreen v-else-if="currentScreen === 'payroll'" />
+          <ProductionKpiScreen v-else-if="currentScreen === 'production-kpi'" />
           <DashboardScreen v-else-if="currentScreen === 'dashboard'" />
         </div>
       </template>
@@ -63,6 +64,9 @@ const LoyaltySettingsScreen = defineAsyncComponent(
   () => import('./loyalty/LoyaltySettingsScreen.vue')
 )
 const DashboardScreen = defineAsyncComponent(() => import('./dashboard/DashboardScreen.vue'))
+const ProductionKpiScreen = defineAsyncComponent(
+  () => import('./production-kpi/ProductionKpiScreen.vue')
+)
 const StaffScreen = defineAsyncComponent(() => import('./staff/StaffScreen.vue'))
 const PayrollScreen = defineAsyncComponent(() => import('./payroll/PayrollScreen.vue'))
 

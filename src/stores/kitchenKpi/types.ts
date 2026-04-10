@@ -60,8 +60,15 @@ export interface RitualCustomTask {
   department: string
   sortOrder: number
   isActive: boolean
+  requiresNote: boolean
+  checklistItems?: RitualChecklistItem[]
   createdAt: string
   updatedAt: string
+}
+
+export interface RitualChecklistItem {
+  label: string
+  required?: boolean
 }
 
 /**
@@ -75,6 +82,8 @@ export interface RitualCustomTaskRow {
   department: string
   sort_order: number
   is_active: boolean
+  requires_note: boolean
+  checklist_items: RitualChecklistItem[] | null
   created_at: string
   updated_at: string
 }
@@ -132,6 +141,13 @@ export interface RitualTaskDetail {
   unit?: string
   // Legacy alias
   quantity?: number
+  // Staff accountability (Phase 4)
+  staffMemberId?: string
+  staffMemberName?: string
+  // Notes (for requires_note custom tasks)
+  notes?: string
+  // Per-task timing
+  durationSeconds?: number
 }
 
 /**
@@ -315,6 +331,11 @@ export interface CompleteScheduleTaskData {
   completedByName: string
   preparationBatchId?: string
   notes?: string
+  // Production Control (Phase 1)
+  staffMemberId?: string
+  staffMemberName?: string
+  photoUrl?: string
+  startedAt?: string
 }
 
 /**
@@ -391,6 +412,14 @@ export interface ProductionScheduleRow {
   sync_error: string | null
   created_at: string
   updated_at: string
+  // Production Control fields (migration 290)
+  staff_member_id: string | null
+  staff_member_name: string | null
+  photo_url: string | null
+  photo_uploaded_at: string | null
+  started_at: string | null
+  actual_duration_minutes: number | null
+  is_quick_completion: boolean | null
 }
 
 // ===============================================

@@ -3,6 +3,7 @@
 export type AdminScreenName =
   | 'channels'
   | 'dashboard'
+  | 'production-kpi'
   | 'loyalty'
   | 'customers'
   | 'staff'

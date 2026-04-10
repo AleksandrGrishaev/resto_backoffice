@@ -170,6 +170,12 @@ export interface ScheduleCompleteTaskPayload {
     userName: string
     isOnTime: boolean
   }
+
+  // Production Control (Phase 1)
+  staffMemberId?: string
+  staffMemberName?: string
+  photoUrl?: string
+  startedAt?: string
 }
 
 export type ScheduleCompleteTask = BackgroundTask<ScheduleCompleteTaskPayload>

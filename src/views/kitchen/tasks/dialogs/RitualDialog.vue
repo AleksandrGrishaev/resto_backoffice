@@ -90,6 +90,10 @@
               <v-icon size="22" color="grey">mdi-checkbox-blank-outline</v-icon>
               <div class="item-body">
                 <div class="item-name">{{ ct.name }}</div>
+                <div v-if="ct.requiresNote" class="item-meta">
+                  <v-icon size="12" color="warning">mdi-note-edit-outline</v-icon>
+                  <span class="text-caption text-warning">note required</span>
+                </div>
               </div>
             </div>
           </div>
@@ -171,6 +175,10 @@
                   <span class="done-actual" :class="getDoneQtyClass(task)">
                     {{ task.completedQuantity || task.targetQuantity }}{{ task.targetUnit }}
                   </span>
+                  <span v-if="taskStaff.get(task.id) || task.staffMemberName" class="done-staff">
+                    <v-icon size="10">mdi-account</v-icon>
+                    {{ taskStaff.get(task.id)?.name || task.staffMemberName }}
+                  </span>
                   <span v-if="task.completedAt" class="done-time">
                     {{ formatTime(task.completedAt) }}
                   </span>
@@ -187,6 +195,16 @@
               <v-icon color="success" size="22">mdi-checkbox-marked</v-icon>
               <div class="item-body">
                 <div class="item-name item-name-done">{{ ct.name }}</div>
+                <div class="item-done-detail">
+                  <span v-if="taskStaff.get(ct.id)" class="done-staff">
+                    <v-icon size="10">mdi-account</v-icon>
+                    {{ taskStaff.get(ct.id)?.name }}
+                  </span>
+                  <span v-if="taskNotes.get(ct.id)" class="done-note">
+                    <v-icon size="10">mdi-note</v-icon>
+                    {{ taskNotes.get(ct.id) }}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -228,6 +246,17 @@
             </v-btn>
           </div>
 
+          <!-- Staff Picker -->
+          <div class="numpad-staff">
+            <StaffPicker
+              v-model="qtyDialogStaffId"
+              :department="qtyDialogTask.department"
+              dense
+              label="Who did this?"
+              @update:staff-member="handleQtyStaffUpdate"
+            />
+          </div>
+
           <!-- Actions -->
           <div class="numpad-actions">
             <v-btn variant="text" @click="cancelQtyDialog">Cancel</v-btn>
@@ -242,6 +271,47 @@
               Confirm
             </v-btn>
           </div>
+        </v-card>
+      </v-dialog>
+      <!-- Note Dialog (for requires_note custom tasks) -->
+      <v-dialog v-model="showNoteDialog" max-width="400" persistent>
+        <v-card v-if="noteDialogTask" class="note-dialog-card">
+          <v-card-title class="text-body-1 font-weight-bold">
+            <v-icon start size="20">mdi-note-edit-outline</v-icon>
+            {{ noteDialogTask.name }}
+          </v-card-title>
+          <v-card-text class="pb-2">
+            <v-textarea
+              v-model="noteDialogText"
+              label="Notes (what was found/done?)"
+              variant="outlined"
+              rows="3"
+              auto-grow
+              density="compact"
+              hide-details
+              class="mb-3"
+            />
+            <StaffPicker
+              v-model="noteDialogStaffId"
+              :department="noteDialogTask?.department || 'kitchen'"
+              dense
+              label="Who did this?"
+              @update:staff-member="handleNoteStaffUpdate"
+            />
+          </v-card-text>
+          <v-card-actions>
+            <v-btn variant="text" @click="cancelNoteDialog">Cancel</v-btn>
+            <v-spacer />
+            <v-btn
+              color="success"
+              variant="flat"
+              :disabled="!noteDialogText.trim()"
+              @click="confirmNoteDialog"
+            >
+              <v-icon start>mdi-check</v-icon>
+              Done
+            </v-btn>
+          </v-card-actions>
         </v-card>
       </v-dialog>
     </v-card>
@@ -266,6 +336,7 @@ import { useKitchenKpiStore } from '@/stores/kitchenKpi'
 import type { ProductionScheduleItem } from '@/stores/kitchenKpi'
 import type { RitualCustomTask, RitualTaskDetail } from '@/stores/kitchenKpi/types'
 import RitualCongratulations from '../components/RitualCongratulations.vue'
+import StaffPicker from '../components/StaffPicker.vue'
 
 interface Props {
   modelValue: boolean
@@ -282,8 +353,19 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  complete: [task: ProductionScheduleItem, quantity: number]
-  'write-off': [task: ProductionScheduleItem, quantity: number]
+  complete: [
+    task: ProductionScheduleItem,
+    quantity: number,
+    staffMemberId?: string,
+    staffMemberName?: string,
+    startedAt?: string
+  ]
+  'write-off': [
+    task: ProductionScheduleItem,
+    quantity: number,
+    staffMemberId?: string,
+    staffMemberName?: string
+  ]
   'ritual-completed': [
     ritualType: 'morning' | 'afternoon' | 'evening',
     taskDetails: RitualTaskDetail[],
@@ -313,6 +395,27 @@ let elapsedTimer: ReturnType<typeof setInterval> | null = null
 const showQtyDialog = ref(false)
 const qtyDialogTask = ref<ProductionScheduleItem | null>(null)
 const qtyDialogDisplay = ref('')
+const qtyDialogPrefilled = ref(false) // True until first keypress replaces the pre-filled value
+
+// Per-task staff tracking
+const taskStaff = reactive(new Map<string, { id: string; name: string }>())
+// Per-task notes (for requires_note custom tasks)
+const taskNotes = reactive(new Map<string, string>())
+// Per-task start times (for duration tracking)
+const taskStartTimes = reactive(new Map<string, number>()) // taskId → Date.now()
+// Per-task duration (recorded on completion)
+const taskDurations = reactive(new Map<string, number>()) // taskId → seconds
+
+// Custom task note dialog
+const showNoteDialog = ref(false)
+const noteDialogTask = ref<RitualCustomTask | null>(null)
+const noteDialogText = ref('')
+const noteDialogStaffId = ref<string>()
+const noteDialogStaffName = ref<string>()
+
+// QtyDialog staff
+const qtyDialogStaffId = ref<string>()
+const qtyDialogStaffName = ref<string>()
 
 // Captured stats for congratulations overlay (survives dialog close)
 const congratsStats = ref({
@@ -332,6 +435,10 @@ watch(
     if (open) {
       inProgressIds.clear()
       completedCustomTaskIds.clear()
+      taskStaff.clear()
+      taskNotes.clear()
+      taskStartTimes.clear()
+      taskDurations.clear()
       doneCollapsed.value = true
       // Use store's startedAt if available (restored session), otherwise now
       startedAt.value = kpiStore.ritualStartedAt || new Date().toISOString()
@@ -474,27 +581,83 @@ function getTaskColor(task: ProductionScheduleItem): string {
 /** Move schedule task from To Do to In Progress */
 function startTask(task: ProductionScheduleItem): void {
   inProgressIds.add(task.id)
+  taskStartTimes.set(task.id, Date.now())
 }
 
 /** Toggle custom task completion */
 function toggleCustomTask(task: RitualCustomTask): void {
   if (completedCustomTaskIds.has(task.id)) {
     completedCustomTaskIds.delete(task.id)
+    taskNotes.delete(task.id)
+    taskStaff.delete(task.id)
+    taskDurations.delete(task.id)
+  } else if (task.requiresNote) {
+    // Open note dialog for requires_note tasks
+    noteDialogTask.value = task
+    noteDialogText.value = ''
+    noteDialogStaffId.value = undefined
+    noteDialogStaffName.value = undefined
+    taskStartTimes.set(task.id, Date.now())
+    showNoteDialog.value = true
   } else {
-    completedCustomTaskIds.add(task.id)
-    doneCollapsed.value = false
+    taskStartTimes.set(task.id, Date.now()) // instant — duration will be ~0s
+    completeCustomTask(task.id)
   }
+}
+
+function completeCustomTask(taskId: string): void {
+  completedCustomTaskIds.add(taskId)
+  // Record duration
+  const startTime = taskStartTimes.get(taskId)
+  if (startTime) {
+    taskDurations.set(taskId, Math.round((Date.now() - startTime) / 1000))
+  }
+  doneCollapsed.value = false
+}
+
+function confirmNoteDialog(): void {
+  if (!noteDialogTask.value) return
+  const taskId = noteDialogTask.value.id
+  if (noteDialogText.value.trim()) {
+    taskNotes.set(taskId, noteDialogText.value.trim())
+  }
+  if (noteDialogStaffId.value && noteDialogStaffName.value) {
+    taskStaff.set(taskId, { id: noteDialogStaffId.value, name: noteDialogStaffName.value })
+  }
+  completeCustomTask(taskId)
+  showNoteDialog.value = false
+  noteDialogTask.value = null
+}
+
+function cancelNoteDialog(): void {
+  showNoteDialog.value = false
+  noteDialogTask.value = null
+}
+
+function handleNoteStaffUpdate(member: { id: string; name: string } | undefined): void {
+  noteDialogStaffName.value = member?.name
 }
 
 /** Open quantity confirmation dialog with numpad */
 function openQtyDialog(task: ProductionScheduleItem): void {
   qtyDialogTask.value = task
   qtyDialogDisplay.value = String(task.targetQuantity)
+  qtyDialogPrefilled.value = true
+  qtyDialogStaffId.value = undefined
+  qtyDialogStaffName.value = undefined
   showQtyDialog.value = true
 }
 
+function handleQtyStaffUpdate(member: { id: string; name: string } | undefined): void {
+  qtyDialogStaffName.value = member?.name
+}
+
 function numpadPress(digit: string): void {
-  if (qtyDialogDisplay.value === '0') {
+  // First keypress replaces pre-filled value
+  if (qtyDialogPrefilled.value) {
+    qtyDialogDisplay.value = digit
+    qtyDialogPrefilled.value = false
+  } else if (qtyDialogDisplay.value === '0') {
     qtyDialogDisplay.value = digit
   } else if (qtyDialogDisplay.value.length < 5) {
     qtyDialogDisplay.value += digit
@@ -502,10 +665,12 @@ function numpadPress(digit: string): void {
 }
 
 function numpadBackspace(): void {
+  qtyDialogPrefilled.value = false
   qtyDialogDisplay.value = qtyDialogDisplay.value.slice(0, -1)
 }
 
 function numpadClear(): void {
+  qtyDialogPrefilled.value = false
   qtyDialogDisplay.value = ''
 }
 
@@ -514,14 +679,28 @@ function confirmQtyDialog(): void {
   const task = qtyDialogTask.value
   const qty = Math.max(1, Number(qtyDialogDisplay.value) || task.targetQuantity)
 
+  // Record staff for this task
+  if (qtyDialogStaffId.value && qtyDialogStaffName.value) {
+    taskStaff.set(task.id, { id: qtyDialogStaffId.value, name: qtyDialogStaffName.value })
+  }
+
+  // Record duration
+  const startTime = taskStartTimes.get(task.id)
+  if (startTime) {
+    taskDurations.set(task.id, Math.round((Date.now() - startTime) / 1000))
+  }
+
   // Remove from in-progress
   inProgressIds.delete(task.id)
 
-  // Emit to parent
+  // Emit to parent (with staff info for Production Control)
+  const staffId = qtyDialogStaffId.value
+  const staffName = qtyDialogStaffName.value
+  const taskStartedAt = startTime ? new Date(startTime).toISOString() : undefined
   if (task.taskType === 'write_off') {
-    emit('write-off', task, qty)
+    emit('write-off', task, qty, staffId, staffName)
   } else {
-    emit('complete', task, qty)
+    emit('complete', task, qty, staffId, staffName, taskStartedAt)
   }
 
   // Expand done column to show result
@@ -550,8 +729,10 @@ function handleFinishRitual(): void {
   // Build task details array
   const taskDetails: RitualTaskDetail[] = []
 
-  // Schedule tasks — full detail for each
+  // Schedule tasks — full detail with staff and timing
   for (const task of props.tasks) {
+    const staff = taskStaff.get(task.id)
+    const duration = taskDurations.get(task.id)
     taskDetails.push({
       taskId: task.id,
       name: task.preparationName,
@@ -561,19 +742,29 @@ function handleFinishRitual(): void {
       targetQuantity: task.targetQuantity,
       completedQuantity: task.completedQuantity || undefined,
       unit: task.targetUnit,
-      quantity: task.completedQuantity || task.targetQuantity
+      quantity: task.completedQuantity || task.targetQuantity,
+      staffMemberId: staff?.id || task.staffMemberId,
+      staffMemberName: staff?.name || task.staffMemberName,
+      durationSeconds: duration
     })
   }
 
-  // Custom tasks — track completion time
+  // Custom tasks — track completion time, staff, notes
   for (const ct of props.customTasks) {
     const isDone = completedCustomTaskIds.has(ct.id)
+    const staff = taskStaff.get(ct.id)
+    const notes = taskNotes.get(ct.id)
+    const duration = taskDurations.get(ct.id)
     taskDetails.push({
       taskId: ct.id,
       name: ct.name,
       type: 'custom',
       completed: isDone,
-      completedAt: isDone ? now : undefined
+      completedAt: isDone ? now : undefined,
+      staffMemberId: staff?.id,
+      staffMemberName: staff?.name,
+      notes,
+      durationSeconds: duration
     })
   }
 
@@ -886,5 +1077,37 @@ function formatTime(isoDate: string): string {
 
 .flex-shrink-0 {
   flex-shrink: 0;
+}
+
+/* Staff picker in numpad dialog */
+.numpad-staff {
+  padding: 0 16px 4px;
+}
+
+/* Done column staff + notes */
+.done-staff {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  margin-left: 4px;
+}
+
+.done-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: rgba(var(--v-theme-on-surface), 0.5);
+  margin-left: 4px;
+  font-style: italic;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Note dialog */
+.note-dialog-card {
+  border-radius: 12px !important;
 }
 </style>

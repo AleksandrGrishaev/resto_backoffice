@@ -63,6 +63,11 @@ const loading = ref(false)
 
 const screens = [
   { id: 'dashboard' as AdminScreenName, label: 'Dashboard', icon: 'mdi-chart-box-outline' },
+  {
+    id: 'production-kpi' as AdminScreenName,
+    label: 'Production',
+    icon: 'mdi-clipboard-check-outline'
+  },
   { id: 'channels' as AdminScreenName, label: 'Channels', icon: 'mdi-store' },
   { id: 'loyalty' as AdminScreenName, label: 'Loyalty', icon: 'mdi-star-circle' },
   { id: 'staff' as AdminScreenName, label: 'Staff', icon: 'mdi-account-group' },

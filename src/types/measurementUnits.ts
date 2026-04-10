@@ -155,33 +155,63 @@ export const MENU_COMPOSITION_UNITS: MeasurementUnit[] = ['gram', 'ml', 'piece',
 // =============================================
 
 /**
+ * Common unit aliases found in DB data — map to canonical MeasurementUnit keys
+ */
+const UNIT_ALIASES: Record<string, MeasurementUnit> = {
+  g: 'gram',
+  gr: 'gram',
+  grams: 'gram',
+  kilogram: 'kg',
+  kilograms: 'kg',
+  pc: 'piece',
+  pcs: 'piece',
+  pieces: 'piece',
+  l: 'liter',
+  liters: 'liter',
+  litres: 'liter',
+  milliliter: 'ml',
+  milliliters: 'ml',
+  teaspoon: 'tsp',
+  tablespoon: 'tbsp',
+  portions: 'portion'
+}
+
+/**
+ * Resolve a unit string to a canonical MeasurementUnit key.
+ * Handles exact matches, aliases, and case-insensitive lookup.
+ */
+function resolveUnit(unit: string): MeasurementUnit | null {
+  if (MEASUREMENT_UNITS[unit as MeasurementUnit]) return unit as MeasurementUnit
+  const lower = unit.toLowerCase()
+  if (MEASUREMENT_UNITS[lower as MeasurementUnit]) return lower as MeasurementUnit
+  return UNIT_ALIASES[lower] || null
+}
+
+/**
  * Get unit information - SAFE VERSION
  */
 export function getUnitInfo(unit: MeasurementUnit | string | undefined | null): UnitInfo | null {
-  if (!unit || typeof unit !== 'string' || !MEASUREMENT_UNITS[unit as MeasurementUnit]) {
-    return null
-  }
-  return MEASUREMENT_UNITS[unit as MeasurementUnit]
+  if (!unit || typeof unit !== 'string') return null
+  const resolved = resolveUnit(unit)
+  return resolved ? MEASUREMENT_UNITS[resolved] : null
 }
 
 /**
  * Get short unit name - SAFE VERSION
  */
 export function getUnitShortName(unit: MeasurementUnit | string | undefined | null): string {
-  if (!unit || typeof unit !== 'string' || !MEASUREMENT_UNITS[unit as MeasurementUnit]) {
-    return '?'
-  }
-  return MEASUREMENT_UNITS[unit as MeasurementUnit].shortName
+  if (!unit || typeof unit !== 'string') return '?'
+  const resolved = resolveUnit(unit)
+  return resolved ? MEASUREMENT_UNITS[resolved].shortName : unit // fallback to raw string, not "?"
 }
 
 /**
  * Get full unit name - SAFE VERSION
  */
 export function getUnitName(unit: MeasurementUnit | string | undefined | null): string {
-  if (!unit || typeof unit !== 'string' || !MEASUREMENT_UNITS[unit as MeasurementUnit]) {
-    return 'Unknown'
-  }
-  return MEASUREMENT_UNITS[unit as MeasurementUnit].name
+  if (!unit || typeof unit !== 'string') return 'Unknown'
+  const resolved = resolveUnit(unit)
+  return resolved ? MEASUREMENT_UNITS[resolved].name : unit
 }
 
 /**
@@ -195,8 +225,10 @@ export function areUnitsCompatible(
     return false
   }
 
-  const info1 = MEASUREMENT_UNITS[unit1 as MeasurementUnit]
-  const info2 = MEASUREMENT_UNITS[unit2 as MeasurementUnit]
+  const r1 = resolveUnit(unit1)
+  const r2 = resolveUnit(unit2)
+  const info1 = r1 ? MEASUREMENT_UNITS[r1] : null
+  const info2 = r2 ? MEASUREMENT_UNITS[r2] : null
 
   if (!info1 || !info2) {
     return false
