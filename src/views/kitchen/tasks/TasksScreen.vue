@@ -397,9 +397,10 @@ async function ensureExpiredWriteOffTasks(): Promise<void> {
       if (!balance.hasExpired) continue
       if (existingWriteOffPrepIds.has(balance.preparationId)) continue
 
+      const now = new Date()
       const expiredQty =
         balance.batches
-          ?.filter(b => b.status === 'expired')
+          ?.filter(b => b.currentQuantity > 0 && b.expiryDate && new Date(b.expiryDate) < now)
           .reduce((sum, b) => sum + (b.currentQuantity || 0), 0) || 0
       if (expiredQty <= 0) continue
 
