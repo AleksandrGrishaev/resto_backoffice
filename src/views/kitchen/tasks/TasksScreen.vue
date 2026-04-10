@@ -253,24 +253,8 @@ const groupedTodoItems = computed<TaskGroup[]>(() => {
   const items = filteredTodoItems.value
   const groups = new Map<string, TaskGroup>()
 
-  // Special group for write-off tasks
-  const WRITEOFF_KEY = '__write_off__'
-
   for (const item of items) {
-    if (item.taskType === 'write_off') {
-      if (!groups.has(WRITEOFF_KEY)) {
-        groups.set(WRITEOFF_KEY, {
-          categoryId: WRITEOFF_KEY,
-          categoryName: 'Write-offs',
-          categoryEmoji: '🗑️',
-          tasks: []
-        })
-      }
-      groups.get(WRITEOFF_KEY)!.tasks.push(item)
-      continue
-    }
-
-    // Find preparation to get category
+    // All tasks (including write-offs) grouped by preparation category
     const preparation = recipesStore.preparations.find(p => p.id === item.preparationId)
     const categoryId = preparation?.type || '__uncategorized__'
     if (!groups.has(categoryId)) {
@@ -284,12 +268,17 @@ const groupedTodoItems = computed<TaskGroup[]>(() => {
     groups.get(categoryId)!.tasks.push(item)
   }
 
-  // Sort: write-offs last, then by number of tasks (largest first)
-  return Array.from(groups.values()).sort((a, b) => {
-    if (a.categoryId === WRITEOFF_KEY) return 1
-    if (b.categoryId === WRITEOFF_KEY) return -1
-    return b.tasks.length - a.tasks.length
-  })
+  // Sort groups by number of tasks (largest first)
+  // Within each group, write-off tasks come first
+  const result = Array.from(groups.values())
+  for (const group of result) {
+    group.tasks.sort((a, b) => {
+      const aWo = a.taskType === 'write_off' ? 0 : 1
+      const bWo = b.taskType === 'write_off' ? 0 : 1
+      return aWo - bWo
+    })
+  }
+  return result.sort((a, b) => b.tasks.length - a.tasks.length)
 })
 
 /** Ritual tasks by type:
@@ -384,10 +373,18 @@ async function ensureExpiredWriteOffTasks(): Promise<void> {
     const balances = preparationStore.state.balances || []
     const deptBalances = balances.filter(b => b.department === department || b.department === 'all')
 
-    // Find expired items that don't have a pending write-off task today
+    const expiredBalances = deptBalances.filter(b => b.hasExpired)
+    DebugUtils.info(MODULE_NAME, '🔍 Checking expired write-off tasks', {
+      totalBalances: balances.length,
+      deptBalances: deptBalances.length,
+      expiredBalances: expiredBalances.length,
+      expiredNames: expiredBalances.map(b => b.preparationName)
+    })
+
+    // Find expired items that don't already have a PENDING write-off task today
     const existingWriteOffPrepIds = new Set(
       kpiStore.scheduleItems
-        .filter(i => i.taskType === 'write_off' && i.status !== 'cancelled')
+        .filter(i => i.taskType === 'write_off' && i.status === 'pending')
         .map(i => i.preparationId)
     )
 
@@ -423,10 +420,16 @@ async function ensureExpiredWriteOffTasks(): Promise<void> {
       })
     }
 
+    DebugUtils.info(MODULE_NAME, '🔍 Write-off tasks to create', {
+      missing: missingWriteOffs.length,
+      existingWriteOffs: existingWriteOffPrepIds.size,
+      items: missingWriteOffs.map(w => `${w.preparationName}: ${w.targetQuantity}${w.targetUnit}`)
+    })
+
     if (missingWriteOffs.length > 0) {
       await kpiStore.createScheduleItems(missingWriteOffs)
       await kpiStore.loadSchedule({ department })
-      DebugUtils.info(MODULE_NAME, 'Added expired write-off tasks', {
+      DebugUtils.info(MODULE_NAME, '✅ Added expired write-off tasks', {
         count: missingWriteOffs.length
       })
     }
