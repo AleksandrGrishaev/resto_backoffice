@@ -381,10 +381,10 @@ async function ensureExpiredWriteOffTasks(): Promise<void> {
       expiredNames: expiredBalances.map(b => b.preparationName)
     })
 
-    // Find expired items that don't have a pending write-off task today
+    // Find expired items that don't already have a PENDING write-off task today
     const existingWriteOffPrepIds = new Set(
       kpiStore.scheduleItems
-        .filter(i => i.taskType === 'write_off' && i.status !== 'cancelled')
+        .filter(i => i.taskType === 'write_off' && i.status === 'pending')
         .map(i => i.preparationId)
     )
 

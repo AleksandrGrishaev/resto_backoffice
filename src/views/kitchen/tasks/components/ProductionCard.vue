@@ -44,6 +44,7 @@ const activeTab = ref<'recipe' | 'complete'>('complete')
 const qtyDisplay = ref('')
 const qtyUnit = ref<'base' | 'portion'>('base') // 'portion' for portion-type preps
 const staffMemberId = ref<string>()
+const staffMemberName = ref<string>()
 const startedAt = ref(new Date().toISOString())
 const elapsedSeconds = ref(0)
 
