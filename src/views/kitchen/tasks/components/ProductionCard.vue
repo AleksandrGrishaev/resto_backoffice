@@ -38,7 +38,7 @@ const { scaleRecipe, formatQuantity } = useRecipeScaling()
 const productionPhoto = useProductionPhoto()
 
 // Tabs
-const activeTab = ref<'recipe' | 'complete'>('recipe')
+const activeTab = ref<'recipe' | 'complete'>('complete')
 
 // State
 const qtyDisplay = ref('')

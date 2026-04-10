@@ -109,8 +109,8 @@ function enrichScheduleItemsWithPortionType(
   return items.map(item => {
     const preparation = recipesStore.preparations?.find(p => p.id === item.preparationId)
     if (preparation) {
-      // Map outputUnit to display unit
-      const unitMap: Record<string, string> = { ml: 'ml', piece: 'pc', portion: 'pc' }
+      // Map outputUnit to display unit (portion → g, quantities are always in grams)
+      const unitMap: Record<string, string> = { ml: 'ml', piece: 'pc' }
       const displayUnit = unitMap[preparation.outputUnit] || 'g'
       return {
         ...item,

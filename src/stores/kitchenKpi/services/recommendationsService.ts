@@ -695,9 +695,9 @@ function getDisplayUnit(rec: ProductionRecommendation, preparations?: Preparatio
       return 'ml'
     case 'piece':
       return 'pc'
-    case 'portion':
-      return 'pc'
     default:
+      // 'portion' and 'gram' — quantities are always in grams
+      // portion toggle in ProductionCard handles portion/base display
       return 'g'
   }
 }

@@ -4,23 +4,17 @@
   <v-dialog
     :model-value="modelValue"
     max-width="900px"
-    fullscreen
+    scrollable
     transition="dialog-bottom-transition"
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <v-card v-if="item" class="d-flex flex-column">
       <!-- Header -->
-      <v-toolbar color="primary" dark>
-        <v-btn icon @click="$emit('update:modelValue', false)">
+      <v-toolbar color="primary" dark density="compact">
+        <v-btn icon size="small" @click="$emit('update:modelValue', false)">
           <v-icon>mdi-close</v-icon>
         </v-btn>
-        <v-toolbar-title class="d-flex align-center">
-          <div class="item-icon-header mr-3">🍲</div>
-          <div>
-            <div class="text-h6">{{ item.preparationName }}</div>
-            <div class="text-caption">Preparation • {{ formatDepartment(item.department) }}</div>
-          </div>
-        </v-toolbar-title>
+        <v-toolbar-title>{{ item.preparationName }}</v-toolbar-title>
       </v-toolbar>
 
       <!-- Summary Cards -->
