@@ -102,6 +102,7 @@
             @produce="openProductionDialogForPrep"
             @write-off="openPrepWriteOffDialogForPrep"
             @view-details="handleViewDetails"
+            @transfer="handleTransfer"
           />
         </v-window-item>
 
@@ -152,6 +153,16 @@
     <!-- Preparation Item Details Dialog (Batches + Write-offs) -->
     <PrepItemDetailsDialog v-model="showItemDetailsDialog" :item="selectedBalanceForDetails" />
 
+    <!-- Batch Transfer Dialog -->
+    <BatchTransferDialog
+      v-model="showTransferDialog"
+      :batch="transferBatchData?.batch || null"
+      :preparation-name="transferBatchData?.preparationName || ''"
+      :department="userDepartment"
+      :responsible-person="authStore.currentUser?.name || 'Staff'"
+      @transferred="handleTransferComplete"
+    />
+
     <!-- Snackbar for notifications -->
     <v-snackbar
       v-model="snackbar.show"
@@ -180,6 +191,7 @@ import SyncStatusIndicator from './components/SyncStatusIndicator.vue'
 import { SimpleProductionDialog, PrepWriteOffDialog, ProductWriteOffDialog } from './dialogs'
 import PreparationQuantityDialog from '@/views/Preparation/components/writeoff/PreparationQuantityDialog.vue'
 import PrepItemDetailsDialog from './dialogs/PrepItemDetailsDialog.vue'
+import BatchTransferDialog from './dialogs/BatchTransferDialog.vue'
 import { useBackgroundTasks } from '@/core/background'
 import type { PreparationBalance } from '@/stores/preparation/types'
 import type { ComponentPublicInstance } from 'vue'
@@ -227,6 +239,8 @@ const showItemDetailsDialog = ref(false)
 const selectedPreparationId = ref<string | null>(null)
 const selectedPreparation = ref<{ id: string; name: string; unit: string } | null>(null)
 const selectedBalanceForDetails = ref<PreparationBalance | null>(null)
+const showTransferDialog = ref(false)
+const transferBatchData = ref<{ batch: any; preparationName: string } | null>(null)
 
 // Template refs
 const historyTabRef = ref<ComponentPublicInstance<{ refreshHistory: () => Promise<void> }> | null>(
@@ -415,6 +429,32 @@ function handleViewDetails(balance: PreparationBalance): void {
     preparationId: balance.preparationId,
     preparationName: balance.preparationName
   })
+}
+
+/**
+ * Open transfer dialog for a specific batch (or largest active batch)
+ */
+function handleTransfer(balance: PreparationBalance, batch?: any): void {
+  if (batch) {
+    transferBatchData.value = { batch, preparationName: balance.preparationName }
+    showTransferDialog.value = true
+    return
+  }
+  const activeBatches = (balance.batches || []).filter(b => b.currentQuantity > 0)
+  if (activeBatches.length === 0) {
+    showSnackbar('No batches to transfer', 'info')
+    return
+  }
+  const largest = activeBatches.sort((a, b) => b.currentQuantity - a.currentQuantity)[0]
+  transferBatchData.value = { batch: largest, preparationName: balance.preparationName }
+  showTransferDialog.value = true
+}
+
+async function handleTransferComplete(): Promise<void> {
+  showTransferDialog.value = false
+  transferBatchData.value = null
+  showSnackbar('Transfer completed', 'success')
+  await preparationStore.fetchBalances(userDepartment.value)
 }
 
 // =============================================

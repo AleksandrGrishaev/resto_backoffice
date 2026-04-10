@@ -16,6 +16,21 @@
       <!-- Status Indicator -->
       <div class="status-indicator" :class="statusClass" />
 
+      <!-- Storage Location (clickable → opens transfer dialog per location) -->
+      <div class="storage-column">
+        <div
+          v-for="(qty, loc) in storageBreakdown"
+          :key="loc"
+          class="storage-location-btn"
+          @click.stop="emitTransferForLocation(String(loc))"
+        >
+          <v-icon size="22" :color="storageColorMap[loc] || 'teal'">
+            {{ storageIconMap[loc] || 'mdi-fridge' }}
+          </v-icon>
+          <span class="storage-loc-qty">{{ formatQty(qty) }}</span>
+        </div>
+      </div>
+
       <!-- Main Info -->
       <div class="stock-info">
         <div class="stock-name">{{ balance.preparationName }}</div>
@@ -67,44 +82,6 @@
           <span class="qty">{{ formatQty(batchQuantities.expired) }}</span>
           <span class="label">expired</span>
         </div>
-      </div>
-
-      <!-- Storage Location Icons -->
-      <div class="storage-icons">
-        <v-tooltip v-if="storageBreakdown['fridge']" text="Fridge" location="top">
-          <template #activator="{ props: tp }">
-            <div
-              v-bind="tp"
-              class="storage-icon-item"
-              :class="{ 'storage-single': !hasMultipleLocations }"
-            >
-              <v-icon size="16" color="teal">mdi-fridge</v-icon>
-              <span v-if="hasMultipleLocations" class="storage-qty">
-                {{ formatQty(storageBreakdown['fridge']) }}
-              </span>
-            </div>
-          </template>
-        </v-tooltip>
-        <v-tooltip v-if="storageBreakdown['freezer']" text="Freezer" location="top">
-          <template #activator="{ props: tp }">
-            <div v-bind="tp" class="storage-icon-item">
-              <v-icon size="16" color="blue">mdi-snowflake</v-icon>
-              <span v-if="hasMultipleLocations" class="storage-qty">
-                {{ formatQty(storageBreakdown['freezer']) }}
-              </span>
-            </div>
-          </template>
-        </v-tooltip>
-        <v-tooltip v-if="storageBreakdown['shelf']" text="Shelf" location="top">
-          <template #activator="{ props: tp }">
-            <div v-bind="tp" class="storage-icon-item">
-              <v-icon size="16" color="brown">mdi-archive</v-icon>
-              <span v-if="hasMultipleLocations" class="storage-qty">
-                {{ formatQty(storageBreakdown['shelf']) }}
-              </span>
-            </div>
-          </template>
-        </v-tooltip>
       </div>
 
       <!-- Status Badges -->
@@ -168,7 +145,19 @@ const emit = defineEmits<{
   produce: [preparationId: string]
   'write-off': [preparationId: string]
   'view-details': [balance: PreparationBalance]
+  transfer: [balance: PreparationBalance, batch?: any]
 }>()
+
+const storageIconMap: Record<string, string> = {
+  fridge: 'mdi-fridge',
+  freezer: 'mdi-snowflake',
+  shelf: 'mdi-archive'
+}
+const storageColorMap: Record<string, string> = {
+  fridge: 'teal',
+  freezer: 'blue',
+  shelf: 'brown'
+}
 
 // =============================================
 // COMPUTED
@@ -240,6 +229,20 @@ const storageBreakdown = computed(() => {
 
 const hasMultipleLocations = computed(() => Object.keys(storageBreakdown.value).length > 1)
 
+const primaryStorage = computed(() => {
+  const breakdown = storageBreakdown.value
+  const entries = Object.entries(breakdown)
+  if (entries.length === 0) return 'fridge'
+  // Return location with most quantity
+  return entries.sort((a, b) => b[1] - a[1])[0][0]
+})
+const primaryStorageIcon = computed(() => storageIconMap[primaryStorage.value] || 'mdi-fridge')
+const primaryStorageColor = computed(() => storageColorMap[primaryStorage.value] || 'teal')
+const primaryStorageLabel = computed(() => {
+  const labels: Record<string, string> = { fridge: 'Fridge', freezer: 'Freezer', shelf: 'Shelf' }
+  return labels[primaryStorage.value] || 'Fridge'
+})
+
 const expiryIconColor = computed(() => {
   if (isExpired.value) return 'error'
   if (isExpiring.value) return 'warning'
@@ -270,6 +273,16 @@ function handleWriteOff(event: Event): void {
   if (!isOutOfStock.value) {
     emit('write-off', props.balance.preparationId)
   }
+}
+
+function emitTransferForLocation(location: string): void {
+  // Find the largest batch in this storage location
+  const batches = (props.balance.batches || []).filter(
+    b => b.currentQuantity > 0 && (b.storageLocation || 'fridge') === location
+  )
+  if (batches.length === 0) return
+  const batch = batches.sort((a, b) => b.currentQuantity - a.currentQuantity)[0]
+  emit('transfer', props.balance, batch)
 }
 
 /**
@@ -362,15 +375,26 @@ function formatCost(cost: number): string {
   }).format(cost)
 }
 
+const shortUnitMap: Record<string, string> = {
+  gram: 'g',
+  ml: 'ml',
+  piece: 'pcs',
+  kg: 'kg',
+  L: 'L'
+}
+
+function shortUnit(): string {
+  return shortUnitMap[props.balance.unit] || props.balance.unit
+}
+
 /**
- * Format quantity with unit for batch breakdown
+ * Format quantity with short unit for batch breakdown
  */
 function formatQty(value: number): string {
-  const unit = props.balance.unit
   if (value >= 1000) {
-    return `${(value / 1000).toFixed(1)}k`
+    return `${(value / 1000).toFixed(1)}kg`
   }
-  return `${Math.round(value)}${unit}`
+  return `${Math.round(value)}${shortUnit()}`
 }
 </script>
 
@@ -424,6 +448,34 @@ function formatQty(value: number): string {
   &.status-success {
     background-color: rgb(var(--v-theme-success));
   }
+}
+
+.storage-column {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.storage-location-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 48px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background-color: rgba(var(--v-theme-on-surface), 0.06);
+  cursor: pointer;
+  transition: background-color 0.15s;
+
+  &:hover {
+    background-color: rgba(var(--v-theme-on-surface), 0.15);
+  }
+}
+
+.storage-loc-qty {
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .stock-info {
@@ -500,28 +552,6 @@ function formatQty(value: number): string {
   &.batch-expired {
     background-color: rgba(var(--v-theme-error), 0.2);
     color: rgb(var(--v-theme-error));
-  }
-}
-
-// Storage location icons
-.storage-icons {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.storage-icon-item {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px 4px;
-  border-radius: 4px;
-  background-color: rgba(var(--v-theme-on-surface), 0.05);
-
-  .storage-qty {
-    font-size: 11px;
-    font-weight: 600;
-    opacity: 0.8;
   }
 }
 

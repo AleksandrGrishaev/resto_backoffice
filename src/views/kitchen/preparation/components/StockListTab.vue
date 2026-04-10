@@ -98,6 +98,7 @@
               @produce="handleProduce"
               @write-off="handleWriteOff"
               @view-details="handleViewDetails"
+              @transfer="handleTransfer"
             />
           </template>
         </div>
@@ -146,6 +147,7 @@ const emit = defineEmits<{
   produce: [preparationId: string]
   'write-off': [preparationId: string]
   'view-details': [balance: PreparationBalance]
+  transfer: [balance: PreparationBalance, batch?: any]
 }>()
 
 // =============================================
@@ -302,6 +304,10 @@ function handleWriteOff(preparationId: string): void {
 
 function handleViewDetails(balance: PreparationBalance): void {
   emit('view-details', balance)
+}
+
+function handleTransfer(balance: PreparationBalance, batch?: any): void {
+  emit('transfer', balance, batch)
 }
 </script>
 
