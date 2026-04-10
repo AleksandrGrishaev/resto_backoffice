@@ -52,32 +52,45 @@
               @click="startTask(task)"
             >
               <div class="item-body">
-                <div class="item-name">
+                <div class="item-row-top">
+                  <span class="item-name">{{ task.preparationName }}</span>
                   <v-chip
                     v-if="task.taskType === 'write_off'"
                     color="error"
                     size="x-small"
                     variant="flat"
-                    class="mr-1"
                   >
                     WO
                   </v-chip>
-                  {{ task.preparationName }}
+                  <v-icon size="16" color="grey" class="item-chevron">mdi-chevron-right</v-icon>
                 </div>
-                <div class="item-meta">
-                  <span class="meta-target">{{ task.targetQuantity }}{{ task.targetUnit }}</span>
-                  <span v-if="task.currentStockAtGeneration != null" class="meta-stock">
-                    stock {{ Math.round(task.currentStockAtGeneration) }}{{ task.targetUnit }}
-                  </span>
-                  <span v-if="task.avgDailyConsumption" class="meta-avg">
-                    avg {{ Math.round(task.avgDailyConsumption) }}{{ task.targetUnit }}/day
-                  </span>
-                  <span v-if="task.maxDailyConsumption" class="meta-max">
-                    max {{ Math.round(task.maxDailyConsumption) }}{{ task.targetUnit }}/day
-                  </span>
+                <div class="item-row-badges">
+                  <div v-if="task.currentStockAtGeneration != null" class="ri-badge ri-badge-stock">
+                    <span class="ri-badge-qty">
+                      {{ Math.round(task.currentStockAtGeneration) }}{{ task.targetUnit }}
+                    </span>
+                    <span class="ri-badge-label">stock</span>
+                  </div>
+                  <div class="ri-badge ri-badge-target">
+                    <span class="ri-badge-qty">{{ task.targetQuantity }}{{ task.targetUnit }}</span>
+                    <span class="ri-badge-label">target</span>
+                  </div>
+                  <div
+                    v-if="task.avgDailyConsumption && task.taskType !== 'write_off'"
+                    class="ri-badge ri-badge-neutral"
+                  >
+                    <span class="ri-badge-qty">{{ Math.round(task.avgDailyConsumption) }}</span>
+                    <span class="ri-badge-label">avg</span>
+                  </div>
+                  <div
+                    v-if="task.maxDailyConsumption && task.taskType !== 'write_off'"
+                    class="ri-badge ri-badge-neutral"
+                  >
+                    <span class="ri-badge-qty">{{ Math.round(task.maxDailyConsumption) }}</span>
+                    <span class="ri-badge-label">max</span>
+                  </div>
                 </div>
               </div>
-              <v-icon size="20" color="grey">mdi-chevron-right</v-icon>
             </div>
 
             <!-- Custom tasks (checkbox style) -->
@@ -120,20 +133,32 @@
               <div class="item-body">
                 <div class="item-name">{{ task.preparationName }}</div>
                 <div class="item-meta">
-                  <span class="meta-target">{{ task.targetQuantity }}{{ task.targetUnit }}</span>
+                  <span class="meta-target-bold">
+                    {{ task.targetQuantity }}{{ task.targetUnit }}
+                  </span>
                 </div>
               </div>
-              <v-btn
-                :color="task.taskType === 'write_off' ? 'error' : 'success'"
-                variant="flat"
-                class="done-btn"
-                @click.stop="openQtyDialog(task)"
-              >
-                <v-icon start size="18">
-                  {{ task.taskType === 'write_off' ? 'mdi-delete' : 'mdi-check' }}
-                </v-icon>
-                Done
-              </v-btn>
+              <div class="ip-actions">
+                <v-btn
+                  color="primary"
+                  variant="tonal"
+                  class="ip-btn"
+                  @click.stop="openProductionCard(task, 'recipe')"
+                >
+                  <v-icon size="18">mdi-book-open-variant</v-icon>
+                </v-btn>
+                <v-btn
+                  :color="task.taskType === 'write_off' ? 'error' : 'success'"
+                  variant="flat"
+                  class="ip-btn ip-btn-done"
+                  @click.stop="openProductionCard(task, 'complete')"
+                >
+                  <v-icon start size="18">
+                    {{ task.taskType === 'write_off' ? 'mdi-delete' : 'mdi-check' }}
+                  </v-icon>
+                  Done
+                </v-btn>
+              </div>
             </div>
           </div>
         </div>
@@ -211,6 +236,16 @@
         </div>
       </div>
 
+      <!-- ProductionCard Dialog (for in-progress tasks) -->
+      <ProductionCard
+        v-if="productionCardTask"
+        v-model="showProductionCard"
+        :task="productionCardTask"
+        :initial-tab="productionCardInitialTab"
+        @complete="handleProductionCardComplete"
+        @write-off="handleProductionCardWriteOff"
+      />
+
       <!-- Quantity Confirmation Dialog with built-in numpad -->
       <v-dialog v-model="showQtyDialog" max-width="360" persistent>
         <v-card v-if="qtyDialogTask" class="qty-dialog-card">
@@ -251,6 +286,7 @@
             <StaffPicker
               v-model="qtyDialogStaffId"
               :department="qtyDialogTask.department"
+              :required="true"
               dense
               label="Who did this?"
               @update:staff-member="handleQtyStaffUpdate"
@@ -265,6 +301,7 @@
               variant="flat"
               size="large"
               class="confirm-btn"
+              :disabled="!qtyDialogStaffId"
               @click="confirmQtyDialog"
             >
               <v-icon start>mdi-check</v-icon>
@@ -294,6 +331,7 @@
             <StaffPicker
               v-model="noteDialogStaffId"
               :department="noteDialogTask?.department || 'kitchen'"
+              :required="true"
               dense
               label="Who did this?"
               @update:staff-member="handleNoteStaffUpdate"
@@ -305,7 +343,7 @@
             <v-btn
               color="success"
               variant="flat"
-              :disabled="!noteDialogText.trim()"
+              :disabled="!noteDialogText.trim() || !noteDialogStaffId"
               @click="confirmNoteDialog"
             >
               <v-icon start>mdi-check</v-icon>
@@ -337,6 +375,7 @@ import type { ProductionScheduleItem } from '@/stores/kitchenKpi'
 import type { RitualCustomTask, RitualTaskDetail } from '@/stores/kitchenKpi/types'
 import RitualCongratulations from '../components/RitualCongratulations.vue'
 import StaffPicker from '../components/StaffPicker.vue'
+import ProductionCard from '../components/ProductionCard.vue'
 
 interface Props {
   modelValue: boolean
@@ -416,6 +455,11 @@ const noteDialogStaffName = ref<string>()
 // QtyDialog staff
 const qtyDialogStaffId = ref<string>()
 const qtyDialogStaffName = ref<string>()
+
+// ProductionCard dialog (replaces numpad for in-progress tasks)
+const showProductionCard = ref(false)
+const productionCardTask = ref<ProductionScheduleItem | null>(null)
+const productionCardInitialTab = ref<'recipe' | 'complete'>('complete')
 
 // Captured stats for congratulations overlay (survives dialog close)
 const congratsStats = ref({
@@ -578,6 +622,24 @@ function getTaskColor(task: ProductionScheduleItem): string {
   return 'production'
 }
 
+function getTaskIcon(task: ProductionScheduleItem): string {
+  if (task.taskType === 'write_off') return 'mdi-delete-outline'
+  if (task.isPremade) return 'mdi-food-variant'
+  return 'mdi-pot-steam-outline'
+}
+
+function getStockClass(task: ProductionScheduleItem): string {
+  if (task.currentStockAtGeneration == null) return ''
+  if (task.currentStockAtGeneration < task.targetQuantity * 0.5) return 'stock-critical'
+  if (task.currentStockAtGeneration < task.targetQuantity) return 'stock-low'
+  return 'stock-ok'
+}
+
+function getStockDiff(task: ProductionScheduleItem): number {
+  if (task.currentStockAtGeneration == null) return 0
+  return Math.round(task.currentStockAtGeneration - task.targetQuantity)
+}
+
 /** Move schedule task from To Do to In Progress */
 function startTask(task: ProductionScheduleItem): void {
   inProgressIds.add(task.id)
@@ -636,6 +698,62 @@ function cancelNoteDialog(): void {
 
 function handleNoteStaffUpdate(member: { id: string; name: string } | undefined): void {
   noteDialogStaffName.value = member?.name
+}
+
+/** Open ProductionCard dialog for an in-progress task */
+function openProductionCard(task: ProductionScheduleItem, tab: 'recipe' | 'complete'): void {
+  productionCardTask.value = task
+  productionCardInitialTab.value = tab
+  showProductionCard.value = true
+}
+
+/** Handle production completion from ProductionCard */
+function handleProductionCardComplete(
+  task: ProductionScheduleItem,
+  qty: number,
+  staffMemberId?: string,
+  staffMemberName?: string,
+  taskStartedAt?: string,
+  photoUrl?: string
+): void {
+  showProductionCard.value = false
+  // Record staff for this task
+  if (staffMemberId && staffMemberName) {
+    taskStaff.set(task.id, { id: staffMemberId, name: staffMemberName })
+  }
+  // Record duration
+  const startTime = taskStartTimes.get(task.id)
+  if (startTime) {
+    taskDurations.set(task.id, Math.round((Date.now() - startTime) / 1000))
+  }
+  // Remove from in-progress
+  inProgressIds.delete(task.id)
+  // Emit to parent
+  emit('complete', task, qty, staffMemberId, staffMemberName, taskStartedAt)
+  // Expand done column
+  doneCollapsed.value = false
+  productionCardTask.value = null
+}
+
+/** Handle write-off from ProductionCard */
+function handleProductionCardWriteOff(
+  task: ProductionScheduleItem,
+  qty: number,
+  staffMemberId?: string,
+  staffMemberName?: string
+): void {
+  showProductionCard.value = false
+  if (staffMemberId && staffMemberName) {
+    taskStaff.set(task.id, { id: staffMemberId, name: staffMemberName })
+  }
+  const startTime = taskStartTimes.get(task.id)
+  if (startTime) {
+    taskDurations.set(task.id, Math.round((Date.now() - startTime) / 1000))
+  }
+  inProgressIds.delete(task.id)
+  emit('write-off', task, qty, staffMemberId, staffMemberName)
+  doneCollapsed.value = false
+  productionCardTask.value = null
 }
 
 /** Open quantity confirmation dialog with numpad */
@@ -869,6 +987,7 @@ function formatTime(isoDate: string): string {
 .col-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: auto;
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -889,15 +1008,15 @@ function formatTime(isoDate: string): string {
 /* Ritual Item */
 .ritual-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
-  padding: 10px 10px;
-  background-color: var(--v-theme-surface);
+  padding: 8px 10px;
+  background-color: rgba(var(--v-theme-on-surface), 0.04);
   border-radius: 8px;
   border-left: 4px solid transparent;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  min-height: 48px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.06);
 
   &:active:not(.item-done) {
     background-color: rgba(var(--v-theme-primary), 0.06);
@@ -911,32 +1030,94 @@ function formatTime(isoDate: string): string {
   }
   &.item-writeoff {
     border-left-color: rgb(var(--v-theme-error));
-    background-color: rgba(var(--v-theme-error), 0.03);
+    background-color: rgba(var(--v-theme-error), 0.04);
   }
   &.item-custom {
     border-left-color: rgb(var(--v-theme-secondary));
+    gap: 8px;
+    align-items: center;
   }
   &.item-in-progress {
     background-color: rgba(var(--v-theme-primary), 0.04);
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
   }
   &.item-done {
     opacity: 0.7;
     border-left-color: rgb(var(--v-theme-success));
     cursor: default;
+    min-height: 48px;
+    padding: 8px 10px;
+    gap: 8px;
+    align-items: center;
+  }
+}
+
+/* Type icon circle (ritual) */
+.item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &.icon-production {
+    background-color: rgba(var(--v-theme-info), 0.12);
+    color: rgb(var(--v-theme-info));
+  }
+  &.icon-premade {
+    background-color: rgba(0, 150, 136, 0.12);
+    color: #009688;
+  }
+  &.icon-writeoff {
+    background-color: rgba(var(--v-theme-error), 0.12);
+    color: rgb(var(--v-theme-error));
   }
 }
 
 .item-body {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+}
+
+/* Row 1: name + WO + chevron */
+.item-row-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .item-name {
-  font-weight: 600;
+  font-weight: 700;
   font-size: 14px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.item-chevron {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* Row 2: badges — single line, no wrap */
+.item-row-badges {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 .item-name-done {
@@ -947,27 +1128,55 @@ function formatTime(isoDate: string): string {
 
 .item-meta {
   display: flex;
-  gap: 8px;
-  margin-top: 2px;
-  font-size: 12px;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 14px;
 }
 
-.meta-target {
+.meta-target-bold {
+  font-weight: 700;
+  color: rgb(var(--v-theme-primary));
+}
+
+/* Badge pills (inline with name, wrap if needed) */
+.ri-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.ri-badge-qty {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.ri-badge-label {
+  font-size: 7px;
   font-weight: 600;
-  color: rgba(var(--v-theme-on-surface), 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-top: 2px;
+  opacity: 0.8;
 }
 
-.meta-stock {
+.ri-badge-stock {
+  background-color: rgba(var(--v-theme-warning), 0.15);
+  color: rgb(var(--v-theme-warning));
+}
+
+.ri-badge-target {
+  background-color: rgba(var(--v-theme-primary), 0.15);
+  color: rgb(var(--v-theme-primary));
+}
+
+.ri-badge-neutral {
+  background-color: rgba(var(--v-theme-on-surface), 0.08);
   color: rgba(var(--v-theme-on-surface), 0.6);
-  font-weight: 500;
-}
-
-.meta-avg {
-  color: rgba(var(--v-theme-on-surface), 0.45);
-}
-
-.meta-max {
-  color: rgba(var(--v-theme-on-surface), 0.45);
 }
 
 .item-done-detail {
@@ -991,14 +1200,24 @@ function formatTime(isoDate: string): string {
   margin-left: 4px;
 }
 
-.done-btn {
+.ip-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ip-btn {
   height: 40px !important;
-  min-width: 80px !important;
+  min-width: 40px !important;
   text-transform: none;
   font-weight: 600;
   font-size: 13px;
   letter-spacing: 0;
-  flex-shrink: 0;
+  padding: 0 10px !important;
+}
+
+.ip-btn-done {
+  min-width: 80px !important;
 }
 
 /* Numpad Dialog */

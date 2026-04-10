@@ -11,9 +11,8 @@
     }"
     @click="handleTap"
   >
-    <!-- Main content -->
-    <div class="task-body">
-      <!-- Header: name + type chip -->
+    <!-- Left: name + chip -->
+    <div class="task-left">
       <div class="task-header">
         <span class="task-name" :class="{ 'text-decoration-line-through': isCompleted }">
           {{ task.preparationName }}
@@ -23,21 +22,7 @@
         </v-chip>
       </div>
 
-      <!-- Meta: stock + target -->
-      <div v-if="!isCompleted" class="task-meta">
-        <span v-if="task.currentStockAtGeneration != null" class="meta-stock">
-          stock {{ Math.round(task.currentStockAtGeneration) }}{{ task.targetUnit }}
-        </span>
-        <span class="meta-target">
-          <v-icon size="10">mdi-arrow-right</v-icon>
-          {{ task.targetQuantity }}{{ task.targetUnit }}
-        </span>
-        <span v-if="!isCompleted" class="meta-expand">
-          <v-icon size="14" color="primary">mdi-open-in-new</v-icon>
-        </span>
-      </div>
-
-      <!-- Completion info: recommended → actual + staff -->
+      <!-- Completion info (only for completed) -->
       <div v-if="isCompleted" class="task-completed-info">
         <v-icon size="14" color="success">mdi-check</v-icon>
         <span class="done-recommended">{{ task.targetQuantity }}{{ task.targetUnit }}</span>
@@ -53,6 +38,31 @@
         <span v-if="task.completedAt" class="done-time">{{ formatTime(task.completedAt) }}</span>
       </div>
     </div>
+
+    <!-- Right: stat badges (pending only) -->
+    <div v-if="!isCompleted" class="task-badges">
+      <div v-if="task.currentStockAtGeneration != null" class="badge badge-stock">
+        <span class="badge-qty">
+          {{ Math.round(task.currentStockAtGeneration) }}{{ task.targetUnit }}
+        </span>
+        <span class="badge-label">stock</span>
+      </div>
+      <div class="badge badge-target">
+        <span class="badge-qty">{{ task.targetQuantity }}{{ task.targetUnit }}</span>
+        <span class="badge-label">target</span>
+      </div>
+      <div v-if="task.avgDailyConsumption && !isWriteOff" class="badge badge-avg">
+        <span class="badge-qty">{{ Math.round(task.avgDailyConsumption) }}</span>
+        <span class="badge-label">avg/d</span>
+      </div>
+      <div v-if="task.maxDailyConsumption && !isWriteOff" class="badge badge-max">
+        <span class="badge-qty">{{ Math.round(task.maxDailyConsumption) }}</span>
+        <span class="badge-label">max/d</span>
+      </div>
+    </div>
+
+    <!-- Chevron -->
+    <v-icon v-if="!isCompleted" size="18" class="task-chevron">mdi-chevron-right</v-icon>
   </div>
 
   <!-- Production Card Dialog -->
@@ -154,16 +164,16 @@ function formatTime(isoDate: string): string {
 .task-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  min-height: 56px;
+  gap: 10px;
+  padding: 12px 12px 12px 16px;
+  min-height: 68px;
   background-color: var(--v-theme-surface);
-  border-radius: 8px;
-  border-left: 4px solid transparent;
+  border-radius: 10px;
+  border-left: 5px solid transparent;
   transition: opacity 0.3s;
 
   &.task-premade {
-    border-left-color: #009688; // teal
+    border-left-color: #009688;
   }
 
   &.task-production {
@@ -178,6 +188,8 @@ function formatTime(isoDate: string): string {
   &.task-completed {
     opacity: 0.5;
     border-left-color: rgb(var(--v-theme-success));
+    min-height: 48px;
+    padding: 8px 12px 8px 16px;
   }
 
   &.task-tappable {
@@ -189,7 +201,8 @@ function formatTime(isoDate: string): string {
   }
 }
 
-.task-body {
+/* Left: name + chip */
+.task-left {
   flex: 1;
   min-width: 0;
 }
@@ -201,38 +214,71 @@ function formatTime(isoDate: string): string {
 }
 
 .task-name {
-  font-weight: 600;
-  font-size: 15px;
+  font-weight: 700;
+  font-size: 16px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.task-meta {
+/* Right: stat badges (like StockItemCard batch-qty style) */
+.task-badges {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-  font-size: 12px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
-.meta-stock {
+.badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 8px;
+  min-width: 52px;
+
+  .badge-qty {
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .badge-label {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-top: 2px;
+    opacity: 0.8;
+  }
+}
+
+.badge-stock {
+  background-color: rgba(var(--v-theme-warning), 0.15);
+  color: rgb(var(--v-theme-warning));
+}
+
+.badge-target {
+  background-color: rgba(var(--v-theme-primary), 0.15);
+  color: rgb(var(--v-theme-primary));
+}
+
+.badge-avg {
+  background-color: rgba(var(--v-theme-on-surface), 0.08);
   color: rgba(var(--v-theme-on-surface), 0.6);
-  font-weight: 500;
 }
 
-.meta-target {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  font-weight: 600;
-  color: rgba(var(--v-theme-on-surface), 0.7);
+.badge-max {
+  background-color: rgba(var(--v-theme-on-surface), 0.08);
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
-.meta-expand {
-  margin-left: auto;
+.task-chevron {
+  flex-shrink: 0;
+  color: rgba(var(--v-theme-on-surface), 0.2);
 }
 
+/* Completed state */
 .task-completed-info {
   display: flex;
   align-items: center;

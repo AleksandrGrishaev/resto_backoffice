@@ -56,6 +56,12 @@
         <div class="screen-btn-content">
           <v-icon size="24">mdi-format-list-checks</v-icon>
           <span class="screen-btn-label">Tasks</span>
+          <v-badge
+            v-if="pendingTasksCount > 0"
+            :content="pendingTasksCount"
+            color="warning"
+            inline
+          />
         </div>
       </v-btn>
 
@@ -194,6 +200,7 @@
 import { ref, computed, watch } from 'vue'
 import { useKitchenDishes } from '@/stores/kitchen/composables'
 import { useAuthStore } from '@/stores/auth'
+import { useKitchenKpiStore } from '@/stores/kitchenKpi'
 import { DebugUtils } from '@/utils'
 import KitchenNavigationMenu from './KitchenNavigationMenu.vue'
 import type { KitchenScreenName } from '../types'
@@ -227,6 +234,7 @@ const emit = defineEmits<{
 
 const authStore = useAuthStore()
 const { dishesStats } = useKitchenDishes()
+const kpiStore = useKitchenKpiStore()
 
 // =============================================
 // STATE
@@ -237,6 +245,14 @@ const selectedDepartment = ref<'all' | 'kitchen' | 'bar'>('all')
 // =============================================
 // COMPUTED
 // =============================================
+
+/**
+ * Count of pending (not completed/cancelled) tasks
+ */
+const pendingTasksCount = computed(() => {
+  return kpiStore.scheduleItems.filter(t => t.status !== 'completed' && t.status !== 'cancelled')
+    .length
+})
 
 /**
  * Show department tabs only for admin
