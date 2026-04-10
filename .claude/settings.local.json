@@ -101,7 +101,8 @@
       "Glob(path:/Users/peaker/dev/kitchen-app/web-winter/**)",
       "Grep(path:/Users/peaker/dev/kitchen-app/web-winter/**)",
       "Bash(npx eslint:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(gh pr:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -10,10 +10,14 @@ import PhotoCaptureDialog from '../dialogs/PhotoCaptureDialog.vue'
 import type { ProductionScheduleItem } from '@/stores/kitchenKpi'
 import type { ScaledIngredient } from '@/views/kitchen/calculator/composables/useRecipeScaling'
 
-const props = defineProps<{
-  task: ProductionScheduleItem
-  modelValue: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    task: ProductionScheduleItem
+    modelValue: boolean
+    initialTab?: 'recipe' | 'complete'
+  }>(),
+  { initialTab: 'complete' }
+)
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -69,7 +73,7 @@ watch(
   () => props.modelValue,
   open => {
     if (open) {
-      activeTab.value = 'complete'
+      activeTab.value = props.initialTab
       qtyDisplay.value = ''
       // Default to portions for portion-type preparations
       const prep = recipesStore.preparations.find(p => p.id === props.task.preparationId)
@@ -202,7 +206,7 @@ const photoRequired = computed(() => !isWriteOff.value)
 const parsedQty = computed(() => parsedQtyInBaseUnit.value)
 const canComplete = computed(() => {
   if (parsedQty.value < 1) return false
-  if (!isWriteOff.value && !staffMemberId.value) return false
+  if (!staffMemberId.value) return false
   if (photoRequired.value && !photoUrl.value && !photoSkipped.value) return false
   return true
 })
@@ -486,7 +490,7 @@ function handleComplete() {
           <StaffPicker
             v-model="staffMemberId"
             :department="task.department"
-            :required="!isWriteOff"
+            :required="true"
             label="Who did this?"
             @update:staff-member="handleStaffUpdate"
           />
