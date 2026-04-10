@@ -18,5 +18,8 @@ ALTER TABLE production_schedule ADD COLUMN IF NOT EXISTS is_quick_completion BOO
 -- Index for staff queries
 CREATE INDEX IF NOT EXISTS idx_production_schedule_staff ON production_schedule(staff_member_id) WHERE staff_member_id IS NOT NULL;
 
+-- Index for KPI dashboard date range queries
+CREATE INDEX IF NOT EXISTS idx_production_schedule_date_dept ON production_schedule(schedule_date, department);
+
 -- Reload PostgREST schema cache
 NOTIFY pgrst, 'reload schema';

@@ -60,8 +60,15 @@ export interface RitualCustomTask {
   department: string
   sortOrder: number
   isActive: boolean
+  requiresNote: boolean
+  checklistItems?: RitualChecklistItem[]
   createdAt: string
   updatedAt: string
+}
+
+export interface RitualChecklistItem {
+  label: string
+  required?: boolean
 }
 
 /**
@@ -75,6 +82,8 @@ export interface RitualCustomTaskRow {
   department: string
   sort_order: number
   is_active: boolean
+  requires_note: boolean
+  checklist_items: RitualChecklistItem[] | null
   created_at: string
   updated_at: string
 }
@@ -132,6 +141,13 @@ export interface RitualTaskDetail {
   unit?: string
   // Legacy alias
   quantity?: number
+  // Staff accountability (Phase 4)
+  staffMemberId?: string
+  staffMemberName?: string
+  // Notes (for requires_note custom tasks)
+  notes?: string
+  // Per-task timing
+  durationSeconds?: number
 }
 
 /**

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useStaffStore } from '@/stores/staff'
 import type { StaffMember } from '@/stores/staff/types'
 
@@ -25,17 +25,19 @@ const emit = defineEmits<{
 
 const staffStore = useStaffStore()
 
+// Ensure staff data is loaded (may not be initialized in kitchen context)
+onMounted(async () => {
+  if (!staffStore.initialized) {
+    await staffStore.initialize()
+  }
+})
+
 const filteredMembers = computed(() => {
   const active = staffStore.activeMembers
   if (props.department) {
     return active.filter(m => m.department === props.department)
   }
   return active
-})
-
-const selectedMember = computed(() => {
-  if (!props.modelValue) return undefined
-  return filteredMembers.value.find(m => m.id === props.modelValue)
 })
 
 function onSelect(memberId: string | undefined) {

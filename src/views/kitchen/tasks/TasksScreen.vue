@@ -388,7 +388,8 @@ function handleComplete(
   quantity: number,
   staffMemberId?: string,
   staffMemberName?: string,
-  startedAt?: string
+  startedAt?: string,
+  photoUrl?: string
 ): void {
   const preparation = recipesStore.preparations.find(p => p.id === task.preparationId)
   if (!preparation) {
@@ -404,8 +405,11 @@ function handleComplete(
       status: 'completed',
       completedAt: new Date().toISOString(),
       completedByName: staffMemberName || authStore.userName,
+      staffMemberId: staffMemberId,
       staffMemberName: staffMemberName,
-      completedQuantity: quantity
+      completedQuantity: quantity,
+      photoUrl,
+      startedAt
     }
   }
 
@@ -460,7 +464,8 @@ function handleComplete(
       // Production Control fields
       staffMemberId,
       staffMemberName,
-      startedAt
+      startedAt,
+      photoUrl
     },
     {
       onSuccess: () => {

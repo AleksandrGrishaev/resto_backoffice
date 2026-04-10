@@ -1,5 +1,32 @@
 # Sprint: Kitchen Production Control System
 
+## Status (2026-04-10)
+
+| Phase                                   | Status   | Migrations     |
+| --------------------------------------- | -------- | -------------- |
+| 1. Foundation (DB + Staff + Categories) | ✅ Done  | 290 (DEV)      |
+| 2. Production Card + v2 Redesign        | ✅ Done  | —              |
+| 3. Photo Verification                   | ✅ Done  | 291, 292 (DEV) |
+| 4. Ritual & Control Points              | ✅ Done  | 293 (DEV)      |
+| 5. Help / Instructions                  | Deferred | —              |
+| 6. KPI & Manager Dashboard              | ✅ Done  | 294 (DEV)      |
+| Code Review Fixes                       | ✅ Done  | —              |
+
+**PROD pending:** Migrations 290-294 + seed control tasks. See `PRODUCTION_RELEASE.md` for full checklist.
+
+**Key files changed this sprint:**
+
+- `ProductionCard.vue` — dialog with tabs (Complete + Recipe), numpad, yield, portions
+- `TaskCard.vue` — opens dialog on tap
+- `StaffPicker.vue` — self-initializing staffStore
+- `RitualDialog.vue` — staff per task, note dialog, per-task timing, numpad fix
+- `PhotoCaptureDialog.vue` + `useProductionPhoto.ts` — camera capture + upload
+- `ProductionKpiScreen.vue` — admin dashboard with staff table
+- `measurementUnits.ts` — unit alias mapping (gr→gram, pc→piece)
+- `useRecipeScaling.ts` — yield adjustment for ingredients
+
+---
+
 ## Problem
 
 Kitchen staff doesn't use the system meaningfully. The digital system and physical kitchen are separate realities:
@@ -370,43 +397,67 @@ src/views/kitchen/preparation/components/StockListTab.vue -- category grouping
 
 ## IMPLEMENTATION PHASES
 
-### Phase 1: Foundation (DB + Staff + Categories)
+### Phase 1: Foundation (DB + Staff + Categories) ✅ DONE
 
-- [ ] Create `staff_members` table + seed with real kitchen/bar staff names
-- [ ] Create StaffPicker component (dropdown filtered by department)
-- [ ] DB migration: add staff_member_id, photo_url, started_at fields to production_schedule
-- [ ] Group tasks by `preparation.type` (category UUID → name + emoji)
-- [ ] Collapsible category sections with summary badges
-- [ ] Group preparations in StockListTab by category
-- [ ] Category filter chips
+- [x] Create `staff_members` table + seed with real kitchen/bar staff names — already existed (DEV: 11 staff, PROD: 8 staff)
+- [x] Create StaffPicker component (dropdown filtered by department) — `StaffPicker.vue`
+- [x] DB migration: add staff_member_id, photo_url, started_at fields to production_schedule — migration 290 (DEV applied)
+- [x] Group tasks by `preparation.type` (category UUID → name + emoji) — `TasksScreen.vue` + `CategoryGroup.vue`
+- [x] Collapsible category sections with summary badges — `CategoryGroup.vue`
+- [x] Group preparations in StockListTab by category — `StockListTab.vue` with collapsible headers + status summary
+- [ ] Category filter chips — deferred (grouping is sufficient for now)
+- [x] Staff store added to kitchen initialization dependencies — `dependencies.ts`
 
-### Phase 2: Production Card (expandable task with staff picker)
+### Phase 2: Production Card (expandable task with staff picker) ✅ DONE
 
-- [ ] Create ProductionCard.vue with scaled ingredients (useRecipeScaling)
-- [ ] Show instructions field from preparation/recipe
-- [ ] Show storage location per ingredient
-- [ ] Make TaskCard expandable (tap to open ProductionCard)
-- [ ] Integrate StaffPicker into ProductionCard — required field
-- [ ] Remove pre-fill of target quantity — empty field, manual entry required
-- [ ] Timer: track started_at when task expanded
+- [x] Create ProductionCard.vue with scaled ingredients (useRecipeScaling)
+- [x] Show instructions field from preparation/recipe
+- [x] Show storage location per ingredient (Fridge/Freezer/Shelf icon)
+- [x] Make TaskCard expandable (tap to open ProductionCard, close to collapse)
+- [x] Integrate StaffPicker into ProductionCard — required field for production, optional for write-off
+- [x] Remove pre-fill of target quantity — empty field, manual entry required
+- [x] Timer: track started_at when task expanded (MM:SS elapsed display)
+- [x] Code review: fixed staff store init, error handling, stale data, write-off staff fields
+- [x] **v2 Redesign**: ProductionCard → dialog with 2 tabs (Complete + Recipe)
+- [x] **Numpad popup**: tap qty card → popup numpad, also for Scale-to calculator
+- [x] **Yield support**: ingredients show purchase qty with yield % (e.g. "285.7 g (70% yield)")
+- [x] **Portion support**: portion-type preps show toggle (portions / base unit), conversion display
+- [x] **Unit aliases**: `gr→gram`, `pc→piece` fix in `measurementUnits.ts` (no more "?" units)
+- [x] **StaffPicker self-init**: auto-loads staffStore if not initialized (fixes kitchen tablet)
 
-### Phase 3: Photo Verification
+### Phase 3: Photo Verification ✅ DONE
 
-- [ ] Create `production-photos` Supabase Storage bucket + RLS
-- [ ] Create useProductionPhoto composable (capture + compress + upload)
-- [ ] Create PhotoCaptureDialog (camera → preview → confirm)
-- [ ] Integrate into task completion: photo required before "Complete"
-- [ ] Photo cleanup: 7-day retention (Edge Function or pg_cron)
+- [x] Create `production-photos` Supabase Storage bucket + RLS — migration 291 (DEV applied)
+- [x] Create useProductionPhoto composable (capture + compress 800px WebP + upload) — `src/composables/useProductionPhoto.ts`
+- [x] Create PhotoCaptureDialog (camera → preview → retake/confirm) — `src/views/kitchen/tasks/dialogs/PhotoCaptureDialog.vue`
+- [x] Integrate into task completion: photo required for production tasks before "Complete" — ProductionCard + TaskCard + TasksScreen emit chain updated
+- [x] Photo cleanup: 7-day retention via pg_cron — migration 292 (DEV applied, daily at 03:00 UTC)
 
-### Phase 4: Ritual & Control Points
+### Phase 4: Ritual & Control Points ✅ DONE
 
-- [ ] Fix afternoon CHECK constraint on ritual_custom_tasks + ritual_completions
-- [ ] Extend ritual custom tasks: requires_note, checklist_items
-- [ ] Seed default control check tasks (fridge check, label verification, etc.)
-- [ ] Add StaffPicker to RitualDialog — per-task "who did this"
-- [ ] Track actual_duration_minutes (started_at → completed_at)
-- [ ] Flag quick completions (< min time for preparation)
-- [ ] Per-custom-task completed_by tracking in ritual task_details JSONB
+- [x] Fix afternoon CHECK constraint on ritual_custom_tasks + ritual_completions — migration 293 (DEV applied)
+- [x] Extend ritual custom tasks: requires_note, checklist_items — migration 293
+- [x] Seed default control check tasks — 13 tasks (5 morning, 3 afternoon, 4 evening) on DEV
+- [x] Add StaffPicker to RitualDialog — per-task "who did this" in both qty dialog and note dialog
+- [x] Track per-task duration (taskStartTimes → taskDurations) — recorded in RitualTaskDetail.durationSeconds
+- [x] Note dialog for requires_note custom tasks — text + staff picker
+- [x] Per-custom-task completed_by tracking in ritual task_details JSONB — staffMemberId/staffMemberName/notes/durationSeconds
+
+### Code Review Fixes (cross-phase, 2026-04-09)
+
+- [x] Migration 291 idempotency: added `DROP POLICY IF EXISTS` before `CREATE POLICY`
+- [x] Migration 292 idempotency: added `cron.unschedule` before `cron.schedule`
+- [x] RLS `is_staff()` on storage policies (was `TO authenticated` only)
+- [x] File size mismatch: client 5MB = bucket 5MB
+- [x] Blob type validation: handle empty string `file.type`
+- [x] Photo remove: added `.catch()` error handling
+- [x] Optimistic update: added `staffMemberId`, `startedAt`, `photoUrl`
+- [x] KPI dashboard timezone: Bali time (`Asia/Makassar`) instead of UTC
+- [x] Performance index: `idx_production_schedule_date_dept(schedule_date, department)`
+- [x] RitualDialog: hardcoded department → dynamic `noteDialogTask.department`
+- [x] RitualDialog: non-null assertion → optional chaining
+- [x] RitualDialog: numpad pre-fill replaces on first keypress
+- [x] RitualDialog: custom task start time for non-requiresNote tasks
 
 ### Phase 5: Help / Instructions (separate sprint)
 
@@ -416,12 +467,16 @@ src/views/kitchen/preparation/components/StockListTab.vue -- category grouping
 - [ ] Fill in `instructions` field for all 63 active preparations
 - [ ] Generate printable prep sheets (PDF)
 
-### Phase 6: KPI & Manager Dashboard (separate sprint)
+### Phase 6: KPI & Manager Dashboard ✅ DONE
 
-- [ ] Per-staff KPI aggregation from staff_member_id
-- [ ] Manager dashboard: per-person production count, quick-completions, photos
-- [ ] Weekly report: who did what, accuracy, speed
-- [ ] Optional: task pre-assignment per person (daily rotation)
+- [x] Per-staff KPI aggregation RPC `get_staff_production_kpi` — migration 294 (DEV applied)
+- [x] Manager dashboard screen in Admin panel — `ProductionKpiScreen.vue` at admin/production-kpi
+- [x] Summary cards: tasks completed, total produced, photo rate, quick completions, rituals, M/A/E breakdown
+- [x] Per-staff sortable table: name, done count, qty, completion rate, photo rate, quick completions, avg duration, active days
+- [x] Date range filter: Today / 7 Days / 30 Days
+- [x] Ritual summary: total rituals, avg duration, avg completion rate, by type breakdown
+- [ ] Weekly report: who did what, accuracy, speed (deferred — future sprint)
+- [ ] Optional: task pre-assignment per person (deferred — future sprint)
 
 ---
 

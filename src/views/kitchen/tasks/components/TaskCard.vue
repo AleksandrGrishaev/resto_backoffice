@@ -1,18 +1,8 @@
 <!-- src/views/kitchen/tasks/components/TaskCard.vue -->
-<!-- Kanban task card — tap to expand into full ProductionCard -->
+<!-- Kanban task card — tap to open ProductionCard dialog -->
 <template>
-  <!-- Expanded: show ProductionCard -->
-  <ProductionCard
-    v-if="expanded && !isCompleted"
-    :task="task"
-    @complete="handleProductionComplete"
-    @write-off="handleProductionWriteOff"
-    @close="expanded = false"
-  />
-
   <!-- Collapsed: compact row -->
   <div
-    v-else
     class="task-card"
     :class="{
       'task-completed': isCompleted,
@@ -43,7 +33,7 @@
           {{ task.targetQuantity }}{{ task.targetUnit }}
         </span>
         <span v-if="!isCompleted" class="meta-expand">
-          <v-icon size="14" color="primary">mdi-chevron-down</v-icon>
+          <v-icon size="14" color="primary">mdi-open-in-new</v-icon>
         </span>
       </div>
 
@@ -59,10 +49,20 @@
           <v-icon size="10">mdi-account</v-icon>
           {{ task.staffMemberName }}
         </span>
+        <v-icon v-if="task.photoUrl" size="10" color="primary">mdi-camera</v-icon>
         <span v-if="task.completedAt" class="done-time">{{ formatTime(task.completedAt) }}</span>
       </div>
     </div>
   </div>
+
+  <!-- Production Card Dialog -->
+  <ProductionCard
+    v-if="showDialog"
+    v-model="showDialog"
+    :task="task"
+    @complete="handleProductionComplete"
+    @write-off="handleProductionWriteOff"
+  />
 </template>
 
 <script setup lang="ts">
@@ -80,7 +80,8 @@ const emit = defineEmits<{
     quantity: number,
     staffMemberId?: string,
     staffMemberName?: string,
-    startedAt?: string
+    startedAt?: string,
+    photoUrl?: string
   ]
   'write-off': [
     task: ProductionScheduleItem,
@@ -90,7 +91,7 @@ const emit = defineEmits<{
   ]
 }>()
 
-const expanded = ref(false)
+const showDialog = ref(false)
 
 const isCompleted = computed(() => props.task.status === 'completed')
 const isWriteOff = computed(() => props.task.taskType === 'write_off')
@@ -110,7 +111,7 @@ const taskColor = computed(() => {
 
 function handleTap(): void {
   if (!isCompleted.value) {
-    expanded.value = true
+    showDialog.value = true
   }
 }
 
@@ -119,10 +120,11 @@ function handleProductionComplete(
   qty: number,
   staffMemberId?: string,
   staffMemberName?: string,
-  startedAt?: string
+  startedAt?: string,
+  photoUrl?: string
 ): void {
-  expanded.value = false
-  emit('complete', task, qty, staffMemberId, staffMemberName, startedAt)
+  showDialog.value = false
+  emit('complete', task, qty, staffMemberId, staffMemberName, startedAt, photoUrl)
 }
 
 function handleProductionWriteOff(
@@ -131,7 +133,7 @@ function handleProductionWriteOff(
   staffMemberId?: string,
   staffMemberName?: string
 ): void {
-  expanded.value = false
+  showDialog.value = false
   emit('write-off', task, qty, staffMemberId, staffMemberName)
 }
 

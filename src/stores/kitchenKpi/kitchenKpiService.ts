@@ -134,6 +134,8 @@ function ritualCustomTaskFromSupabase(row: RitualCustomTaskRow): RitualCustomTas
     department: row.department,
     sortOrder: row.sort_order,
     isActive: row.is_active,
+    requiresNote: row.requires_note ?? false,
+    checklistItems: row.checklist_items ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
