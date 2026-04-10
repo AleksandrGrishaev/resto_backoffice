@@ -730,17 +730,16 @@ export class PreparationService {
 
   calculateFifoAllocation(
     preparationId: string,
-    department: PreparationDepartment,
+    _department: PreparationDepartment,
     quantity: number
   ): { allocations: BatchAllocation[]; remainingQuantity: number } {
     try {
+      // Filter batches by preparationId only (not batch's department field)
+      // This matches recalculateBalances logic which uses preparation's department
+      // from recipesStore, not the batch's own department field
+      // Freezer batches are included — kitchen can use frozen preparations directly
       const batches = this.batches.filter(
-        b =>
-          b.preparationId === preparationId &&
-          b.department === department &&
-          b.status === 'active' &&
-          b.currentQuantity > 0 &&
-          b.storageLocation !== 'freezer' // Frozen batches must be thawed before use
+        b => b.preparationId === preparationId && b.status === 'active' && b.currentQuantity > 0
       )
 
       return this.calculateFifoAllocationHelper(batches, quantity)
@@ -782,16 +781,25 @@ export class PreparationService {
       for (const item of data.items) {
         const preparationInfo = this.getPreparationInfo(item.preparationId)
 
+        let writeOffQty = item.quantity
         const { allocations, remainingQuantity } = this.calculateFifoAllocation(
           item.preparationId,
           data.department,
-          item.quantity
+          writeOffQty
         )
 
         if (remainingQuantity > 0) {
-          throw new Error(
-            `Insufficient stock for ${preparationInfo.name}. Missing: ${remainingQuantity} ${preparationInfo.unit}`
+          // Clamp to available stock instead of throwing
+          const allocatedQty = writeOffQty - remainingQuantity
+          if (allocatedQty <= 0) {
+            DebugUtils.warn(MODULE_NAME, `Skipping ${preparationInfo.name}: no stock in batches`)
+            continue
+          }
+          DebugUtils.warn(
+            MODULE_NAME,
+            `Clamping ${preparationInfo.name} write-off from ${writeOffQty} to ${allocatedQty} (batch stock)`
           )
+          writeOffQty = allocatedQty
         }
 
         const totalCost = allocations.reduce(
@@ -803,7 +811,7 @@ export class PreparationService {
           id: `prep-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           preparationId: item.preparationId,
           preparationName: preparationInfo.name,
-          quantity: item.quantity,
+          quantity: writeOffQty,
           unit: preparationInfo.unit,
           batchAllocations: allocations,
           totalCost,
@@ -862,6 +870,10 @@ export class PreparationService {
             this.batches[batchIndex] = batch
           }
         }
+      }
+
+      if (operationItems.length === 0) {
+        throw new Error('No items with available stock to write off')
       }
 
       const operation: PreparationOperation = {

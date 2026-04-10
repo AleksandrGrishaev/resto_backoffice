@@ -43,6 +43,23 @@
               <v-icon size="36" color="grey">mdi-check-all</v-icon>
             </div>
 
+            <!-- Custom tasks (checkbox style, shown first) -->
+            <div
+              v-for="ct in todoCustomTasks"
+              :key="ct.id"
+              class="ritual-item item-custom"
+              @click="toggleCustomTask(ct)"
+            >
+              <v-icon size="22" color="grey">mdi-checkbox-blank-outline</v-icon>
+              <div class="item-body">
+                <div class="item-name">{{ ct.name }}</div>
+                <div v-if="ct.requiresNote" class="item-meta">
+                  <v-icon size="12" color="warning">mdi-note-edit-outline</v-icon>
+                  <span class="text-caption text-warning">note required</span>
+                </div>
+              </div>
+            </div>
+
             <!-- Schedule tasks -->
             <div
               v-for="task in todoScheduleTasks"
@@ -89,23 +106,6 @@
                     <span class="ri-badge-qty">{{ Math.round(task.maxDailyConsumption) }}</span>
                     <span class="ri-badge-label">max</span>
                   </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Custom tasks (checkbox style) -->
-            <div
-              v-for="ct in todoCustomTasks"
-              :key="ct.id"
-              class="ritual-item item-custom"
-              @click="toggleCustomTask(ct)"
-            >
-              <v-icon size="22" color="grey">mdi-checkbox-blank-outline</v-icon>
-              <div class="item-body">
-                <div class="item-name">{{ ct.name }}</div>
-                <div v-if="ct.requiresNote" class="item-meta">
-                  <v-icon size="12" color="warning">mdi-note-edit-outline</v-icon>
-                  <span class="text-caption text-warning">note required</span>
                 </div>
               </div>
             </div>
@@ -310,23 +310,51 @@
           </div>
         </v-card>
       </v-dialog>
-      <!-- Note Dialog (for requires_note custom tasks) -->
-      <v-dialog v-model="showNoteDialog" max-width="400" persistent>
+      <!-- Rating Dialog (for requires_note custom tasks) -->
+      <v-dialog v-model="showNoteDialog" max-width="360" persistent>
         <v-card v-if="noteDialogTask" class="note-dialog-card">
           <v-card-title class="text-body-1 font-weight-bold">
-            <v-icon start size="20">mdi-note-edit-outline</v-icon>
+            <v-icon start size="20">mdi-clipboard-check-outline</v-icon>
             {{ noteDialogTask.name }}
           </v-card-title>
           <v-card-text class="pb-2">
+            <div class="rating-buttons">
+              <v-btn
+                :variant="noteDialogRating === 'bad' ? 'flat' : 'outlined'"
+                color="error"
+                class="rating-btn"
+                @click="noteDialogRating = 'bad'"
+              >
+                Bad
+              </v-btn>
+              <v-btn
+                :variant="noteDialogRating === 'good' ? 'flat' : 'outlined'"
+                color="warning"
+                class="rating-btn"
+                @click="noteDialogRating = 'good'"
+              >
+                Good
+              </v-btn>
+              <v-btn
+                :variant="noteDialogRating === 'excellent' ? 'flat' : 'outlined'"
+                color="success"
+                class="rating-btn"
+                @click="noteDialogRating = 'excellent'"
+              >
+                Excellent
+              </v-btn>
+            </div>
+            <!-- Comment: required for bad, optional for good, hidden for excellent -->
             <v-textarea
+              v-if="noteDialogRating === 'bad' || noteDialogRating === 'good'"
               v-model="noteDialogText"
-              label="Notes (what was found/done?)"
+              :label="noteDialogRating === 'bad' ? 'Comment (required)' : 'Comment (optional)'"
               variant="outlined"
-              rows="3"
+              rows="2"
               auto-grow
               density="compact"
               hide-details
-              class="mb-3"
+              class="mt-3"
             />
             <StaffPicker
               v-model="noteDialogStaffId"
@@ -334,6 +362,7 @@
               :required="true"
               dense
               label="Who did this?"
+              class="mt-3"
               @update:staff-member="handleNoteStaffUpdate"
             />
           </v-card-text>
@@ -343,7 +372,11 @@
             <v-btn
               color="success"
               variant="flat"
-              :disabled="!noteDialogText.trim() || !noteDialogStaffId"
+              :disabled="
+                !noteDialogRating ||
+                !noteDialogStaffId ||
+                (noteDialogRating === 'bad' && !noteDialogText.trim())
+              "
               @click="confirmNoteDialog"
             >
               <v-icon start>mdi-check</v-icon>
@@ -422,6 +455,9 @@ const showCongrats = ref(false)
 // Local "in progress" state (UI only, not persisted)
 const inProgressIds = reactive(new Set<string>())
 
+// Local "completed" schedule tasks (tracks completions before store propagates)
+const completedScheduleIds = reactive(new Set<string>())
+
 // Custom tasks completion tracking (local state)
 const completedCustomTaskIds = reactive(new Set<string>())
 
@@ -438,16 +474,19 @@ const qtyDialogPrefilled = ref(false) // True until first keypress replaces the 
 
 // Per-task staff tracking
 const taskStaff = reactive(new Map<string, { id: string; name: string }>())
-// Per-task notes (for requires_note custom tasks)
+// Per-task notes (for custom tasks)
 const taskNotes = reactive(new Map<string, string>())
+// Per-task ratings (bad/good/excellent)
+const taskRatings = reactive(new Map<string, string>())
 // Per-task start times (for duration tracking)
 const taskStartTimes = reactive(new Map<string, number>()) // taskId → Date.now()
 // Per-task duration (recorded on completion)
 const taskDurations = reactive(new Map<string, number>()) // taskId → seconds
 
-// Custom task note dialog
+// Custom task rating dialog
 const showNoteDialog = ref(false)
 const noteDialogTask = ref<RitualCustomTask | null>(null)
+const noteDialogRating = ref('')
 const noteDialogText = ref('')
 const noteDialogStaffId = ref<string>()
 const noteDialogStaffName = ref<string>()
@@ -516,17 +555,23 @@ const allRitualTasks = computed(() => {
   return [...scheduleTasks, ...customTasks]
 })
 
-/** Schedule tasks by status */
+/** Schedule tasks by status (use local completedScheduleIds for immediate UI feedback) */
 const todoScheduleTasks = computed(() =>
-  props.tasks.filter(t => t.status !== 'completed' && !inProgressIds.has(t.id))
+  props.tasks.filter(
+    t => t.status !== 'completed' && !completedScheduleIds.has(t.id) && !inProgressIds.has(t.id)
+  )
 )
 
 const inProgressTasks = computed(() =>
-  props.tasks.filter(t => t.status !== 'completed' && inProgressIds.has(t.id))
+  props.tasks.filter(
+    t => t.status !== 'completed' && !completedScheduleIds.has(t.id) && inProgressIds.has(t.id)
+  )
 )
 
 const doneScheduleTasks = computed(() => {
-  const completed = props.tasks.filter(t => t.status === 'completed')
+  const completed = props.tasks.filter(
+    t => t.status === 'completed' || completedScheduleIds.has(t.id)
+  )
   return [...completed].sort((a, b) => {
     const ta = a.completedAt ? new Date(a.completedAt).getTime() : 0
     const tb = b.completedAt ? new Date(b.completedAt).getTime() : 0
@@ -646,24 +691,22 @@ function startTask(task: ProductionScheduleItem): void {
   taskStartTimes.set(task.id, Date.now())
 }
 
-/** Toggle custom task completion */
+/** Toggle custom task completion — always show rating dialog */
 function toggleCustomTask(task: RitualCustomTask): void {
   if (completedCustomTaskIds.has(task.id)) {
     completedCustomTaskIds.delete(task.id)
     taskNotes.delete(task.id)
+    taskRatings.delete(task.id)
     taskStaff.delete(task.id)
     taskDurations.delete(task.id)
-  } else if (task.requiresNote) {
-    // Open note dialog for requires_note tasks
+  } else {
     noteDialogTask.value = task
     noteDialogText.value = ''
+    noteDialogRating.value = ''
     noteDialogStaffId.value = undefined
     noteDialogStaffName.value = undefined
     taskStartTimes.set(task.id, Date.now())
     showNoteDialog.value = true
-  } else {
-    taskStartTimes.set(task.id, Date.now()) // instant — duration will be ~0s
-    completeCustomTask(task.id)
   }
 }
 
@@ -680,6 +723,7 @@ function completeCustomTask(taskId: string): void {
 function confirmNoteDialog(): void {
   if (!noteDialogTask.value) return
   const taskId = noteDialogTask.value.id
+  taskRatings.set(taskId, noteDialogRating.value)
   if (noteDialogText.value.trim()) {
     taskNotes.set(taskId, noteDialogText.value.trim())
   }
@@ -726,8 +770,9 @@ function handleProductionCardComplete(
   if (startTime) {
     taskDurations.set(task.id, Math.round((Date.now() - startTime) / 1000))
   }
-  // Remove from in-progress
+  // Remove from in-progress, mark as locally completed
   inProgressIds.delete(task.id)
+  completedScheduleIds.add(task.id)
   // Emit to parent
   emit('complete', task, qty, staffMemberId, staffMemberName, taskStartedAt)
   // Expand done column
@@ -751,6 +796,7 @@ function handleProductionCardWriteOff(
     taskDurations.set(task.id, Math.round((Date.now() - startTime) / 1000))
   }
   inProgressIds.delete(task.id)
+  completedScheduleIds.add(task.id)
   emit('write-off', task, qty, staffMemberId, staffMemberName)
   doneCollapsed.value = false
   productionCardTask.value = null
@@ -808,8 +854,9 @@ function confirmQtyDialog(): void {
     taskDurations.set(task.id, Math.round((Date.now() - startTime) / 1000))
   }
 
-  // Remove from in-progress
+  // Remove from in-progress, mark as locally completed
   inProgressIds.delete(task.id)
+  completedScheduleIds.add(task.id)
 
   // Emit to parent (with staff info for Production Control)
   const staffId = qtyDialogStaffId.value
@@ -867,10 +914,11 @@ function handleFinishRitual(): void {
     })
   }
 
-  // Custom tasks — track completion time, staff, notes
+  // Custom tasks — track completion time, staff, rating, notes
   for (const ct of props.customTasks) {
     const isDone = completedCustomTaskIds.has(ct.id)
     const staff = taskStaff.get(ct.id)
+    const rating = taskRatings.get(ct.id)
     const notes = taskNotes.get(ct.id)
     const duration = taskDurations.get(ct.id)
     taskDetails.push({
@@ -881,6 +929,7 @@ function handleFinishRitual(): void {
       completedAt: isDone ? now : undefined,
       staffMemberId: staff?.id,
       staffMemberName: staff?.name,
+      rating: rating as 'bad' | 'good' | 'excellent' | undefined,
       notes,
       durationSeconds: duration
     })
@@ -1328,5 +1377,20 @@ function formatTime(isoDate: string): string {
 /* Note dialog */
 .note-dialog-card {
   border-radius: 12px !important;
+}
+
+.rating-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.rating-btn {
+  flex: 1;
+  height: 44px !important;
+  min-width: 0 !important;
+  padding: 0 8px !important;
+  font-size: 12px !important;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 </style>
