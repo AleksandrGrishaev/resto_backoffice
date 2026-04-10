@@ -156,13 +156,13 @@ import { useAuthStore } from '@/stores/auth'
 import { useRecipesStore } from '@/stores/recipes'
 import { useRecommendations } from '@/stores/kitchenKpi/composables/useRecommendations'
 import { useBackgroundTasks } from '@/core/background'
-import { DebugUtils } from '@/utils'
+import { DebugUtils, TimeUtils } from '@/utils'
 import TaskCard from './components/TaskCard.vue'
 import CategoryGroup from './components/CategoryGroup.vue'
 import RitualBanner from './components/RitualBanner.vue'
 import RitualDialog from './dialogs/RitualDialog.vue'
 import type { ProductionScheduleItem } from '@/stores/kitchenKpi'
-import type { RitualTaskDetail } from '@/stores/kitchenKpi/types'
+import type { RitualTaskDetail, CreateScheduleItemData } from '@/stores/kitchenKpi/types'
 import { RITUAL_WINDOWS } from '@/stores/kitchenKpi/types'
 
 const MODULE_NAME = 'TasksScreen'
@@ -352,7 +352,10 @@ async function autoGenerateIfNeeded(): Promise<void> {
   const isStale = Date.now() - lastGenTime > TWELVE_HOURS_MS
   const hasPendingTasks = kpiStore.scheduleItems.some(i => i.status === 'pending')
 
-  // Don't regenerate if there are pending tasks (avoid duplicating existing tasks)
+  // Always ensure expired write-off tasks exist, even when production tasks are pending
+  await ensureExpiredWriteOffTasks()
+
+  // Don't regenerate production if there are pending tasks (avoid duplicating existing tasks)
   if (hasPendingTasks) return
   // Don't regenerate if recently generated and no pending tasks (all done, nothing to add)
   if (!isStale) return
@@ -368,6 +371,66 @@ async function autoGenerateIfNeeded(): Promise<void> {
     localStorage.setItem(lastGenKey, new Date().toISOString())
   } catch (err) {
     DebugUtils.error(MODULE_NAME, 'Auto-generation failed', { error: err })
+  }
+}
+
+/**
+ * Ensure write-off tasks exist for all expired preparations.
+ * Runs every time tasks load — upsert prevents duplicates.
+ */
+async function ensureExpiredWriteOffTasks(): Promise<void> {
+  try {
+    const department = userDepartment.value
+    const balances = preparationStore.state.balances || []
+    const deptBalances = balances.filter(b => b.department === department || b.department === 'all')
+
+    // Find expired items that don't have a pending write-off task today
+    const existingWriteOffPrepIds = new Set(
+      kpiStore.scheduleItems
+        .filter(i => i.taskType === 'write_off' && i.status !== 'cancelled')
+        .map(i => i.preparationId)
+    )
+
+    const missingWriteOffs: CreateScheduleItemData[] = []
+
+    for (const balance of deptBalances) {
+      if (!balance.hasExpired) continue
+      if (existingWriteOffPrepIds.has(balance.preparationId)) continue
+
+      const expiredQty =
+        balance.batches
+          ?.filter(b => b.status === 'expired')
+          .reduce((sum, b) => sum + (b.currentQuantity || 0), 0) || 0
+      if (expiredQty <= 0) continue
+
+      const prep = recipesStore.preparations?.find(p => p.id === balance.preparationId)
+      const unitMap: Record<string, string> = { ml: 'ml', piece: 'pc' }
+      const displayUnit = unitMap[prep?.outputUnit || ''] || 'g'
+
+      missingWriteOffs.push({
+        preparationId: balance.preparationId,
+        preparationName: balance.preparationName,
+        department,
+        scheduleDate: TimeUtils.getCurrentLocalDate(),
+        productionSlot: 'urgent',
+        targetQuantity: Math.round(expiredQty),
+        targetUnit: displayUnit,
+        priority: 100,
+        recommendationReason: `Write-off expired: ${Math.round(expiredQty)}${displayUnit}`,
+        currentStockAtGeneration: balance.totalQuantity,
+        taskType: 'write_off'
+      })
+    }
+
+    if (missingWriteOffs.length > 0) {
+      await kpiStore.createScheduleItems(missingWriteOffs)
+      await kpiStore.loadSchedule({ department })
+      DebugUtils.info(MODULE_NAME, 'Added expired write-off tasks', {
+        count: missingWriteOffs.length
+      })
+    }
+  } catch (err) {
+    DebugUtils.error(MODULE_NAME, 'Failed to ensure expired write-off tasks', { error: err })
   }
 }
 
