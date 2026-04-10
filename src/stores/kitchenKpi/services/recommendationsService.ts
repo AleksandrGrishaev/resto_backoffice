@@ -644,10 +644,11 @@ function generateWriteOffRecommendations(
   for (const balance of balances) {
     if (!balance.hasExpired) continue
 
-    // Calculate expired quantity from batches
+    // Calculate expired quantity from batches (check expiry date, not status field)
+    const now = new Date()
     const expiredQuantity =
       balance.batches
-        ?.filter(b => b.status === 'expired')
+        ?.filter(b => b.currentQuantity > 0 && b.expiryDate && new Date(b.expiryDate) < now)
         .reduce((sum, b) => sum + (b.currentQuantity || 0), 0) || 0
 
     if (expiredQuantity <= 0) continue

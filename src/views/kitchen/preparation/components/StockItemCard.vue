@@ -27,7 +27,7 @@
           <v-icon size="22" :color="storageColorMap[loc] || 'teal'">
             {{ storageIconMap[loc] || 'mdi-fridge' }}
           </v-icon>
-          <span class="storage-loc-qty">{{ formatQty(qty) }}</span>
+          <span v-if="hasMultipleLocations" class="storage-loc-qty">{{ formatQty(qty) }}</span>
         </div>
       </div>
 

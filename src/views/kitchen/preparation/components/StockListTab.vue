@@ -366,6 +366,9 @@ function handleTransfer(balance: PreparationBalance, batch?: any): void {
 
 .category-section {
   margin-bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .category-header {
