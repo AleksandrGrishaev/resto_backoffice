@@ -111,7 +111,7 @@ import type { ChangeLogEntry } from '@/core/changelog'
 import { getFieldLabel, formatFieldValue } from '@/core/changelog'
 
 interface Props {
-  entityType: 'recipe' | 'preparation'
+  entityType: 'recipe' | 'preparation' | 'product'
   entityId: string
 }
 

@@ -6,6 +6,7 @@ import type {
   Preparation,
   PreparationIngredient
 } from '@/stores/recipes/types'
+import type { Product } from '@/stores/productsStore/types'
 
 // =============================================
 // TYPES
@@ -58,6 +59,20 @@ const PREPARATION_TRACKED_FIELDS = [
   'portionSize',
   'preparationTime',
   'shelfLife'
+] as const
+
+const PRODUCT_TRACKED_FIELDS = [
+  'name',
+  'category',
+  'baseUnit',
+  'baseCostPerUnit',
+  'yieldPercentage',
+  'canBeSold',
+  'isActive',
+  'description',
+  'storageConditions',
+  'shelfLife',
+  'minStock'
 ] as const
 
 // =============================================
@@ -277,5 +292,15 @@ export function computePreparationDiff(
     fields,
     components,
     hasChanges: fields.length > 0 || components.length > 0
+  }
+}
+
+export function computeProductDiff(oldProduct: Product, newData: Partial<Product>): EntityDiff {
+  const fields = diffFields(oldProduct, newData, PRODUCT_TRACKED_FIELDS)
+
+  return {
+    fields,
+    components: [],
+    hasChanges: fields.length > 0
   }
 }

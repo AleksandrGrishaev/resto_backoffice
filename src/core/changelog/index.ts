@@ -1,6 +1,6 @@
 // src/core/changelog/index.ts
 
-export { computeRecipeDiff, computePreparationDiff } from './entityDiff'
+export { computeRecipeDiff, computePreparationDiff, computeProductDiff } from './entityDiff'
 export type { FieldChange, ComponentChange, EntityDiff } from './entityDiff'
 
 export { changelogService, setCurrentUserProvider } from './changelogService'
