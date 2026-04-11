@@ -183,6 +183,9 @@ export function generateRecommendations(
     const hasBalance = departmentBalances.some(b => b.preparationId === preparation.id)
     if (hasBalance) continue
 
+    // Skip "from knife" preparations — no stock tracking
+    if (preparation.trackStock === false) continue
+
     // Check if preparation belongs to this department
     if (preparation.department !== department && preparation.department !== 'all') {
       continue

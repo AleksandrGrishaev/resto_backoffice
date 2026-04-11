@@ -244,6 +244,7 @@ const formData = ref<any>({
   shelfLifeFrozen: 30,
   shelfLifeThawed: 2,
   usedFrozen: false,
+  trackStock: true,
   // ⭐ PHASE 2: Portion type support
   portionType: 'weight' as 'weight' | 'portion' // Default: weight-based
 })
@@ -348,6 +349,7 @@ async function handleSubmit() {
         shelfLifeFrozen: formData.value.shelfLifeFrozen,
         shelfLifeThawed: formData.value.shelfLifeThawed,
         usedFrozen: formData.value.usedFrozen || false,
+        trackStock: formData.value.trackStock ?? true,
         // ⭐ PHASE 2: Portion type support
         portionType: formData.value.portionType || 'weight',
         portionSize:
@@ -461,6 +463,7 @@ async function handleSaveDraft() {
         shelfLifeFrozen: formData.value.shelfLifeFrozen,
         shelfLifeThawed: formData.value.shelfLifeThawed,
         usedFrozen: formData.value.usedFrozen || false,
+        trackStock: formData.value.trackStock ?? true,
         portionType: formData.value.portionType || 'weight',
         portionSize:
           formData.value.portionType === 'portion' ? formData.value.portionSize : undefined,
@@ -547,6 +550,7 @@ function resetForm() {
     shelfLifeFrozen: 30,
     shelfLifeThawed: 2,
     usedFrozen: false,
+    trackStock: true,
     // ⭐ PHASE 2: Portion type support
     portionType: 'weight' as 'weight' | 'portion' // Default: weight-based
   }
@@ -579,6 +583,7 @@ watch(dialogModel, async newVal => {
           shelfLifeFrozen: prep.shelfLifeFrozen || 30,
           shelfLifeThawed: prep.shelfLifeThawed || prep.shelfLife || 2,
           usedFrozen: prep.usedFrozen || false,
+          trackStock: prep.trackStock ?? true,
           // ⭐ PHASE 2: Portion type support
           portionType: prep.portionType || 'weight',
           portionSize: prep.portionSize || 1,

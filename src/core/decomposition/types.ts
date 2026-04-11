@@ -157,6 +157,7 @@ export interface PreparationForDecomposition {
   portionSize?: number
   recipe: PreparationIngredient[]
   isActive: boolean
+  trackStock?: boolean // false = "from knife", decompose to raw ingredients instead of consuming batches
 }
 
 /**

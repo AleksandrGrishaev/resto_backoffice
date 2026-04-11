@@ -394,7 +394,8 @@ export class DecompositionEngine {
     totalQuantity = Math.round(totalQuantity * 100) / 100
 
     // Strategy: keep preparation as final element (for write-off from prep batches)
-    if (options.preparationStrategy === 'keep') {
+    // Exception: trackStock=false preparations are always decomposed to raw ingredients ("from knife")
+    if (options.preparationStrategy === 'keep' && preparation.trackStock !== false) {
       // 🐛 DEBUG: Log final node creation
       DebugUtils.debug(MODULE_NAME, '✅ Creating preparation node', {
         preparationId: comp.id,
@@ -423,6 +424,19 @@ export class DecompositionEngine {
 
     // Strategy: decompose preparation to its ingredients
     // This is used when we want to trace all the way to raw products
+    if (preparation.trackStock === false && preparation.recipe.length === 0) {
+      DebugUtils.warn(
+        MODULE_NAME,
+        '⚠️ trackStock=false prep has no recipe — nothing to decompose',
+        {
+          preparationId: comp.id,
+          preparationName: preparation.name,
+          quantity: totalQuantity
+        }
+      )
+      return []
+    }
+
     const results: DecomposedNode[] = []
 
     for (const ingredient of preparation.recipe) {
@@ -655,7 +669,8 @@ export async function createDecompositionEngine(
         portionType: prep.portionType,
         portionSize: prep.portionSize,
         recipe: prep.recipe || [],
-        isActive: prep.isActive
+        isActive: prep.isActive,
+        trackStock: prep.trackStock ?? true
       }
     },
 
