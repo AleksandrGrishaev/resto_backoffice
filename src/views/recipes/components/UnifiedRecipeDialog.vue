@@ -287,8 +287,8 @@ function updateComponent(index: number, field: string, value: unknown) {
 // ✅ NEW: Generate next available code for preparations or recipes
 function generateNextCode(type: 'recipe' | 'preparation'): string {
   const prefix = type === 'preparation' ? 'P' : 'R'
-  const items =
-    type === 'preparation' ? recipesStore.activePreparations : recipesStore.activeRecipes
+  // Use ALL items (including archived) to avoid code collisions
+  const items = type === 'preparation' ? recipesStore.preparations : recipesStore.recipes
 
   const existingCodes = items
     .map(item => item.code)
