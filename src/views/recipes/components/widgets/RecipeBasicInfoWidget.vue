@@ -269,54 +269,116 @@
             </v-col>
           </v-row>
 
+          <!-- Production mode + Frozen usage -->
           <v-row>
             <v-col cols="12" md="6">
-              <v-checkbox
-                :model-value="formData.usedFrozen"
-                label="Used frozen (no defrost needed — e.g. soup base)"
-                density="compact"
-                hide-details
-                color="cyan"
-                @update:model-value="updateField('usedFrozen', $event)"
-              />
+              <div class="toggle-group">
+                <div class="toggle-group__label">Production Mode</div>
+                <v-btn-toggle
+                  :model-value="(formData.trackStock ?? true) ? 'batch' : 'knife'"
+                  mandatory
+                  density="comfortable"
+                  color="primary"
+                  divided
+                  class="w-100"
+                  @update:model-value="handleProductionModeChange($event)"
+                >
+                  <v-btn value="batch" class="toggle-group__btn">
+                    <v-icon size="18">mdi-package-variant-closed</v-icon>
+                    <span>Batch</span>
+                  </v-btn>
+                  <v-btn value="knife" class="toggle-group__btn">
+                    <v-icon size="18">mdi-knife</v-icon>
+                    <span>From knife</span>
+                  </v-btn>
+                </v-btn-toggle>
+              </div>
             </v-col>
-            <v-col cols="12" md="6">
-              <v-checkbox
-                :model-value="formData.trackStock ?? true"
-                label="Track stock (uncheck = made fresh, from knife)"
-                density="compact"
-                hide-details
-                color="info"
-                @update:model-value="updateField('trackStock', $event)"
-              />
+
+            <v-col v-if="formData.trackStock ?? true" cols="12" md="6">
+              <div class="toggle-group">
+                <div class="toggle-group__label">Frozen Usage</div>
+                <v-btn-toggle
+                  :model-value="formData.usedFrozen ? 'frozen' : 'defrost'"
+                  mandatory
+                  density="comfortable"
+                  color="cyan"
+                  divided
+                  class="w-100"
+                  @update:model-value="updateField('usedFrozen', $event === 'frozen')"
+                >
+                  <v-btn value="defrost" class="toggle-group__btn">
+                    <v-icon size="18">mdi-snowflake-melt</v-icon>
+                    <span>Needs defrost</span>
+                  </v-btn>
+                  <v-btn value="frozen" class="toggle-group__btn">
+                    <v-icon size="18">mdi-snowflake</v-icon>
+                    <span>Used frozen</span>
+                  </v-btn>
+                </v-btn-toggle>
+              </div>
             </v-col>
           </v-row>
 
           <v-row>
-            <v-col cols="12" md="4">
-              <v-select
-                :model-value="formData.storageLocation || 'fridge'"
-                :items="storageLocationItems"
-                item-title="label"
-                item-value="value"
-                label="Storage Location"
-                variant="outlined"
-                density="comfortable"
-                @update:model-value="updateField('storageLocation', $event)"
-              />
+            <v-col cols="12" md="6">
+              <div class="toggle-group">
+                <div class="toggle-group__label">Storage Location</div>
+                <v-btn-toggle
+                  :model-value="formData.storageLocation || 'fridge'"
+                  mandatory
+                  density="comfortable"
+                  :color="storageLocationColor"
+                  divided
+                  class="w-100"
+                  @update:model-value="updateField('storageLocation', $event)"
+                >
+                  <v-btn value="fridge" class="toggle-group__btn">
+                    <v-icon size="18">mdi-fridge-outline</v-icon>
+                    <span>Fridge</span>
+                  </v-btn>
+                  <v-btn value="freezer" class="toggle-group__btn">
+                    <v-icon size="18">mdi-snowflake</v-icon>
+                    <span>Freezer</span>
+                  </v-btn>
+                  <v-btn value="shelf" class="toggle-group__btn">
+                    <v-icon size="18">mdi-archive-outline</v-icon>
+                    <span>Shelf</span>
+                  </v-btn>
+                </v-btn-toggle>
+              </div>
             </v-col>
 
-            <v-col cols="12" md="4">
-              <v-select
-                :model-value="formData.productionSlot || 'any'"
-                :items="productionSlotItems"
-                item-title="label"
-                item-value="value"
-                label="Production Time"
-                variant="outlined"
-                density="comfortable"
-                @update:model-value="updateField('productionSlot', $event)"
-              />
+            <v-col cols="12" md="6">
+              <div class="toggle-group">
+                <div class="toggle-group__label">Production Time</div>
+                <v-btn-toggle
+                  :model-value="formData.productionSlot || 'any'"
+                  mandatory
+                  density="comfortable"
+                  :color="productionTimeColor"
+                  divided
+                  class="w-100"
+                  @update:model-value="updateField('productionSlot', $event)"
+                >
+                  <v-btn value="any" class="toggle-group__btn">
+                    <v-icon size="18">mdi-clock-outline</v-icon>
+                    <span>Any</span>
+                  </v-btn>
+                  <v-btn value="morning" class="toggle-group__btn">
+                    <v-icon size="18">mdi-weather-sunny</v-icon>
+                    <span>AM</span>
+                  </v-btn>
+                  <v-btn value="afternoon" class="toggle-group__btn">
+                    <v-icon size="18">mdi-weather-partly-cloudy</v-icon>
+                    <span>PM</span>
+                  </v-btn>
+                  <v-btn value="evening" class="toggle-group__btn">
+                    <v-icon size="18">mdi-weather-night</v-icon>
+                    <span>Eve</span>
+                  </v-btn>
+                </v-btn-toggle>
+              </div>
             </v-col>
           </v-row>
         </div>
@@ -481,6 +543,24 @@ async function loadUnitOptions() {
   unitOptionsLoaded.value = unitOptions.value || []
 }
 
+// Dynamic colors per selected value
+const storageLocationColor = computed(() => {
+  const loc = props.formData.storageLocation || 'fridge'
+  const colors: Record<string, string> = { fridge: 'teal', freezer: 'blue', shelf: 'brown' }
+  return colors[loc] || 'teal'
+})
+
+const productionTimeColor = computed(() => {
+  const slot = props.formData.productionSlot || 'any'
+  const colors: Record<string, string> = {
+    any: 'blue-grey',
+    morning: 'amber',
+    afternoon: 'orange',
+    evening: 'deep-purple'
+  }
+  return colors[slot] || 'blue-grey'
+})
+
 // Computed
 const categoryItems = computed(() => {
   if (props.type === 'preparation') {
@@ -602,6 +682,15 @@ function handleCodeInput(event: Event) {
   updateField('code', upperCaseValue)
 }
 
+function handleProductionModeChange(mode: string) {
+  const isTrackStock = mode === 'batch'
+  updateField('trackStock', isTrackStock)
+  // Reset usedFrozen when switching to "from knife"
+  if (!isTrackStock) {
+    updateField('usedFrozen', false)
+  }
+}
+
 function handleCategoryChange(category: string) {
   updateField('category', category)
   emit('category-changed', category)
@@ -717,5 +806,35 @@ onMounted(async () => {
   color: rgba(var(--v-theme-on-surface), 0.5);
   padding-bottom: 4px;
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.toggle-group {
+  &__label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(var(--v-theme-on-surface), 0.5);
+    margin-bottom: 6px;
+  }
+
+  :deep(.v-btn-group) {
+    width: 100%;
+    border-radius: 10px;
+  }
+
+  &__btn {
+    flex: 1;
+    text-transform: none;
+    letter-spacing: normal;
+    min-height: 42px;
+
+    :deep(.v-btn__content) {
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      font-size: 0.78rem;
+    }
+  }
 }
 </style>
