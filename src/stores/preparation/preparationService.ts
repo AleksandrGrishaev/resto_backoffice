@@ -2090,7 +2090,7 @@ export class PreparationService {
         const recipesStore = useRecipesStore()
         // ✅ FIXED: Filter preparations by their department field
         departmentPreparations = recipesStore.activePreparations.filter(
-          p => p.isActive && p.department === department
+          p => p.isActive && p.department === department && p.trackStock !== false
         )
 
         DebugUtils.info(

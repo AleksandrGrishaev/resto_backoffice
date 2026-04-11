@@ -562,6 +562,7 @@ async function ensureExpiredWriteOffTasks(): Promise<void> {
       if (expiredQty <= 0) continue
 
       const prep = recipesStore.preparations?.find(p => p.id === balance.preparationId)
+      if (prep?.trackStock === false) continue // "from knife" — no write-off tasks
       const unitMap: Record<string, string> = { ml: 'ml', piece: 'pc' }
       const displayUnit = unitMap[prep?.outputUnit || ''] || 'g'
 

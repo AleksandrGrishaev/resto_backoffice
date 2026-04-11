@@ -270,7 +270,7 @@
           </v-row>
 
           <v-row>
-            <v-col cols="12">
+            <v-col cols="12" md="6">
               <v-checkbox
                 :model-value="formData.usedFrozen"
                 label="Used frozen (no defrost needed — e.g. soup base)"
@@ -278,6 +278,16 @@
                 hide-details
                 color="cyan"
                 @update:model-value="updateField('usedFrozen', $event)"
+              />
+            </v-col>
+            <v-col cols="12" md="6">
+              <v-checkbox
+                :model-value="formData.trackStock ?? true"
+                label="Track stock (uncheck = made fresh, from knife)"
+                density="compact"
+                hide-details
+                color="info"
+                @update:model-value="updateField('trackStock', $event)"
               />
             </v-col>
           </v-row>
@@ -435,6 +445,7 @@ interface FormData {
   shelfLifeFrozen?: number // Shelf life in days when frozen
   shelfLifeThawed?: number // Shelf life in days after thawing
   usedFrozen?: boolean // Used frozen, no defrost needed
+  trackStock?: boolean // Track stock (false = from knife)
   // ⭐ PHASE 2: Portion type support
   portionType?: 'weight' | 'portion'
   // 🆕 Kitchen Preparation: Storage & Production Settings
