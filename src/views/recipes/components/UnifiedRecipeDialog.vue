@@ -243,6 +243,7 @@ const formData = ref<any>({
   shelfLife: 2, // ✅ NEW: Default shelf life for preparations (days)
   shelfLifeFrozen: 30,
   shelfLifeThawed: 2,
+  usedFrozen: false,
   // ⭐ PHASE 2: Portion type support
   portionType: 'weight' as 'weight' | 'portion' // Default: weight-based
 })
@@ -346,6 +347,7 @@ async function handleSubmit() {
         shelfLife: formData.value.shelfLife,
         shelfLifeFrozen: formData.value.shelfLifeFrozen,
         shelfLifeThawed: formData.value.shelfLifeThawed,
+        usedFrozen: formData.value.usedFrozen || false,
         // ⭐ PHASE 2: Portion type support
         portionType: formData.value.portionType || 'weight',
         portionSize:
@@ -458,6 +460,7 @@ async function handleSaveDraft() {
         shelfLife: formData.value.shelfLife,
         shelfLifeFrozen: formData.value.shelfLifeFrozen,
         shelfLifeThawed: formData.value.shelfLifeThawed,
+        usedFrozen: formData.value.usedFrozen || false,
         portionType: formData.value.portionType || 'weight',
         portionSize:
           formData.value.portionType === 'portion' ? formData.value.portionSize : undefined,
@@ -543,6 +546,7 @@ function resetForm() {
     shelfLife: 2,
     shelfLifeFrozen: 30,
     shelfLifeThawed: 2,
+    usedFrozen: false,
     // ⭐ PHASE 2: Portion type support
     portionType: 'weight' as 'weight' | 'portion' // Default: weight-based
   }
@@ -574,6 +578,7 @@ watch(dialogModel, async newVal => {
           shelfLife: prep.shelfLife || 2,
           shelfLifeFrozen: prep.shelfLifeFrozen || 30,
           shelfLifeThawed: prep.shelfLifeThawed || prep.shelfLife || 2,
+          usedFrozen: prep.usedFrozen || false,
           // ⭐ PHASE 2: Portion type support
           portionType: prep.portionType || 'weight',
           portionSize: prep.portionSize || 1,

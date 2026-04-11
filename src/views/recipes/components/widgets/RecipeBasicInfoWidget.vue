@@ -270,6 +270,19 @@
           </v-row>
 
           <v-row>
+            <v-col cols="12">
+              <v-checkbox
+                :model-value="formData.usedFrozen"
+                label="Used frozen (no defrost needed — e.g. soup base)"
+                density="compact"
+                hide-details
+                color="cyan"
+                @update:model-value="updateField('usedFrozen', $event)"
+              />
+            </v-col>
+          </v-row>
+
+          <v-row>
             <v-col cols="12" md="4">
               <v-select
                 :model-value="formData.storageLocation || 'fridge'"
@@ -421,6 +434,7 @@ interface FormData {
   shelfLife?: number // Shelf life in days (fridge)
   shelfLifeFrozen?: number // Shelf life in days when frozen
   shelfLifeThawed?: number // Shelf life in days after thawing
+  usedFrozen?: boolean // Used frozen, no defrost needed
   // ⭐ PHASE 2: Portion type support
   portionType?: 'weight' | 'portion'
   // 🆕 Kitchen Preparation: Storage & Production Settings

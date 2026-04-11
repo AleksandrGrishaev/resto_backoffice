@@ -111,6 +111,7 @@ export interface Preparation extends BaseEntity {
   shelfLife?: number // Срок хранения в днях (fridge)
   shelfLifeFrozen?: number // Срок хранения в морозилке (дни)
   shelfLifeThawed?: number // Срок хранения после разморозки (дни)
+  usedFrozen?: boolean // Используется замороженным (не нужно размораживать)
 
   // ✨ NEW: Negative inventory config (Sprint 1)
   allowNegativeInventory?: boolean

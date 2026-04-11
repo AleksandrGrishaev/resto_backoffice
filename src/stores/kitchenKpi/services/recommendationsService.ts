@@ -705,6 +705,9 @@ function generateDefrostRecommendations(
     const prep = preparations?.find(p => p.id === balance.preparationId)
     if (!prep) continue
 
+    // Skip preparations that are used frozen (e.g. soup bases) — no defrost needed
+    if (prep.usedFrozen) continue
+
     // Get active, non-expired batches split by storage location
     const now = new Date()
     const activeBatches =
