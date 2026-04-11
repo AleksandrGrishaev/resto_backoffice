@@ -320,7 +320,7 @@ export interface CreateScheduleItemData {
   priority?: number
   recommendationReason?: string
   currentStockAtGeneration?: number
-  taskType?: 'production' | 'write_off'
+  taskType?: 'production' | 'write_off' | 'defrost'
 }
 
 /**

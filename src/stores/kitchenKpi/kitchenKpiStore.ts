@@ -646,11 +646,15 @@ export const useKitchenKpiStore = defineStore('kitchenKpi', () => {
       let fulfilledCount = 0
 
       for (const task of pendingTasks) {
+        // Skip write-off and defrost tasks — they require manual action
+        if (task.taskType === 'write_off') continue
+        if (task.taskType === 'defrost') continue
+
         // Get current stock for this preparation
         const balance = preparationStore.getBalance(task.preparationId, department)
         const currentStock = balance?.totalQuantity || 0
 
-        // Check if current stock meets or exceeds target
+        // Check if current stock meets or exceeds target (production tasks only)
         if (currentStock >= task.targetQuantity) {
           try {
             // Mark as completed with auto-fulfill note

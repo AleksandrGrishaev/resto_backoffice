@@ -79,6 +79,14 @@
                   >
                     WO
                   </v-chip>
+                  <v-chip
+                    v-if="task.taskType === 'defrost'"
+                    color="cyan"
+                    size="x-small"
+                    variant="flat"
+                  >
+                    DF
+                  </v-chip>
                   <v-icon size="16" color="grey" class="item-chevron">mdi-chevron-right</v-icon>
                 </div>
                 <div class="item-row-badges">
@@ -148,13 +156,25 @@
                   <v-icon size="18">mdi-book-open-variant</v-icon>
                 </v-btn>
                 <v-btn
-                  :color="task.taskType === 'write_off' ? 'error' : 'success'"
+                  :color="
+                    task.taskType === 'write_off'
+                      ? 'error'
+                      : task.taskType === 'defrost'
+                        ? 'cyan'
+                        : 'success'
+                  "
                   variant="flat"
                   class="ip-btn ip-btn-done"
                   @click.stop="openProductionCard(task, 'complete')"
                 >
                   <v-icon start size="18">
-                    {{ task.taskType === 'write_off' ? 'mdi-delete' : 'mdi-check' }}
+                    {{
+                      task.taskType === 'write_off'
+                        ? 'mdi-delete'
+                        : task.taskType === 'defrost'
+                          ? 'mdi-snowflake-melt'
+                          : 'mdi-check'
+                    }}
                   </v-icon>
                   Done
                 </v-btn>
@@ -244,6 +264,7 @@
         :initial-tab="productionCardInitialTab"
         @complete="handleProductionCardComplete"
         @write-off="handleProductionCardWriteOff"
+        @defrost="handleProductionCardDefrost"
       />
 
       <!-- Quantity Confirmation Dialog with built-in numpad -->
@@ -297,7 +318,13 @@
           <div class="numpad-actions">
             <v-btn variant="text" @click="cancelQtyDialog">Cancel</v-btn>
             <v-btn
-              :color="qtyDialogTask.taskType === 'write_off' ? 'error' : 'success'"
+              :color="
+                qtyDialogTask.taskType === 'write_off'
+                  ? 'error'
+                  : qtyDialogTask.taskType === 'defrost'
+                    ? 'cyan'
+                    : 'success'
+              "
               variant="flat"
               size="large"
               class="confirm-btn"
@@ -433,6 +460,12 @@ const emit = defineEmits<{
     startedAt?: string
   ]
   'write-off': [
+    task: ProductionScheduleItem,
+    quantity: number,
+    staffMemberId?: string,
+    staffMemberName?: string
+  ]
+  defrost: [
     task: ProductionScheduleItem,
     quantity: number,
     staffMemberId?: string,
@@ -663,12 +696,14 @@ watch(allDone, done => {
 
 function getTaskColor(task: ProductionScheduleItem): string {
   if (task.taskType === 'write_off') return 'writeoff'
+  if (task.taskType === 'defrost') return 'defrost'
   if (task.isPremade) return 'premade'
   return 'production'
 }
 
 function getTaskIcon(task: ProductionScheduleItem): string {
   if (task.taskType === 'write_off') return 'mdi-delete-outline'
+  if (task.taskType === 'defrost') return 'mdi-snowflake-melt'
   if (task.isPremade) return 'mdi-food-variant'
   return 'mdi-pot-steam-outline'
 }
@@ -802,6 +837,28 @@ function handleProductionCardWriteOff(
   productionCardTask.value = null
 }
 
+/** Handle defrost from ProductionCard */
+function handleProductionCardDefrost(
+  task: ProductionScheduleItem,
+  qty: number,
+  staffMemberId?: string,
+  staffMemberName?: string
+): void {
+  showProductionCard.value = false
+  if (staffMemberId && staffMemberName) {
+    taskStaff.set(task.id, { id: staffMemberId, name: staffMemberName })
+  }
+  const startTime = taskStartTimes.get(task.id)
+  if (startTime) {
+    taskDurations.set(task.id, Math.round((Date.now() - startTime) / 1000))
+  }
+  inProgressIds.delete(task.id)
+  completedScheduleIds.add(task.id)
+  emit('defrost', task, qty, staffMemberId, staffMemberName)
+  doneCollapsed.value = false
+  productionCardTask.value = null
+}
+
 /** Open quantity confirmation dialog with numpad */
 function openQtyDialog(task: ProductionScheduleItem): void {
   qtyDialogTask.value = task
@@ -864,6 +921,8 @@ function confirmQtyDialog(): void {
   const taskStartedAt = startTime ? new Date(startTime).toISOString() : undefined
   if (task.taskType === 'write_off') {
     emit('write-off', task, qty, staffId, staffName)
+  } else if (task.taskType === 'defrost') {
+    emit('defrost', task, qty, staffId, staffName)
   } else {
     emit('complete', task, qty, staffId, staffName, taskStartedAt)
   }
@@ -1080,6 +1139,10 @@ function formatTime(isoDate: string): string {
   &.item-writeoff {
     border-left-color: rgb(var(--v-theme-error));
     background-color: rgba(var(--v-theme-error), 0.04);
+  }
+  &.item-defrost {
+    border-left-color: #00bcd4;
+    background-color: rgba(0, 188, 212, 0.04);
   }
   &.item-custom {
     border-left-color: rgb(var(--v-theme-secondary));

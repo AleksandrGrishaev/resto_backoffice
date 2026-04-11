@@ -433,7 +433,7 @@ export interface ProductionScheduleItem {
   currentStockAtGeneration?: number
   recommendationReason?: string
   status: ProductionScheduleStatus
-  taskType: 'production' | 'write_off'
+  taskType: 'production' | 'write_off' | 'defrost'
 
   // Portion type support for UI display
   portionType?: PortionType // 'weight' (default) or 'portion'
@@ -491,6 +491,9 @@ export interface ProductionRecommendation {
   portionSize?: number
   isPremade?: boolean
   isWriteOff?: boolean
+  isDefrost?: boolean
+  freezerStock?: number
+  fridgeStock?: number
 
   // Completion tracking (when converted to schedule item)
   isCompleted: boolean
