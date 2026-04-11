@@ -623,6 +623,9 @@ async function ensureDefrostTasks(): Promise<void> {
       const prep = recipesStore.preparations?.find(p => p.id === balance.preparationId)
       if (!prep) continue
 
+      // Skip preparations used frozen (e.g. soup bases) — no defrost needed
+      if (prep.usedFrozen) continue
+
       // Exclude expired batches — expired frozen stock should be written off, not defrosted
       const now = new Date()
       const activeBatches =

@@ -82,6 +82,7 @@ export function preparationToSupabaseInsert(preparation: Preparation): SupabaseP
     shelf_life: preparation.shelfLife || null, // ✅ NEW: Shelf life in days
     shelf_life_frozen: preparation.shelfLifeFrozen || null,
     shelf_life_thawed: preparation.shelfLifeThawed || null,
+    used_frozen: preparation.usedFrozen || false,
     is_active: preparation.isActive,
     cost_per_portion: preparation.costPerPortion || null,
     // ⭐ FIX: Include lastKnownCost
@@ -136,6 +137,7 @@ export function preparationFromSupabase(
     shelfLife: row.shelf_life || undefined, // ✅ NEW: Shelf life in days
     shelfLifeFrozen: row.shelf_life_frozen ? Number(row.shelf_life_frozen) : undefined,
     shelfLifeThawed: row.shelf_life_thawed ? Number(row.shelf_life_thawed) : undefined,
+    usedFrozen: (row as any).used_frozen === true,
     isActive: row.is_active ?? true,
     costPerPortion: row.cost_per_portion ? Number(row.cost_per_portion) : undefined,
     // ⭐ FIX: Load lastKnownCost from database
