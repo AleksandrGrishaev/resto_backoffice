@@ -36,6 +36,12 @@ const emit = defineEmits<{
     staffMemberId?: string,
     staffMemberName?: string
   ]
+  defrost: [
+    task: ProductionScheduleItem,
+    quantity: number,
+    staffMemberId?: string,
+    staffMemberName?: string
+  ]
 }>()
 
 const recipesStore = useRecipesStore()
@@ -204,7 +210,8 @@ const targetInDisplayUnit = computed(() => {
 
 // Validation
 const isWriteOff = computed(() => props.task.taskType === 'write_off')
-const photoRequired = computed(() => !isWriteOff.value)
+const isDefrost = computed(() => props.task.taskType === 'defrost')
+const photoRequired = computed(() => !isWriteOff.value && !isDefrost.value)
 const parsedQty = computed(() => parsedQtyInBaseUnit.value)
 
 // Available stock for write-off validation
@@ -287,7 +294,9 @@ const numpadTitle = computed(() =>
   numpadMode.value === 'qty'
     ? isWriteOff.value
       ? 'Write-off quantity'
-      : 'Produced quantity'
+      : isDefrost.value
+        ? 'Defrost quantity'
+        : 'Produced quantity'
     : 'Scale ingredients to'
 )
 const numpadDisplayValue = computed(() => numpadBuffer.value || '0')
@@ -314,6 +323,8 @@ function handleComplete() {
   const qty = parsedQty.value
   if (isWriteOff.value) {
     emit('write-off', props.task, qty, staffMemberId.value, staffMemberName.value)
+  } else if (isDefrost.value) {
+    emit('defrost', props.task, qty, staffMemberId.value, staffMemberName.value)
   } else {
     emit(
       'complete',
@@ -345,6 +356,9 @@ function handleComplete() {
           <span class="pc-name">{{ task.preparationName }}</span>
           <v-chip v-if="isWriteOff" color="error" size="small" variant="flat" class="ml-1">
             WRITE-OFF
+          </v-chip>
+          <v-chip v-if="isDefrost" color="cyan" size="small" variant="flat" class="ml-1">
+            DEFROST
           </v-chip>
         </div>
         <div class="pc-header-right">
@@ -397,7 +411,7 @@ function handleComplete() {
         <!-- ===================== RECIPE TAB ===================== -->
         <div v-if="activeTab === 'recipe'" class="tab-recipe">
           <!-- Calculator -->
-          <div v-if="!isWriteOff" class="calc-card" @click="openNumpad('calc')">
+          <div v-if="!isWriteOff && !isDefrost" class="calc-card" @click="openNumpad('calc')">
             <div class="calc-label">
               <v-icon size="16" color="primary">mdi-calculator</v-icon>
               Scale to
@@ -420,7 +434,10 @@ function handleComplete() {
           </div>
 
           <!-- Ingredients -->
-          <div v-if="scaledIngredients.length > 0 && !isWriteOff" class="ingredients-section">
+          <div
+            v-if="scaledIngredients.length > 0 && !isWriteOff && !isDefrost"
+            class="ingredients-section"
+          >
             <div class="section-label">
               <v-icon size="16" color="primary">mdi-format-list-bulleted</v-icon>
               Ingredients
@@ -452,7 +469,7 @@ function handleComplete() {
           </div>
 
           <!-- Instructions -->
-          <div v-if="hasInstructions && !isWriteOff" class="instructions-section">
+          <div v-if="hasInstructions && !isWriteOff && !isDefrost" class="instructions-section">
             <div class="section-label">
               <v-icon size="16" color="primary">mdi-book-open-variant</v-icon>
               Instructions
@@ -466,6 +483,13 @@ function handleComplete() {
             <p class="text-body-1 mt-2">Write-off task</p>
             <p class="text-body-2 text-medium-emphasis">Go to Complete tab to enter quantity</p>
           </div>
+
+          <!-- Empty state for defrost -->
+          <div v-if="isDefrost" class="write-off-info">
+            <v-icon size="48" color="cyan">mdi-snowflake-melt</v-icon>
+            <p class="text-body-1 mt-2">Defrost task</p>
+            <p class="text-body-2 text-medium-emphasis">Move from freezer to fridge</p>
+          </div>
         </div>
 
         <!-- ===================== COMPLETE TAB ===================== -->
@@ -474,7 +498,13 @@ function handleComplete() {
           <div class="qty-card" :class="{ 'qty-filled': parsedQty > 0 }" @click="openNumpad('qty')">
             <div class="qty-top-row">
               <div class="qty-label">
-                {{ isWriteOff ? 'WRITE-OFF QUANTITY' : 'PRODUCED QUANTITY' }}
+                {{
+                  isWriteOff
+                    ? 'WRITE-OFF QUANTITY'
+                    : isDefrost
+                      ? 'DEFROST QUANTITY'
+                      : 'PRODUCED QUANTITY'
+                }}
               </div>
               <!-- Unit toggle for portion-type preps -->
               <v-btn-toggle
@@ -585,7 +615,7 @@ function handleComplete() {
             @click="handleComplete"
           >
             <v-icon start size="24">{{ isWriteOff ? 'mdi-delete' : 'mdi-check-circle' }}</v-icon>
-            {{ isWriteOff ? 'Write Off' : 'Complete Production' }}
+            {{ isWriteOff ? 'Write Off' : isDefrost ? 'Move to Fridge' : 'Complete Production' }}
           </v-btn>
         </div>
       </div>

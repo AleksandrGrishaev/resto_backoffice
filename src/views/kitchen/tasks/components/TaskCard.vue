@@ -20,6 +20,9 @@
         <v-chip v-if="isWriteOff && !isCompleted" color="error" size="x-small" variant="flat">
           WRITE-OFF
         </v-chip>
+        <v-chip v-if="isDefrost && !isCompleted" color="cyan" size="x-small" variant="flat">
+          DEFROST
+        </v-chip>
       </div>
 
       <!-- Completion info (only for completed) -->
@@ -41,24 +44,40 @@
 
     <!-- Right: stat badges (pending only) -->
     <div v-if="!isCompleted" class="task-badges">
-      <div v-if="task.currentStockAtGeneration != null" class="badge badge-stock">
-        <span class="badge-qty">
-          {{ Math.round(task.currentStockAtGeneration) }}{{ task.targetUnit }}
-        </span>
-        <span class="badge-label">stock</span>
-      </div>
-      <div class="badge badge-target">
-        <span class="badge-qty">{{ task.targetQuantity }}{{ task.targetUnit }}</span>
-        <span class="badge-label">target</span>
-      </div>
-      <div v-if="task.avgDailyConsumption && !isWriteOff" class="badge badge-avg">
-        <span class="badge-qty">{{ Math.round(task.avgDailyConsumption) }}</span>
-        <span class="badge-label">avg/d</span>
-      </div>
-      <div v-if="task.maxDailyConsumption && !isWriteOff" class="badge badge-max">
-        <span class="badge-qty">{{ Math.round(task.maxDailyConsumption) }}</span>
-        <span class="badge-label">max/d</span>
-      </div>
+      <!-- Defrost badges: FROZEN + DEFROST -->
+      <template v-if="isDefrost">
+        <div v-if="task.currentStockAtGeneration != null" class="badge badge-frozen">
+          <span class="badge-qty">
+            {{ Math.round(task.currentStockAtGeneration) }}{{ task.targetUnit }}
+          </span>
+          <span class="badge-label">frozen</span>
+        </div>
+        <div class="badge badge-defrost">
+          <span class="badge-qty">{{ task.targetQuantity }}{{ task.targetUnit }}</span>
+          <span class="badge-label">defrost</span>
+        </div>
+      </template>
+      <!-- Standard badges (production/write-off) -->
+      <template v-else>
+        <div v-if="task.currentStockAtGeneration != null" class="badge badge-stock">
+          <span class="badge-qty">
+            {{ Math.round(task.currentStockAtGeneration) }}{{ task.targetUnit }}
+          </span>
+          <span class="badge-label">stock</span>
+        </div>
+        <div class="badge badge-target">
+          <span class="badge-qty">{{ task.targetQuantity }}{{ task.targetUnit }}</span>
+          <span class="badge-label">target</span>
+        </div>
+        <div v-if="task.avgDailyConsumption && !isWriteOff" class="badge badge-avg">
+          <span class="badge-qty">{{ Math.round(task.avgDailyConsumption) }}</span>
+          <span class="badge-label">avg/d</span>
+        </div>
+        <div v-if="task.maxDailyConsumption && !isWriteOff" class="badge badge-max">
+          <span class="badge-qty">{{ Math.round(task.maxDailyConsumption) }}</span>
+          <span class="badge-label">max/d</span>
+        </div>
+      </template>
     </div>
 
     <!-- Chevron -->
@@ -72,6 +91,7 @@
     :task="task"
     @complete="handleProductionComplete"
     @write-off="handleProductionWriteOff"
+    @defrost="handleProductionDefrost"
   />
 </template>
 
@@ -99,12 +119,19 @@ const emit = defineEmits<{
     staffMemberId?: string,
     staffMemberName?: string
   ]
+  defrost: [
+    task: ProductionScheduleItem,
+    quantity: number,
+    staffMemberId?: string,
+    staffMemberName?: string
+  ]
 }>()
 
 const showDialog = ref(false)
 
 const isCompleted = computed(() => props.task.status === 'completed')
 const isWriteOff = computed(() => props.task.taskType === 'write_off')
+const isDefrost = computed(() => props.task.taskType === 'defrost')
 const isPremade = computed(() => props.task.isPremade === true)
 
 const doneQtyClass = computed(() => {
@@ -115,6 +142,7 @@ const doneQtyClass = computed(() => {
 
 const taskColor = computed(() => {
   if (isWriteOff.value) return 'writeoff'
+  if (isDefrost.value) return 'defrost'
   if (isPremade.value) return 'premade'
   return 'production'
 })
@@ -145,6 +173,16 @@ function handleProductionWriteOff(
 ): void {
   showDialog.value = false
   emit('write-off', task, qty, staffMemberId, staffMemberName)
+}
+
+function handleProductionDefrost(
+  task: ProductionScheduleItem,
+  qty: number,
+  staffMemberId?: string,
+  staffMemberName?: string
+): void {
+  showDialog.value = false
+  emit('defrost', task, qty, staffMemberId, staffMemberName)
 }
 
 function formatTime(isoDate: string): string {
@@ -183,6 +221,11 @@ function formatTime(isoDate: string): string {
   &.task-writeoff {
     border-left-color: rgb(var(--v-theme-error));
     background-color: rgba(var(--v-theme-error), 0.03);
+  }
+
+  &.task-defrost {
+    border-left-color: #00bcd4;
+    background-color: rgba(0, 188, 212, 0.03);
   }
 
   &.task-completed {
@@ -271,6 +314,16 @@ function formatTime(isoDate: string): string {
 .badge-max {
   background-color: rgba(var(--v-theme-on-surface), 0.08);
   color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.badge-frozen {
+  background-color: rgba(0, 188, 212, 0.15);
+  color: #00838f;
+}
+
+.badge-defrost {
+  background-color: rgba(76, 175, 80, 0.15);
+  color: #2e7d32;
 }
 
 .task-chevron {

@@ -73,7 +73,7 @@ function scheduleFromSupabase(row: ProductionScheduleRow): ProductionScheduleIte
       : undefined,
     recommendationReason: row.recommendation_reason || undefined,
     status: row.status as 'pending' | 'in_progress' | 'completed' | 'cancelled',
-    taskType: (row.task_type as 'production' | 'write_off') || 'production',
+    taskType: (row.task_type as 'production' | 'write_off' | 'defrost') || 'production',
     completedAt: row.completed_at || undefined,
     completedBy: row.completed_by || undefined,
     completedByName: row.completed_by_name || undefined,

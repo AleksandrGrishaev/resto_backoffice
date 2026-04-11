@@ -5,13 +5,15 @@
     class="task-card"
     :class="{
       'task-completed': isCompleted,
-      'task-writeoff': isWriteOff && !isCompleted
+      'task-writeoff': isWriteOff && !isCompleted,
+      'task-defrost': isDefrost && !isCompleted
     }"
   >
     <!-- Checkbox / Status (large touch target) -->
     <div class="task-checkbox" @click="!isCompleted && handleQuickComplete()">
       <v-icon v-if="isCompleted" color="success" size="28">mdi-checkbox-marked-circle</v-icon>
       <v-icon v-else-if="isWriteOff" color="error" size="28">mdi-delete-circle-outline</v-icon>
+      <v-icon v-else-if="isDefrost" color="cyan" size="28">mdi-snowflake-melt</v-icon>
       <v-icon v-else color="grey-lighten-1" size="28">mdi-checkbox-blank-circle-outline</v-icon>
     </div>
 
@@ -26,6 +28,15 @@
           variant="flat"
         >
           WRITE-OFF
+        </v-chip>
+        <v-chip
+          v-if="isDefrost && !isCompleted"
+          color="cyan"
+          size="x-small"
+          class="mr-1"
+          variant="flat"
+        >
+          DEFROST
         </v-chip>
         {{ task.preparationName }}
       </div>
@@ -104,6 +115,7 @@ const emit = defineEmits<{
 
 const isCompleted = computed(() => props.task.status === 'completed')
 const isWriteOff = computed(() => props.task.taskType === 'write_off')
+const isDefrost = computed(() => props.task.taskType === 'defrost')
 
 // =============================================
 // METHODS
@@ -201,6 +213,10 @@ function getReasonLabel(reason: string): string {
   &.task-writeoff {
     border-left: 3px solid rgb(var(--v-theme-error));
     background-color: rgba(var(--v-theme-error), 0.03);
+  }
+  &.task-defrost {
+    border-left: 3px solid #00bcd4;
+    background-color: rgba(0, 188, 212, 0.03);
   }
 }
 

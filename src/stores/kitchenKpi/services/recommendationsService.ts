@@ -217,6 +217,14 @@ export function generateRecommendations(
     count: writeOffRecs.length
   })
 
+  // Generate defrost tasks for items with freezer stock and low fridge stock
+  const defrostRecs = generateDefrostRecommendations(department, departmentBalances, preparations)
+  recommendations.push(...defrostRecs)
+
+  DebugUtils.info(MODULE_NAME, '🧊 Defrost recommendations', {
+    count: defrostRecs.length
+  })
+
   // Sort by priority (urgent first)
   recommendations.sort((a, b) => {
     const priorityA = URGENCY_PRIORITY[a.urgency] || 0
@@ -679,6 +687,85 @@ function generateWriteOffRecommendations(
 }
 
 // =============================================
+// Defrost Recommendations
+// =============================================
+
+/**
+ * Generate defrost recommendations for items with low fridge stock but available freezer stock.
+ * When fridge stock is running low and there are frozen batches, recommend thawing.
+ */
+function generateDefrostRecommendations(
+  department: 'kitchen' | 'bar',
+  balances: PreparationBalance[],
+  preparations?: Preparation[]
+): ProductionRecommendation[] {
+  const defrostRecs: ProductionRecommendation[] = []
+
+  for (const balance of balances) {
+    const prep = preparations?.find(p => p.id === balance.preparationId)
+    if (!prep) continue
+
+    // Get active, non-expired batches split by storage location
+    const now = new Date()
+    const activeBatches =
+      balance.batches?.filter(
+        b =>
+          b.currentQuantity > 0 &&
+          b.status === 'active' &&
+          !(b.expiryDate && new Date(b.expiryDate) < now)
+      ) || []
+    const freezerBatches = activeBatches.filter(b => b.storageLocation === 'freezer')
+    const fridgeBatches = activeBatches.filter(
+      b =>
+        b.storageLocation === 'fridge' || (!b.storageLocation && prep.storageLocation !== 'freezer')
+    )
+
+    const freezerStock = freezerBatches.reduce((sum, b) => sum + b.currentQuantity, 0)
+    const fridgeStock = fridgeBatches.reduce((sum, b) => sum + b.currentQuantity, 0)
+
+    // Skip if no freezer stock available
+    if (freezerStock <= 0) continue
+
+    // Need consumption data to decide if fridge is low
+    const maxDaily = prep.maxDailyUsage || balance.averageDailyUsage || 0
+    if (maxDaily <= 0) continue
+
+    // Target: 1 day of fridge stock (thawed items need time before use)
+    const fridgeTarget = maxDaily
+
+    // Only recommend defrost if fridge stock is below target
+    if (fridgeStock >= fridgeTarget) continue
+
+    const defrostQuantity = Math.min(freezerStock, Math.round(fridgeTarget - fridgeStock))
+    if (defrostQuantity < 50) continue // below min threshold
+
+    const avgDailyConsumption = balance.averageDailyUsage || 0
+
+    defrostRecs.push({
+      id: generateId(),
+      preparationId: balance.preparationId,
+      preparationName: balance.preparationName,
+      currentStock: freezerStock, // currentStock = freezer stock for defrost
+      avgDailyConsumption,
+      daysUntilStockout: avgDailyConsumption > 0 ? fridgeStock / avgDailyConsumption : 999,
+      recommendedQuantity: defrostQuantity,
+      urgency: 'morning', // defrost needs time, always morning
+      reason: `Defrost: fridge ${Math.round(fridgeStock)}${prep.outputUnit}, freezer ${Math.round(freezerStock)}${prep.outputUnit}`,
+      storageLocation: prep.storageLocation || 'fridge',
+      portionType: prep.portionType,
+      portionSize: prep.portionSize,
+      isPremade: false,
+      isCompleted: false,
+      isDefrost: true,
+      freezerStock,
+      fridgeStock
+    })
+  }
+
+  return defrostRecs
+}
+
+// =============================================
 // Utility Functions
 // =============================================
 
@@ -719,7 +806,7 @@ export function recommendationsToScheduleData(
   priority: number
   recommendationReason: string
   currentStockAtGeneration: number
-  taskType: 'production' | 'write_off'
+  taskType: 'production' | 'write_off' | 'defrost'
 }> {
   return recommendations.map(rec => ({
     preparationId: rec.preparationId,
@@ -732,7 +819,11 @@ export function recommendationsToScheduleData(
     priority: URGENCY_PRIORITY[rec.urgency] || 50,
     recommendationReason: rec.reason,
     currentStockAtGeneration: rec.currentStock,
-    taskType: rec.isWriteOff ? ('write_off' as const) : ('production' as const)
+    taskType: rec.isWriteOff
+      ? ('write_off' as const)
+      : rec.isDefrost
+        ? ('defrost' as const)
+        : ('production' as const)
   }))
 }
 

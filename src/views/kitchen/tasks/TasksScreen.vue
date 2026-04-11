@@ -43,6 +43,10 @@
                 <v-icon start size="14" color="error">mdi-circle</v-icon>
                 Write-off
               </v-chip>
+              <v-chip value="defrost" variant="outlined" filter size="small">
+                <v-icon start size="14" color="cyan">mdi-circle</v-icon>
+                Defrost
+              </v-chip>
             </v-chip-group>
             <v-btn
               variant="text"
@@ -113,6 +117,7 @@
                 :task="task"
                 @complete="handleComplete"
                 @write-off="handleWriteOff"
+                @defrost="handleDefrost"
               />
             </CategoryGroup>
           </template>
@@ -161,6 +166,7 @@
       :staff-name="authStore.userName"
       @complete="handleComplete"
       @write-off="handleWriteOff"
+      @defrost="handleDefrost"
       @ritual-completed="handleRitualCompleted"
     />
 
@@ -328,9 +334,11 @@ const doneItems = computed(() => {
       case 'premade':
         return item.isPremade === true
       case 'production':
-        return item.taskType !== 'write_off' && !item.isPremade
+        return item.taskType !== 'write_off' && item.taskType !== 'defrost' && !item.isPremade
       case 'write_off':
         return item.taskType === 'write_off'
+      case 'defrost':
+        return item.taskType === 'defrost'
       default:
         return true
     }
@@ -346,9 +354,11 @@ const filteredTodoItems = computed(() => {
       case 'premade':
         return item.isPremade === true
       case 'production':
-        return item.taskType !== 'write_off' && !item.isPremade
+        return item.taskType !== 'write_off' && item.taskType !== 'defrost' && !item.isPremade
       case 'write_off':
         return item.taskType === 'write_off'
+      case 'defrost':
+        return item.taskType === 'defrost'
       default:
         return true
     }
@@ -387,9 +397,10 @@ const groupedTodoItems = computed<TaskGroup[]>(() => {
   const result = Array.from(groups.values())
   for (const group of result) {
     group.tasks.sort((a, b) => {
-      const aWo = a.taskType === 'write_off' ? 0 : 1
-      const bWo = b.taskType === 'write_off' ? 0 : 1
-      return aWo - bWo
+      const typeOrder: Record<string, number> = { write_off: 0, defrost: 1, production: 2 }
+      const aOrder = typeOrder[a.taskType] ?? 2
+      const bOrder = typeOrder[b.taskType] ?? 2
+      return aOrder - bOrder
     })
   }
   return result.sort((a, b) => b.tasks.length - a.tasks.length)
@@ -432,7 +443,11 @@ const ritualTasks = computed(() => {
   switch (kpiStore.currentRitualType) {
     case 'morning':
       return allItems.value.filter(
-        i => i.isPremade || i.productionSlot === 'urgent' || i.productionSlot === 'morning'
+        i =>
+          i.isPremade ||
+          i.productionSlot === 'urgent' ||
+          i.productionSlot === 'morning' ||
+          i.taskType === 'defrost'
       )
     case 'afternoon':
       return allItems.value.filter(
@@ -485,6 +500,9 @@ async function autoGenerateIfNeeded(): Promise<void> {
 
   // Always ensure expired write-off tasks exist, even when production tasks are pending
   await ensureExpiredWriteOffTasks()
+
+  // Always ensure defrost tasks exist for items with freezer stock and low fridge stock
+  await ensureDefrostTasks()
 
   // Don't regenerate production if there are pending tasks (avoid duplicating existing tasks)
   if (hasPendingTasks) return
@@ -577,6 +595,92 @@ async function ensureExpiredWriteOffTasks(): Promise<void> {
     }
   } catch (err) {
     DebugUtils.error(MODULE_NAME, 'Failed to ensure expired write-off tasks', { error: err })
+  }
+}
+
+/**
+ * Ensure defrost tasks exist for preparations with freezer stock and low fridge stock.
+ * Runs every time tasks load — upsert prevents duplicates.
+ */
+async function ensureDefrostTasks(): Promise<void> {
+  try {
+    const department = userDepartment.value
+    const balances = preparationStore.state.balances || []
+    const deptBalances = balances.filter(b => b.department === department || b.department === 'all')
+
+    // Find existing pending defrost tasks
+    const existingDefrostPrepIds = new Set(
+      kpiStore.scheduleItems
+        .filter(i => i.taskType === 'defrost' && i.status === 'pending')
+        .map(i => i.preparationId)
+    )
+
+    const missingDefrost: CreateScheduleItemData[] = []
+
+    for (const balance of deptBalances) {
+      if (existingDefrostPrepIds.has(balance.preparationId)) continue
+
+      const prep = recipesStore.preparations?.find(p => p.id === balance.preparationId)
+      if (!prep) continue
+
+      // Exclude expired batches — expired frozen stock should be written off, not defrosted
+      const now = new Date()
+      const activeBatches =
+        balance.batches?.filter(
+          b =>
+            b.currentQuantity > 0 &&
+            b.status === 'active' &&
+            !(b.expiryDate && new Date(b.expiryDate) < now)
+        ) || []
+      const freezerBatches = activeBatches.filter(b => b.storageLocation === 'freezer')
+      const fridgeBatches = activeBatches.filter(
+        b =>
+          b.storageLocation === 'fridge' ||
+          (!b.storageLocation && prep.storageLocation !== 'freezer')
+      )
+
+      const freezerStock = freezerBatches.reduce((sum, b) => sum + b.currentQuantity, 0)
+      const fridgeStock = fridgeBatches.reduce((sum, b) => sum + b.currentQuantity, 0)
+
+      if (freezerStock <= 0) continue
+
+      const maxDaily = prep.maxDailyUsage || balance.averageDailyUsage || 0
+      if (maxDaily <= 0) continue
+
+      const fridgeTarget = maxDaily
+      if (fridgeStock >= fridgeTarget) continue
+
+      const defrostQty = Math.min(freezerStock, Math.round(fridgeTarget - fridgeStock))
+      if (defrostQty < 50) continue
+
+      const unitMap: Record<string, string> = { ml: 'ml', piece: 'pc' }
+      const displayUnit = unitMap[prep.outputUnit || ''] || 'g'
+
+      missingDefrost.push({
+        preparationId: balance.preparationId,
+        preparationName: balance.preparationName,
+        department,
+        scheduleDate: TimeUtils.getCurrentLocalDate(),
+        productionSlot: 'morning',
+        targetQuantity: defrostQty,
+        targetUnit: displayUnit,
+        priority: 80,
+        recommendationReason: `Defrost: fridge ${Math.round(fridgeStock)}${displayUnit}, freezer ${Math.round(freezerStock)}${displayUnit}`,
+        currentStockAtGeneration: freezerStock,
+        taskType: 'defrost'
+      })
+    }
+
+    if (missingDefrost.length > 0) {
+      await kpiStore.createScheduleItems(missingDefrost)
+      await kpiStore.loadSchedule({ department })
+      DebugUtils.info(MODULE_NAME, '🧊 Added defrost tasks', {
+        count: missingDefrost.length,
+        items: missingDefrost.map(d => `${d.preparationName}: ${d.targetQuantity}${d.targetUnit}`)
+      })
+    }
+  } catch (err) {
+    DebugUtils.error(MODULE_NAME, 'Failed to ensure defrost tasks', { error: err })
   }
 }
 
@@ -774,6 +878,139 @@ function handleWriteOff(
       }
     }
   )
+}
+
+async function handleDefrost(
+  task: ProductionScheduleItem,
+  quantity: number,
+  staffMemberId?: string,
+  staffMemberName?: string
+): Promise<void> {
+  // Find freezer batches for this preparation (FIFO order)
+  const balance = (preparationStore.state.balances || []).find(
+    b => b.preparationId === task.preparationId
+  )
+  if (!balance) {
+    showSnackbar('No stock data found', 'error')
+    return
+  }
+
+  const now = new Date()
+  const freezerBatches = (balance.batches || [])
+    .filter(
+      b =>
+        b.storageLocation === 'freezer' &&
+        b.currentQuantity > 0 &&
+        b.status === 'active' &&
+        !(b.expiryDate && new Date(b.expiryDate) < now)
+    )
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+
+  if (freezerBatches.length === 0) {
+    showSnackbar('No freezer stock available', 'error')
+    return
+  }
+
+  // Optimistic update
+  const idx = kpiStore.scheduleItems.findIndex(i => i.id === task.id)
+  if (idx !== -1) {
+    kpiStore.scheduleItems[idx] = {
+      ...kpiStore.scheduleItems[idx],
+      status: 'completed',
+      completedAt: new Date().toISOString(),
+      completedByName: staffMemberName || authStore.userName,
+      staffMemberId,
+      staffMemberName,
+      completedQuantity: quantity
+    }
+  }
+
+  let remainingQty = quantity
+  try {
+    // Transfer batches FIFO: move quantity from freezer to fridge
+    for (const batch of freezerBatches) {
+      if (remainingQty <= 0) break
+      const transferQty = Math.min(remainingQty, batch.currentQuantity)
+
+      const result = await preparationStore.transferBatch({
+        department: userDepartment.value,
+        responsiblePerson: staffMemberName || authStore.userName,
+        sourceBatchId: batch.id,
+        preparationId: task.preparationId,
+        quantity: transferQty,
+        fromLocation: 'freezer',
+        toLocation: 'fridge',
+        notes: `Defrost task: ${task.preparationName}`
+      })
+
+      if (!result.success) {
+        throw new Error(result.error || 'Transfer failed')
+      }
+      remainingQty -= transferQty
+    }
+
+    // Mark schedule task as completed in DB
+    const actualTransferred = quantity - remainingQty
+    await kpiStore.completeTask({
+      taskId: task.id,
+      completedQuantity: actualTransferred,
+      completedByName: staffMemberName || authStore.userName,
+      staffMemberId,
+      staffMemberName
+    })
+
+    // Refresh balances so subsequent tasks see updated stock
+    await preparationStore.fetchBalances(userDepartment.value)
+
+    showSnackbar(`${task.preparationName} moved to fridge!`, 'success')
+  } catch (err) {
+    // Some batches may have already transferred — refresh balances to reflect actual state
+    await preparationStore.fetchBalances(userDepartment.value).catch(() => {})
+
+    // If some quantity was already transferred, mark as partially completed
+    const transferredSoFar = quantity - remainingQty
+    if (transferredSoFar > 0) {
+      // Partial success — update with actual transferred amount
+      const partialIdx = kpiStore.scheduleItems.findIndex(i => i.id === task.id)
+      if (partialIdx !== -1) {
+        kpiStore.scheduleItems[partialIdx] = {
+          ...kpiStore.scheduleItems[partialIdx],
+          status: 'completed',
+          completedQuantity: transferredSoFar
+        }
+      }
+      await kpiStore
+        .completeTask({
+          taskId: task.id,
+          completedQuantity: transferredSoFar,
+          completedByName: staffMemberName || authStore.userName,
+          staffMemberId,
+          staffMemberName,
+          notes: `Partial defrost: ${transferredSoFar}/${quantity} transferred`
+        })
+        .catch(() => {})
+      showSnackbar(
+        `Partial defrost: ${transferredSoFar}${task.targetUnit} moved (error on remaining)`,
+        'warning'
+      )
+    } else {
+      // Full failure — revert optimistic update
+      const revertIdx = kpiStore.scheduleItems.findIndex(i => i.id === task.id)
+      if (revertIdx !== -1) {
+        kpiStore.scheduleItems[revertIdx] = {
+          ...kpiStore.scheduleItems[revertIdx],
+          status: 'pending',
+          completedAt: undefined,
+          completedByName: undefined,
+          completedQuantity: undefined
+        }
+      }
+      showSnackbar(
+        'Defrost failed: ' + (err instanceof Error ? err.message : 'Unknown error'),
+        'error'
+      )
+    }
+  }
 }
 
 /**
