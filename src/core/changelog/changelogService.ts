@@ -17,7 +17,7 @@ function isTableMissing(error: any): boolean {
 // TYPES
 // =============================================
 
-export type EntityType = 'recipe' | 'preparation'
+export type EntityType = 'recipe' | 'preparation' | 'product'
 export type ChangeType = 'created' | 'updated' | 'archived' | 'restored' | 'cloned'
 
 export interface ChangeLogEntry {

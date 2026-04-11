@@ -18,8 +18,26 @@ import type {
 import { DebugUtils, invalidateCache } from '@/utils'
 import type { ProductForRecipe } from '@/stores/recipes/types'
 import { isUnitDivisible, type MeasurementUnit } from '@/types/measurementUnits'
+import { computeProductDiff, changelogService, setCurrentUserProvider } from '@/core/changelog'
+import { useAuthStore } from '@/stores/auth/authStore'
 
 const MODULE_NAME = 'ProductsStore'
+
+let _changelogUserProviderSet = false
+function ensureChangelogUserProvider() {
+  if (_changelogUserProviderSet) return
+  _changelogUserProviderSet = true
+  setCurrentUserProvider(() => {
+    try {
+      const authStore = useAuthStore()
+      const user = authStore.currentUser
+      if (user) return { id: user.id, name: user.name }
+    } catch {
+      /* store not ready */
+    }
+    return null
+  })
+}
 
 export const useProductsStore = defineStore('products', {
   state: (): ProductsState => ({
@@ -244,6 +262,17 @@ export const useProductsStore = defineStore('products', {
           packageName: savedPackage.packageName
         })
 
+        ensureChangelogUserProvider()
+        changelogService
+          .logChange({
+            entityType: 'product',
+            entityId: newProduct.id,
+            entityName: newProduct.name,
+            changeType: 'created',
+            changes: {}
+          })
+          .catch(() => {})
+
         return newProduct
       } catch (error) {
         DebugUtils.error(MODULE_NAME, 'Error creating product', { error, data })
@@ -295,16 +324,34 @@ export const useProductsStore = defineStore('products', {
 
         DebugUtils.info(MODULE_NAME, 'Updating product', { data })
 
+        const index = this.products.findIndex(p => p.id === data.id)
+        const oldProduct = index !== -1 ? { ...this.products[index] } : null
+
         // Always use productsService (Supabase-only)
         const { productsService } = await import('./productsService')
         await productsService.updateProduct(data)
 
-        const index = this.products.findIndex(p => p.id === data.id)
         if (index !== -1) {
           this.products[index] = {
             ...this.products[index],
             ...data,
             updatedAt: new Date().toISOString()
+          }
+        }
+
+        if (oldProduct) {
+          ensureChangelogUserProvider()
+          const diff = computeProductDiff(oldProduct, data)
+          if (diff.hasChanges) {
+            changelogService
+              .logChange({
+                entityType: 'product',
+                entityId: data.id,
+                entityName: data.name || oldProduct.name,
+                changeType: 'updated',
+                changes: diff
+              })
+              .catch(() => {})
           }
         }
 

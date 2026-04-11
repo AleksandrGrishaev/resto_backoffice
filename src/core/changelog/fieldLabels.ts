@@ -17,6 +17,16 @@ const FIELD_LABELS: Record<string, string> = {
   preparationTime: 'Preparation Time',
   shelfLife: 'Shelf Life',
 
+  // Product
+  baseUnit: 'Base Unit',
+  baseCostPerUnit: 'Base Cost Per Unit',
+  yieldPercentage: 'Yield',
+  canBeSold: 'Can Be Sold',
+  isActive: 'Status',
+  storageConditions: 'Storage Conditions',
+  minStock: 'Minimum Stock',
+  description: 'Description',
+
   // Component fields
   quantity: 'Quantity',
   unit: 'Unit'
@@ -45,6 +55,18 @@ export function formatFieldValue(field: string, value: any): string {
       return String(value)
     case 'portionType':
       return value === 'portion' ? 'Portion' : 'Weight'
+    case 'yieldPercentage':
+      return `${value}%`
+    case 'baseCostPerUnit':
+      return `${Number(value).toLocaleString('id-ID')} IDR`
+    case 'canBeSold':
+      return value ? 'Yes' : 'No'
+    case 'isActive':
+      return value ? 'Active' : 'Archived'
+    case 'baseUnit':
+      return String(value).charAt(0).toUpperCase() + String(value).slice(1)
+    case 'minStock':
+      return String(value)
     default:
       return String(value)
   }

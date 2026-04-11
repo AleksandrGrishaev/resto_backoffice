@@ -22,6 +22,7 @@
             class="ml-1"
           />
         </v-tab>
+        <v-tab v-if="isEdit && product?.id" value="history">History</v-tab>
       </v-tabs>
       <v-divider />
 
@@ -320,6 +321,11 @@
                 </v-card>
               </div>
             </v-tabs-window-item>
+
+            <!-- === History Tab === -->
+            <v-tabs-window-item v-if="isEdit && product?.id" value="history">
+              <entity-history-tab ref="historyRef" entity-type="product" :entity-id="product.id" />
+            </v-tabs-window-item>
           </v-tabs-window>
         </v-form>
       </v-card-text>
@@ -380,6 +386,7 @@ import { useProductsStore } from '@/stores/productsStore'
 import { DebugUtils } from '@/utils'
 import PackageOptionDialog from './package/PackageOptionDialog.vue'
 import { NumericInputField } from '@/components/input'
+import EntityHistoryTab from '@/views/kitchen/constructor/components/EntityHistoryTab.vue'
 
 const MODULE_NAME = 'ProductDialog'
 const productsStore = useProductsStore()
@@ -422,6 +429,7 @@ const packageDialogOpen = ref(false)
 const editingPackage = ref<PackageOption | undefined>(undefined)
 const editingPackageIndex = ref<number | null>(null)
 const saving = ref(false)
+const historyRef = ref<InstanceType<typeof EntityHistoryTab> | null>(null)
 const localPackageOptions = ref<LocalPackage[]>([])
 const departmentOptions = [
   { value: 'kitchen' as Department, title: 'Kitchen' },
