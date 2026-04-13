@@ -1104,7 +1104,17 @@ export class OrdersService {
 
           console.log('✅ Order updated in Supabase:', order.orderNumber)
         } catch (error) {
-          console.error('❌ Supabase update failed:', extractErrorDetails(error))
+          const details = extractErrorDetails(error)
+          console.error('❌ Supabase update failed:', details)
+          // Propagate constraint violations (e.g. unique table_id) — these indicate
+          // a real data integrity problem that localStorage fallback cannot fix
+          const code = (error as any)?.code || (error as any)?.details?.code
+          if (code === '23505') {
+            return {
+              success: false,
+              error: `Database constraint violation: ${details}`
+            }
+          }
         }
       }
 

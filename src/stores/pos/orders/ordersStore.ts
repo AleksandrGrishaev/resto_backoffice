@@ -1548,6 +1548,42 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
   }
 
   /**
+   * Clear stale table_id references in DB before assigning a new order to a table.
+   * This handles the case where a previous order still has table_id set
+   * (e.g. releaseTable update failed silently), which would cause
+   * idx_unique_active_order_per_table unique constraint violation.
+   */
+  async function clearStaleTableReferences(tableId: string, excludeOrderId: string): Promise<void> {
+    try {
+      const { error: clearError } = await supabase
+        .from('orders')
+        .update({ table_id: null })
+        .eq('table_id', tableId)
+        .neq('id', excludeOrderId)
+        .not('status', 'in', '("cancelled","served","collected","delivered")')
+
+      if (clearError) {
+        console.warn('⚠️ [ordersStore] Failed to clear stale table references:', clearError.message)
+      } else {
+        console.log('🧹 [ordersStore] Cleared stale table_id references for table:', tableId)
+      }
+
+      // Also update local state for any stale orders
+      for (const order of orders.value) {
+        if (
+          order.tableId === tableId &&
+          order.id !== excludeOrderId &&
+          !['cancelled', 'served', 'collected', 'delivered'].includes(order.status)
+        ) {
+          order.tableId = undefined
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ [ordersStore] Error clearing stale table references:', err)
+    }
+  }
+
+  /**
    * Установить фильтры
    */
   function setFilters(newFilters: Partial<OrderFilters>): void {
@@ -1890,10 +1926,16 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       // Case 2: Target table is free → Assign order to table
       console.log('📍 [ordersStore] Target table is free, assigning order')
 
+      // Save original table for rollback
+      const previousTableId = orderToMove.tableId
+
       // Release the current table (if any)
       if (orderToMove.tableId) {
         await tablesStore.freeTable(orderToMove.tableId, orderToMove.id)
       }
+
+      // Clear stale table_id references to avoid unique constraint violation
+      await clearStaleTableReferences(targetTableId, orderId)
 
       // Update order with new table
       orderToMove.tableId = targetTableId
@@ -1905,6 +1947,16 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       // Save the order
       const updateResponse = await updateOrder(orderToMove)
       if (!updateResponse.success) {
+        // Rollback: free target table, restore previous table
+        await tablesStore.freeTable(targetTableId, orderId)
+        orderToMove.tableId = previousTableId
+        if (previousTableId) {
+          await tablesStore.occupyTable(previousTableId, orderId)
+        }
+        console.error(
+          '❌ [ordersStore] moveOrderToTable failed, rolled back:',
+          updateResponse.error
+        )
         return updateResponse
       }
 
@@ -2093,6 +2145,9 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
       // Case 2: Target table is free → Convert order type and assign table
       console.log('📍 [ordersStore] Target table is free, converting order type')
 
+      // Save original values for rollback
+      const originalType = orderToConvert.type
+
       // Convert order type to dine_in and update channel
       orderToConvert.type = 'dine_in'
       orderToConvert.tableId = tableId
@@ -2130,12 +2185,23 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
       orderToConvert.updatedAt = new Date().toISOString()
 
+      // Clear stale table_id references to avoid unique constraint violation
+      await clearStaleTableReferences(tableId, orderId)
+
       // Occupy the target table
       await tablesStore.occupyTable(tableId, orderId)
 
       // Save the order
       const updateResponse = await updateOrder(orderToConvert)
       if (!updateResponse.success) {
+        // Rollback: free the table we just occupied since order save failed
+        await tablesStore.freeTable(tableId, orderId)
+        orderToConvert.tableId = undefined
+        orderToConvert.type = originalType
+        console.error(
+          '❌ [ordersStore] convertOrderToDineIn failed, rolled back table:',
+          updateResponse.error
+        )
         return updateResponse
       }
 
@@ -2254,6 +2320,9 @@ export const usePosOrdersStore = defineStore('posOrders', () => {
 
       // Case 2: Target table is free → Create new order with this bill
       console.log('📍 [ordersStore] Target table is free, creating new order')
+
+      // Clear stale table_id references to avoid unique constraint violation
+      await clearStaleTableReferences(targetTableId, '')
 
       // Remove bill from source order
       const billIndex = sourceOrder.bills.findIndex(b => b.id === billId)
