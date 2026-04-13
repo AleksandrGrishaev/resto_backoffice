@@ -16,6 +16,7 @@ export interface ConflictItem {
 export const MERGE_FIELDS: MergeField[] = [
   { key: 'name', dbKey: 'name', label: 'Name' },
   { key: 'phone', dbKey: 'phone', label: 'Phone' },
+  { key: 'email', dbKey: 'email', label: 'Email' },
   { key: 'telegramUsername', dbKey: 'telegram_username', label: 'Telegram' },
   { key: 'notes', dbKey: 'notes', label: 'Notes' },
   { key: 'tier', dbKey: 'tier', label: 'Tier' },

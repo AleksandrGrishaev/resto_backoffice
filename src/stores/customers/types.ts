@@ -7,6 +7,7 @@ export type LoyaltyProgram = 'stamps' | 'cashback'
 export interface Customer {
   id: string
   name: string
+  email: string | null
   telegramId: string | null
   telegramUsername: string | null
   phone: string | null

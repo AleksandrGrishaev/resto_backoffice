@@ -40,7 +40,9 @@ export class CustomersService {
       .select('*')
       .eq('status', 'active')
       .is('merged_into', null)
-      .or(`name.ilike.%${query}%,telegram_username.ilike.%${query}%,phone.ilike.%${query}%`)
+      .or(
+        `name.ilike.%${query}%,telegram_username.ilike.%${query}%,phone.ilike.%${query}%,email.ilike.%${query}%`
+      )
       .order('last_visit_at', { ascending: false, nullsFirst: false })
       .limit(20)
 
@@ -165,6 +167,24 @@ export class CustomersService {
 
     if (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to update customer', { error })
+      throw error
+    }
+
+    return mapCustomerFromDb(data)
+  }
+
+  /** Generate a new token for a customer (re-link via QR) */
+  async resetToken(id: string): Promise<Customer> {
+    const newToken = crypto.randomUUID().replace(/-/g, '').slice(0, 24)
+    const { data, error } = await supabase
+      .from('customers')
+      .update({ token: newToken, telegram_id: null, telegram_username: null, email: null })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to reset customer token', { error })
       throw error
     }
 

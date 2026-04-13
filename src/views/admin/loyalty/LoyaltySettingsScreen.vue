@@ -733,6 +733,10 @@
                         }}
                       </div>
                     </v-col>
+                    <v-col cols="12">
+                      <div class="text-caption text-medium-emphasis">Email</div>
+                      <div class="text-body-1">{{ selectedCustomer.email || '-' }}</div>
+                    </v-col>
                   </v-row>
 
                   <!-- Personal Discount -->
@@ -762,8 +766,34 @@
                   <v-divider class="my-3" />
 
                   <div class="text-caption text-medium-emphasis mb-1">Token</div>
-                  <div class="text-body-2 font-weight-mono mb-3">
-                    {{ maskToken(selectedCustomer.token) }}
+                  <div class="d-flex align-center gap-2 mb-3">
+                    <span class="text-body-2 font-weight-mono">
+                      {{ maskToken(selectedCustomer.token) }}
+                    </span>
+                    <v-btn
+                      size="x-small"
+                      variant="tonal"
+                      color="warning"
+                      prepend-icon="mdi-refresh"
+                      :loading="resettingToken"
+                      @click="confirmResetToken"
+                    >
+                      New QR
+                    </v-btn>
+                  </div>
+
+                  <!-- Registration source -->
+                  <div class="text-caption text-medium-emphasis mb-1">Registered via</div>
+                  <div class="d-flex gap-1 mb-3">
+                    <v-chip
+                      v-for="(src, i) in registrationSource"
+                      :key="i"
+                      size="small"
+                      :color="src.color"
+                      variant="tonal"
+                    >
+                      {{ src.label }}
+                    </v-chip>
                   </div>
 
                   <!-- Transactions -->
@@ -840,6 +870,15 @@
                     variant="outlined"
                     hide-details
                     class="mb-3"
+                  />
+                  <v-text-field
+                    v-model="custForm.email"
+                    label="Email"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="mb-3"
+                    type="email"
                   />
                   <v-text-field
                     v-model="custForm.notes"
@@ -1206,6 +1245,15 @@
                   variant="outlined"
                   hide-details
                   class="mb-3"
+                />
+                <v-text-field
+                  v-model="custForm.email"
+                  label="Email"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                  class="mb-3"
+                  type="email"
                 />
                 <v-text-field
                   v-model="custForm.notes"
@@ -1599,6 +1647,7 @@ const custForm = ref({
   phoneCode: '+62',
   phoneNumber: '',
   telegramUsername: '',
+  email: '',
   notes: '',
   tier: 'member' as string,
   loyaltyProgram: 'stamps' as string,
@@ -1618,6 +1667,51 @@ const balanceChanged = computed(
 )
 
 const tierWindowLabel = computed(() => `Spent ${loyaltyStore.settings?.tierWindowDays ?? 90}d`)
+
+const resettingToken = ref(false)
+
+const registrationSource = computed(() => {
+  const c = selectedCustomer.value
+  if (!c) return [{ label: '-', color: 'grey' }]
+
+  // Determine linked auth methods
+  const methods: { label: string; color: string }[] = []
+  if (c.telegramId || c.telegramUsername) {
+    methods.push({ label: 'Telegram', color: 'blue' })
+  }
+  if (c.email) {
+    // Google OAuth emails vs magic link — both show as email, but we can hint
+    const isGmail = c.email.endsWith('@gmail.com') || c.email.endsWith('@googlemail.com')
+    methods.push({ label: isGmail ? 'Google' : 'Email', color: isGmail ? 'red' : 'purple' })
+  }
+  if (methods.length > 0) return methods
+
+  // No linked identity
+  return [{ label: 'QR only (not linked)', color: 'grey' }]
+})
+
+async function confirmResetToken() {
+  if (!selectedCustomer.value) return
+  const ok = window.confirm(
+    `Reset token for "${selectedCustomer.value.name}"?\n\nThis will:\n- Generate a new QR code\n- Unlink Telegram and Email\n- Customer will need to re-register\n\nLoyalty balance and history will be preserved.`
+  )
+  if (!ok) return
+
+  resettingToken.value = true
+  try {
+    const updated = await customersStore.resetToken(selectedCustomer.value.id)
+    selectedCustomer.value = updated
+    snackbar.message = 'Token reset — new QR generated'
+    snackbar.color = 'success'
+    snackbar.show = true
+  } catch (err) {
+    snackbar.message = 'Failed to reset token'
+    snackbar.color = 'error'
+    snackbar.show = true
+  } finally {
+    resettingToken.value = false
+  }
+}
 
 const customerHeaders = computed(() => [
   { title: 'Name', key: 'name', sortable: true },
@@ -1721,6 +1815,7 @@ function resetCustForm() {
     phoneCode: '+62',
     phoneNumber: '',
     telegramUsername: '',
+    email: '',
     notes: '',
     tier: 'member',
     loyaltyProgram: 'stamps',
@@ -1785,6 +1880,7 @@ async function startCustomerEdit() {
     phoneCode: parsed.code,
     phoneNumber: parsed.number,
     telegramUsername: c.telegramUsername || '',
+    email: c.email || '',
     notes: c.notes || '',
     tier: c.tier,
     loyaltyProgram: c.loyaltyProgram || 'stamps',
@@ -1821,6 +1917,7 @@ async function saveCustomerEdit() {
       name: custForm.value.name.trim(),
       phone: fullPhone || null,
       telegramUsername: custForm.value.telegramUsername.trim() || null,
+      email: custForm.value.email.trim() || null,
       notes: custForm.value.notes.trim() || null,
       tier: custForm.value.tier,
       loyaltyProgram: custForm.value.loyaltyProgram,
@@ -1896,6 +1993,7 @@ async function createNewCustomer() {
       name: custForm.value.name.trim(),
       phone: fullPhone || null,
       telegramUsername: custForm.value.telegramUsername.trim() || null,
+      email: custForm.value.email.trim() || null,
       notes: custForm.value.notes.trim() || null,
       personalDiscount: Math.max(0, Math.min(100, custForm.value.personalDiscount || 0)),
       discountNote: custForm.value.discountNote.trim() || null,

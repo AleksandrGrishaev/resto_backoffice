@@ -6,6 +6,7 @@ export function mapCustomerFromDb(row: any): Customer {
   return {
     id: row.id,
     name: row.name,
+    email: row.email || null,
     telegramId: row.telegram_id || null,
     telegramUsername: row.telegram_username || null,
     phone: row.phone || null,
@@ -33,6 +34,7 @@ export function mapCustomerFromDb(row: any): Customer {
 export function mapCustomerToDb(customer: Partial<Customer>): Record<string, any> {
   const result: Record<string, any> = {}
   if (customer.name !== undefined) result.name = customer.name
+  if (customer.email !== undefined) result.email = customer.email
   if (customer.telegramId !== undefined) result.telegram_id = customer.telegramId
   if (customer.telegramUsername !== undefined) result.telegram_username = customer.telegramUsername
   if (customer.phone !== undefined) result.phone = customer.phone

@@ -115,6 +115,15 @@ export const useCustomersStore = defineStore('customers', () => {
     return updated
   }
 
+  async function resetToken(id: string): Promise<Customer> {
+    const updated = await customersService.resetToken(id)
+    const index = customers.value.findIndex(c => c.id === id)
+    if (index !== -1) {
+      customers.value[index] = updated
+    }
+    return updated
+  }
+
   async function reload(): Promise<void> {
     isLoading.value = true
     try {
@@ -176,6 +185,7 @@ export const useCustomersStore = defineStore('customers', () => {
     searchCustomers,
     createCustomer,
     updateCustomer,
+    resetToken,
     refreshCustomer,
     mergeCustomers
   }
