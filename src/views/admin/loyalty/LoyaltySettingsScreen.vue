@@ -1324,6 +1324,46 @@
               </v-card-actions>
             </v-card>
           </v-dialog>
+
+          <!-- ===== Reset Token Confirm Dialog ===== -->
+          <v-dialog v-model="showResetTokenDialog" max-width="420">
+            <v-card>
+              <v-card-title class="bg-warning text-white">Reset Token</v-card-title>
+              <v-card-text class="pt-4">
+                <p class="text-body-1 mb-3">
+                  Reset token for
+                  <strong>{{ selectedCustomer?.name }}</strong>
+                  ?
+                </p>
+                <v-list density="compact" class="mb-3">
+                  <v-list-item prepend-icon="mdi-qrcode" class="px-0">
+                    Generate a new QR code
+                  </v-list-item>
+                  <v-list-item prepend-icon="mdi-link-off" class="px-0">
+                    Unlink Telegram and Email
+                  </v-list-item>
+                  <v-list-item prepend-icon="mdi-account-arrow-right" class="px-0">
+                    Customer will need to re-register
+                  </v-list-item>
+                </v-list>
+                <v-alert type="info" variant="tonal" density="compact">
+                  Loyalty balance and history will be preserved.
+                </v-alert>
+              </v-card-text>
+              <v-card-actions>
+                <v-spacer />
+                <v-btn variant="text" @click="showResetTokenDialog = false">Cancel</v-btn>
+                <v-btn
+                  color="warning"
+                  variant="flat"
+                  :loading="resettingToken"
+                  @click="executeResetToken"
+                >
+                  Reset
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-dialog>
         </div>
 
         <!-- ===================== HISTORY TAB ===================== -->
@@ -1669,6 +1709,7 @@ const balanceChanged = computed(
 const tierWindowLabel = computed(() => `Spent ${loyaltyStore.settings?.tierWindowDays ?? 90}d`)
 
 const resettingToken = ref(false)
+const showResetTokenDialog = ref(false)
 
 const registrationSource = computed(() => {
   const c = selectedCustomer.value
@@ -1690,17 +1731,19 @@ const registrationSource = computed(() => {
   return [{ label: 'QR only (not linked)', color: 'grey' }]
 })
 
-async function confirmResetToken() {
+function confirmResetToken() {
   if (!selectedCustomer.value) return
-  const ok = window.confirm(
-    `Reset token for "${selectedCustomer.value.name}"?\n\nThis will:\n- Generate a new QR code\n- Unlink Telegram and Email\n- Customer will need to re-register\n\nLoyalty balance and history will be preserved.`
-  )
-  if (!ok) return
+  showResetTokenDialog.value = true
+}
+
+async function executeResetToken() {
+  if (!selectedCustomer.value) return
 
   resettingToken.value = true
   try {
     const updated = await customersStore.resetToken(selectedCustomer.value.id)
     selectedCustomer.value = updated
+    showResetTokenDialog.value = false
     snackbar.message = 'Token reset — new QR generated'
     snackbar.color = 'success'
     snackbar.show = true
