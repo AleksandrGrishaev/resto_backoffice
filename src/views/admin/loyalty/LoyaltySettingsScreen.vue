@@ -1325,6 +1325,13 @@
             </v-card>
           </v-dialog>
 
+          <!-- ===== QR Code Dialog ===== -->
+          <ShowQrDialog
+            v-model="showQrDialog"
+            :url="showQrUrl"
+            :title="`Invite QR — ${selectedCustomer?.name}`"
+          />
+
           <!-- ===== Reset Token Confirm Dialog ===== -->
           <v-dialog v-model="showResetTokenDialog" max-width="420">
             <v-card>
@@ -1460,6 +1467,7 @@ import {
   type ConflictItem
 } from '@/stores/customers/mergeConflicts'
 import { supabase } from '@/supabase/client'
+import ShowQrDialog from '@/components/common/ShowQrDialog.vue'
 import { formatIDR, TimeUtils } from '@/utils'
 import { usePhoneCodes, buildFullPhone } from '@/composables/usePhoneCodes'
 
@@ -1710,6 +1718,8 @@ const tierWindowLabel = computed(() => `Spent ${loyaltyStore.settings?.tierWindo
 
 const resettingToken = ref(false)
 const showResetTokenDialog = ref(false)
+const showQrDialog = ref(false)
+const showQrUrl = ref('')
 
 const registrationSource = computed(() => {
   const c = selectedCustomer.value
@@ -1744,7 +1754,17 @@ async function executeResetToken() {
     const updated = await customersStore.resetToken(selectedCustomer.value.id)
     selectedCustomer.value = updated
     showResetTokenDialog.value = false
-    snackbar.message = 'Token reset — new QR generated'
+
+    // Generate invite QR for re-registration
+    const { data } = await supabase.rpc('create_customer_invite', {
+      p_customer_id: updated.id
+    })
+    if (data?.success && data?.url) {
+      showQrUrl.value = data.url
+      showQrDialog.value = true
+    }
+
+    snackbar.message = 'Token reset — scan QR to re-register'
     snackbar.color = 'success'
     snackbar.show = true
   } catch (err) {
