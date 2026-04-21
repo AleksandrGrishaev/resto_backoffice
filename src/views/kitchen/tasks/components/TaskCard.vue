@@ -46,10 +46,8 @@
     <div v-if="!isCompleted" class="task-badges">
       <!-- Defrost badges: FROZEN + DEFROST -->
       <template v-if="isDefrost">
-        <div v-if="task.currentStockAtGeneration != null" class="badge badge-frozen">
-          <span class="badge-qty">
-            {{ Math.round(task.currentStockAtGeneration) }}{{ task.targetUnit }}
-          </span>
+        <div v-if="liveStock != null" class="badge badge-frozen">
+          <span class="badge-qty">{{ Math.round(liveStock) }}{{ task.targetUnit }}</span>
           <span class="badge-label">frozen</span>
         </div>
         <div class="badge badge-defrost">
@@ -59,10 +57,8 @@
       </template>
       <!-- Standard badges (production/write-off) -->
       <template v-else>
-        <div v-if="task.currentStockAtGeneration != null" class="badge badge-stock">
-          <span class="badge-qty">
-            {{ Math.round(task.currentStockAtGeneration) }}{{ task.targetUnit }}
-          </span>
+        <div v-if="liveStock != null" class="badge badge-stock">
+          <span class="badge-qty">{{ Math.round(liveStock) }}{{ task.targetUnit }}</span>
           <span class="badge-label">stock</span>
         </div>
         <div class="badge badge-target">
@@ -98,6 +94,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import ProductionCard from './ProductionCard.vue'
+import { usePreparationStore } from '@/stores/preparation'
 import type { ProductionScheduleItem } from '@/stores/kitchenKpi'
 
 const props = defineProps<{
@@ -128,11 +125,22 @@ const emit = defineEmits<{
 }>()
 
 const showDialog = ref(false)
+const preparationStore = usePreparationStore()
 
 const isCompleted = computed(() => props.task.status === 'completed')
 const isWriteOff = computed(() => props.task.taskType === 'write_off')
 const isDefrost = computed(() => props.task.taskType === 'defrost')
 const isPremade = computed(() => props.task.isPremade === true)
+
+// Live stock for this preparation (matches the write-off dialog's source of truth).
+// Falls back to the generation-time snapshot if balance is not yet loaded.
+const liveStock = computed<number | null>(() => {
+  const balance = (preparationStore.state.balances || []).find(
+    b => b.preparationId === props.task.preparationId && b.department === props.task.department
+  )
+  if (balance) return balance.totalQuantity
+  return props.task.currentStockAtGeneration ?? null
+})
 
 const doneQtyClass = computed(() => {
   const actual = props.task.completedQuantity || props.task.targetQuantity

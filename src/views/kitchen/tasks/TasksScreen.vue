@@ -302,6 +302,37 @@ const isRefreshing = ref(false)
 const showRitualDialog = ref(false)
 const snackbar = ref({ show: false, message: '', color: 'success' })
 const customTaskDone = ref<Record<string, boolean>>({})
+
+// Checklist draft persistence (localStorage, scoped by date+dept+ritualType).
+// Survives page refresh until the whole ritual is finished.
+function getChecklistDraftKey(ritualType?: 'morning' | 'afternoon' | 'evening'): string {
+  const date = TimeUtils.getCurrentLocalDate()
+  const type = ritualType || kpiStore.currentRitualType
+  return `ritual_checklist_draft_${date}_${userDepartment.value}_${type}`
+}
+function loadChecklistDraft(): void {
+  try {
+    const raw = localStorage.getItem(getChecklistDraftKey())
+    customTaskDone.value = raw ? (JSON.parse(raw) as Record<string, boolean>) : {}
+  } catch {
+    customTaskDone.value = {}
+  }
+}
+function saveChecklistDraft(): void {
+  try {
+    localStorage.setItem(getChecklistDraftKey(), JSON.stringify(customTaskDone.value))
+  } catch (err) {
+    DebugUtils.error(MODULE_NAME, 'Failed to save checklist draft', { error: err })
+  }
+}
+function clearChecklistDraft(ritualType?: 'morning' | 'afternoon' | 'evening'): void {
+  try {
+    localStorage.removeItem(getChecklistDraftKey(ritualType))
+  } catch {
+    // noop
+  }
+}
+
 const showRatingDialog = ref(false)
 const ratingDialogTask = ref<RitualCustomTask | null>(null)
 const ratingValue = ref('')
@@ -412,6 +443,7 @@ const currentCustomTasks = computed(() => kpiStore.currentRitualCustomTasks)
 function toggleCustomTaskDone(ct: RitualCustomTask): void {
   if (customTaskDone.value[ct.id]) {
     customTaskDone.value[ct.id] = false
+    saveChecklistDraft()
     return
   }
   ratingDialogTask.value = ct
@@ -425,6 +457,7 @@ function toggleCustomTaskDone(ct: RitualCustomTask): void {
 function confirmRatingDialog(): void {
   if (!ratingDialogTask.value) return
   customTaskDone.value[ratingDialogTask.value.id] = true
+  saveChecklistDraft()
   showRatingDialog.value = false
   ratingDialogTask.value = null
 }
@@ -497,6 +530,9 @@ async function autoGenerateIfNeeded(): Promise<void> {
   const lastGenTime = lastGenStr ? new Date(lastGenStr).getTime() : 0
   const isStale = Date.now() - lastGenTime > TWELVE_HOURS_MS
   const hasPendingTasks = kpiStore.scheduleItems.some(i => i.status === 'pending')
+
+  // Cancel pending write-off tasks whose live stock is now 0 (already consumed/reconciled elsewhere)
+  await cleanupObsoleteWriteOffTasks()
 
   // Always ensure expired write-off tasks exist, even when production tasks are pending
   await ensureExpiredWriteOffTasks()
@@ -596,6 +632,47 @@ async function ensureExpiredWriteOffTasks(): Promise<void> {
     }
   } catch (err) {
     DebugUtils.error(MODULE_NAME, 'Failed to ensure expired write-off tasks', { error: err })
+  }
+}
+
+/**
+ * Cancel pending write-off tasks whose live stock dropped to 0.
+ * Happens when the batches that triggered the write-off got consumed or reconciled
+ * via another flow (direct storage write-off, reconciliation, etc.) — leaving a
+ * zombie task with nothing to write off.
+ */
+async function cleanupObsoleteWriteOffTasks(): Promise<void> {
+  try {
+    const department = userDepartment.value
+    const balances = preparationStore.state.balances || []
+
+    // Safety: if balances failed to load, do nothing — we can't trust "0 stock" here.
+    if (balances.length === 0) return
+
+    const balanceByPrepId = new Map(
+      balances
+        .filter(b => b.department === department || b.department === 'all')
+        .map(b => [b.preparationId, b])
+    )
+
+    const obsolete = kpiStore.scheduleItems.filter(i => {
+      if (i.taskType !== 'write_off' || i.status !== 'pending') return false
+      if (i.department !== department) return false
+      const balance = balanceByPrepId.get(i.preparationId)
+      // No balance row or totalQuantity 0 → nothing left to write off
+      return !balance || balance.totalQuantity <= 0
+    })
+
+    if (obsolete.length === 0) return
+
+    DebugUtils.info(MODULE_NAME, '🧹 Cancelling obsolete write-off tasks', {
+      count: obsolete.length,
+      items: obsolete.map(t => t.preparationName)
+    })
+
+    await Promise.all(obsolete.map(t => kpiStore.updateTaskStatus(t.id, 'cancelled')))
+  } catch (err) {
+    DebugUtils.error(MODULE_NAME, 'Failed to cleanup obsolete write-off tasks', { error: err })
   }
 }
 
@@ -1052,6 +1129,10 @@ async function handleRitualCompleted(
       taskDetails
     })
 
+    // Ritual persisted — clear the checklist draft for this window
+    clearChecklistDraft(ritualType)
+    customTaskDone.value = {}
+
     const ritualNames = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening' }
     showSnackbar(`${ritualNames[ritualType]} Ritual recorded!`, 'success')
   } catch (err) {
@@ -1190,6 +1271,7 @@ watch(showRitualDialog, open => {
 
 onMounted(async () => {
   await loadData()
+  loadChecklistDraft()
   // After data loaded, check ritual state
   checkRitualOnMount()
 })
@@ -1199,6 +1281,12 @@ onUnmounted(() => {
 })
 
 watch(userDepartment, () => loadData())
+
+// Reload checklist draft when department or ritual window changes
+watch(
+  () => [userDepartment.value, kpiStore.currentRitualType],
+  () => loadChecklistDraft()
+)
 </script>
 
 <style scoped lang="scss">
