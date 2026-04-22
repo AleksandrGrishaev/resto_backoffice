@@ -49,9 +49,9 @@ Siklus pelanggan kartu stamp pada umumnya:
 
 ---
 
-## Scenario 2: Customer Wants to Register at Checkout (with Stamps)
+## Scenario 2: Customer Wants to Register at Checkout (Fresh Card)
 
-**When:** Customer just paid (or is paying) and asks to register / open a card. We create customer + card with the stamps for this order.
+**When:** Customer just paid (or is paying) and asks to register / open a card. We create customer + a brand-new card.
 
 ### English
 
@@ -59,16 +59,15 @@ Siklus pelanggan kartu stamp pada umumnya:
 2. Go to the **CARD** tab → tap **NEW**
 3. The form opens with the **card number auto-filled** (read-only — system picks the next free number)
 4. Fill in:
-   - **Owner name** (required to create the customer profile — ask the customer)
+   - **Owner name** (required — when filled, a customer profile is created on the **Stamps** program and linked to this card; if left empty, only an anonymous card is created)
    - **Phone number** (recommended)
-   - **Initial stamps** — number of stamps to mark for this order
+   - **Initial stamps** — leave at **0** for a brand-new card. The current order's stamps are added automatically when the order is completed.
 5. Tap **CREATE CARD**
-   - System creates customer (program = **stamps**) + new card with the stamps
-   - Card is auto-attached to the current order
+   - System creates customer (program = **Stamps**) + new card
+   - Both card and customer are **auto-attached to the current order** — no need to switch tabs
 6. **Write the card number on the physical card** and hand it to the customer
-7. Switch to the **CUSTOMER** tab → search the customer by name → tap the result to attach
-8. Tap the **QR icon** (or **Print Invite QR**) → invite receipt prints
-9. Hand the receipt to the customer: _"Scan to access your stamps online"_
+7. With the customer attached, tap the **QR icon** next to the customer name → invite receipt prints
+8. Hand the receipt to the customer: _"Scan to access your stamps online"_
 
 ### Bahasa Indonesia
 
@@ -76,16 +75,15 @@ Siklus pelanggan kartu stamp pada umumnya:
 2. Pilih tab **CARD** → tekan **NEW**
 3. Form terbuka dengan **nomor kartu otomatis terisi** (read-only — sistem pilih nomor bebas berikutnya)
 4. Isi:
-   - **Nama pemilik** (wajib agar profil pelanggan dibuat — tanyakan ke pelanggan)
+   - **Nama pemilik** (wajib — jika diisi, profil pelanggan dibuat di program **Stamps** dan terhubung ke kartu ini; jika dikosongkan, hanya kartu anonim yang dibuat)
    - **Nomor telepon** (disarankan)
-   - **Initial stamps** — jumlah stamp untuk pesanan ini
+   - **Initial stamps** — biarkan **0** untuk kartu baru. Stamp pesanan ini akan ditambahkan otomatis saat pesanan selesai.
 5. Tekan **CREATE CARD**
-   - Sistem membuat pelanggan (program = **stamps**) + kartu baru dengan stamp
-   - Kartu otomatis terpasang ke pesanan saat ini
+   - Sistem membuat pelanggan (program = **Stamps**) + kartu baru
+   - Kartu dan pelanggan **otomatis terpasang ke pesanan** — tidak perlu pindah tab
 6. **Tulis nomor kartu di kartu fisik** lalu berikan ke pelanggan
-7. Pindah ke tab **CUSTOMER** → cari pelanggan berdasarkan nama → tekan hasilnya untuk pasang
-8. Tekan **ikon QR** (atau **Print Invite QR**) → struk invite tercetak
-9. Berikan struk ke pelanggan: _"Scan untuk akses stamp Anda online"_
+7. Dengan pelanggan terpasang, tekan **ikon QR** di sebelah nama pelanggan → struk invite tercetak
+8. Berikan struk ke pelanggan: _"Scan untuk akses stamp Anda online"_
 
 ---
 
@@ -241,23 +239,64 @@ Gunakan tab **CUSTOMER** → **NEW**. Isi nama + telepon, biarkan program **Stam
 
 ---
 
+## Scenario 8: Discrepancy — Customer's Stamps Don't Match the System
+
+**When:** Customer has a physical card with stamps but the system shows fewer stamps (or no card at all). Common causes:
+
+- (a) Customer received a blank card (Scenario 1) and self-registered online — the online account has no card linked, the physical card isn't in the system
+- (b) Customer was registered in POS earlier (Customer A with card #NNN) AND later self-registered online (Customer B, Telegram/Google) — there are now **two duplicate customer records** for the same person
+- (c) Customer claims X stamps but the system shows Y (rare — physical card miscount, or stamps lost during a sync issue)
+
+### What the cashier does
+
+1. **Find the customer** at POS — try the SCAN tab first (always shows the freshest record), then CUSTOMER search by name/phone
+2. **Attach whichever record gives the customer the better outcome for this order** (e.g. the one that does have stamps, or the registered one if they want online cabinet access)
+3. **Note the discrepancy on the receipt or in the shift log:** physical card # / number of stamps owed / any duplicate names found
+4. **Tell the admin** — give them the customer name, phone, card number(s), and what needs fixing
+5. **Complete the current order normally** so the customer isn't kept waiting. Admin reconciles afterward.
+
+> **Don't try to "fix" by creating duplicate records yourself.** Creating a second customer or a second card just makes the problem bigger. If in doubt, attach the existing customer and escalate to admin.
+
+### Bahasa Indonesia
+
+**Kapan:** Pelanggan punya kartu fisik dengan stamp, tapi sistem menunjukkan stamp lebih sedikit (atau tidak ada kartu sama sekali). Penyebab umum:
+
+- (a) Pelanggan menerima kartu kosong (Skenario 1) dan registrasi sendiri online — akun online tidak punya kartu, kartu fisik tidak ada di sistem
+- (b) Pelanggan sudah terdaftar di POS (Customer A dengan kartu #NNN) DAN kemudian registrasi sendiri online (Customer B, Telegram/Google) — sekarang ada **dua data pelanggan duplikat** untuk orang yang sama
+- (c) Pelanggan klaim X stamp tapi sistem menunjukkan Y (jarang)
+
+**Apa yang dilakukan kasir:**
+
+1. **Cari pelanggan** di POS — coba tab SCAN dulu, lalu CUSTOMER search
+2. **Pasang record mana saja yang lebih menguntungkan pelanggan** untuk pesanan ini
+3. **Catat selisih di struk atau log shift:** nomor kartu fisik / jumlah stamp yang harus ditambahkan / nama duplikat
+4. **Beritahu admin** — beri nama pelanggan, telepon, nomor kartu, dan apa yang harus diperbaiki
+5. **Selesaikan pesanan saat ini** dengan normal. Admin yang merekonsiliasi setelahnya.
+
+> **Jangan coba "perbaiki" sendiri dengan membuat record duplikat.** Membuat pelanggan kedua atau kartu kedua hanya memperbesar masalah.
+
+➡ See the **Admin Section** below for what the admin does to resolve this (add stamps, merge duplicates).
+
+---
+
 ## Quick Reference / Referensi Cepat
 
-| Action                               | Where                                          | Steps   |
-| ------------------------------------ | ---------------------------------------------- | ------- |
-| Hand out blank card (no system)      | Physical card from stack — no POS action       | 0 steps |
-| Register customer + card with stamps | CARD → NEW → name + initial stamps → CREATE    | 3 steps |
-| Find registered card                 | CARD → type number → FIND                      | 1 step  |
-| Find customer by their QR            | SCAN tab → point camera at customer's phone    | 1 step  |
-| Find customer by name / phone        | CUSTOMER → search field → tap result           | 1 step  |
-| Register VIP / cashback customer     | CUSTOMER → NEW → fill form → Cashback → CREATE | 3 steps |
-| Print invite QR                      | Customer attached → tap QR icon (next to name) | 1 step  |
-| Self-register via pre-bill QR        | Print Pre-bill → customer scans                | 0 steps |
+| Action                              | Where                                                    | Steps   |
+| ----------------------------------- | -------------------------------------------------------- | ------- |
+| Hand out blank card (no system)     | Physical card from stack — no POS action                 | 0 steps |
+| Register customer + card            | CARD → NEW → name + 0 stamps → CREATE                    | 2 steps |
+| Find registered card                | CARD → type number → FIND                                | 1 step  |
+| Find customer by their QR           | SCAN tab → point camera at customer's phone              | 1 step  |
+| Find customer by name / phone       | CUSTOMER → search field → tap result                     | 1 step  |
+| Register VIP / cashback customer    | CUSTOMER → NEW → fill form → Cashback → CREATE           | 3 steps |
+| Print invite QR                     | Customer attached → tap QR icon (next to name)           | 1 step  |
+| Self-register via pre-bill QR       | Print Pre-bill → customer scans                          | 0 steps |
+| Discrepancy / duplicate / lost card | Note details, attach existing record, **escalate admin** | —       |
 
 ## FAQ
 
 **Q: Customer lost their stamp card, what to do?**
-A: Search by name in CUSTOMER tab. If found, attach to order. If they're registered, stamps will accrue on any linked card.
+A: Search by name in CUSTOMER tab. If found, attach to order — stamps will accrue on their account regardless of physical card. If they want a replacement card, ask admin to issue and link a new card via Admin → Loyalty.
 
 **Q: Can a customer have both stamps and cashback?**
 A: No. Each customer is on one program. When a stamp card cycle completes, the customer automatically transitions to cashback.
@@ -268,11 +307,94 @@ A: Wait a few seconds for the realtime update. If it still doesn't show, use the
 **Q: How do I switch a customer from stamps to cashback?**
 A: Only admin can change an existing customer's program. Ask the manager.
 
-**Q: I created a card via CARD → NEW with a name but I don't see the customer attached to the order — why?**
-A: The CARD-NEW flow attaches the **card** to the order, not the customer. Switch to the CUSTOMER tab, search the just-created name, and tap the result to attach the customer too. Both can be attached simultaneously.
-
 **Q: Customer self-registered online but doesn't appear in CUSTOMER search at POS — why?**
 A: The customers list refreshes periodically. Use the **SCAN** tab and ask the customer to show the QR code from their personal cabinet — that always finds them via the live token.
 
 **Q: Should I always enter stamps in CARD → NEW, or leave it at 0?**
-A: Set it to the **stamps the customer already has** on their physical card (or 0 for a brand-new card). The current order's stamps will be added automatically when the order is completed.
+A: Set it to the **stamps already on the physical card** (or **0** for a brand-new card). The current order's stamps are added automatically when the order is completed.
+
+**Q: Customer claims they have stamps that the system doesn't show — what do I do?**
+A: See **Scenario 8** above. The cashier flags it; admin resolves via Admin → Loyalty (add stamps, merge duplicates, etc.).
+
+---
+
+# Admin Section / Bagian Admin
+
+> The actions below are **admin-only** (manager / owner role). Cashiers escalate Scenario 8 cases to the admin, who resolves them here.
+
+**Where:** **Admin → Loyalty** screen → tabs:
+
+- **Settings** — global loyalty configuration (stamps per cycle, rewards, tier thresholds, cashback rates)
+- **Cards** — list/issue/edit/deactivate stamp cards
+- **Customers** — list/edit/merge customers, adjust stamps and balance
+- **History** — loyalty transaction log
+
+## Admin Action 1: Add Stamps to an Existing Customer
+
+**When:** Customer has stamps on a physical card that the system doesn't show (Scenario 8a / 8c).
+
+1. Admin → Loyalty → **Customers** tab
+2. Find the customer (search by name / phone / telegram)
+3. Click the row to open the customer detail dialog
+4. Tap **Edit**
+5. In the **Loyalty** section, set **Stamps** to the correct total (existing system stamps + missing stamps from physical card)
+6. Tap **Save**
+
+> The customer's active stamp card gets the new stamp count. If they don't have a card yet, admin should issue one first via **Cards** tab → **+ New** (then re-open Customers, link the new card via Edit and set stamps).
+
+## Admin Action 2: Adjust Cashback Balance
+
+**When:** Cashback customer has a balance discrepancy (refund, manual reward, correction).
+
+1. Admin → Loyalty → **Customers** tab → click customer → **Edit**
+2. In the **Loyalty** section, change **Cashback Balance** to the correct amount
+3. Fill in **Adjustment reason** (required when balance changes — kept in audit log)
+4. Tap **Save**
+
+## Admin Action 3: Merge Two Duplicate Customer Records
+
+**When:** Same person ended up with two records (Scenario 8b — e.g. POS-created Customer A with card #NNN + later self-registered Customer B online via Telegram/Google).
+
+1. Admin → Loyalty → **Customers** tab → find the **source** record (the one to be merged away — usually the duplicate with less data, e.g. the empty self-registered account)
+2. Click the row → in the detail dialog, tap **Merge Into…**
+3. **Step 1: Select target** — pick the record that should remain (the one with stamps / order history)
+4. Confirmation summary appears: target's balance / visits / total spent
+5. **Step 2: Resolve conflicts** — for each field where source and target differ (name, phone, email, telegram, tier, etc.), tap the side you want to keep
+6. Tap **Merge** at the bottom
+7. Result:
+   - All orders, transactions, loyalty points, stamp cards, and identities from the source are transferred to the target
+   - The source record is removed (status `merged`)
+   - The customer now has a single, consolidated record with all stamps + online cabinet access intact
+
+## Admin Action 4: Issue / Edit / Deactivate a Stamp Card
+
+1. Admin → Loyalty → **Cards** tab
+2. **Issue new card:** **+ New** button → optionally enter a card number (auto-generated otherwise) and link to a customer
+3. **Edit card:** click the row → adjust stamps count (e.g. fix a miscount) → Save
+4. **Deactivate card:** click the row → **Deactivate** (use for lost cards before issuing a replacement)
+
+## Admin Action 5: Switch a Customer's Loyalty Program
+
+**When:** Cashier asks to convert a stamps customer to cashback (or vice-versa) for VIP treatment.
+
+1. Admin → Loyalty → **Customers** tab → click customer → **Edit**
+2. **Loyalty** section → change **Program** (`stamps` ↔ `cashback`)
+3. Tap **Save**
+
+> Stamps → cashback transition also happens **automatically** when a customer completes a stamp card cycle. Admin only does this manually for special cases.
+
+---
+
+## Admin FAQ
+
+**Q: Customer says they had stamps on a physical card from months ago — do I trust them?**
+A: Use judgement. Check if the customer is in the system at all, what their visit history looks like, and ask them for the physical card number (if any). If the story is plausible, add the stamps. The Adjustment reason field captures your justification for audit.
+
+**Q: Two customer records have different phone numbers — which is right?**
+A: Use the **Resolve conflicts** step in the merge dialog to pick the correct value field-by-field. The other phone number can be discarded or saved into the Notes field.
+
+**Q: After merge, where do the merged-away record's stamps and orders go?**
+A: All of it transfers to the target record. The source record stays in the database with status `merged` (so historical references stay valid) but is hidden from active customer lists.
+
+**Q: Can I undo a merge?**
+A: No — merge is destructive (the source is marked `merged` and its identity is reattached to the target). Always double-check the conflict resolution screen before tapping Merge.
