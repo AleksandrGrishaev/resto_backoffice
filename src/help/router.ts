@@ -31,6 +31,15 @@ const PosCancelMoveGuide = () => import('./pos/guides/PosCancelMoveGuide.vue')
 const PosPaymentGuide = () => import('./pos/guides/PosPaymentGuide.vue')
 const PosShiftGuide = () => import('./pos/guides/PosShiftGuide.vue')
 
+// Loyalty
+const LoyaltyHelpView = () => import('./loyalty/LoyaltyHelpView.vue')
+const LoyaltyOverviewGuide = () => import('./loyalty/guides/LoyaltyOverviewGuide.vue')
+const LoyaltyNewCardGuide = () => import('./loyalty/guides/LoyaltyNewCardGuide.vue')
+const LoyaltyFindCustomerGuide = () => import('./loyalty/guides/LoyaltyFindCustomerGuide.vue')
+const LoyaltyCashbackGuide = () => import('./loyalty/guides/LoyaltyCashbackGuide.vue')
+const LoyaltyCheckoutGuide = () => import('./loyalty/guides/LoyaltyCheckoutGuide.vue')
+const LoyaltyAdminGuide = () => import('./loyalty/guides/LoyaltyAdminGuide.vue')
+
 export const helpRoutes: RouteRecordRaw[] = [
   {
     path: '/help',
@@ -201,6 +210,70 @@ export const helpRoutes: RouteRecordRaw[] = [
         meta: {
           title: 'Manajemen Produk',
           section: 'backoffice'
+        }
+      },
+      // Loyalty section
+      {
+        path: 'loyalty',
+        name: 'help-loyalty',
+        component: LoyaltyHelpView,
+        meta: {
+          title: 'Panduan Loyalty',
+          section: 'loyalty'
+        }
+      },
+      {
+        path: 'loyalty/overview',
+        name: 'help-loyalty-overview',
+        component: LoyaltyOverviewGuide,
+        meta: {
+          title: 'Ikhtisar Loyalty',
+          section: 'loyalty'
+        }
+      },
+      {
+        path: 'loyalty/new-card',
+        name: 'help-loyalty-new-card',
+        component: LoyaltyNewCardGuide,
+        meta: {
+          title: 'Kartu Baru & Registrasi',
+          section: 'loyalty'
+        }
+      },
+      {
+        path: 'loyalty/find-customer',
+        name: 'help-loyalty-find-customer',
+        component: LoyaltyFindCustomerGuide,
+        meta: {
+          title: 'Cari Pelanggan',
+          section: 'loyalty'
+        }
+      },
+      {
+        path: 'loyalty/cashback',
+        name: 'help-loyalty-cashback',
+        component: LoyaltyCashbackGuide,
+        meta: {
+          title: 'Pelanggan VIP / Cashback',
+          section: 'loyalty'
+        }
+      },
+      {
+        path: 'loyalty/checkout',
+        name: 'help-loyalty-checkout',
+        component: LoyaltyCheckoutGuide,
+        meta: {
+          title: 'Loyalty di Checkout',
+          section: 'loyalty'
+        }
+      },
+      {
+        path: 'loyalty/admin',
+        name: 'help-loyalty-admin',
+        component: LoyaltyAdminGuide,
+        meta: {
+          title: 'Admin Loyalty',
+          section: 'loyalty'
         }
       }
     ]

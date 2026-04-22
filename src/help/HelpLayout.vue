@@ -14,6 +14,8 @@ const backToAppRoute = computed(() => {
       return '/pos'
     case 'kitchen':
       return '/kitchen'
+    case 'loyalty':
+      return '/pos'
     case 'backoffice':
     default:
       return '/'
@@ -26,6 +28,8 @@ const backToAppLabel = computed(() => {
       return 'Back to POS'
     case 'kitchen':
       return 'Back to Kitchen'
+    case 'loyalty':
+      return 'Back to POS'
     case 'backoffice':
       return 'Back to Backoffice'
     default:
@@ -117,6 +121,51 @@ const sections: Section[] = [
         title: 'Manajemen Produk',
         icon: 'mdi-package-variant',
         route: 'help-backoffice-products'
+      }
+    ]
+  },
+  {
+    id: 'loyalty',
+    title: 'Loyalty',
+    icon: 'mdi-card-account-details',
+    route: 'help-loyalty',
+    description: 'Panduan kasir untuk program loyalitas (Stamps & Cashback)',
+    guides: [
+      {
+        id: 'overview',
+        title: 'Ikhtisar Loyalty',
+        icon: 'mdi-information',
+        route: 'help-loyalty-overview'
+      },
+      {
+        id: 'new-card',
+        title: 'Kartu Baru & Registrasi',
+        icon: 'mdi-card-plus',
+        route: 'help-loyalty-new-card'
+      },
+      {
+        id: 'find-customer',
+        title: 'Cari Pelanggan',
+        icon: 'mdi-account-search',
+        route: 'help-loyalty-find-customer'
+      },
+      {
+        id: 'cashback',
+        title: 'Pelanggan VIP / Cashback',
+        icon: 'mdi-star-circle',
+        route: 'help-loyalty-cashback'
+      },
+      {
+        id: 'checkout',
+        title: 'Loyalty di Checkout',
+        icon: 'mdi-credit-card-check',
+        route: 'help-loyalty-checkout'
+      },
+      {
+        id: 'admin',
+        title: 'Admin Loyalty',
+        icon: 'mdi-shield-account',
+        route: 'help-loyalty-admin'
       }
     ]
   }

@@ -30,6 +30,15 @@ const sections = [
     color: 'blue',
     route: 'help-backoffice',
     guides: 0
+  },
+  {
+    id: 'loyalty',
+    title: 'Loyalty',
+    description: 'Stamps & Cashback, registrasi pelanggan, kartu, checkout, admin',
+    icon: 'mdi-card-account-details',
+    color: 'purple',
+    route: 'help-loyalty',
+    guides: 6
   }
 ]
 
