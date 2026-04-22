@@ -27,6 +27,21 @@ Siklus pelanggan kartu stamp pada umumnya:
 
 ---
 
+### Two interfaces for "register customer + card" — when to use which / Dua antarmuka untuk "registrasi pelanggan + kartu"
+
+| Interface                                        | Use when                                                                                                                                       | What it creates                                                                   |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **CARD → NEW** _(default)_                       | Customer has a **physical card with no system entry** (the usual case — Scenarios 2, 3)                                                        | A new card AND a new customer (if Owner name filled) — both attached to the order |
+| **CUSTOMER → NEW + pick existing card** _(rare)_ | The card **already exists in our system as unassigned** (no customer linked) — e.g. it was issued earlier via CARD → NEW with empty Owner name | A new customer linked to the chosen unassigned card (no new card created)         |
+
+The CUSTOMER → NEW form's "Link existing unassigned card" picker shows **only cards without a customer** — you can't accidentally re-assign someone else's card. If the picker is empty, every system card is already linked — use CARD → NEW instead.
+
+**Never use both flows for the same registration** (don't create a customer via CUSTOMER → NEW and then issue another card for them via CARD → NEW — you'd end up with two cards on one customer).
+
+Bahasa: Tabel di atas menjelaskan kapan pakai **CARD → NEW** (default — kartu fisik baru) vs **CUSTOMER → NEW** dengan picker kartu (jarang — hanya jika kartu sudah ada di sistem tanpa pelanggan terhubung).
+
+---
+
 ## Scenario 1: Hand Out Blank Stamp Card — First Visit (Most Common)
 
 **When:** A new customer ordered. We give every new customer a physical stamp card right away. No registration needed.
@@ -100,8 +115,8 @@ Same flow as Scenario 2, with one detail:
 - After CREATE, **write the new system-generated number on the physical card**
 - Print invite QR as in Scenario 2 step 8
 
-**Variant — card already has a printed number (rare):**
-Use **CUSTOMER** tab → **NEW** instead. Fill name + phone, keep program as **Stamps**, enter the printed **Stamp card number**, tap **CREATE**. Existing card is linked to the new customer.
+**Variant — card already exists in our system as unassigned (rare):**
+Use **CUSTOMER** tab → **NEW** instead. Fill name + phone, keep program as **Stamps**, then in **Link existing unassigned card** pick the card from the dropdown (the dropdown only lists system cards with no customer linked). Tap **CREATE** — the existing card is linked to the new customer; **no new card is created**. See the "Two interfaces" table at the top of this guide for when this applies.
 
 ### Bahasa Indonesia
 
@@ -112,8 +127,8 @@ Alur sama dengan Skenario 2, dengan satu detail:
 - Setelah CREATE, **tulis nomor baru dari sistem di kartu fisik**
 - Cetak QR invite seperti Skenario 2 langkah 8
 
-**Varian — kartu sudah ada nomor cetak (jarang):**
-Gunakan tab **CUSTOMER** → **NEW**. Isi nama + telepon, biarkan program **Stamps**, masukkan **Stamp card number** yang tercetak, tekan **CREATE**. Kartu yang sudah ada akan terhubung ke pelanggan baru.
+**Varian — kartu sudah ada di sistem tanpa pelanggan terhubung (jarang):**
+Gunakan tab **CUSTOMER** → **NEW**. Isi nama + telepon, biarkan program **Stamps**, lalu di **Link existing unassigned card** pilih kartu dari dropdown (dropdown hanya menampilkan kartu sistem tanpa pelanggan). Tekan **CREATE** — kartu yang sudah ada akan terhubung ke pelanggan baru; **kartu baru tidak dibuat**. Lihat tabel "Two interfaces" di bagian atas guide.
 
 ---
 
@@ -312,6 +327,9 @@ A: The customers list refreshes periodically. Use the **SCAN** tab and ask the c
 
 **Q: Should I always enter stamps in CARD → NEW, or leave it at 0?**
 A: Set it to the **stamps already on the physical card** (or **0** for a brand-new card). The current order's stamps are added automatically when the order is completed.
+
+**Q: When should I use CUSTOMER → NEW with the "Link existing card" picker?**
+A: Only when the dropdown actually shows cards (= some system cards have no customer linked). If the dropdown is empty, every card already belongs to someone — go to **CARD → NEW** instead. The picker shows only unassigned cards by design, so you can't accidentally take someone else's card.
 
 **Q: Customer claims they have stamps that the system doesn't show — what do I do?**
 A: See **Scenario 8** above. The cashier flags it; admin resolves via Admin → Loyalty (add stamps, merge duplicates, etc.).

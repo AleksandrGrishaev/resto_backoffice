@@ -102,6 +102,10 @@ export const useLoyaltyStore = defineStore('loyalty', () => {
     return loyaltyService.searchCards(query)
   }
 
+  async function listActiveOrphanCards(): Promise<StampCardListItem[]> {
+    return loyaltyService.listActiveOrphanCards()
+  }
+
   async function linkCardToCustomer(cardNumber: string, customerId: string): Promise<void> {
     return loyaltyService.linkCardToCustomer(cardNumber, customerId)
   }
@@ -182,6 +186,7 @@ export const useLoyaltyStore = defineStore('loyalty', () => {
     issueCardForCustomer,
     issueNewCard,
     searchCards,
+    listActiveOrphanCards,
     linkCardToCustomer,
     listCards,
     updateCard,

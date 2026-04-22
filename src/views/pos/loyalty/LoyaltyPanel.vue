@@ -651,16 +651,37 @@
               <v-btn value="cashback" size="small" class="flex-grow-1">Cashback</v-btn>
             </v-btn-toggle>
           </div>
-          <v-text-field
-            v-if="newCustomerLoyaltyProgram === 'stamps'"
-            v-model="newCustomerCardNumber"
-            placeholder="Stamp card number (optional)"
-            density="compact"
-            variant="outlined"
-            hide-details
-            inputmode="numeric"
-            class="mb-2"
-          />
+          <!-- Link an EXISTING unassigned card (rare). Leave empty to auto-create
+               a fresh card on save. Lists only cards with no customer linked. -->
+          <template v-if="newCustomerLoyaltyProgram === 'stamps'">
+            <v-autocomplete
+              v-model="newCustomerCardNumber"
+              :items="orphanCards"
+              :loading="loadingOrphanCards"
+              :no-data-text="loadingOrphanCards ? 'Loading...' : 'No unassigned cards in system'"
+              item-value="cardNumber"
+              item-title="cardNumber"
+              label="Link existing unassigned card"
+              placeholder="Leave empty to auto-create a new card"
+              density="compact"
+              variant="outlined"
+              hide-details
+              clearable
+              class="mb-1"
+            >
+              <template #item="{ item, props: itemProps }">
+                <v-list-item
+                  v-bind="itemProps"
+                  :title="`#${item.raw.cardNumber}`"
+                  :subtitle="`active · created ${formatRelative(item.raw.createdAt)}`"
+                />
+              </template>
+            </v-autocomplete>
+            <div class="text-caption text-medium-emphasis mb-2">
+              Empty → fresh card auto-created. Pick one → links that existing card to this customer
+              (no new card created).
+            </div>
+          </template>
           <v-alert
             v-if="createCustomerError"
             type="error"
@@ -884,10 +905,12 @@ const showNewCustomer = ref(false)
 const newCustomerName = ref('')
 const newCustomerPhone = usePhoneInput()
 const newCustomerTelegram = ref('')
-const newCustomerCardNumber = ref('')
+const newCustomerCardNumber = ref<string | null>(null)
 const newCustomerLoyaltyProgram = ref<'stamps' | 'cashback'>('stamps')
 const createCustomerError = ref('')
 const conversionResult = ref<ConvertResult | null>(null)
+const orphanCards = ref<StampCardListItem[]>([])
+const loadingOrphanCards = ref(false)
 
 // Computed
 const tierColor = computed(() => getTierColor(attachedCustomer.value?.tier || 'member'))
@@ -1000,6 +1023,20 @@ watch(attachedCustomer, async customer => {
     }
   } else {
     attachedCustomerCard.value = null
+  }
+})
+
+// Load orphan (customer-less) cards when the CUSTOMER → NEW form opens — they're
+// the only cards the cashier can pick to "link existing card" via this form.
+watch(showNewCustomer, async open => {
+  if (!open) return
+  loadingOrphanCards.value = true
+  try {
+    orphanCards.value = await loyaltyStore.listActiveOrphanCards()
+  } catch {
+    orphanCards.value = []
+  } finally {
+    loadingOrphanCards.value = false
   }
 })
 
@@ -1245,29 +1282,25 @@ async function createNewCustomer() {
   createCustomerError.value = ''
 
   try {
-    const customer = await customersStore.createCustomer({
-      name: newCustomerName.value.trim(),
-      phone: newCustomerPhone.fullPhone.value || undefined,
-      telegramUsername: newCustomerTelegram.value.trim() || undefined,
-      loyaltyProgram: newCustomerLoyaltyProgram.value
-    } as any)
-
-    // If stamp card number provided, link it to customer (no conversion — stamps keep accruing)
-    const cardNum = newCustomerCardNumber.value.trim()
-    if (cardNum) {
-      try {
-        await loyaltyStore.linkCardToCustomer(cardNum, customer.id)
-      } catch {
-        // Card linking is optional — don't block customer creation
-      }
-    }
+    const cardNum = newCustomerCardNumber.value?.trim() || undefined
+    // Pass cardNum so customersStore links it INSTEAD of auto-creating a fresh card
+    // (the old flow ran both, leaving the customer with two active cards).
+    const customer = await customersStore.createCustomer(
+      {
+        name: newCustomerName.value.trim(),
+        phone: newCustomerPhone.fullPhone.value || undefined,
+        telegramUsername: newCustomerTelegram.value.trim() || undefined,
+        loyaltyProgram: newCustomerLoyaltyProgram.value
+      } as any,
+      cardNum ? { existingCardNumber: cardNum } : undefined
+    )
 
     selectCustomer(customer)
     showNewCustomer.value = false
     newCustomerName.value = ''
     newCustomerPhone.localNumber.value = ''
     newCustomerTelegram.value = ''
-    newCustomerCardNumber.value = ''
+    newCustomerCardNumber.value = null
     newCustomerLoyaltyProgram.value = 'stamps'
   } catch (err) {
     createCustomerError.value = err instanceof Error ? err.message : 'Failed to create customer'

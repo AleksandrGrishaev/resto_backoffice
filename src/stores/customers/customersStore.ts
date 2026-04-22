@@ -89,17 +89,29 @@ export const useCustomersStore = defineStore('customers', () => {
     return customersService.search(query)
   }
 
-  async function createCustomer(data: Partial<Customer>): Promise<Customer> {
+  async function createCustomer(
+    data: Partial<Customer>,
+    options?: { existingCardNumber?: string }
+  ): Promise<Customer> {
     const newCustomer = await customersService.create(data)
     customers.value.push(newCustomer)
 
-    // Auto-create stamp card for stamps-program customers
+    // For stamps-program customers we either link an existing unassigned card
+    // (if caller explicitly chose one) OR auto-create a fresh card. Doing both
+    // would leave the customer with two active cards (caller-passed link +
+    // auto-created), which is the bug we're fixing.
     if (newCustomer.loyaltyProgram === 'stamps') {
-      try {
-        const loyaltyStore = useLoyaltyStore()
-        await loyaltyStore.issueCardForCustomer(newCustomer.id)
-      } catch (err) {
-        DebugUtils.error(MODULE_NAME, 'Failed to auto-create stamp card', { error: err })
+      const loyaltyStore = useLoyaltyStore()
+      if (options?.existingCardNumber) {
+        // Linking errors propagate to the UI so the cashier sees what happened.
+        // Customer record stays — they can retry linking later via admin.
+        await loyaltyStore.linkCardToCustomer(options.existingCardNumber, newCustomer.id)
+      } else {
+        try {
+          await loyaltyStore.issueCardForCustomer(newCustomer.id)
+        } catch (err) {
+          DebugUtils.error(MODULE_NAME, 'Failed to auto-create stamp card', { error: err })
+        }
       }
     }
 

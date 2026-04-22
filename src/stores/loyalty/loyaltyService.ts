@@ -443,11 +443,64 @@ export class LoyaltyService {
     }
   }
 
+  /** Lists active stamp cards that have no customer linked (for the "link existing card"
+   *  picker in CUSTOMER → NEW). Cap at 50 — orphan cards are usually rare. */
+  async listActiveOrphanCards(): Promise<StampCardListItem[]> {
+    const { data, error } = await supabase
+      .from('stamp_cards')
+      .select('id, card_number, status, cycle, created_at')
+      .eq('status', 'active')
+      .is('customer_id', null)
+      .order('card_number', { ascending: true })
+      .limit(50)
+
+    if (error) {
+      DebugUtils.error(MODULE_NAME, 'Failed to list orphan cards', { error })
+      return []
+    }
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      cardNumber: row.card_number,
+      status: row.status || 'active',
+      stamps: 0,
+      cycle: row.cycle || 1,
+      customerId: null,
+      customerName: null,
+      createdAt: row.created_at,
+      lastStampAt: null
+    }))
+  }
+
   async linkCardToCustomer(cardNumber: string, customerId: string): Promise<void> {
+    // Validate before update: card must exist and not be linked to another customer.
+    // (Old version did silent no-op if card was missing, and would overwrite an
+    // existing customer link — risking lost stamps for the previous owner.)
+    const { data: card, error: lookupError } = await supabase
+      .from('stamp_cards')
+      .select('id, customer_id, status')
+      .eq('card_number', cardNumber)
+      .maybeSingle()
+
+    if (lookupError) {
+      DebugUtils.error(MODULE_NAME, 'Failed to look up card for linking', { lookupError })
+      throw lookupError
+    }
+    if (!card) {
+      throw new Error(`Card #${cardNumber} not found`)
+    }
+    if (card.customer_id && card.customer_id !== customerId) {
+      throw new Error(`Card #${cardNumber} is already linked to another customer`)
+    }
+    if (card.customer_id === customerId) {
+      // Already linked — no-op (idempotent)
+      return
+    }
+
     const { error } = await supabase
       .from('stamp_cards')
       .update({ customer_id: customerId })
-      .eq('card_number', cardNumber)
+      .eq('id', card.id)
 
     if (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to link card to customer', { error })
