@@ -8,15 +8,8 @@
     >
       <!-- Customer attached -->
       <template v-if="attachedCustomer">
-        <v-chip
-          size="small"
-          :color="attachedCustomer.personalDiscount > 0 ? 'orange' : tierColor"
-          variant="flat"
-          class="text-white"
-        >
-          {{
-            attachedCustomer.personalDiscount > 0 ? 'DISCOUNT' : attachedCustomer.tier.toUpperCase()
-          }}
+        <v-chip size="small" :color="customerChipColor" variant="flat" class="text-white">
+          {{ customerChipLabelShort }}
         </v-chip>
         <span class="text-body-2 text-truncate flex-grow-1">
           {{ attachedCustomer.name }}
@@ -29,7 +22,17 @@
         >
           {{ attachedCustomer.personalDiscount }}%
         </v-chip>
-        <span class="text-body-2 font-weight-medium">
+        <!-- Stamps customer: show card # / stamps; cashback: show balance -->
+        <span
+          v-if="isStampsCustomer && attachedCustomerCard"
+          class="text-body-2 font-weight-medium"
+        >
+          #{{ attachedCustomerCard.cardNumber }} · {{ attachedCustomerCard.stamps }}/{{
+            attachedCustomerCard.stampsPerCycle
+          }}
+        </span>
+        <span v-else-if="isStampsCustomer" class="text-body-2 text-medium-emphasis">No card</span>
+        <span v-else class="text-body-2 font-weight-medium">
           {{ formatIDR(attachedCustomer.loyaltyBalance) }}
         </span>
         <v-btn
@@ -148,27 +151,28 @@
             </div>
             <v-chip
               size="x-small"
-              :color="
-                scannedCustomer.personalDiscount > 0 ? 'orange' : getTierColor(scannedCustomer.tier)
-              "
+              :color="customerProgramChipColor(scannedCustomer)"
               variant="flat"
               class="text-white"
             >
               {{
                 scannedCustomer.personalDiscount > 0
                   ? `DISCOUNT ${scannedCustomer.personalDiscount}%`
-                  : scannedCustomer.tier.toUpperCase()
+                  : scannedCustomer.loyaltyProgram === 'stamps'
+                    ? 'STAMPS'
+                    : scannedCustomer.tier.toUpperCase()
               }}
             </v-chip>
           </div>
-          <div class="d-flex align-center gap-4 text-body-2 mb-3">
-            <span>
+          <div class="d-flex align-center gap-3 text-body-2 mb-3 flex-wrap">
+            <!-- Stamps customer: skip balance (irrelevant). Cashback: show balance. -->
+            <span v-if="scannedCustomer.loyaltyProgram !== 'stamps'">
               <v-icon size="14" class="mr-1">mdi-wallet</v-icon>
               {{ formatIDR(scannedCustomer.loyaltyBalance) }}
             </span>
-            <span class="text-medium-emphasis">{{ scannedCustomer.totalVisits }} visits</span>
+            <span class="text-medium-emphasis">· {{ scannedCustomer.totalVisits }} visits</span>
             <span v-if="scannedCustomer.phone" class="text-medium-emphasis">
-              {{ scannedCustomer.phone }}
+              · {{ scannedCustomer.phone }}
             </span>
           </div>
           <div class="d-flex gap-2">
@@ -289,26 +293,36 @@
             variant="outlined"
             hide-details
             readonly
-            class="mb-2"
+            class="mb-1"
           />
+          <div class="text-caption text-medium-emphasis mb-2">
+            Auto-generated. Write this number on the physical card.
+          </div>
           <NumericInputField
             v-model="newCardStamps"
-            label="Initial stamps (for existing cards)"
+            label="Initial stamps"
             density="compact"
             variant="outlined"
             hide-details
             :min="0"
             :max="100"
-            class="mb-2"
+            class="mb-1"
           />
+          <div class="text-caption text-medium-emphasis mb-2">
+            Stamps already on the physical card. 0 for a brand-new card.
+          </div>
           <v-text-field
             v-model="newCardOwnerName"
-            placeholder="Owner name (optional)"
+            label="Owner name"
+            placeholder="Leave empty for anonymous card"
             density="compact"
             variant="outlined"
             hide-details
-            class="mb-2"
+            class="mb-1"
           />
+          <div class="text-caption text-medium-emphasis mb-2">
+            If filled — a customer profile is created (Stamps program) and linked to this card.
+          </div>
           <div class="d-flex gap-2 mb-2">
             <v-select
               :model-value="newCardPhone.selectedCountry.value.code"
@@ -420,17 +434,17 @@
             v-for="c in searchResults"
             :key="c.id"
             :title="c.name"
-            :subtitle="`${c.personalDiscount > 0 ? 'DISCOUNT ' + c.personalDiscount + '%' : c.tier.toUpperCase()} | ${formatIDR(c.loyaltyBalance)}${c.phone ? ' | ' + c.phone : ''}${c.telegramUsername ? ' | @' + c.telegramUsername : ''}`"
+            :subtitle="customerSearchSubtitle(c)"
             @click="selectCustomer(c)"
           >
             <template #prepend>
               <v-chip
                 size="x-small"
-                :color="c.personalDiscount > 0 ? 'orange' : getTierColor(c.tier)"
+                :color="customerProgramChipColor(c)"
                 variant="flat"
                 class="text-white mr-2"
               >
-                {{ c.personalDiscount > 0 ? 'D' : c.tier[0].toUpperCase() }}
+                {{ customerProgramChipInitial(c) }}
               </v-chip>
             </template>
           </v-list-item>
@@ -444,30 +458,56 @@
           <div class="d-flex align-center justify-space-between">
             <span class="text-body-2 font-weight-medium">{{ attachedCustomer.name }}</span>
             <div class="d-flex align-center gap-1">
-              <v-chip
-                size="x-small"
-                :color="attachedCustomer.personalDiscount > 0 ? 'orange' : tierColor"
-                variant="flat"
-                class="text-white"
-              >
-                {{
-                  attachedCustomer.personalDiscount > 0
-                    ? `DISCOUNT ${attachedCustomer.personalDiscount}%`
-                    : `${attachedCustomer.tier.toUpperCase()} (${cashbackPct}%)`
-                }}
+              <v-chip size="x-small" :color="customerChipColor" variant="flat" class="text-white">
+                {{ customerChipLabel }}
               </v-chip>
               <v-btn icon size="x-small" variant="text" color="error" @click="detachCustomer">
                 <v-icon size="14">mdi-close</v-icon>
               </v-btn>
             </div>
           </div>
-          <div class="d-flex align-center gap-4 mt-1 flex-wrap">
+          <!-- Stamps program: show card + stamps. Cashback: show balance + visits. -->
+          <div v-if="isStampsCustomer" class="d-flex align-center gap-2 mt-1 flex-wrap">
+            <template v-if="attachedCustomerCard">
+              <span class="text-body-2">
+                <v-icon size="14" class="mr-1" color="amber">mdi-stamper</v-icon>
+                Card #{{ attachedCustomerCard.cardNumber }} — {{ attachedCustomerCard.stamps }}/{{
+                  attachedCustomerCard.stampsPerCycle
+                }}
+                <span class="text-medium-emphasis">· cycle {{ attachedCustomerCard.cycle }}</span>
+              </span>
+              <span v-if="attachedCustomerCard.activeReward" class="text-body-2 text-success">
+                <v-icon size="14" class="mr-1">mdi-gift</v-icon>
+                {{ attachedCustomerCard.activeReward.category }}
+              </span>
+            </template>
+            <span v-else class="text-body-2 text-medium-emphasis">No active stamp card</span>
+            <v-chip
+              v-if="attachedCustomer.personalDiscount > 0"
+              size="x-small"
+              color="orange"
+              variant="tonal"
+            >
+              <v-icon start size="12">mdi-percent</v-icon>
+              {{ attachedCustomer.personalDiscount }}%
+              {{ attachedCustomer.discountNote || 'Personal' }}
+            </v-chip>
+            <v-chip
+              v-if="attachedCustomer.disableLoyaltyAccrual"
+              size="x-small"
+              color="grey"
+              variant="tonal"
+            >
+              No accrual
+            </v-chip>
+          </div>
+          <div v-else class="d-flex align-center gap-3 mt-1 flex-wrap">
             <span class="text-body-2">
               <v-icon size="14" class="mr-1">mdi-wallet</v-icon>
               {{ formatIDR(attachedCustomer.loyaltyBalance) }}
             </span>
             <span class="text-body-2 text-medium-emphasis">
-              {{ attachedCustomer.totalVisits }} visits
+              · {{ attachedCustomer.totalVisits }} visits
             </span>
             <v-chip
               v-if="attachedCustomer.personalDiscount > 0"
@@ -837,7 +877,9 @@ const newCardPhone = usePhoneInput()
 // Customer state
 const customerQuery = ref('')
 const searchResults = ref<Customer[]>([])
+const searchResultCards = ref<Record<string, { cardNumber: string; stamps: number }>>({})
 const attachedCustomer = ref<Customer | null>(null)
+const attachedCustomerCard = ref<StampCardInfo | null>(null)
 const showNewCustomer = ref(false)
 const newCustomerName = ref('')
 const newCustomerPhone = usePhoneInput()
@@ -855,6 +897,35 @@ const cashbackPct = computed(() => {
   return loyaltyStore.cashbackRateForTier(attachedCustomer.value.tier)
 })
 
+const isStampsCustomer = computed(() => attachedCustomer.value?.loyaltyProgram === 'stamps')
+
+// Chip label/color for the attached customer — branches by loyaltyProgram so stamps
+// customers don't show meaningless cashback "MEMBER (5%)" badges.
+const customerChipLabel = computed(() => {
+  const c = attachedCustomer.value
+  if (!c) return ''
+  if (c.personalDiscount > 0) return `DISCOUNT ${c.personalDiscount}%`
+  if (c.loyaltyProgram === 'stamps') return 'STAMPS'
+  return `${c.tier.toUpperCase()} (${cashbackPct.value}%)`
+})
+
+const customerChipColor = computed(() => {
+  const c = attachedCustomer.value
+  if (!c) return 'grey'
+  if (c.personalDiscount > 0) return 'orange'
+  if (c.loyaltyProgram === 'stamps') return 'amber-darken-2'
+  return tierColor.value
+})
+
+// Compact chip label for the collapsed top-bar (no cashback %).
+const customerChipLabelShort = computed(() => {
+  const c = attachedCustomer.value
+  if (!c) return ''
+  if (c.personalDiscount > 0) return 'DISCOUNT'
+  if (c.loyaltyProgram === 'stamps') return 'STAMPS'
+  return c.tier.toUpperCase()
+})
+
 function getTierColor(tier: string): string {
   switch (tier) {
     case 'vip':
@@ -868,6 +939,44 @@ function getTierColor(tier: string): string {
   }
 }
 
+// Helpers for the customer search list — branch by loyaltyProgram so stamps customers
+// are not shown as "MEMBER | Rp 0" (cashback-only labels).
+function customerProgramChipColor(c: Customer): string {
+  if (c.personalDiscount > 0) return 'orange'
+  if (c.loyaltyProgram === 'stamps') return 'amber-darken-2'
+  return getTierColor(c.tier)
+}
+
+function customerProgramChipInitial(c: Customer): string {
+  if (c.personalDiscount > 0) return 'D'
+  if (c.loyaltyProgram === 'stamps') return 'S'
+  return c.tier[0].toUpperCase()
+}
+
+function customerSearchSubtitle(c: Customer): string {
+  const parts: string[] = []
+  if (c.personalDiscount > 0) {
+    parts.push(`DISCOUNT ${c.personalDiscount}%`)
+  } else if (c.loyaltyProgram === 'stamps') {
+    parts.push('STAMPS')
+    // Append card # and stamps if loaded (loaded async after search)
+    const card = searchResultCards.value[c.id]
+    const perCycle = loyaltyStore.settings?.stampsPerCycle ?? 15
+    if (card) {
+      parts.push(`#${card.cardNumber} — ${card.stamps}/${perCycle}`)
+    }
+  } else {
+    parts.push(c.tier.toUpperCase())
+  }
+  // Show balance only for cashback (irrelevant for stamps customers)
+  if (c.loyaltyProgram !== 'stamps') {
+    parts.push(formatIDR(c.loyaltyBalance))
+  }
+  if (c.phone) parts.push(c.phone)
+  if (c.telegramUsername) parts.push('@' + c.telegramUsername)
+  return parts.join(' | ')
+}
+
 function formatRelative(date: string): string {
   return TimeUtils.getRelativeTime(date)
 }
@@ -879,6 +988,20 @@ watch(
     if (tab) activeTab.value = tab
   }
 )
+
+// Load active stamp card when a stamps-program customer is attached, so the panel
+// can show "Card #NNN · X/Y stamps" instead of a stale cashback chip.
+watch(attachedCustomer, async customer => {
+  if (customer?.loyaltyProgram === 'stamps') {
+    try {
+      attachedCustomerCard.value = await loyaltyStore.getActiveCardByCustomerId(customer.id)
+    } catch {
+      attachedCustomerCard.value = null
+    }
+  } else {
+    attachedCustomerCard.value = null
+  }
+})
 
 // Stop camera when leaving scan tab or panel collapses
 watch(activeTab, (newTab, oldTab) => {
@@ -1033,6 +1156,18 @@ async function createNewCard() {
     cardNumber.value = createdNumber
     showNewCard.value = false
     await findCard()
+
+    // If owner name was provided, a customer was created — auto-attach it to the order.
+    // attachedCard.value.customerId is set by findCard() above.
+    if (newCardOwnerName.value && attachedCard.value?.customerId) {
+      try {
+        await customersStore.refreshCustomer(attachedCard.value.customerId)
+        const customer = customersStore.getById(attachedCard.value.customerId)
+        if (customer) selectCustomer(customer)
+      } catch {
+        // Non-critical: card is attached, customer just isn't auto-linked
+      }
+    }
   } catch (err) {
     newCardError.value = err instanceof Error ? err.message : 'Failed to create card'
   } finally {
@@ -1053,9 +1188,37 @@ function debouncedSearch() {
   searchTimeout = setTimeout(async () => {
     if (customerQuery.value.trim().length < 2) {
       searchResults.value = []
+      searchResultCards.value = {}
       return
     }
-    searchResults.value = await customersStore.searchCustomers(customerQuery.value.trim())
+    const results = await customersStore.searchCustomers(customerQuery.value.trim())
+    searchResults.value = results
+    // Load active stamp cards for stamps customers in the result set, so the search
+    // subtitle can show "STAMPS | #NNN — X/Y" instead of just "STAMPS".
+    const stampsIds = results.filter(c => c.loyaltyProgram === 'stamps').map(c => c.id)
+    if (stampsIds.length > 0) {
+      try {
+        const { data } = await supabase
+          .from('stamp_cards')
+          .select('customer_id, card_number, stamp_entries(stamps)')
+          .eq('status', 'active')
+          .in('customer_id', stampsIds)
+        const map: Record<string, { cardNumber: string; stamps: number }> = {}
+        for (const card of data || []) {
+          if (!card.customer_id) continue
+          const stamps = ((card as any).stamp_entries || []).reduce(
+            (sum: number, e: any) => sum + (e.stamps || 0),
+            0
+          )
+          map[card.customer_id] = { cardNumber: card.card_number, stamps }
+        }
+        searchResultCards.value = map
+      } catch {
+        searchResultCards.value = {}
+      }
+    } else {
+      searchResultCards.value = {}
+    }
   }, 300)
 }
 
@@ -1071,6 +1234,7 @@ function selectCustomer(customer: Customer) {
 
 function detachCustomer() {
   attachedCustomer.value = null
+  attachedCustomerCard.value = null
   customerHasAuth.value = false
   emit('update:customer', null)
 }

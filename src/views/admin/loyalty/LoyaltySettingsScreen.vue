@@ -666,7 +666,18 @@
               <v-card-title class="d-flex align-center justify-space-between bg-primary text-white">
                 <span>{{ customerEditing ? 'Edit Customer' : selectedCustomer.name }}</span>
                 <div class="d-flex align-center gap-1">
+                  <!-- Stamps customer: STAMPS chip; cashback: tier chip -->
                   <v-chip
+                    v-if="isStampsCustomer"
+                    color="amber-darken-2"
+                    variant="flat"
+                    class="text-white"
+                    size="small"
+                  >
+                    STAMPS
+                  </v-chip>
+                  <v-chip
+                    v-else
                     :color="getTierColor(selectedCustomer.tier)"
                     variant="flat"
                     class="text-white"
@@ -687,7 +698,46 @@
               <v-card-text class="pt-4" style="max-height: 70vh">
                 <!-- ---- View Mode ---- -->
                 <template v-if="!customerEditing">
-                  <v-row dense>
+                  <!-- Stamps customer: card-focused metrics -->
+                  <v-row v-if="isStampsCustomer" dense>
+                    <v-col cols="6">
+                      <div class="text-caption text-medium-emphasis">Card #</div>
+                      <div class="text-h6">
+                        {{ selectedCustomerCard ? '#' + selectedCustomerCard.cardNumber : '—' }}
+                      </div>
+                    </v-col>
+                    <v-col cols="6">
+                      <div class="text-caption text-medium-emphasis">Stamps</div>
+                      <div class="text-h6">
+                        <template v-if="selectedCustomerCard">
+                          {{ selectedCustomerCard.stamps }}/{{
+                            selectedCustomerCard.stampsPerCycle
+                          }}
+                        </template>
+                        <template v-else>—</template>
+                      </div>
+                    </v-col>
+                    <v-col cols="6">
+                      <div class="text-caption text-medium-emphasis">Cycle</div>
+                      <div class="text-h6">{{ selectedCustomerCard?.cycle ?? '—' }}</div>
+                    </v-col>
+                    <v-col cols="6">
+                      <div class="text-caption text-medium-emphasis">Visits</div>
+                      <div class="text-h6">{{ selectedCustomer.totalVisits }}</div>
+                    </v-col>
+                    <v-col cols="12">
+                      <div class="text-caption text-medium-emphasis">Active reward</div>
+                      <div class="text-body-1">
+                        <template v-if="selectedCustomerCard?.activeReward">
+                          {{ selectedCustomerCard.activeReward.category }}
+                          (up to {{ formatIDR(selectedCustomerCard.activeReward.maxDiscount) }})
+                        </template>
+                        <template v-else>None</template>
+                      </div>
+                    </v-col>
+                  </v-row>
+                  <!-- Cashback customer: spend/balance metrics -->
+                  <v-row v-else dense>
                     <v-col cols="6">
                       <div class="text-caption text-medium-emphasis">Balance</div>
                       <div class="text-h6">{{ formatIDR(selectedCustomer.loyaltyBalance) }}</div>
@@ -1458,6 +1508,7 @@ import type {
   StampReward,
   TierConfig,
   StampCardListItem,
+  StampCardInfo,
   LoyaltyTransaction
 } from '@/stores/loyalty'
 import type { Customer } from '@/stores/customers'
@@ -1680,12 +1731,15 @@ const levelFilterOptions = ['stamps', 'member', 'regular', 'vip', 'discount']
 const showCustomerDetail = ref(false)
 const showCreateCustomerDialog = ref(false)
 const selectedCustomer = ref<Customer | null>(null)
+const selectedCustomerCard = ref<StampCardInfo | null>(null)
 const customerTxs = ref<LoyaltyTransaction[]>([])
 const loadingTx = ref(false)
 const customerEditing = ref(false)
 const custSaving = ref(false)
 const custSaveError = ref('')
 const togglingStatus = ref(false)
+
+const isStampsCustomer = computed(() => selectedCustomer.value?.loyaltyProgram === 'stamps')
 
 const tierOptions = ['member', 'regular', 'family', 'vip']
 
@@ -1898,20 +1952,23 @@ function resetCustForm() {
 // ---- Open detail (view mode) ----
 async function openCustomerDetail(customer: Customer) {
   selectedCustomer.value = customer
+  selectedCustomerCard.value = null
   customerEditing.value = false
   custSaveError.value = ''
   showCustomerDetail.value = true
   loadingTx.value = true
 
   try {
-    // Refresh + load transactions in parallel
-    const [, txs] = await Promise.all([
+    // Refresh + load transactions + active stamp card in parallel
+    const [, txs, card] = await Promise.all([
       customersStore.refreshCustomer(customer.id).then(() => {
         selectedCustomer.value = customersStore.getById(customer.id) || customer
       }),
-      loyaltyStore.getTransactions(customer.id, 20)
+      loyaltyStore.getTransactions(customer.id, 20),
+      loyaltyStore.getActiveCardByCustomerId(customer.id).catch(() => null)
     ])
     customerTxs.value = txs
+    selectedCustomerCard.value = card
   } catch {
     customerTxs.value = []
   } finally {
