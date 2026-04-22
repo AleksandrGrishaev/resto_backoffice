@@ -294,6 +294,82 @@ Gunakan tab **CUSTOMER** → **NEW**. Isi nama + telepon, biarkan program **Stam
 
 ---
 
+## Scenario 9: Convert Stamps to Cashback Points (Customer Request)
+
+**When:** Customer wants to "cash out" their stamp card — convert all current stamps into cashback points (e.g. they don't want to wait for the milestone reward, or they're switching to cashback program). Action is **irreversible**: the card is closed after conversion.
+
+### English
+
+1. Attach the customer (SCAN / CUSTOMER search)
+2. The customer-info row in the loyalty panel shows their card; tap **Convert to Points** (deep-purple button below the card details)
+3. Confirmation dialog opens: _"Convert all stamps on card #NNN into loyalty points for {Customer}?"_
+4. Tap **Convert**
+5. Result dialog shows: stamps converted, unredeemed rewards (if any) listed, points awarded, new balance
+6. The stamp card is now **closed**. The customer's program may also auto-switch to cashback (depends on settings)
+
+> Use sparingly — usually customers want to wait for the next milestone (free dish > a small cashback amount). Confirm verbally with the customer before tapping Convert.
+
+### Bahasa Indonesia
+
+1. Pasang pelanggan (SCAN / CUSTOMER search)
+2. Di info pelanggan, tekan **Convert to Points** (tombol deep-purple di bawah detail kartu)
+3. Dialog konfirmasi muncul: _"Convert all stamps on card #NNN into loyalty points for {Pelanggan}?"_
+4. Tekan **Convert**
+5. Dialog hasil menampilkan: stamp dikonversi, reward yang belum diklaim (jika ada), poin yang diberikan, saldo baru
+6. Kartu stamp ditutup. Program pelanggan bisa auto-switch ke cashback (tergantung settings)
+
+> Gunakan dengan hati-hati — biasanya pelanggan lebih untung menunggu milestone berikutnya (free dish > sedikit cashback). Konfirmasi verbal dulu.
+
+---
+
+## At Checkout — Loyalty in Payment Dialog
+
+When a customer is attached and the cashier opens **Payment Checkout**, several loyalty controls appear automatically. Here's what each one means and when to use it.
+
+### Stamps earned indicator
+
+For a stamps-program customer with an active card, the order summary shows:
+
+> **Stamps earned: +N (X + N = Y/15)**
+
+That's the printable "what's about to happen" — printed automatically when the order is completed. **Only orders that meet the stamp threshold** (set in Admin → Loyalty → Settings, e.g. Rp 50,000 per stamp) earn stamps. A very small order may earn 0 stamps — that's expected. If the customer asks why no stamp was added, check that the bill subtotal hit the threshold.
+
+### Stamp Card Reward (use customer's free reward)
+
+When the customer's stamp card has reached a milestone (e.g. 5/15 → free coffee), the discount menu in PaymentDialog (open via "Manual Discount" button row) shows an extra row:
+
+> **🎁 Stamp Card Reward** — _{category} — up to Rp {amount}_
+
+Tap it → opens the bill discount dialog with the reward pre-selected. Apply it as a discount on this bill. **Don't forget to do this** — the reward stays on the card until used, but the customer expects you to apply it for them at checkout.
+
+### Use Points (cashback redemption)
+
+If the customer is on **cashback** program and has a positive balance, the order summary shows:
+
+> _{Customer name} — Rp {balance}_ [**Use Points** toggle]
+
+Toggle on → "Points to redeem (IDR)" field appears. Enter how much to deduct from the bill (max = balance, capped at order total). Useful when the customer says _"use my points"_ to lower today's bill.
+
+### Personal discount auto-apply
+
+If the attached customer has a **personal discount** (orange `DISCOUNT N%` chip — set by admin for friends/founders/etc.), the discount is **applied automatically** at the order level. The discount menu shows:
+
+> Manual Discount — _Overridden by personal discount (N%)_
+> Stamp Card Reward — _Overridden by personal discount_
+
+Personal discount takes precedence — the cashier doesn't need to apply anything extra. If the customer also wants to use Points/Reward, that's not possible; ask admin to either remove the personal discount or do a manual workaround.
+
+### Bahasa Indonesia
+
+Saat pelanggan terpasang dan kasir membuka **Payment Checkout**, beberapa kontrol loyalty muncul otomatis:
+
+- **Stamps earned** — `+N (X + N = Y/15)` di order summary. Hanya pesanan yang mencapai threshold stamp (Admin → Loyalty → Settings) yang dapat stamp. Pesanan kecil mungkin dapat 0 stamp.
+- **Stamp Card Reward** — kalau kartu sudah capai milestone (mis. 5/15 → free coffee), tombol di menu discount. Jangan lupa apply!
+- **Use Points** — pelanggan cashback dengan saldo > 0 → toggle "Use Points" + isi jumlah untuk dipotong dari bill.
+- **Personal discount auto-apply** — pelanggan dengan personal discount → otomatis diterapkan, override Manual Discount dan Stamp Card Reward.
+
+---
+
 ## Quick Reference / Referensi Cepat
 
 | Action                              | Where                                                    | Steps   |
@@ -306,6 +382,10 @@ Gunakan tab **CUSTOMER** → **NEW**. Isi nama + telepon, biarkan program **Stam
 | Register VIP / cashback customer    | CUSTOMER → NEW → fill form → Cashback → CREATE           | 3 steps |
 | Print invite QR                     | Customer attached → tap QR icon (next to name)           | 1 step  |
 | Self-register via pre-bill QR       | Print Pre-bill → customer scans                          | 0 steps |
+| Detach attached customer / card     | Tap the red X next to the name / card number             | 1 step  |
+| Apply Stamp Card Reward at checkout | PaymentDialog → Discount menu → Stamp Card Reward        | 2 steps |
+| Apply customer's points to bill     | PaymentDialog → toggle **Use Points** → enter amount     | 2 steps |
+| Convert stamps to cashback points   | Customer attached → **Convert to Points** → confirm      | 2 steps |
 | Discrepancy / duplicate / lost card | Note details, attach existing record, **escalate admin** | —       |
 
 ## FAQ
@@ -323,7 +403,10 @@ A: Wait a few seconds for the realtime update. If it still doesn't show, use the
 A: Only admin can change an existing customer's program. Ask the manager.
 
 **Q: Customer self-registered online but doesn't appear in CUSTOMER search at POS — why?**
-A: The customers list refreshes periodically. Use the **SCAN** tab and ask the customer to show the QR code from their personal cabinet — that always finds them via the live token.
+A: The customers list is loaded into POS at session start and not auto-refreshed in real time. Use the **SCAN** tab and ask the customer to show the QR code from their personal cabinet — that always finds them via the live database lookup, regardless of cache.
+
+**Q: I attached the wrong customer (or the wrong card) to the order — how do I undo?**
+A: In the loyalty panel, tap the small **red X** next to the attached customer's name (or card number). That detaches them from the order without removing any data. Then attach the correct one.
 
 **Q: Should I always enter stamps in CARD → NEW, or leave it at 0?**
 A: Set it to the **stamps already on the physical card** (or **0** for a brand-new card). The current order's stamps are added automatically when the order is completed.
@@ -387,7 +470,7 @@ A: See **Scenario 8** above. The cashier flags it; admin resolves via Admin → 
 ## Admin Action 4: Issue / Edit / Deactivate a Stamp Card
 
 1. Admin → Loyalty → **Cards** tab
-2. **Issue new card:** **+ New** button → optionally enter a card number (auto-generated otherwise) and link to a customer
+2. **Issue new card:** **New Card** button → card number is auto-generated. Optionally link to a customer.
 3. **Edit card:** click the row → adjust stamps count (e.g. fix a miscount) → Save
 4. **Deactivate card:** click the row → **Deactivate** (use for lost cards before issuing a replacement)
 
