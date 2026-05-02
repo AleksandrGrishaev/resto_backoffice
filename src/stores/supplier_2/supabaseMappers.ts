@@ -441,8 +441,8 @@ export function mapReceiptItemToDB(item: ReceiptItem, receiptId: string): DBRece
 
     package_id: item.packageId,
     package_name: item.packageName,
-    ordered_package_quantity: item.orderedPackageQuantity,
-    received_package_quantity: item.receivedPackageQuantity,
+    ordered_package_quantity: item.orderedPackageQuantity ?? 0,
+    received_package_quantity: item.receivedPackageQuantity ?? 0,
     package_unit: item.packageUnit,
 
     ordered_price: item.orderedPrice,

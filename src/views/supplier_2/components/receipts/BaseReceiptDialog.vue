@@ -1040,7 +1040,8 @@ function autoFillFromOrder() {
       item.receivedQuantity = orderItem.orderedQuantity
       item.actualPrice = undefined
       item.actualPackagePrice = undefined
-      item.receivedPackageQuantity = undefined
+      // NOT NULL in DB — copy from order, never undefined (см. supplierstore_receipt_items)
+      item.receivedPackageQuantity = orderItem.packageQuantity ?? 0
     }
   })
 
