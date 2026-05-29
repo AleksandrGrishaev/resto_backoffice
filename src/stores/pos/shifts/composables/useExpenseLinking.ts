@@ -450,7 +450,8 @@ export function useExpenseLinking() {
     expense: ShiftExpenseOperation,
     invoice: InvoiceSuggestion,
     linkAmount: number,
-    performedBy: { id: string; name: string }
+    performedBy: { id: string; name: string },
+    options?: { skipRefresh?: boolean }
   ): Promise<{ success: boolean; error?: string }> {
     try {
       isLoading.value = true
@@ -488,9 +489,12 @@ export function useExpenseLinking() {
 
       // linkPaymentToOrder already updates expense via updateExpenseLinkingStatusByPaymentId
 
-      // ✅ FIX: Refresh payments cache to ensure UI updates correctly
-      // This ensures fully linked payments disappear from Unlinked tab
-      await accountStore.fetchPayments(true)
+      // Refresh payments cache to ensure UI updates correctly
+      // Skip when called in a loop (linkExpenseToMultipleInvoices) to avoid
+      // reloading the store mid-loop which can evict the payment from cache
+      if (!options?.skipRefresh) {
+        await accountStore.fetchPayments(true)
+      }
 
       return { success: true }
     } catch (err) {
@@ -572,7 +576,8 @@ export function useExpenseLinking() {
           expense,
           link.invoice,
           link.allocatedAmount,
-          performedBy
+          performedBy,
+          { skipRefresh: true }
         )
 
         if (result.success) {
@@ -584,6 +589,11 @@ export function useExpenseLinking() {
             error: result.error
           })
         }
+      }
+
+      // Refresh payments cache once after all links are processed
+      if (linkedCount > 0) {
+        await accountStore.fetchPayments(true)
       }
 
       DebugUtils.info(MODULE_NAME, 'Linked expense to multiple invoices', {
