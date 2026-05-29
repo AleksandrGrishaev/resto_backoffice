@@ -557,8 +557,9 @@ export class AccountSupabaseService {
         query = query.eq('priority', filters.priority)
       }
 
-      // Order by due date
-      query = query.order('due_date', { ascending: true })
+      // Load most recent payments first (created_at DESC) with explicit limit
+      // Supabase default is 1000 rows — we set it explicitly to be clear
+      query = query.order('created_at', { ascending: false }).limit(1000)
 
       const { data, error } = await withTimeout(query)
 
