@@ -394,14 +394,27 @@ class SupplierService {
   // PURCHASE ORDERS METHODS
   // =============================================
 
-  async getOrders(options?: { limit?: number; offset?: number }): Promise<PurchaseOrder[]> {
+  async getOrders(options?: {
+    limit?: number
+    offset?: number
+    supplierId?: string
+    status?: string
+  }): Promise<PurchaseOrder[]> {
     try {
-      const { limit = 25, offset = 0 } = options || {}
+      const { limit = 25, offset = 0, supplierId, status } = options || {}
 
       let query = supabase
         .from('supplierstore_orders')
         .select('*, supplierstore_order_items(*)', { count: 'exact' })
         .order('created_at', { ascending: false })
+
+      // Server-side filters
+      if (supplierId) {
+        query = query.eq('supplier_id', supplierId)
+      }
+      if (status) {
+        query = query.eq('status', status)
+      }
 
       // Apply pagination
       if (limit) {
@@ -417,7 +430,9 @@ class SupplierService {
       DebugUtils.info(MODULE_NAME, 'Orders fetched from Supabase', {
         count: orders.length,
         limit,
-        offset
+        offset,
+        supplierId,
+        status
       })
 
       return orders
@@ -769,14 +784,39 @@ class SupplierService {
   // RECEIPTS METHODS
   // =============================================
 
-  async getReceipts(options?: { limit?: number; offset?: number }): Promise<Receipt[]> {
+  async getReceipts(options?: {
+    limit?: number
+    offset?: number
+    supplierId?: string
+    status?: string
+  }): Promise<Receipt[]> {
     try {
-      const { limit = 25, offset = 0 } = options || {}
+      const { limit = 25, offset = 0, supplierId, status } = options || {}
 
       let query = supabase
         .from('supplierstore_receipts')
         .select('*, supplierstore_receipt_items(*)', { count: 'exact' })
         .order('delivery_date', { ascending: false })
+
+      // Server-side filters
+      if (supplierId) {
+        // Receipts don't have supplier_id — filter via order IDs
+        const { data: orderIds } = await supabase
+          .from('supplierstore_orders')
+          .select('id')
+          .eq('supplier_id', supplierId)
+        if (orderIds && orderIds.length > 0) {
+          query = query.in(
+            'purchase_order_id',
+            orderIds.map(o => o.id)
+          )
+        } else {
+          return [] // No orders for this supplier
+        }
+      }
+      if (status) {
+        query = query.eq('status', status)
+      }
 
       // Apply pagination
       if (limit) {
@@ -792,7 +832,9 @@ class SupplierService {
       DebugUtils.info(MODULE_NAME, '✅ Receipts loaded from Supabase', {
         count: receipts.length,
         limit,
-        offset
+        offset,
+        supplierId,
+        status
       })
       return receipts
     } catch (error) {

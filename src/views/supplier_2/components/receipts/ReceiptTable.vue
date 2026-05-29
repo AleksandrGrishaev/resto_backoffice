@@ -242,7 +242,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { Receipt, PurchaseOrder } from '@/stores/supplier_2/types'
 
 // =============================================
@@ -253,6 +253,7 @@ interface Props {
   receipts: Receipt[]
   orders: PurchaseOrder[]
   loading: boolean
+  allSuppliers?: Array<{ id: string; name: string }>
 }
 
 interface Emits {
@@ -260,6 +261,7 @@ interface Emits {
   (e: 'edit-receipt', receipt: Receipt): void
   (e: 'view-storage', operationId: string): void
   (e: 'load-more'): void
+  (e: 'filter-change', filters: { supplierId?: string; status?: string }): void
 }
 
 const props = defineProps<Props>()
@@ -277,6 +279,14 @@ const statusFilter = ref<string>()
 const supplierFilter = ref<string>()
 const discrepancyFilter = ref<boolean | string>()
 const searchQuery = ref('')
+
+// Emit server-side filter changes (supplier, status)
+watch([supplierFilter, statusFilter], ([newSupplier, newStatus]) => {
+  emits('filter-change', {
+    supplierId: newSupplier || undefined,
+    status: newStatus || undefined
+  })
+})
 
 // =============================================
 // TABLE CONFIGURATION
@@ -317,8 +327,12 @@ const discrepancyOptions = [
   { title: 'No Discrepancies', value: false }
 ]
 
-// Unique suppliers from orders
+// Unique suppliers — use full list from counteragents if available
 const supplierOptions = computed(() => {
+  if (props.allSuppliers && props.allSuppliers.length > 0) {
+    return props.allSuppliers.map(s => ({ title: s.name, value: s.id }))
+  }
+  // Fallback to orders-derived list
   const suppliersMap = new Map<string, string>()
   if (Array.isArray(props.orders)) {
     for (const order of props.orders) {

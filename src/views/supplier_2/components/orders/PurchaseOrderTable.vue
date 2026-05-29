@@ -303,7 +303,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { usePurchaseOrders } from '@/stores/supplier_2/composables/usePurchaseOrders'
 import { usePurchaseOrderExport } from '@/stores/supplier_2/composables/usePurchaseOrderExport'
 import type { PurchaseOrder, BillStatus, Receipt } from '@/stores/supplier_2/types'
@@ -318,6 +318,7 @@ import OrderPreviewDialog from './OrderPreviewDialog.vue'
 interface Props {
   orders: PurchaseOrder[]
   loading: boolean
+  allSuppliers?: Array<{ id: string; name: string }>
 }
 
 interface Emits {
@@ -327,6 +328,7 @@ interface Emits {
   (e: 'edit-receipt', receipt: Receipt): void
   (e: 'view-receipt', receipt: Receipt): void
   (e: 'load-more'): void
+  (e: 'filter-change', filters: { supplierId?: string; status?: string }): void
 }
 
 const props = defineProps<Props>()
@@ -364,6 +366,16 @@ const {
 } = usePurchaseOrders()
 
 const { isPrinting, buildExportData } = usePurchaseOrderExport()
+
+// Emit server-side filter changes (supplier, status)
+watch(
+  () => [filters.value.supplier, filters.value.status],
+  ([newSupplier, newStatus]) => {
+    const supplierId = newSupplier && newSupplier !== 'all' ? newSupplier : undefined
+    const status = newStatus && newStatus !== 'all' ? newStatus : undefined
+    emits('filter-change', { supplierId, status })
+  }
+)
 
 // =============================================
 // LOCAL STATE (упрощенный - убраны orderBills)
@@ -415,6 +427,13 @@ const billStatusOptions = [
 ]
 
 const supplierOptions = computed(() => {
+  if (props.allSuppliers && props.allSuppliers.length > 0) {
+    return [
+      { title: 'All Suppliers', value: 'all' },
+      ...props.allSuppliers.map(s => ({ title: s.name, value: s.id }))
+    ]
+  }
+  // Fallback to orders-derived list
   const suppliers = new Set(props.orders?.map(order => order.supplierName) || [])
   return [
     { title: 'All Suppliers', value: 'all' },
@@ -441,7 +460,11 @@ const filteredOrders = computed(() => {
   }
 
   if (filters.value.supplier && filters.value.supplier !== 'all') {
-    filtered = filtered.filter(order => order.supplierName === filters.value.supplier)
+    // When allSuppliers is provided, filter value is supplierId; otherwise it's supplierName
+    const filterVal = filters.value.supplier
+    filtered = filtered.filter(
+      order => order.supplierId === filterVal || order.supplierName === filterVal
+    )
   }
 
   if (searchQuery.value) {

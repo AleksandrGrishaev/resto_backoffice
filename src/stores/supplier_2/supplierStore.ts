@@ -337,17 +337,31 @@ export const useSupplierStore = defineStore('supplier', () => {
   /**
    * ✅ NEW (Phase 2): Load orders from Supabase
    */
-  async function loadOrders(): Promise<void> {
+  // Remember active filters for Load More pagination
+  const activeOrderFilters = ref<{ supplierId?: string; status?: string }>({})
+  const activeReceiptFilters = ref<{ supplierId?: string; status?: string }>({})
+
+  async function loadOrders(filters?: { supplierId?: string; status?: string }): Promise<void> {
     try {
       state.value.loading.orders = true
-      DebugUtils.info(MODULE_NAME, 'Loading initial orders from Supabase...')
+      // Only update filters if explicitly passed; undefined = keep current filters
+      if (filters !== undefined) {
+        activeOrderFilters.value = filters
+      }
+      DebugUtils.info(MODULE_NAME, 'Loading orders from Supabase...', {
+        filters: activeOrderFilters.value
+      })
 
-      // Load first 25 orders
-      const orders = await supplierService.getOrders({ limit: 25, offset: 0 })
+      const orders = await supplierService.getOrders({
+        limit: 25,
+        offset: 0,
+        ...activeOrderFilters.value
+      })
       state.value.orders = orders
 
-      DebugUtils.info(MODULE_NAME, 'Initial orders loaded from Supabase', {
-        count: orders.length
+      DebugUtils.info(MODULE_NAME, 'Orders loaded from Supabase', {
+        count: orders.length,
+        filters
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to load orders from Supabase', { error })
@@ -362,7 +376,11 @@ export const useSupplierStore = defineStore('supplier', () => {
       const currentCount = state.value.orders.length
       DebugUtils.info(MODULE_NAME, 'Loading more orders...', { offset: currentCount })
 
-      const moreOrders = await supplierService.getOrders({ limit: 25, offset: currentCount })
+      const moreOrders = await supplierService.getOrders({
+        limit: 25,
+        offset: currentCount,
+        ...activeOrderFilters.value
+      })
 
       if (moreOrders.length > 0) {
         state.value.orders.push(...moreOrders)
@@ -383,17 +401,27 @@ export const useSupplierStore = defineStore('supplier', () => {
   /**
    * ✅ NEW (Phase 3): Load receipts from Supabase
    */
-  async function loadReceipts(): Promise<void> {
+  async function loadReceipts(filters?: { supplierId?: string; status?: string }): Promise<void> {
     try {
       state.value.loading.receipts = true
-      DebugUtils.info(MODULE_NAME, 'Loading initial receipts from Supabase...')
+      // Only update filters if explicitly passed; undefined = keep current filters
+      if (filters !== undefined) {
+        activeReceiptFilters.value = filters
+      }
+      DebugUtils.info(MODULE_NAME, 'Loading receipts from Supabase...', {
+        filters: activeReceiptFilters.value
+      })
 
-      // Load first 25 receipts
-      const receipts = await supplierService.getReceipts({ limit: 25, offset: 0 })
+      const receipts = await supplierService.getReceipts({
+        limit: 25,
+        offset: 0,
+        ...activeReceiptFilters.value
+      })
       state.value.receipts = receipts
 
-      DebugUtils.info(MODULE_NAME, 'Initial receipts loaded from Supabase', {
-        count: receipts.length
+      DebugUtils.info(MODULE_NAME, 'Receipts loaded from Supabase', {
+        count: receipts.length,
+        filters
       })
     } catch (error) {
       DebugUtils.error(MODULE_NAME, 'Failed to load receipts from Supabase', { error })
@@ -408,7 +436,11 @@ export const useSupplierStore = defineStore('supplier', () => {
       const currentCount = state.value.receipts.length
       DebugUtils.info(MODULE_NAME, 'Loading more receipts...', { offset: currentCount })
 
-      const moreReceipts = await supplierService.getReceipts({ limit: 25, offset: currentCount })
+      const moreReceipts = await supplierService.getReceipts({
+        limit: 25,
+        offset: currentCount,
+        ...activeReceiptFilters.value
+      })
 
       if (moreReceipts.length > 0) {
         state.value.receipts.push(...moreReceipts)

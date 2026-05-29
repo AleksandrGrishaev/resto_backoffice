@@ -99,12 +99,14 @@
           <purchase-order-table
             :orders="ordersArray"
             :loading="Boolean(supplierStore.state.loading?.orders)"
+            :all-suppliers="allSuppliers"
             @edit-order="handleEditOrder"
             @send-order="handleSendOrder"
             @start-receipt="handleStartReceipt"
             @edit-receipt="handleEditReceipt"
             @view-receipt="handleViewReceiptDetails"
             @load-more="handleLoadMoreOrders"
+            @filter-change="handleOrderFilterChange"
           />
 
           <!-- Empty State -->
@@ -123,10 +125,12 @@
             :receipts="receiptsArray"
             :orders="ordersArray"
             :loading="supplierStore.state.loading?.receipts || false"
+            :all-suppliers="allSuppliers"
             @view-details="handleViewReceiptDetails"
             @edit-receipt="handleEditReceipt"
             @view-storage="handleViewStorage"
             @load-more="handleLoadMoreReceipts"
+            @filter-change="handleReceiptFilterChange"
           />
 
           <!-- Empty State -->
@@ -391,6 +395,14 @@ const ordersArray = computed(() => {
 
 const receiptsArray = computed(() => {
   return Array.isArray(supplierStore.state.receipts) ? supplierStore.state.receipts : []
+})
+
+// Full supplier list for filter dropdowns (all counteragents, not just loaded ones)
+const allSuppliers = computed(() => {
+  return counteragentsStore.supplierCounterAgents.map(s => ({
+    id: s.id,
+    name: s.name
+  }))
 })
 
 // ✅ НОВЫЙ: Подсчет товаров готовых к заказу
@@ -692,6 +704,29 @@ function handleEditOrder(order: PurchaseOrder) {
   // Открываем диалог редактирования
   selectedOrderForEdit.value = order
   showOrderEditDialog.value = true
+}
+
+async function handleOrderFilterChange(filters: {
+  supplierId?: string
+  status?: string
+}): Promise<void> {
+  try {
+    await supplierStore.loadOrders(filters)
+    await recalculateBillStatuses()
+  } catch (error) {
+    handleError('Failed to filter orders')
+  }
+}
+
+async function handleReceiptFilterChange(filters: {
+  supplierId?: string
+  status?: string
+}): Promise<void> {
+  try {
+    await supplierStore.loadReceipts(filters)
+  } catch (error) {
+    handleError('Failed to filter receipts')
+  }
 }
 
 async function handleLoadMoreOrders(): Promise<void> {
